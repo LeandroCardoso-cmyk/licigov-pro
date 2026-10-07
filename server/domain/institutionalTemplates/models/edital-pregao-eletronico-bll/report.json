@@ -1,0 +1,105 @@
+{
+  "astSemanticHash": "e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d",
+  "report": {
+    "mappedInputs": 160,
+    "renderCapableInputs": 157,
+    "controlInputs": 3,
+    "unknownPlaceholders": [],
+    "unmappedInputs": [],
+    "residualPlaceholders": 0,
+    "placeholderOccurrences": {
+      "text": 258,
+      "systemNote": 64,
+      "condition": 0
+    },
+    "noteOnlyInputs": [
+      "DATA_DIVULGACAO_PREVISTA",
+      "ORCAMENTO_SIGILOSO_SIM_NAO",
+      "UTILIZA_SRP"
+    ],
+    "noteNonNameForms": [
+      "{{CONTRATADO_*}}",
+      "{{FORNECEDOR_REGISTRADO_*}}"
+    ],
+    "conditionTypesMapped": 48,
+    "conditionTypesUsed": [
+      "SE_ACEITA_REGISTRO_CADASTRAL",
+      "SE_ADMITE_ADESAO_ATA",
+      "SE_ADMITE_SUBCONTRATACAO",
+      "SE_ANEXOS_ADICIONAIS",
+      "SE_BENEFICIO_AFASTADO",
+      "SE_CONTRATO_POR_ESCOPO",
+      "SE_COTA_RESERVADA",
+      "SE_DECLARACAO_ESPECIFICA_OBJETO",
+      "SE_DISPUTA_ABERTA",
+      "SE_DISPUTA_ABERTA_FECHADA",
+      "SE_EXCLUSIVIDADE_REGIONAL",
+      "SE_EXCLUSIVO_ME_EPP",
+      "SE_EXIGE_AMOSTRA",
+      "SE_EXIGE_BALANCO",
+      "SE_EXIGE_CAPITAL_OU_PL_MINIMO",
+      "SE_EXIGE_CATALOGO",
+      "SE_EXIGE_GARANTIA_CONTRATUAL",
+      "SE_EXIGE_MARCA_MODELO",
+      "SE_EXIGE_PROVA_CONCEITO",
+      "SE_INSTRUMENTO_EQUIVALENTE",
+      "SE_INTERVALO_MINIMO_LANCES",
+      "SE_INVERSAO_FASES",
+      "SE_JULGAMENTO_POR_ITEM",
+      "SE_JULGAMENTO_POR_LOTE",
+      "SE_MAIOR_DESCONTO",
+      "SE_MATRIZ_DE_RISCOS",
+      "SE_MENOR_PRECO",
+      "SE_ORCAMENTO_PUBLICO",
+      "SE_ORCAMENTO_SIGILOSO",
+      "SE_PARTICIPACAO_CONSORCIO",
+      "SE_PARTICIPACAO_COOPERATIVA",
+      "SE_PASTA_TECNICA",
+      "SE_PRIORIDADE_REGIONAL",
+      "SE_PROPOSTA_SEM_IDENTIFICACAO",
+      "SE_REGULAMENTO_MUNICIPAL_VERIFICADO",
+      "SE_REPACTUACAO",
+      "SE_SEM_INVERSAO_FASES",
+      "SE_SEM_SRP",
+      "SE_SEM_TRATAMENTO_DADOS_PESSOAIS",
+      "SE_SERVICO_OU_FORNECIMENTO_CONTINUO",
+      "SE_SRP_ATA",
+      "SE_TERMO_DE_CONTRATO",
+      "SE_TRATAMENTO_DADOS_PESSOAIS",
+      "SE_TRATAMENTO_REGIONAL",
+      "SE_VEDACAO_CONSORCIO",
+      "SE_VEDA_ADESAO_ATA",
+      "SE_VEDA_SUBCONTRATACAO",
+      "SE_VISITA_TECNICA_FACULTATIVA"
+    ],
+    "conditionTypesUnused": [],
+    "conditionBlocks": 80,
+    "inlineConditionBlocks": 2,
+    "balancedConditions": true,
+    "exclusiveGroups": 13,
+    "choicesBuilt": 20,
+    "systemNotes": 51,
+    "systemNotesRendered": 0,
+    "ignoredLines": 7,
+    "scaffoldingLines": 3,
+    "crossReferences": {
+      "entries": 58,
+      "replaced": 127,
+      "externalCitations": 1,
+      "unmappedRemissions": 0
+    },
+    "anchors": {
+      "defined": 55,
+      "attached": 55
+    },
+    "annexes": 5,
+    "aiSlots": 6,
+    "catalogRenderableVarsNotInMapping": []
+  },
+  "findings": [
+    {
+      "id": "DOCX-ANEXO-II-PRECO",
+      "description": "O DOCX congelado (sha256 5927f257c82599faff208994b02aae8a9b094c491b66b0bc12cdf0f6d8f38fa9) perdeu a tabela de preços do Anexo II (bloco SE_MENOR_PRECO): o par de \"$\" em \"Preço unitário (R$)\" / \"Preço total (R$)\" foi lido pela conversão como matemática em linha (1 objeto OMML), removendo os \"$\" e os espaços (\"Preçototal(R)\") e deixando a linha em texto com barras. O Markdown aprovado (sha256 6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904) está íntegro; a AST deriva dele e declara \"(R$)\" nas colunas monetárias. O snapshot congelado não foi alterado."
+    }
+  ]
+}

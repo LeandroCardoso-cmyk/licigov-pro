@@ -18,7 +18,8 @@
  *  - `commitLifecycleTransition` grava decisão institucional + transição da revisão + evento na MESMA transação, com CAS;
  *  - sem backing disponível ⇒ falha fechada (`createUnavailableTemplatePorts` / `PORTS_NOT_CONFIGURED`), nunca fallback.
  */
-import type { DocRefKind } from "../../domain/institutionalTemplates/ast";
+import type { DocRefKind2 } from "../../domain/institutionalTemplates/ast2";
+import type { AnyVariableCatalog } from "../../domain/institutionalTemplates/astVersions";
 import type {
   BindingRequest, BindingResolution, ComposeInput, ComposeOutcome, CompositionManifest, OrgId, TemplateBinding,
   TemplateDocumentKind, TemplateIdentity, TemplateRevision, RevisionStatus, VariableCatalog,
@@ -26,8 +27,11 @@ import type {
 import type { AiNarrativeOutput, CanonicalSourceSnapshot, OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
 import type { GenerationManifest, IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
 import type { AiNarrativeAcceptance, HumanEditLink, StructuralDeviationAcknowledgment } from "../../domain/institutionalTemplates/revalidation";
-import type { VariableSource } from "../../domain/institutionalTemplates/variableCatalog";
-import type { InstitutionalDecision } from "../../domain/institutionalDecision";
+import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import type { DecisionRequest, DecisionSubjectType, InstitutionalDecision } from "../../domain/institutionalDecision";
+import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
+import type { ReadinessMatrix } from "../../domain/institutionalTemplates/governance/readinessMatrix";
+import type { ReadinessWitnessRefs } from "../../domain/institutionalTemplates/governance/readinessWitness";
 import type { OfficialDocsExecutor } from "../../db/officialDocuments";
 
 /** Executor transacional (o mesmo do Document Engine/Lifecycle e dos repositórios da Lane A). */
@@ -43,7 +47,7 @@ export interface TemplateEnablementPort {
 /** Catálogo de variáveis = CONTRATO DE CÓDIGO versionado (o catálogo de produção é das fases T4/T5). */
 export interface VariableCatalogPort {
   current(): VariableCatalog;
-  byVersion(version: string): VariableCatalog | null;
+  byVersion(version: string): AnyVariableCatalog | null;
 }
 
 /** Relógio operacional (fora de qualquer hash semântico). */
@@ -71,6 +75,8 @@ export interface IdentityListFilter {
 export type LifecycleCommitResult =
   | { readonly status: "COMMITTED" | "REPLAYED"; readonly decision: InstitutionalDecision }
   | { readonly status: "STALE_STATUS"; readonly currentStatus: RevisionStatus }
+  /** O estado em que a prontidão foi provada mudou antes do COMMIT (rollback total; nada foi gravado). */
+  | { readonly status: "READINESS_STALE"; readonly drift: readonly string[] }
   | { readonly status: "DECISION_IDEMPOTENCY_CONFLICT" };
 
 export interface LifecycleCommit {
@@ -83,6 +89,11 @@ export interface LifecycleCommit {
   readonly after: TemplateRevision;
   /** Decisão a gravar no ledger existente (`institutional_decisions`); `planDecision` já a validou. */
   readonly decision: InstitutionalDecision;
+  /**
+   * Publicação sob gate de prontidão: referências do estado em que a matriz foi provada. A transação (linha da revisão travada)
+   * RELÊ revisão + procedência + evidência e compara; divergiu ⇒ `READINESS_STALE` e nada é gravado.
+   */
+  readonly readinessWitness?: ReadinessWitnessRefs;
 }
 
 export interface TemplateRepositoryPort {
@@ -126,6 +137,36 @@ export class DuplicateTemplateRevisionError extends Error {
   constructor() { super("Número de revisão já existe para a identidade."); this.name = "DuplicateTemplateRevisionError"; }
 }
 
+// ─── Governança do modelo (procedência da importação · evidência jurídica) ─────────────────────────────────────
+
+export type GovernanceCommitResult =
+  | { readonly status: "COMMITTED" | "REPLAYED"; readonly decision: InstitutionalDecision }
+  | { readonly status: "SUBJECT_NOT_FOUND" }
+  | { readonly status: "STALE_VERSION"; readonly currentVersion: number }
+  | { readonly status: "DECISION_IDEMPOTENCY_CONFLICT" };
+
+/**
+ * Registros de governança SOBRE uma revisão exata, no ledger institucional EXISTENTE (append-only). Não há transição da
+ * revisão: procedência e evidência jurídica NÃO são status do ciclo de vida. O adapter trava a linha da revisão
+ * (`lockDecisionSubject`), faz replay pela chave de idempotência, CAS pela versão corrente e INSERT — numa transação.
+ */
+export interface TemplateGovernancePort {
+  /** `request` já validado (`validateDecisionRequest`). `request.expectedRevision` é a versão corrente que o chamador viu (0 = nenhuma). */
+  recordGovernanceDecision(request: DecisionRequest): Promise<GovernanceCommitResult>;
+  /** Histórico completo (v1…corrente) do assunto (= revisão), tenant-scoped. Revisão de outro tenant ⇒ lista vazia. */
+  listGovernanceDecisions(organizationId: OrgId, subjectType: DecisionSubjectType, revisionId: string): Promise<readonly InstitutionalDecision[]>;
+}
+
+/**
+ * Port ESTREITO de prontidão para a publicação. O backend recalcula a matriz com o estado AUTORITATIVO atual (revisão, procedência
+ * e evidência do ledger, capacidades do sistema) — nunca aceita matriz enviada pelo cliente. Não decide nada: devolve fatos
+ * (PASS/BLOCKED/NOT_APPLICABLE); quem bloqueia a transição APPROVED → PUBLISHED é o workflow. Ausente/indisponível ⇒ publicação falha
+ * fechada (`READINESS_UNAVAILABLE`).
+ */
+export interface TemplateReadinessPort {
+  evaluateForPublication(ctx: WorkflowContext, input: { readonly revisionId: string; readonly inventory?: unknown }): Promise<ReadinessMatrix>;
+}
+
 // ─── Manifests M1/M2 ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Manifests M1/M2 — INSERT-only; leitura tenant-scoped. */
@@ -149,12 +190,45 @@ export interface CompositionPort {
   resolveExactBinding?(request: BindingRequest): Promise<BindingResolution>;
 }
 
-/** Referências canônicas do domínio institucional (DOMAIN = TRUTH), lidas fora de transação. */
+/** Pin PEDIDO por quem gera (escolha humana do documento oficial exato): documento + versão + hash do conteúdo. */
+export interface RequestedOfficialPin {
+  readonly documentId: string;
+  readonly version: number;
+  readonly contentHash: string;
+}
+
+/**
+ * Referências canônicas do domínio institucional (DOMAIN = TRUTH), lidas fora de transação.
+ * Fonte sem backing ou fora do contrato ⇒ `TemplateSourceUnavailableError` (falha FECHADA; nunca omitida em silêncio).
+ */
 export interface CanonicalReferencePort {
-  resolveSources(organizationId: OrgId, subjectId: string, sources: readonly VariableSource[]): Promise<Partial<Record<VariableSource, CanonicalSourceSnapshot>>>;
-  /** Pin exato (documento + linhagem + versão + hash) da versão oficial autoritativa de cada tipo referenciado. */
-  resolveOfficialDocuments(organizationId: OrgId, subjectId: string, kinds: readonly DocRefKind[]): Promise<Partial<Record<DocRefKind, OfficialDocumentPin>>>;
+  /** `catalog` = o catálogo da REVISÃO (v1 ⇒ comportamento histórico; v2 ⇒ fontes por caminhos do catálogo). */
+  resolveSources(organizationId: OrgId, subjectId: string, sources: readonly VariableSource2[], catalog: AnyVariableCatalog): Promise<Partial<Record<VariableSource2, CanonicalSourceSnapshot>>>;
+  /**
+   * AUTORIDADE ATUAL: pin exato (documento + linhagem + versão + hash) da versão oficial EMITIDA mais recente de cada tipo.
+   * Usado pela REVALIDAÇÃO para detectar que o documento oficial referenciado mudou (SOURCE_CHANGED).
+   */
+  resolveOfficialDocuments(organizationId: OrgId, subjectId: string, kinds: readonly DocRefKind2[]): Promise<Partial<Record<DocRefKind2, OfficialDocumentPin>>>;
+  /**
+   * GERAÇÃO: o chamador informa o documento oficial EXATO (id + versão + hash). O adapter só ACEITA o pin se ele for um
+   * documento `emitido` do MESMO tenant e da MESMA origem, com versão e hash conferidos e ainda vigente como a última versão
+   * emitida do tipo. Sem pin informado, de rascunho/`gerado`, de outra origem/tenant, divergente ou superado ⇒ falha fechada.
+   * Nunca "o último TR" escolhido pelo servidor.
+   */
+  pinOfficialDocuments(
+    organizationId: OrgId, subjectId: string, kinds: readonly DocRefKind2[], requested: Partial<Record<DocRefKind2, RequestedOfficialPin>>,
+  ): Promise<Partial<Record<DocRefKind2, OfficialDocumentPin>>>;
   identityFingerprint(organizationId: OrgId): Promise<string>;
+}
+
+export const TEMPLATE_SOURCE_UNAVAILABLE = "TEMPLATE_SOURCE_UNAVAILABLE";
+
+/** Fonte canônica indisponível/fora do contrato (ex.: ITEMS sem Itens da contratação; NORMATIVE sem reference set ativo). */
+export class TemplateSourceUnavailableError extends Error {
+  constructor(readonly source: string, readonly reason: string, readonly detail: string) {
+    super(`${TEMPLATE_SOURCE_UNAVAILABLE}: ${source} — ${reason}: ${detail}`);
+    this.name = "TemplateSourceUnavailableError";
+  }
 }
 
 /** Rascunho operacional (`generated_documents`) que recebe o conteúdo composto. */
@@ -193,6 +267,12 @@ export interface TemplateWorkflowPorts {
   readonly flag: TemplateEnablementPort;
   readonly clock: ClockPort;
   readonly ids: IdPort;
+  /** Procedência + evidência jurídica (ledger existente). Ausente ⇒ essas operações falham fechado (`PORTS_NOT_CONFIGURED`). */
+  readonly governance?: TemplateGovernancePort;
+  /** Capacidades reais do sistema (matriz de prontidão, dimensões de escopo). Ausente ⇒ `INTEGRATED_CAPABILITIES`. */
+  readonly capabilities?: TemplateCapabilities;
+  /** Prontidão para publicar. Ausente ⇒ publicar revisão de tipo sob `READINESS_GATED_KINDS` falha fechada (`READINESS_UNAVAILABLE`). */
+  readonly readiness?: TemplateReadinessPort;
 }
 
 /** Composição e emissão governadas (Lane B). */
@@ -228,7 +308,7 @@ export function createUnavailableTemplatePorts(): TemplatePorts {
     enablement: { isEnabled: async () => false },
     repository: { getIdentity: unavailable("repository"), getRevision: unavailable("repository"), listRevisions: unavailable("repository"), listBindings: unavailable("repository") },
     catalog: { current: () => { throw new TemplatePersistenceUnavailableError("catalog"); }, byVersion: () => null },
-    canonical: { resolveSources: unavailable("canonical"), resolveOfficialDocuments: unavailable("canonical"), identityFingerprint: unavailable("canonical") },
+    canonical: { resolveSources: unavailable("canonical"), resolveOfficialDocuments: unavailable("canonical"), pinOfficialDocuments: unavailable("canonical"), identityFingerprint: unavailable("canonical") },
     drafts: { reserveDraftId: unavailable("drafts"), writeDraft: unavailable("drafts") },
     manifests: {
       getManifest: unavailable("manifests"), findGenerationManifestForDraft: unavailable("manifests"),

@@ -1,0 +1,9 @@
+{
+  "compiler": "tpl-master-compiler/2",
+  "modelKey": "EDITAL_PREGAO_ELETRONICO_BLL",
+  "sourceLogicalVersion": "1.0.1-draft",
+  "sourceSha256": "6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904",
+  "sourceBytes": 149770,
+  "mappingSha256": "731559a54c8e47473a3fb3cc560fef9a17153918d606438dda4e2f7bc14b5f7a",
+  "catalogVersion": "edital-pregao-eletronico-bll/1.0.1-draft.c2"
+}

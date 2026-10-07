@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1791315248.6912768,
-    "ast_hash": "23092c4971bc4eb01cfcf09a50ab192c",
+    "mtime": 1791377256.7370224,
+    "ast_hash": "84d3ebbb9577977643bbb89e9441733b",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1791315248.6912768,
-    "ast_hash": "dbc9e96a78533910d2186bf1369ca001",
+    "mtime": 1791377257.0170224,
+    "ast_hash": "36a7032ffc68b38cddc8f9c4b1aad55b",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1791307793.5662405,
-    "ast_hash": "f2045d42a6901260a94fa95746f57bc8",
+    "mtime": 1791377257.1650224,
+    "ast_hash": "af1cf81dc26cb37a75aa3575856d91ba",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6830,8 +6830,8 @@
     "semantic_hash": ""
   },
   "server/bootstrap.ts": {
-    "mtime": 1791315248.6952767,
-    "ast_hash": "0f0b1032b6bb87cc29a1f8cc537a344e",
+    "mtime": 1791377257.0210223,
+    "ast_hash": "bfd6e3748d520b7f600020d23ce59af2",
     "semantic_hash": ""
   },
   "server/config/ai.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1791249270.1376843,
-    "ast_hash": "2083f583ec274dec08718be04f340d07",
+    "mtime": 1791377257.0250223,
+    "ast_hash": "d0575cdeecaf4c81fd3f1b7fff58d9c6",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1790269615.3777397,
-    "ast_hash": "73db9080c6965925dd331565df4e9305",
+    "mtime": 1791377257.1770222,
+    "ast_hash": "2a877255fc79c846ff7c2a8d0aa9bc05",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -10535,8 +10535,8 @@
     "semantic_hash": ""
   },
   "tsconfig.json": {
-    "mtime": 1790269615.616141,
-    "ast_hash": "71091f6e209a751279c46827bbcee1c7",
+    "mtime": 1791377776.833961,
+    "ast_hash": "b37c939cf925fcecf7c0cb3d88fb27d0",
     "semantic_hash": ""
   },
   "vite.config.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791317184.856327,
-    "ast_hash": "c9c384d2be3deb8c6dddb15ac2c017a7",
+    "mtime": 1791382416.1667304,
+    "ast_hash": "90073fb47b58815948cf731af6263101",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -12860,8 +12860,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalDecisions.ts": {
-    "mtime": 1791316072.0180144,
-    "ast_hash": "e0b422943409828791339496f28fbbab",
+    "mtime": 1791377978.843987,
+    "ast_hash": "cd9182353d13f4d0a5da2e5bc96b66b2",
     "semantic_hash": ""
   },
   "server/db/legalOpinionAssignment.ts": {
@@ -12885,8 +12885,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalDecision.ts": {
-    "mtime": 1791315707.0394614,
-    "ast_hash": "f40b81c682d72ca5083019442921df9d",
+    "mtime": 1791377978.8433762,
+    "ast_hash": "90d151dc943394bec8f1865465010204",
     "semantic_hash": ""
   },
   "server/domain/processLifecycle.ts": {
@@ -13560,18 +13560,18 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/ast.ts": {
-    "mtime": 1791307793.6090906,
-    "ast_hash": "16fcd91b7936f3f822706906335adcb1",
+    "mtime": 1791377257.1690223,
+    "ast_hash": "987a95d404e760f020249db19fb8ec1c",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/binding.ts": {
-    "mtime": 1791307793.6097212,
-    "ast_hash": "b806a04710b62d79259186c04bb49e71",
+    "mtime": 1791378570.0180793,
+    "ast_hash": "a92546ba7571ae29b804ae0a3b73f43a",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composerContract.ts": {
-    "mtime": 1791307793.6097212,
-    "ast_hash": "fedd5de7fca8e3b9683d0c4a6871a453",
+    "mtime": 1791377257.1690223,
+    "ast_hash": "37f248bfff8132f4910a9344c1398e0c",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/conditionalDsl.ts": {
@@ -13580,18 +13580,18 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/index.ts": {
-    "mtime": 1791307793.6113415,
-    "ast_hash": "60c492dcd7f971ef57da5e807108e87f",
+    "mtime": 1791379894.483216,
+    "ast_hash": "85e1d0b2b5a85800894f460a57897da2",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/manifest.ts": {
-    "mtime": 1791307793.6116211,
-    "ast_hash": "30febcc18f004da2670fc266948f076c",
+    "mtime": 1791377272.0563302,
+    "ast_hash": "75c3e0adba230b524b35460c95994cd6",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revision.ts": {
-    "mtime": 1791307793.6119244,
-    "ast_hash": "099b2ad6cf42c28e9b8b08a625dd8b7c",
+    "mtime": 1791377257.1730223,
+    "ast_hash": "1e1f4521de5acc42de3420a5613bea6d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/semanticHash.ts": {
@@ -13605,12 +13605,12 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/types.ts": {
-    "mtime": 1791307793.6128585,
-    "ast_hash": "1e4132c3980ac2972c3abab9d49118f1",
+    "mtime": 1791377272.055985,
+    "ast_hash": "8d5ac0f704f1d2e4ef8238d5be50b72d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/variableCatalog.ts": {
-    "mtime": 1791307793.613144,
+    "mtime": 1791377647.7490077,
     "ast_hash": "263ec1f4b0a1799c5d26b0db91e339b6",
     "semantic_hash": ""
   },
@@ -13670,23 +13670,23 @@
     "semantic_hash": ""
   },
   "client/src/lib/institutionalTemplatesView.test.ts": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "280df1d375e52e138525f624cec13970",
+    "mtime": 1791377294.497021,
+    "ast_hash": "55163a091ab83d7546e50953bf8e3172",
     "semantic_hash": ""
   },
   "client/src/lib/institutionalTemplatesView.ts": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "f7d6df4c0a05798a28b0199593f1d39c",
+    "mtime": 1791379519.8689384,
+    "ast_hash": "a9d833ff0c791bb7f078af15fa3028e7",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplateDetail.tsx": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "49cf98d43bf326d22dda76c073278353",
+    "mtime": 1791377379.6415315,
+    "ast_hash": "10ab7db99499e9a87e8de8c0a6b55029",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplates.tsx": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "ec75c9980244db80b4907ce0441c5610",
+    "mtime": 1791377733.384339,
+    "ast_hash": "152cf65b899f09c83e7b2fd5b7be56f4",
     "semantic_hash": ""
   },
   "drizzle/0316_institutional_templates_persistence.sql": {
@@ -13700,8 +13700,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesFakes.ts": {
-    "mtime": 1791315499.3238547,
-    "ast_hash": "85222f8ad595cf62c2af9350530f0c8d",
+    "mtime": 1791377294.497021,
+    "ast_hash": "79d480ab4af788d1fb56788ce5bed674",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesFixture.ts": {
@@ -13710,8 +13710,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-templates-lane-b-service.test.ts": {
-    "mtime": 1791316736.2709055,
-    "ast_hash": "fc3621fca7bc443c6a7dfcd4cb2d4b9b",
+    "mtime": 1791380147.0157034,
+    "ast_hash": "a0020e85059e019b8d29419e79b6c608",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
@@ -13725,8 +13725,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-persistence-mysql-smoke.test.ts": {
-    "mtime": 1791315248.6952767,
-    "ast_hash": "18d462a2c636a8a00df04d93e714f700",
+    "mtime": 1791377257.1690223,
+    "ast_hash": "91ef2390bedce58e2807a7c2ab5d8a41",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-integration.test.ts": {
@@ -13750,8 +13750,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-lane-c-support.test.ts": {
-    "mtime": 1791316365.6551871,
-    "ast_hash": "2ba841341acdb5114183c1e941a61acc",
+    "mtime": 1791377379.6438785,
+    "ast_hash": "f960e0f1ac56cdbbbefae5ee60e52e97",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-lane-c-workflow.test.ts": {
@@ -13760,13 +13760,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-t2-schema-guard.test.ts": {
-    "mtime": 1791315248.6952767,
-    "ast_hash": "203ca3f46d4bc5a43e4f5d5778fbe457",
+    "mtime": 1791377257.0210223,
+    "ast_hash": "e40beef6ce5c9a7a55530f982f05c488",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/bindings.ts": {
-    "mtime": 1791315248.6952767,
-    "ast_hash": "d281bbdab52c36bf28ed37c67a59948d",
+    "mtime": 1791377338.4253013,
+    "ast_hash": "121510f77e528d45efcc81fa8836d4ff",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/errors.ts": {
@@ -13790,8 +13790,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/identities.ts": {
-    "mtime": 1791315670.1818273,
-    "ast_hash": "2c710d4cf2546a1043158d747a5c2e71",
+    "mtime": 1791377257.0210223,
+    "ast_hash": "084a1fb521ad3e408e17874a56223227",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/ids.ts": {
@@ -13810,8 +13810,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/revisions.ts": {
-    "mtime": 1791315670.1825643,
-    "ast_hash": "ccc74a351c63b40ddda32c318a7bb39e",
+    "mtime": 1791377257.1690223,
+    "ast_hash": "beaf5239a1f6be188e8a9591f49300f6",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/schemaContract.ts": {
@@ -13825,23 +13825,23 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composer.ts": {
-    "mtime": 1791317171.0444593,
-    "ast_hash": "e717e2d4c854e5d91c7f0637e717e07d",
+    "mtime": 1791379667.1889331,
+    "ast_hash": "71fc4f0da562723368ab3ab062589c9e",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revalidation.ts": {
-    "mtime": 1791315248.7072768,
-    "ast_hash": "6cb38301bdb746ea8fd977f9cc91bf3e",
+    "mtime": 1791380893.3968592,
+    "ast_hash": "6736c1cf5245b4ab9805a8c5e3d978d4",
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
-    "mtime": 1791316365.6556098,
-    "ast_hash": "24c0cb036d2a3396accf47dcda3abba5",
+    "mtime": 1791383021.327689,
+    "ast_hash": "5a21687823ec3c40f3ce20817a8f413c",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalAdapter.ts": {
-    "mtime": 1791316013.2323062,
-    "ast_hash": "adfa9656c9dd1a9db9fa88e166d9f011",
+    "mtime": 1791378063.7234507,
+    "ast_hash": "11f6e4afccb54f5911bb0bfcd38ffb0a",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
@@ -13860,13 +13860,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/previewAdapter.ts": {
-    "mtime": 1791316013.234153,
-    "ast_hash": "c32670d74f9d38f5f792c2a20ffa7120",
+    "mtime": 1791377257.1770222,
+    "ast_hash": "ed9bed0045a7f14c5550a8caa603027c",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/repositoryAdapter.ts": {
-    "mtime": 1791315870.272293,
-    "ast_hash": "a94b40b3d824fedb02a45912476fb822",
+    "mtime": 1791378893.600923,
+    "ast_hash": "cf3f700f09e267fb935eba6c1c77470b",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/reviewAdapter.ts": {
@@ -13875,23 +13875,23 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/astSummary.ts": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "269a6df564ad7fae173cc454faec7557",
+    "mtime": 1791377257.1770222,
+    "ast_hash": "be72abad0a26be76c5d8c8c6781c553f",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/authority.ts": {
-    "mtime": 1791316231.7677314,
-    "ast_hash": "1f380b4bb4c6fa939437d5e02355711f",
+    "mtime": 1791377344.9459667,
+    "ast_hash": "09ed4766b74a7ba9b00e5334102979d6",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/catalogRegistry.ts": {
-    "mtime": 1791316179.1814613,
-    "ast_hash": "31b7f028903cddedf0e4c4c8ce5056e7",
+    "mtime": 1791377794.5226612,
+    "ast_hash": "f8c27b97af2d0d703b3caed64cad96c5",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/errors.ts": {
-    "mtime": 1791315253.175277,
-    "ast_hash": "f3ca713727af280a3b6c27a6c908ef43",
+    "mtime": 1791378893.5992343,
+    "ast_hash": "77b660aca92afb136faba9f430a93ef7",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/explainability.ts": {
@@ -13905,13 +13905,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/integration.ts": {
-    "mtime": 1791316179.2017488,
-    "ast_hash": "2d8d60b5b325d40ad3e25a9862b81320",
+    "mtime": 1791377294.5050209,
+    "ast_hash": "fad85df5b4243b0655f014dbbd0815a9",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/ports.ts": {
-    "mtime": 1791316736.26968,
-    "ast_hash": "e29bb6e0cf754bcd3f522501afc0e3a0",
+    "mtime": 1791378893.600413,
+    "ast_hash": "da09a33bea64adcec47545db6455b602",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/portsRegistry.ts": {
@@ -13920,23 +13920,23 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/reviewService.ts": {
-    "mtime": 1791316136.8720777,
-    "ast_hash": "6971cbb00c34900d56846901aca056ea",
+    "mtime": 1791377257.0290222,
+    "ast_hash": "c2d57f59046de151259b780abb961cdf",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1791316736.2705266,
-    "ast_hash": "6f0e28bd877c50419d4b2b43ee581122",
+    "mtime": 1791379894.4823647,
+    "ast_hash": "221ddd7ccd2b593f0ec5d9f994c28d97",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
-    "mtime": 1791317037.1567917,
-    "ast_hash": "b9fd18c0fa30ece879fd6295ea04b963",
+    "mtime": 1791383021.330711,
+    "ast_hash": "aa8eb7eddddc3a8580d591927f6281a7",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_TEMPLATES_INTEGRATION.md": {
-    "mtime": 1791317229.2616272,
-    "ast_hash": "a4c7be3d43a5747417b3a571cde9bb22",
+    "mtime": 1791377294.497021,
+    "ast_hash": "ea38dec59fe4652cf27db446ee6ae53a",
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_TEMPLATES_LANE_B_COMPOSITION.md": {
@@ -13947,6 +13947,411 @@
   "docs/architecture/INSTITUTIONAL_TEMPLATES_LANE_C_WORKFLOW_UX.md": {
     "mtime": 1791317229.2810388,
     "ast_hash": "0eb0f988c2ffa60f476de7a7b053e844",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/CatalogCard.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "5750350a9b7f2e0fcfcc21bc1f2805af",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/CatalogFilters.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "41b3f5f4b612391d267c1c7d4955d8b7",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/LegalEvidencePanel.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "5eb4fc50e0a6a94c6b6a5c148ad40751",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/PreviewDossierPanel.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "82c7860796fb673cde4cf9370d7bedbf",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/ReadinessMatrixPanel.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "f3a2f6a5162467568b1cd7005b97da14",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/RegisterModelForm.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "850e4eb7d535128031222fc04ef1ebf1",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/ScopeFields.tsx": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "2436ec64185f9150f960a506897a728b",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/institutionalTemplatesEditalPilot-components.test.ts": {
+    "mtime": 1791379453.8152783,
+    "ast_hash": "0af6f84edbd2a1bd58d665244dbf4d62",
+    "semantic_hash": ""
+  },
+  "client/src/lib/institutionalTemplatesEditalPilot.test.ts": {
+    "mtime": 1791380050.836451,
+    "ast_hash": "2b27328ec5697edfd7fd2322a05cbb5d",
+    "semantic_hash": ""
+  },
+  "drizzle/0317_institutional_template_multimodel_scope.sql": {
+    "mtime": 1791377256.5530224,
+    "ast_hash": "f41a825c757fdc3fc18e2f7ef2041d68",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0317_snapshot.json": {
+    "mtime": 1791377256.7370224,
+    "ast_hash": "e827478425d97901c0ec0dd524a85677",
+    "semantic_hash": ""
+  },
+  "scripts/edital-pilot-harness.ts": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "9b2e2169d4923f5574b54633622e2f31",
+    "semantic_hash": ""
+  },
+  "scripts/templates-compile-master.ts": {
+    "mtime": 1791377257.1650224,
+    "ast_hash": "15e98f6b734dac4f42feef1d6381e9c1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/institutionalTemplatesBllHarness.ts": {
+    "mtime": 1791380405.1649058,
+    "ast_hash": "477c179a8d90582fd9dffc43cc7413a9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
+    "mtime": 1791380584.1573539,
+    "ast_hash": "1dc31a4e77ab63e07070fa1f060fe5fb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/institutionalTemplatesGovernanceFakes.ts": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "2bdadd8f6fd46a0b45fec82ab7cc388e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/institutionalTemplatesMiniMaster.ts": {
+    "mtime": 1791377257.1650224,
+    "ast_hash": "b4c14adb18a3aedbcd0cb514c0debc0c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/institutionalTemplatesV2Fixture.ts": {
+    "mtime": 1791377257.1650224,
+    "ast_hash": "50651c94d8faad21c824a80c60fba18d",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/zipText.ts": {
+    "mtime": 1791377257.1650224,
+    "ast_hash": "a372cbb240d9355a35f7d3b18146b594",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-0317-migration-mysql-smoke.test.ts": {
+    "mtime": 1791377257.0170224,
+    "ast_hash": "7d8d7d5f6ea313c68d03c26a758025c2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
+    "mtime": 1791383021.324144,
+    "ast_hash": "8ca1972c6c5c228f51c65f00be57cf36",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts": {
+    "mtime": 1791380207.9840388,
+    "ast_hash": "cb7b3535055dafa77912ede6f1e0384f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-sources-mysql-smoke.test.ts": {
+    "mtime": 1791382224.431641,
+    "ast_hash": "390dbf3488cbc2b25a7711a4265c3113",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-ast2-composer.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "5da7d2a999cf974e60361be45196237e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-ast2-contract.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "a189afb527b57c894b214aba672c84ad",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-ast2-extensions.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "28bc2e58a712d1237b56cb68856193a4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-bll-master-source.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "3f06cdd9ad1f9e4b6678dad07e334dc5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-bll-model.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "4533334fe70600f75ce4760ebee373d2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-pilot-domain.test.ts": {
+    "mtime": 1791379275.8221776,
+    "ast_hash": "236d087ee4db6d9957c2bf77e3288f46",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-pilot-harness.test.ts": {
+    "mtime": 1791379332.3543036,
+    "ast_hash": "04500f237f980c99a7d4fbff2ae1162a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-pilot-router.test.ts": {
+    "mtime": 1791379414.0961843,
+    "ast_hash": "378a87a413f06bdb44024949c7b7d9a5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-pilot-services.test.ts": {
+    "mtime": 1791379332.352877,
+    "ast_hash": "e9aa7667e3b30499c1f14c02f9fce4d4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-master-compiler-dialect.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "4c11373d4cb199bdc1dd327f9bae4116",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-master-compiler.test.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "50ffa8623baed2c84e77fbd95034a10a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-model-rules-witness.test.ts": {
+    "mtime": 1791383740.126069,
+    "ast_hash": "a7f23ec9c684e7ad3bf35b8264060be3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-multimodel-domain.test.ts": {
+    "mtime": 1791379234.236949,
+    "ast_hash": "379d6e42a1f3685ea9a2843afbfb07f0",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/ast2.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "4ea51cde5a3c353ab690ab376b215e94",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/astVersions.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "9be54d469c89d7764baca36be0fe1e3d",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/composer2.ts": {
+    "mtime": 1791379670.664933,
+    "ast_hash": "819a14a94822e6dd3fcb3abcbce6fdf7",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/composerRequirements.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "71641a22cce444e345992f8082e80921",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/composerShared.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "8661be9042f046605b6c5f81ef39225d",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/conditionalDsl2.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "d401244f5cbae114e0c3fac1930aa4d1",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/astFacts.ts": {
+    "mtime": 1791380640.0649529,
+    "ast_hash": "11d1a7eb4e5db1365931442e62134308",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/capabilities.ts": {
+    "mtime": 1791378807.416287,
+    "ast_hash": "ca8bb47b7e15f9e9d609fe25ab93a243",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/importProvenance.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "2d8236160310cd1d124bd3e611c9155a",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/kv.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "7c5329516c94175942acd68ded6e1c54",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/legalEvidence.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "4427212a2719c4f8a7963b79abd2bf79",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/packageInventory.ts": {
+    "mtime": 1791380640.0672994,
+    "ast_hash": "605f452e74240b030cf05a5f934c3345",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/readinessMatrix.ts": {
+    "mtime": 1791380640.0666778,
+    "ast_hash": "103c8ad3b773e2dc6681813511df840a",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/readinessWitness.ts": {
+    "mtime": 1791378893.5690246,
+    "ast_hash": "6fa1f1b633b2ac40fecb48b9e7f6a24e",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/scopeDimensions.ts": {
+    "mtime": 1791378570.017475,
+    "ast_hash": "1c28fe1ff8e1ec418c090d496b09d803",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governance/sourceInventory.ts": {
+    "mtime": 1791380640.065643,
+    "ast_hash": "3b827bb420396815f4223aa113e57f10",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/governedSources.ts": {
+    "mtime": 1791381886.4357865,
+    "ast_hash": "2d77eecd12cf4b3501122657c8e7d007",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/masterCompiler.ts": {
+    "mtime": 1791377257.1690223,
+    "ast_hash": "673cb69b432b3110706b1659ecd6b90b",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/modelRules.ts": {
+    "mtime": 1791379703.6289318,
+    "ast_hash": "d5c25d33e4666f4a0dfc9b820d63d183",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/approvedPackage.json": {
+    "mtime": 1791379818.7449274,
+    "ast_hash": "557c44be985c0196fbb6e5a11c4578c7",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/ast.json": {
+    "mtime": 1791377257.1730223,
+    "ast_hash": "c39fc2caafba971183f7ddffb623557e",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/catalog.v2.json": {
+    "mtime": 1791380783.2768917,
+    "ast_hash": "95348c0c5535ec545ddde2ea379a9d49",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/mapping.json": {
+    "mtime": 1791377257.1730223,
+    "ast_hash": "bc9c4d073dadbe10b84c64527e4efe12",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/provenance.json": {
+    "mtime": 1791377257.1730223,
+    "ast_hash": "5e25c55e167dc25fedb024bd6794f6d9",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/report.json": {
+    "mtime": 1791377257.1730223,
+    "ast_hash": "00e151bbd4c85df6e43d6c30817631d5",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/rules.json": {
+    "mtime": 1791380941.8332915,
+    "ast_hash": "f0815cb2420fafd3edb195c43aebc654",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/valueTypes2.ts": {
+    "mtime": 1791377257.1770222,
+    "ast_hash": "f3ba40ec4c29c696d1c87466f4357266",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/variableCatalog2.ts": {
+    "mtime": 1791377257.1770222,
+    "ast_hash": "93c74133ad29a2754c0e2f4a5a9faa0e",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/adapters/canonicalSources.ts": {
+    "mtime": 1791378045.4749546,
+    "ast_hash": "502f4d5de82dc81e6153d237eabb73a1",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/adapters/governanceAdapter.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "dbe29b3bac5d9f860487f0d6cb0dc4fc",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/catalogService.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "018ff0ede0721b560db0d6325a838133",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/decisionRecorder.ts": {
+    "mtime": 1791377257.0290222,
+    "ast_hash": "4eadc24e01e806ec7cfb8cf1afc5d3e7",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/governanceService.ts": {
+    "mtime": 1791377294.5043635,
+    "ast_hash": "8574d549459db2e1e6e5a1852601e20e",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/governedFieldsStore.ts": {
+    "mtime": 1791381886.4365962,
+    "ast_hash": "0b79e270fa9a58bf2bb3170da6762400",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/governedSourceService.ts": {
+    "mtime": 1791381886.437064,
+    "ast_hash": "67ffc51a512de0c3eb7bc973654f9048",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/modelPackages.ts": {
+    "mtime": 1791379804.1729279,
+    "ast_hash": "a1a2f8f594b5bf33daea686d4418b162",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/modelRegistrationService.ts": {
+    "mtime": 1791380941.8341048,
+    "ast_hash": "409605a06798177b988345c16cdc7e9e",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/pilot/editalPilotFixture.ts": {
+    "mtime": 1791378807.4175494,
+    "ast_hash": "2a6d296c7ca26c6740f8b8db9a85ac7d",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/pilot/editalPilotHarness.ts": {
+    "mtime": 1791377294.5059843,
+    "ast_hash": "35ac83b533b0ea3e673435234c194514",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/previewDossierService.ts": {
+    "mtime": 1791378215.1104858,
+    "ast_hash": "2c462fdf1ff78291353b3c7edcd52649",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/readinessService.ts": {
+    "mtime": 1791379017.7076445,
+    "ast_hash": "f7da1916ac16bc9c73856ae453efe925",
+    "semantic_hash": ""
+  },
+  "docs/architecture/EDITAL_PILOT_LANE_C.md": {
+    "mtime": 1791377294.497021,
+    "ast_hash": "5f47b2c97471a2a1c3615946109be6e7",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_TEMPLATES_AST_V2.md": {
+    "mtime": 1791377257.1650224,
+    "ast_hash": "0e8a3ca6c2a0638b706b656371184586",
+    "semantic_hash": ""
+  },
+  "docs/architecture/INSTITUTIONAL_TEMPLATES_MULTIMODEL.md": {
+    "mtime": 1791383711.5595345,
+    "ast_hash": "79b729bb6c78bf02586e24e1a36f1586",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/README.md": {
+    "mtime": 1791383717.0912273,
+    "ast_hash": "1f80147bb2333e93fa1c9b63417116ec",
     "semantic_hash": ""
   }
 }

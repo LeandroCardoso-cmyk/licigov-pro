@@ -91,6 +91,9 @@ const CRITICAL_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ["process_members", "functionalRole"],
   ["processes", "organizationId"], ["documents", "organizationId"], ["activity_logs", "organizationId"],
   ["import_sessions", "checksum"], ["documents", "documentStatus"],
+  // Institutional Templates (0317): o código lê/grava forma, plataforma e rótulo — sem eles o módulo falharia em runtime.
+  ["institutional_template_bindings", "scope_form"], ["institutional_template_bindings", "scope_platform"],
+  ["institutional_template_identities", "display_name"],
 ];
 
 export type SchemaValidationLevel = "ok" | "warn" | "fail";

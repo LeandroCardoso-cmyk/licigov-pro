@@ -19,24 +19,39 @@
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../db/connection";
 import type { DocumentBusinessDomain, OfficialDocumentType } from "../../domain/officialDocument";
-import { referencedVariables } from "../../domain/institutionalTemplates/ast";
+import {
+  findAnyVariable, isCatalogV2, referencedVariablesAny, templateRequirementsAny, type AnyVariableCatalog,
+} from "../../domain/institutionalTemplates/astVersions";
+import { conditionVariables } from "../../domain/institutionalTemplates/conditionalDsl2";
+import type { ModelRules } from "../../domain/institutionalTemplates/modelRules";
+import { getModelRulesForCatalog } from "./modelPackages";
 import { resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
 import {
-  composeTemplate, templateRequirements,
+  composeTemplate,
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
 } from "../../domain/institutionalTemplates/composer";
 import { manifestRevisionIssues, validateManifest, type GenerationManifest, type IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
 import { buildIssuanceManifest, revalidateForIssuance } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
-import { findVariable, type VariableCatalog, type VariableSource } from "../../domain/institutionalTemplates/variableCatalog";
+import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { sha256Hex } from "../../domain/canonicalJson";
 import { generateOfficialDocument } from "../documentEngineService";
 import { serviceLogger } from "../observabilityService";
 import { runTransactionWithDeadlockRetry } from "../transactionDeadlockRetry";
-import { TemplatePersistenceUnavailableError, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor } from "./ports";
+import {
+  TEMPLATE_SOURCE_UNAVAILABLE, TemplatePersistenceUnavailableError, TemplateSourceUnavailableError,
+  type RequestedOfficialPin, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor,
+} from "./ports";
+import type { DocRefKind2 } from "../../domain/institutionalTemplates/ast2";
 
 const log = serviceLogger("TemplateCompositionService");
+
+/** Marcas deixadas pelo composer: `[REVISAR: …]` (valor não informado ou narrativa de IA pendente). Documento oficial não as contém. */
+const UNRESOLVED_MARKER_RE = /\[REVISAR:[^\]\n]*\]/g;
+export function unresolvedMarkers(text: string): string[] {
+  return [...text.matchAll(UNRESOLVED_MARKER_RE)].map((m) => m[0]);
+}
 
 export const TEMPLATE_COMPOSITION_DISABLED = "TEMPLATE_COMPOSITION_DISABLED";
 export const TEMPLATE_NOT_BOUND = "TEMPLATE_NOT_BOUND";
@@ -58,6 +73,12 @@ const KIND_TARGETS: Readonly<Record<TemplateDocumentKind, { readonly businessDom
   contrato: { businessDomain: "contratos", documentTypes: ["contrato"] },
   aditivo: { businessDomain: "contratos", documentTypes: ["aditivo"] },
 };
+
+/** Fonte canônica indisponível/inconsistente ⇒ recusa governada (PRECONDITION_FAILED), sem nenhum efeito. */
+function sourceUnavailableToPrecondition(err: unknown): never {
+  if (err instanceof TemplateSourceUnavailableError) throw preconditionFailed(TEMPLATE_SOURCE_UNAVAILABLE, `${err.source} — ${err.reason}: ${err.detail}`);
+  throw err;
+}
 
 function codesOf(issues: readonly { code: string }[]): string {
   return [...new Set(issues.map((i) => i.code))].join(", ");
@@ -84,20 +105,36 @@ async function assertEnabled(ports: TemplatePorts, organizationId: OrgId): Promi
   }
 }
 
-/** Fontes canônicas consultadas pelas variáveis do AST (via catálogo). */
-function requiredSources(revision: TemplateRevision, catalog: VariableCatalog): VariableSource[] {
-  const out = new Set<VariableSource>();
-  for (const name of referencedVariables(revision.ast)) {
-    const def = findVariable(catalog, name);
-    if (def) out.add(def.source);
+/**
+ * Fontes canônicas consultadas pelas variáveis do AST (via catálogo). Para o catálogo v2 o fecho inclui as variáveis das
+ * condições `requiredWhen` das variáveis resolvidas (o composer as avalia).
+ */
+function requiredSources(revision: TemplateRevision, catalog: AnyVariableCatalog): VariableSource2[] {
+  const out = new Set<VariableSource2>();
+  const seen = new Set<string>();
+  const work = [...referencedVariablesAny(revision.ast)];
+  while (work.length) {
+    const name = work.pop()!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const def = findAnyVariable(catalog, name);
+    if (!def) continue;
+    out.add(def.source as VariableSource2);
+    if (isCatalogV2(catalog) && "requiredWhen" in def && def.requiredWhen) work.push(...conditionVariables(def.requiredWhen));
   }
   return [...out].sort();
+}
+
+/** Regras governadas do pacote do modelo (só catálogo v2). Valem na geração E na revalidação: o mesmo conjunto, o mesmo resultado. */
+function rulesFor(t: { readonly catalog: AnyVariableCatalog }): { modelRules?: ModelRules } {
+  const rules = isCatalogV2(t.catalog) ? getModelRulesForCatalog(t.catalog.version) : null;
+  return rules ? { modelRules: rules } : {};
 }
 
 interface LoadedTemplate {
   readonly identity: TemplateIdentity;
   readonly revision: TemplateRevision;
-  readonly catalog: VariableCatalog;
+  readonly catalog: AnyVariableCatalog;
 }
 
 /** Carrega identidade + revisão EXATA + catálogo da revisão (tenant-scoped; ausente ⇒ falha fechada). */
@@ -117,12 +154,22 @@ async function loadExactTemplate(ports: TemplatePorts, organizationId: OrgId, id
   return { identity, revision, catalog };
 }
 
-/** Lê do domínio institucional tudo de que a revisão precisa (fora da transação). */
-async function loadCanonicalInputs(ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate) {
-  const needs = templateRequirements(t.revision.ast.root);
+/**
+ * Lê do domínio institucional tudo de que a revisão precisa (fora da transação).
+ *  - GERAÇÃO (`officialPins` informado, mesmo vazio): o documento oficial referenciado é o PIN EXATO escolhido por pessoa
+ *    (validado contra a versão vigente); sem pin para um `docRef` ⇒ falha fechada. Nunca "o último" decidido pelo servidor.
+ *  - REVALIDAÇÃO (`officialPins` ausente): lê a AUTORIDADE ATUAL para detectar que o documento oficial mudou (SOURCE_CHANGED).
+ */
+async function loadCanonicalInputs(
+  ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate,
+  officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>,
+) {
+  const needs = templateRequirementsAny(t.revision.ast);
   const [sources, officialDocuments, identityFingerprint] = await Promise.all([
-    ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog)),
-    ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
+    ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog),
+    officialPins !== undefined
+      ? ports.canonical.pinOfficialDocuments(organizationId, subjectId, needs.docRefKinds, officialPins)
+      : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
   return { sources, officialDocuments, identityFingerprint };
@@ -144,6 +191,11 @@ export interface GenerateTemplatedDocumentParams {
   readonly correlationId: string;
   /** Narrativas de IA já produzidas para os `aiSlot` da revisão (opcional; nunca aceitas por padrão). */
   readonly aiNarratives?: readonly AiNarrativeOutput[];
+  /**
+   * Documentos oficiais EXATOS (id + versão + hash) escolhidos por pessoa para cada `docRef` da revisão (ex.: o TR). Obrigatório
+   * quando a revisão referencia documento oficial; ausente ⇒ TEMPLATE_SOURCE_UNAVAILABLE (OFFICIAL_PIN_REQUIRED).
+   */
+  readonly officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>;
 }
 
 export interface GenerateTemplatedDocumentResult {
@@ -189,7 +241,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
 
   // 3. Fontes canônicas + rascunho de destino (fora da transação).
   const [canonical, generatedDocumentId] = await Promise.all([
-    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t),
+    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}).catch(sourceUnavailableToPrecondition),
     ports.drafts.reserveDraftId(params.organizationId, params.subjectId, params.documentType),
   ]);
 
@@ -199,6 +251,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
     pin: { identityId: t.identity.id, revisionId: t.revision.id, semanticHash: t.revision.semanticHash },
     sources: canonical.sources, officialDocuments: canonical.officialDocuments, aiNarratives: params.aiNarratives ?? [],
     identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: ports.clock.now(), purpose: "GENERATION",
+    ...rulesFor(t),
   };
   const composed = composeTemplate(request);
   if (!composed.ok) throw preconditionFailed(TEMPLATE_COMPOSITION_FAILED, codesOf(composed.issues));
@@ -269,7 +322,7 @@ async function recompose(ports: TemplatePorts, organizationId: OrgId, subjectId:
     pin: { identityId: m1.templateIdentityId, revisionId: m1.templateRevisionId, semanticHash: m1.templateSemanticHash },
     sources: canonical.sources, officialDocuments: canonical.officialDocuments, aiNarratives: narratives,
     identityFingerprint: canonical.identityFingerprint, generatedDocumentId: m1.generatedDocumentId, createdAt: m1.createdAt,
-    purpose: "REVALIDATION",
+    purpose: "REVALIDATION", ...rulesFor(t),
   });
 }
 
@@ -290,6 +343,10 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         throw blocked(m1Check.ok ? "MANIFEST_INVALID" : codesOf(m1Check.issues), "M1 inválido para este rascunho");
       }
       if (sha256Hex(input.content) !== input.contentHash) throw blocked("MANIFEST_HASH_MISMATCH", "hash do conteúdo a emitir não confere");
+      // Emissão OFICIAL nunca carrega marcador pendente: narrativa de IA não redigida/aceita ou valor não informado. A pessoa resolve
+      // (aceita a narrativa exata, informa o dado ou edita o texto com linhagem) ANTES de emitir.
+      const residual = unresolvedMarkers(input.content);
+      if (residual.length) throw blocked("UNRESOLVED_MARKERS", `${residual.length} marcador(es) pendente(s) no texto a emitir: ${residual.slice(0, 5).join("; ")}`);
 
       const t = await loadExactTemplate(ports, input.organizationId, m1.templateIdentityId, m1.templateRevisionId);
       const consistency = manifestRevisionIssues(m1, t.revision);
@@ -305,7 +362,11 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
       }
 
       const [recomposition, humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
-        recompose(ports, input.organizationId, input.processId, m1, t, outputs),
+        // Fonte que deixou de estar disponível/íntegra (ex.: configuração corrompida, set normativo desativado) BLOQUEIA a emissão.
+        recompose(ports, input.organizationId, input.processId, m1, t, outputs).catch((err: unknown) => {
+          if (err instanceof TemplateSourceUnavailableError) throw blocked("SOURCE_UNAVAILABLE", `${err.source} — ${err.reason}`);
+          throw err;
+        }),
         ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
         ports.review.listAiAcceptances(input.organizationId, m1.id),
         ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),

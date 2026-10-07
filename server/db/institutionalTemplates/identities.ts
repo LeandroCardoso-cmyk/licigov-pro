@@ -10,7 +10,7 @@ import { duplicateKeyName, isDuplicateKey, requireReader, type TemplatesContext,
 export function rowToIdentity(r: InstitutionalTemplateIdentityRow): TemplateIdentity {
   return {
     id: r.id, organizationId: r.organizationId, documentKind: r.documentKind as TemplateDocumentKind,
-    slug: r.slug, createdAt: r.createdAtIso, createdByUserId: r.createdByUserId,
+    slug: r.slug, ...(r.displayName ? { displayName: r.displayName } : {}), createdAt: r.createdAtIso, createdByUserId: r.createdByUserId,
   };
 }
 
@@ -72,12 +72,13 @@ export async function insertIdentity(tx: TemplatesTx, ctx: TemplatesContext, ide
   try {
     await tx.insert(institutionalTemplateIdentitiesTable).values({
       id: identity.id, organizationId: identity.organizationId, documentKind: identity.documentKind, slug: identity.slug,
-      createdAtIso: identity.createdAt, createdByUserId: identity.createdByUserId,
+      displayName: identity.displayName ?? "", createdAtIso: identity.createdAt, createdByUserId: identity.createdByUserId,
     });
   } catch (err) {
     if (!isDuplicateKey(err)) throw err;
     const existing = await lockIdentity(tx, ctx.organizationId, identity.id);
-    if (existing && existing.documentKind === identity.documentKind && existing.slug === identity.slug) return { identity: existing, created: false };
+    if (existing && existing.documentKind === identity.documentKind && existing.slug === identity.slug
+      && (existing.displayName ?? null) === (identity.displayName ?? null)) return { identity: existing, created: false };
     const key = duplicateKeyName(err);
     throw new TemplatePersistenceError("CONFLICT", key === "uq_iti_org_kind_slug"
       ? "já existe uma identidade com este tipo e slug nesta organização"

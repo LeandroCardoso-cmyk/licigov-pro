@@ -29,6 +29,7 @@
     "db:embedding:reindex": "tsx scripts/reindex-legal-embeddings.ts",
     "db:audit": "tsx scripts/schema-audit.ts",
     "ai:models": "tsx scripts/ai-models.ts",
+    "templates:compile-master": "tsx scripts/templates-compile-master.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "ops:schedule-backfill": "tsx scripts/operation-record-schedule-backfill.ts"

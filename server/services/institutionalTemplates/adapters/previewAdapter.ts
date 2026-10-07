@@ -3,12 +3,12 @@
  * revisão; nada é persistido; nenhuma IA). Os valores de exemplo viram snapshots sintéticos por fonte via catálogo
  * (`source` + `path`), de modo que a prévia passe pelo MESMO caminho de resolução da geração real.
  */
-import { referencedVariables } from "../../../domain/institutionalTemplates/ast";
-import { composeTemplate, templateRequirements, type AiNarrativeOutput, type CanonicalSourceSnapshot, type OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
+import { findAnyVariable, referencedVariablesAny, templateRequirementsAny } from "../../../domain/institutionalTemplates/astVersions";
+import { composeTemplate, type AiNarrativeOutput, type CanonicalSourceSnapshot, type OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
 import type { ComposeInput, ComposeOutcome, TemplateIdentity } from "../../../domain/institutionalTemplates";
-import { findVariable, type VariableSource } from "../../../domain/institutionalTemplates/variableCatalog";
+import type { VariableSource2 } from "../../../domain/institutionalTemplates/variableCatalog2";
 import { sha256Hex } from "../../../domain/canonicalJson";
-import type { DocRefKind } from "../../../domain/institutionalTemplates/ast";
+import type { DocRefKind2 } from "../../../domain/institutionalTemplates/ast2";
 import type { CompositionPort } from "../ports";
 
 const PREVIEW_AT = "1970-01-01T00:00:00.000Z";
@@ -29,18 +29,18 @@ export function previewComposeOutcome(input: ComposeInput & { identity?: Templat
   const identity: TemplateIdentity = input.identity ?? {
     id: revision.identityId, organizationId: revision.organizationId, documentKind: "edital", slug: "preview", createdAt: PREVIEW_AT, createdByUserId: 1,
   };
-  const data: Partial<Record<VariableSource, Record<string, unknown>>> = {};
-  for (const name of referencedVariables(revision.ast)) {
-    const def = findVariable(catalog, name);
+  const data: Partial<Record<VariableSource2, Record<string, unknown>>> = {};
+  for (const name of referencedVariablesAny(revision.ast)) {
+    const def = findAnyVariable(catalog, name);
     if (!def || input.values[name] === undefined) continue;
     const bucket = (data[def.source] ??= {});
     setPath(bucket, def.path, input.values[name]);
   }
-  const sources: Partial<Record<VariableSource, CanonicalSourceSnapshot>> = {};
-  for (const [k, v] of Object.entries(data)) sources[k as VariableSource] = { organizationId: revision.organizationId, data: v };
+  const sources: Partial<Record<VariableSource2, CanonicalSourceSnapshot>> = {};
+  for (const [k, v] of Object.entries(data)) sources[k as VariableSource2] = { organizationId: revision.organizationId, data: v };
 
-  const needs = templateRequirements(revision.ast.root);
-  const officialDocuments: Partial<Record<DocRefKind, OfficialDocumentPin>> = {};
+  const needs = templateRequirementsAny(revision.ast);
+  const officialDocuments: Partial<Record<DocRefKind2, OfficialDocumentPin>> = {};
   for (const kind of needs.docRefKinds) {
     officialDocuments[kind] = {
       organizationId: revision.organizationId, documentId: `preview-${kind}`, lineageId: `preview-${kind}`, version: 1,

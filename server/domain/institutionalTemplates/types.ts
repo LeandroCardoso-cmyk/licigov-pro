@@ -41,7 +41,19 @@ export type TemplateIssueCode =
   | "MANIFEST_INVALID"
   | "MANIFEST_HASH_MISMATCH"
   | "REFERENCE_NOT_PINNED"
-  | "HASH_INVALID";
+  | "HASH_INVALID"
+  | "SOURCE_PAYLOAD_INVALID"
+  // tpl-ast/2 · tpl-catalog/2 (aditivos: nenhum código anterior muda de significado)
+  | "AST_VERSION_UNSUPPORTED"
+  | "CATALOG_FORMAT_MISMATCH"
+  | "CONTROL_ONLY_VARIABLE_RENDERED"
+  | "ANCHOR_DUPLICATE"
+  | "XREF_TARGET_UNKNOWN"
+  | "XREF_TARGET_NOT_NUMBERED"
+  | "TABLE_BINDING_INVALID"
+  | "CHOICE_INVALID"
+  | "ANNEX_INVALID"
+  | "DOCREF_INVALID";
 
 export interface TemplateIssue {
   readonly code: TemplateIssueCode;

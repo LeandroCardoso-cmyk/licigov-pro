@@ -7,11 +7,11 @@
  */
 import type { GenerationManifest } from "./manifest";
 import type { TemplateRevision } from "./revision";
-import type { VariableCatalog } from "./variableCatalog";
+import type { AnyVariableCatalog } from "./astVersions";
 
 export interface ComposeInput {
   readonly revision: TemplateRevision;
-  readonly catalog: VariableCatalog;
+  readonly catalog: AnyVariableCatalog;
   readonly values: Readonly<Record<string, unknown>>;
   readonly aiNarratives: Readonly<Record<string, string>>;
 }

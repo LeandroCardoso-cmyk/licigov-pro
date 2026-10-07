@@ -17,7 +17,7 @@ import {
 } from "../../../drizzle/schema";
 import {
   REVISION_STATUSES, TEMPLATE_HASH_VERSION, revisionSemanticHash, templateCanonicalJson,
-  type RevisionSourceFormat, type RevisionStatus, type TemplateAST, type TemplateRevision, type HashVersion,
+  type AnyTemplateAST, type RevisionSourceFormat, type RevisionStatus, type TemplateRevision, type HashVersion,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
 import { assertDecisionInTenant } from "./existingParents";
@@ -33,8 +33,8 @@ export function rowToRevision(r: InstitutionalTemplateRevisionRow): TemplateRevi
   if (!REVISION_STATUSES.includes(r.status as RevisionStatus)) throw corrupt(`estado fora do lifecycle (${r.status})`);
   if (r.hashVersion !== TEMPLATE_HASH_VERSION) throw corrupt(`versão de hash desconhecida (${r.hashVersion})`);
   if (!SOURCE_FORMATS.includes(r.sourceFormat as RevisionSourceFormat)) throw corrupt(`formato de origem desconhecido (${r.sourceFormat})`);
-  let ast: TemplateAST;
-  try { ast = JSON.parse(r.astJson) as TemplateAST; } catch { throw corrupt("AST ilegível"); }
+  let ast: AnyTemplateAST;
+  try { ast = JSON.parse(r.astJson) as AnyTemplateAST; } catch { throw corrupt("AST ilegível"); }
   const revision: TemplateRevision = {
     id: r.id, identityId: r.identityId, organizationId: r.organizationId, revision: r.revision,
     status: r.status as RevisionStatus, ast, variableCatalogVersion: r.variableCatalogVersion,
@@ -137,7 +137,7 @@ export async function insertDraftRevision(tx: TemplatesTx, ctx: TemplatesContext
  */
 export async function updateDraftContent(
   tx: TemplatesTx, ctx: TemplatesContext, revisionId: string,
-  content: { readonly ast: TemplateAST; readonly variableCatalogVersion: string },
+  content: { readonly ast: AnyTemplateAST; readonly variableCatalogVersion: string },
   /** CAS opcional: só atualiza se o hash semântico ainda for o que quem edita viu (outro editor ganhou ⇒ CONFLICT). */
   expectedSemanticHash?: string,
 ): Promise<TemplateRevision> {

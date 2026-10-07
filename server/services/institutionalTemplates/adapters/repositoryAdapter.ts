@@ -13,7 +13,8 @@ import {
   listIdentities, listRevisions, countRevisionReferences, findIdentityBySlug, transitionRevisionStatus, updateDraftContent,
   withTemplatesTransaction, TemplatePersistenceError, type TemplatesContext,
 } from "../../../db/institutionalTemplates";
-import { DecisionWriteRaceError, getDecisionByIdempotencyKey, insertDecision, lockDecisionSubject } from "../../../db/institutionalDecisions";
+import { DecisionWriteRaceError, getCurrentDecision, getDecisionByIdempotencyKey, insertDecision, lockDecisionSubject } from "../../../db/institutionalDecisions";
+import { witnessDrift } from "../../../domain/institutionalTemplates/governance/readinessWitness";
 import {
   DuplicateTemplateIdentityError, DuplicateTemplateRevisionError,
   type LifecycleCommit, type LifecycleCommitResult, type PersistenceContext, type TemplateRepositoryPort,
@@ -116,6 +117,19 @@ async function commitLifecycle(c: LifecycleCommit): Promise<LifecycleCommitResul
       const current = await getRevision(c.organizationId, c.before.id, tx);
       if (!current) throw new TemplatePersistenceError("NOT_FOUND", "revisão inexistente neste tenant");
       if (current.status !== c.expectedStatus) return { status: "STALE_STATUS", currentStatus: current.status };
+
+      // TOCTOU-001: com a linha da revisão TRAVADA (os registros de procedência/evidência também a travam para gravar), relê o estado
+      // em que a prontidão foi provada. Divergiu ⇒ nada é gravado (a transação termina sem escrita) e o chamador recebe READINESS_STALE.
+      if (c.readinessWitness) {
+        const [prov, legal] = await Promise.all([
+          getCurrentDecision(tx, c.organizationId, "institutional_template.import_provenance", c.before.id),
+          getCurrentDecision(tx, c.organizationId, "institutional_template.legal_evidence", c.before.id),
+        ]);
+        const drift = witnessDrift(c.readinessWitness, {
+          revisionSemanticHash: current.semanticHash, provenanceDecisionId: prov?.id ?? null, legalEvidenceDecisionId: legal?.id ?? null,
+        });
+        if (drift.length) return { status: "READINESS_STALE", drift };
+      }
 
       await insertDecision(tx, d);   // append-only; colisão de revisão da decisão ⇒ DecisionWriteRaceError (rollback)
       await transitionRevisionStatus(tx, ctx, { revisionId: c.before.id, to, decisionId: d.id });

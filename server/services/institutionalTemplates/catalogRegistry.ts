@@ -1,11 +1,14 @@
 /**
- * Registro de CÓDIGO versionado do catálogo de variáveis dos Modelos Institucionais (INV-TPL-24/25).
+ * Registro de CÓDIGO versionado dos catálogos de variáveis dos Modelos Institucionais (INV-TPL-24/25).
  *
- * `tpl-catalog/1` é o catálogo INICIAL: só variáveis que o `CanonicalReferencePort` real consegue resolver pelo domínio
- * existente (processo, identidade institucional e parâmetros do edital). O catálogo de produção completo (itens, estimativas,
- * textos de ETP/TR) é das fases T4/T5 e entra como NOVA versão — versões antigas permanecem resolvíveis para replay.
+ *  - `tpl-catalog/1` (formato v1): catálogo INICIAL, só variáveis que o domínio resolvia na T2 (processo, identidade, parâmetros
+ *    do edital). INALTERADO — revisões `tpl-ast/1` continuam reproduzíveis byte a byte.
+ *  - Catálogos `tpl-catalog/2` (formato v2): UM POR MODELO/VERSÃO (ex.: `edital-pregao-eletronico-bll/1.0.1-draft.c2`), carregados
+ *    dos pacotes de modelo versionados (`modelPackages.ts`). Um catálogo v2 já usado por uma revisão é imutável.
+ * Revisão de AST v1 ⇒ catálogo v1; AST v2 ⇒ catálogo v2 da MESMA versão (nunca coerção silenciosa).
  */
-import { validateVariableCatalog, type VariableCatalog } from "../../domain/institutionalTemplates";
+import { validateAnyCatalog, type AnyVariableCatalog, type VariableCatalog } from "../../domain/institutionalTemplates";
+import { MODEL_PACKAGES } from "./modelPackages";
 import type { VariableCatalogPort } from "./ports";
 
 export const TEMPLATE_CATALOG_V1: VariableCatalog = Object.freeze({
@@ -26,16 +29,24 @@ export const TEMPLATE_CATALOG_V1: VariableCatalog = Object.freeze({
   ]) as VariableCatalog["vars"],
 });
 
-const REGISTRY: ReadonlyMap<string, VariableCatalog> = new Map([[TEMPLATE_CATALOG_V1.version, TEMPLATE_CATALOG_V1]]);
+/** Catálogo padrão para autoria `tpl-ast/1` (modelos novos de AST v2 informam a versão do catálogo do seu pacote). */
 export const CURRENT_TEMPLATE_CATALOG_VERSION = TEMPLATE_CATALOG_V1.version;
+
+const REGISTRY: ReadonlyMap<string, AnyVariableCatalog> = new Map<string, AnyVariableCatalog>([
+  [TEMPLATE_CATALOG_V1.version, TEMPLATE_CATALOG_V1],
+  ...MODEL_PACKAGES.map((p): [string, AnyVariableCatalog] => [p.catalog.version, p.catalog]),
+]);
 
 export function createVariableCatalogPort(): VariableCatalogPort {
   return {
-    current: () => REGISTRY.get(CURRENT_TEMPLATE_CATALOG_VERSION)!,
+    current: () => REGISTRY.get(CURRENT_TEMPLATE_CATALOG_VERSION) as VariableCatalog,
     byVersion: (version) => REGISTRY.get(version) ?? null,
   };
 }
 
-// Falha no carregamento do módulo (nunca em runtime) se o catálogo embutido for inválido.
-const check = validateVariableCatalog(TEMPLATE_CATALOG_V1);
-if (!check.ok) throw new Error(`catálogo de variáveis embutido inválido: ${JSON.stringify(check.issues)}`);
+// Falha no carregamento do módulo (nunca em runtime) se um catálogo embutido for inválido ou houver versão duplicada.
+if (REGISTRY.size !== 1 + MODEL_PACKAGES.length) throw new Error("catálogo de variáveis duplicado no registro de modelos");
+for (const c of REGISTRY.values()) {
+  const check = validateAnyCatalog(c);
+  if (!check.ok) throw new Error(`catálogo de variáveis embutido inválido (${c.version}): ${JSON.stringify(check.issues)}`);
+}

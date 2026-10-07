@@ -8,16 +8,13 @@
  * com o que o M1 registrou; qualquer divergência recusa sem escrever. Assuntos: `<manifestId>:<sha256(chave)[0..16]>`.
  */
 import { createHash } from "crypto";
-import { getCurrentDecision, getDecisionByIdempotencyKey, insertDecision, lockDecisionSubject, DecisionWriteRaceError } from "../../db/institutionalDecisions";
-import { TemplatePersistenceError, withTemplatesTransaction } from "../../db/institutionalTemplates";
-import {
-  DECISION_MESSAGES, planDecision, validateDecisionRequest, type DecisionRequest, type DecisionSubjectType, type InstitutionalDecision,
-} from "../../domain/institutionalDecision";
+import type { DecisionSubjectType } from "../../domain/institutionalDecision";
 import type { StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { OrgId } from "../../domain/institutionalTemplates";
 import { serviceLogger } from "../observabilityService";
 import { assertHumanActor } from "./authority";
 import { TemplateWorkflowError } from "./errors";
+import { recordHumanDecision, type DecisionActInput, type RecordedDecision } from "./decisionRecorder";
 import type { TemplateManifestPort, WorkflowContext } from "./ports";
 
 const log = serviceLogger("TemplateReviewService");
@@ -29,54 +26,8 @@ const keyHash = (s: string): string => createHash("sha256").update(s).digest("he
 export const aiAcceptanceSubjectId = (manifestId: string, slotKey: string): string => `${manifestId}:${keyHash(`ai:${slotKey}`)}`;
 export const deviationAckSubjectId = (manifestId: string, blockId: string, kind: StructuralDeviationKind): string => `${manifestId}:${keyHash(`dev:${blockId}|${kind}`)}`;
 
-export interface ReviewDecisionInput {
-  readonly confirm: boolean;
-  readonly idempotencyKey: string;
-  readonly decision: {
-    readonly decidedByName: string; readonly decidedByRole: string; readonly decidedByUserId?: number | null;
-    readonly decidedAt: string; readonly basisReference: string; readonly reason: string;
-  };
-}
-
-export interface RecordedReview { readonly decision: InstitutionalDecision; readonly replayed: boolean }
-
-async function persistReviewDecision(
-  ctx: WorkflowContext, subjectType: DecisionSubjectType, decisionType: "template_ai_acceptance" | "template_deviation_acknowledgment",
-  outcome: "aceito" | "reconhecido", subjectId: string, input: ReviewDecisionInput, evidence: readonly string[],
-): Promise<RecordedReview> {
-  const request: DecisionRequest = {
-    organizationId: ctx.organizationId, subjectType, subjectId, decisionType, outcome,
-    decidedByName: input.decision.decidedByName, decidedByRole: input.decision.decidedByRole, decidedByUserId: input.decision.decidedByUserId ?? null,
-    decidedAt: input.decision.decidedAt, basisReference: input.decision.basisReference, reason: input.decision.reason, evidence,
-    recordedByUserId: ctx.actor.userId, expectedRevision: 0, idempotencyKey: input.idempotencyKey, correlationId: ctx.correlationId,
-  };
-  const valid = validateDecisionRequest(request);
-  if (!valid.ok) {
-    throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[valid.code] ?? valid.code,
-      (valid.fields ?? []).map((f) => ({ code: valid.code, path: f, message: "campo obrigatório ou inválido" })));
-  }
-  try {
-    return await withTemplatesTransaction("template.review.decision", ctx, async (tx) => {
-      const exists = await lockDecisionSubject(tx, ctx.organizationId, subjectType, subjectId);
-      if (!exists) throw new TemplatePersistenceError("NOT_FOUND", "manifest inexistente neste tenant");
-      const [byKey, current] = await Promise.all([
-        getDecisionByIdempotencyKey(tx, ctx.organizationId, input.idempotencyKey.trim()),
-        getCurrentDecision(tx, ctx.organizationId, subjectType, subjectId),
-      ]);
-      // O mesmo ato (assunto = M1 + slot/bloco) já foi registrado: converge para a decisão existente (sem segunda linha).
-      if (current && !byKey) return { decision: current, replayed: true };
-      const plan = planDecision(request, { byIdempotencyKey: byKey, current });
-      if (plan.kind === "replay") return { decision: plan.decision, replayed: true };
-      if (plan.kind === "conflict") throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[plan.code]);
-      await insertDecision(tx, plan.decision);
-      return { decision: plan.decision, replayed: false };
-    });
-  } catch (err) {
-    if (err instanceof TemplatePersistenceError && (err.code === "NOT_FOUND")) throw new TemplateWorkflowError("NOT_FOUND", "manifest não encontrado nesta organização");
-    if (err instanceof DecisionWriteRaceError) throw new TemplateWorkflowError("STALE_STATE", "outra pessoa registrou esta decisão ao mesmo tempo; recarregue");
-    throw err;
-  }
-}
+export type ReviewDecisionInput = DecisionActInput;
+export type RecordedReview = RecordedDecision;
 
 export class TemplateReviewService {
   constructor(private readonly manifests: Pick<TemplateManifestPort, "getManifest">) {}
@@ -95,9 +46,11 @@ export class TemplateReviewService {
     if (narrative.executionId !== input.executionId || narrative.outputHash !== input.outputHash) {
       throw new TemplateWorkflowError("VALIDATION_FAILED", "execução/hash informados não correspondem à narrativa registrada no manifest — o aceite exige o texto exato");
     }
-    const out = await persistReviewDecision(ctx, AI_ACCEPTANCE_SUBJECT, "template_ai_acceptance", "aceito",
-      aiAcceptanceSubjectId(m1.id, input.slotKey), input,
-      [`slot:${input.slotKey}`, `execution:${input.executionId}`, `output:${input.outputHash}`]);
+    const out = await recordHumanDecision(ctx, {
+      subjectType: AI_ACCEPTANCE_SUBJECT, decisionType: "template_ai_acceptance", outcome: "aceito", mode: "converge",
+      subjectId: aiAcceptanceSubjectId(m1.id, input.slotKey), act: input,
+      evidence: [`slot:${input.slotKey}`, `execution:${input.executionId}`, `output:${input.outputHash}`],
+    });
     log.info("template_ai_narrative_accepted", { organizationId: ctx.organizationId, manifestId: m1.id, slotKey: input.slotKey, decisionId: out.decision.id, replayed: out.replayed, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return out;
   }
@@ -112,8 +65,10 @@ export class TemplateReviewService {
     if (input.kind !== "INCLUDED_BLOCK_REMOVED" && input.kind !== "EXCLUDED_BLOCK_INSERTED") throw new TemplateWorkflowError("VALIDATION_FAILED", "tipo de desvio inválido");
     const m1 = await this.manifests.getManifest(ctx.organizationId as OrgId, input.manifestId);
     if (!m1 || m1.stage !== "GENERATION" || m1.organizationId !== ctx.organizationId) throw new TemplateWorkflowError("NOT_FOUND", "manifest não encontrado nesta organização");
-    const out = await persistReviewDecision(ctx, DEVIATION_ACK_SUBJECT, "template_deviation_acknowledgment", "reconhecido",
-      deviationAckSubjectId(m1.id, input.blockId, input.kind), input, [`block:${input.blockId}`, `kind:${input.kind}`]);
+    const out = await recordHumanDecision(ctx, {
+      subjectType: DEVIATION_ACK_SUBJECT, decisionType: "template_deviation_acknowledgment", outcome: "reconhecido", mode: "converge",
+      subjectId: deviationAckSubjectId(m1.id, input.blockId, input.kind), act: input, evidence: [`block:${input.blockId}`, `kind:${input.kind}`],
+    });
     log.info("template_deviation_acknowledged", { organizationId: ctx.organizationId, manifestId: m1.id, blockId: input.blockId, kind: input.kind, decisionId: out.decision.id, replayed: out.replayed, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return out;
   }

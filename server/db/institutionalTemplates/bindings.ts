@@ -13,7 +13,7 @@ import {
   institutionalTemplateBindingsTable, institutionalTemplateRevisionsTable, type InstitutionalTemplateBindingRow,
 } from "../../../drizzle/schema";
 import {
-  TEMPLATE_DOCUMENT_KINDS, resolveTemplateBinding,
+  TEMPLATE_DOCUMENT_KINDS, resolveTemplateBinding, sameScope, scopeIssues,
   type BindingRequest, type BindingResolution, type BindingScope, type TemplateBinding, type TemplateDocumentKind, type TemplateRevision,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
@@ -22,16 +22,18 @@ import { affectedRows, duplicateKeyName, isDuplicateKey, requireReader, type Tem
 import { lockRevisionForShare, rowToRevision } from "./revisions";
 
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-type ScopeKey = "modality" | "regime" | "criterion";
 
-function scopeColumn(scope: BindingScope, key: ScopeKey): string {
-  const v = scope[key];
-  if (v === undefined) return "";
-  // '' é a representação de "não especificado": recusar '' mantém o mapeamento bijetivo; '|' é o separador da chave única.
-  if (typeof v !== "string" || v.trim() === "" || v !== v.trim() || v.length > 64 || v.includes("|")) {
-    throw new TemplatePersistenceError("INVALID_INPUT", `escopo '${key}' inválido (texto não vazio, sem espaços nas pontas, sem '|', até 64 caracteres)`);
-  }
-  return v;
+/**
+ * Escopo → colunas ('' = não especificado). A validação (texto não vazio, sem '|', slug em forma/plataforma) é a MESMA do
+ * domínio (`scopeIssues`): uma só regra, sem divergência entre resolução e persistência.
+ */
+function scopeColumns(scope: BindingScope): { modality: string; form: string; platform: string; regime: string; criterion: string } {
+  const problems = scopeIssues(scope);
+  if (problems.length) throw new TemplatePersistenceError("INVALID_INPUT", problems[0].message, problems);
+  return {
+    modality: scope.modality ?? "", form: scope.form ?? "", platform: scope.platform ?? "",
+    regime: scope.regime ?? "", criterion: scope.criterion ?? "",
+  };
 }
 
 export function rowToBinding(r: InstitutionalTemplateBindingRow): TemplateBinding {
@@ -39,6 +41,8 @@ export function rowToBinding(r: InstitutionalTemplateBindingRow): TemplateBindin
     id: r.id, organizationId: r.organizationId, documentKind: r.documentKind as TemplateDocumentKind,
     scope: {
       ...(r.scopeModality ? { modality: r.scopeModality } : {}),
+      ...(r.scopeForm ? { form: r.scopeForm } : {}),
+      ...(r.scopePlatform ? { platform: r.scopePlatform } : {}),
       ...(r.scopeRegime ? { regime: r.scopeRegime } : {}),
       ...(r.scopeCriterion ? { criterion: r.scopeCriterion } : {}),
     },
@@ -66,8 +70,7 @@ export async function listBindings(
 
 const sameBinding = (a: TemplateBinding, b: TemplateBinding): boolean =>
   a.documentKind === b.documentKind && a.identityId === b.identityId && a.pinnedRevisionId === b.pinnedRevisionId
-  && a.effectiveFrom === b.effectiveFrom && (a.scope.modality ?? null) === (b.scope.modality ?? null)
-  && (a.scope.regime ?? null) === (b.scope.regime ?? null) && (a.scope.criterion ?? null) === (b.scope.criterion ?? null);
+  && a.effectiveFrom === b.effectiveFrom && sameScope(a.scope, b.scope);
 
 export interface PersistedBinding { readonly binding: TemplateBinding; readonly created: boolean }
 
@@ -82,7 +85,7 @@ export async function insertBinding(tx: TemplatesTx, ctx: TemplatesContext, bind
   if (!TEMPLATE_DOCUMENT_KINDS.includes(binding.documentKind)) throw new TemplatePersistenceError("INVALID_INPUT", "tipo documental fora do contrato");
   if (!binding.active) throw new TemplatePersistenceError("INVALID_INPUT", "um binding novo nasce ativo");
   if (!ISO_UTC_RE.test(binding.effectiveFrom)) throw new TemplatePersistenceError("INVALID_INPUT", "effectiveFrom deve ser ISO-8601 UTC");
-  const scope = { modality: scopeColumn(binding.scope, "modality"), regime: scopeColumn(binding.scope, "regime"), criterion: scopeColumn(binding.scope, "criterion") };
+  const scope = scopeColumns(binding.scope);
 
   const revision = await lockRevisionForShare(tx, ctx.organizationId, binding.pinnedRevisionId);
   if (!revision || revision.identityId !== binding.identityId) {
@@ -94,7 +97,7 @@ export async function insertBinding(tx: TemplatesTx, ctx: TemplatesContext, bind
   try {
     await tx.insert(institutionalTemplateBindingsTable).values({
       id: binding.id, organizationId: binding.organizationId, documentKind: binding.documentKind,
-      scopeModality: scope.modality, scopeRegime: scope.regime, scopeCriterion: scope.criterion,
+      scopeModality: scope.modality, scopeForm: scope.form, scopePlatform: scope.platform, scopeRegime: scope.regime, scopeCriterion: scope.criterion,
       identityId: binding.identityId, pinnedRevisionId: binding.pinnedRevisionId, active: 1, effectiveFromIso: binding.effectiveFrom,
     });
   } catch (err) {

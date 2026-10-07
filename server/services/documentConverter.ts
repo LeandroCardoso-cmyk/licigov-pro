@@ -13,7 +13,7 @@
 // `any` inevitável ao consumir a AST não-tipada do `marked` e as opções do PDFKit.
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType } from "docx";
 
 // Strip inline markdown (bold, italic, links, code) to plain text
 function stripInline(text: string): string {
@@ -297,6 +297,7 @@ export type DocBlock =
   | { kind: "paragraph"; runs: InlineRun[] }
   | { kind: "list"; ordered: boolean; items: InlineRun[][] }
   | { kind: "notice"; runs: InlineRun[] } // blockquote → bloco de aviso destacado
+  | { kind: "table"; header: InlineRun[][]; rows: InlineRun[][][] } // tabela Markdown (GFM) — nunca descartada
   | { kind: "hr" };
 
 /**
@@ -390,6 +391,20 @@ export function buildInstitutionalModel(content: string, meta: InstitutionalMeta
       case "hr":
         blocks.push({ kind: "hr" });
         break;
+      case "table": {
+        // Tabela GFM: antes era descartada em silêncio (perda de conteúdo no DOCX/PDF). Células preservam o texto
+        // exatamente como composto (inclusive "R$" e "(R$)") — apenas apresentação.
+        const cellRuns = (c: any): InlineRun[] => {
+          const r = tokensToRuns(c.tokens);
+          return r.length ? r : [{ text: (c.text ?? "").toString() }];
+        };
+        blocks.push({
+          kind: "table",
+          header: (token.header ?? []).map(cellRuns),
+          rows: (token.rows ?? []).map((row: any[]) => row.map(cellRuns)),
+        });
+        break;
+      }
       default:
         break;
     }
@@ -457,7 +472,7 @@ function draftNotice(meta: InstitutionalMeta): string {
 /** Renderiza o modelo institucional para DOCX. */
 export async function renderInstitutionalDOCX(model: InstitutionalModel): Promise<Buffer> {
   const { meta } = model;
-  const paras: Paragraph[] = [];
+  const paras: (Paragraph | Table)[] = [];
 
   if (meta.organizationName) {
     paras.push(new Paragraph({ text: meta.organizationName, heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }));
@@ -485,6 +500,13 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
       for (const item of b.items) paras.push(new Paragraph({ bullet: { level: 0 }, children: runsToDocx(item) }));
     } else if (b.kind === "notice") {
       paras.push(new Paragraph({ spacing: { before: 100, after: 100 }, children: [new TextRun({ text: "⚠ ", bold: true }), ...runsToDocx(b.runs, true)] }));
+    } else if (b.kind === "table") {
+      const cell = (runs: InlineRun[], header: boolean): TableCell => new TableCell({
+        children: [new Paragraph({ children: runsToDocx(header ? runs.map((r) => ({ ...r, bold: true })) : runs) })],
+      });
+      const rows = [new TableRow({ tableHeader: true, children: b.header.map((c) => cell(c, true)) }), ...b.rows.map((r) => new TableRow({ children: r.map((c) => cell(c, false)) }))];
+      paras.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
+      paras.push(new Paragraph({ text: "", spacing: { after: 120 } }));
     }
   }
 
@@ -525,9 +547,36 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
       else if (b.kind === "paragraph") { writeRunsPDF(doc, b.runs, 11, false, { align: "justify", paragraphGap: 6 }); }
       else if (b.kind === "list") { for (const item of b.items) { doc.fontSize(11).font("Helvetica").text("• ", { continued: true }); writeRunsPDF(doc, item, 11, false, { paragraphGap: 3 }); } doc.moveDown(0.2); }
       else if (b.kind === "notice") { doc.moveDown(0.2).fontSize(10).font("Helvetica-Oblique").fillColor("#1e3a8a").text("⚠ ", { continued: true }); writeRunsPDF(doc, b.runs, 10, false, { paragraphGap: 4 }, true); doc.fillColor("black"); }
+      else if (b.kind === "table") { writeTablePDF(doc, b.header, b.rows, pageWidth); }
     }
     doc.end();
   });
+}
+
+/** Tabela em grade simples (colunas de largura igual; quebra de página por linha). Apresentação apenas. */
+function writeTablePDF(doc: PDFKit.PDFDocument, header: InlineRun[][], rows: InlineRun[][][], pageWidth: number): void {
+  const cols = Math.max(header.length, 1);
+  const colW = pageWidth / cols;
+  const pad = 3;
+  const plain = (runs: InlineRun[]): string => runs.map((r) => r.text).join("");
+  const drawRow = (cells: InlineRun[][], bold: boolean): void => {
+    doc.fontSize(9).font(bold ? "Helvetica-Bold" : "Helvetica");
+    const heights = cells.map((c) => doc.heightOfString(plain(c), { width: colW - pad * 2 }));
+    const h = Math.max(...heights, 10) + pad * 2;
+    if (doc.y + h > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const y = doc.y;
+    cells.forEach((c, i) => {
+      const x = 56 + i * colW;
+      doc.rect(x, y, colW, h).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black");
+      doc.fontSize(9).font(bold ? "Helvetica-Bold" : "Helvetica").text(plain(c), x + pad, y + pad, { width: colW - pad * 2 });
+    });
+    doc.x = 56;
+    doc.y = y + h;
+  };
+  doc.moveDown(0.3);
+  drawRow(header, true);
+  for (const r of rows) drawRow(r, false);
+  doc.moveDown(0.5);
 }
 
 function pdfFont(bold: boolean, italic: boolean): string {

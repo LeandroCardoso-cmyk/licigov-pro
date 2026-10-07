@@ -4,13 +4,16 @@
  */
 import { createHash } from "crypto";
 import {
-  sealGenerationManifest, type BindingResolution, type CompositionManifest, type ComposeInput, type ComposeOutcome, type TemplateBinding,
+  isAstV2, isCatalogV2, sealGenerationManifest, type BindingResolution, type CompositionManifest, type ComposeInput, type ComposeOutcome, type TemplateBinding,
   type TemplateDocumentKind, type TemplateIdentity, type TemplateNode, type TemplateRevision, type VariableCatalog, type OrgId, type Inline,
 } from "../../domain/institutionalTemplates";
 import type { InstitutionalDecision } from "../../domain/institutionalDecision";
+import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
+import { InMemoryGovernance } from "./institutionalTemplatesGovernanceFakes";
+import { createTemplateReadinessPort } from "../../services/institutionalTemplates/readinessService";
 import {
   DuplicateTemplateIdentityError, DuplicateTemplateRevisionError,
-  type LifecycleCommit, type LifecycleCommitResult, type TemplateRepositoryPort, type TemplateWorkflowPorts,
+  type LifecycleCommit, type LifecycleCommitResult, type TemplateReadinessPort, type TemplateRepositoryPort, type TemplateWorkflowPorts,
 } from "../../services/institutionalTemplates/ports";
 
 export const TEST_CATALOG: VariableCatalog = {
@@ -72,7 +75,9 @@ export class InMemoryTemplateRepository implements TemplateRepositoryPort {
     if (this.failNextCommit) { this.failNextCommit = false; throw new Error("falha simulada na transação"); }
     const byKey = [...this.decisions.values()].find((d) => d.organizationId === c.organizationId && d.idempotencyKey === c.decision.idempotencyKey);
     if (byKey) return byKey.requestHash === c.decision.requestHash ? { status: "REPLAYED", decision: byKey } : { status: "DECISION_IDEMPOTENCY_CONFLICT" };
-    const cur = await this.getRevision(c.organizationId, c.before.id);
+    // CAS atômico (síncrono entre a leitura e a escrita): duas transições concorrentes nunca passam ambas — como o lock do banco.
+    const cur0 = this.revisions.get(c.before.id);
+    const cur = cur0 && cur0.organizationId === c.organizationId ? cur0 : null;
     if (!cur || cur.status !== c.expectedStatus) return { status: "STALE_STATUS", currentStatus: cur?.status ?? "DEPRECATED" };
     // atômico: decisão + transição juntas
     this.decisions.set(c.decision.id, c.decision);
@@ -113,6 +118,7 @@ export function fakeComposer(input: ComposeInput): ComposeOutcome {
     else if (n.t === "aiSlot") { aiKeys.push(n.slotKey); lines.push(input.aiNarratives[n.slotKey] ?? ""); }
     else if (n.t === "conditional") walk(n.then);
   });
+  if (isAstV2(input.revision.ast) || isCatalogV2(input.catalog)) return { error: "AST_INVALID" }; // stand-in só do v1
   walk(input.revision.ast.root);
   for (const v of input.catalog.vars) if (v.required && input.values[v.name] === undefined) return { error: "MISSING_REQUIRED" };
   const text = lines.join("\n");
@@ -134,16 +140,24 @@ export interface TestPortsOptions {
   flag?: (org: OrgId) => boolean;
   composer?: (i: ComposeInput) => ComposeOutcome;
   manifests?: Map<string, CompositionManifest>;
+  /** `false` ⇒ sem port de governança (procedência/evidência indisponíveis, fail-closed). Padrão: em memória, compartilhando o ledger do repositório. */
+  governance?: boolean;
+  capabilities?: TemplateCapabilities;
+  /** `false` ⇒ sem port de prontidão (publicar Edital falha fechado: READINESS_UNAVAILABLE). Padrão: o port REAL sobre os fakes. */
+  readiness?: false | TemplateReadinessPort;
+  catalog?: VariableCatalog;
   resolveExactBinding?: (r: Parameters<NonNullable<TemplateWorkflowPorts["composition"]["resolveExactBinding"]>>[0]) => Promise<BindingResolution>;
 }
 
-export function makeTestPorts(opts: TestPortsOptions = {}): { ports: TemplateWorkflowPorts; repo: InMemoryTemplateRepository; composeCalls: ComposeInput[]; ticks: { n: number } } {
+export function makeTestPorts(opts: TestPortsOptions = {}): { ports: TemplateWorkflowPorts; repo: InMemoryTemplateRepository; governance: InMemoryGovernance; composeCalls: ComposeInput[]; ticks: { n: number } } {
   const repo = opts.repo ?? new InMemoryTemplateRepository();
+  const governance = new InMemoryGovernance(repo);
+  const cat = opts.catalog ?? TEST_CATALOG;
   const composeCalls: ComposeInput[] = [];
   const ticks = { n: 0 };
   const ports: TemplateWorkflowPorts = {
     repository: repo,
-    catalog: { current: () => TEST_CATALOG, byVersion: (v) => (v === TEST_CATALOG.version ? TEST_CATALOG : null) },
+    catalog: { current: () => cat, byVersion: (v) => (v === cat.version ? cat : null) },
     composition: {
       previewComposition: (i) => { composeCalls.push(i); return (opts.composer ?? fakeComposer)(i); },
       ...(opts.resolveExactBinding ? { resolveExactBinding: opts.resolveExactBinding } : {}),
@@ -152,8 +166,12 @@ export function makeTestPorts(opts: TestPortsOptions = {}): { ports: TemplateWor
     flag: { isEnabled: async (org) => (opts.flag ? opts.flag(org) : true) },
     clock: { now: () => "2026-10-06T12:00:00.000Z" },
     ids: { newId: (p) => `${p}${String(++ticks.n).padStart(6, "0")}` },
+    ...(opts.governance === false ? {} : { governance }),
+    ...(opts.capabilities ? { capabilities: opts.capabilities } : {}),
   };
-  return { ports, repo, composeCalls, ticks };
+  const withReadiness: TemplateWorkflowPorts = opts.readiness === false ? ports
+    : { ...ports, readiness: opts.readiness ?? createTemplateReadinessPort(ports) };
+  return { ports: withReadiness, repo, governance, composeCalls, ticks };
 }
 
 export const decisionInput = (over: Record<string, unknown> = {}) => ({

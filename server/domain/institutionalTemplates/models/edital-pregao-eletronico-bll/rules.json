@@ -1,0 +1,157 @@
+{
+  "format": "tpl-model-rules/1",
+  "modelKey": "EDITAL_PREGAO_ELETRONICO_BLL",
+  "catalogVersion": "edital-pregao-eletronico-bll/1.0.1-draft.c2",
+  "rules": [
+    {
+      "id": "R_DESCONTO_EXIGE_ORCAMENTO_PUBLICO",
+      "kind": "forbid",
+      "when": {
+        "op": "and",
+        "of": [
+          {
+            "op": "eq",
+            "var": "julgamento.criterioJulgamento",
+            "value": "maior desconto"
+          },
+          {
+            "op": "eq",
+            "var": "controle.orcamentoSigilosoSimNao",
+            "value": true
+          }
+        ]
+      },
+      "message": "Critério de julgamento 'maior desconto' é incompatível com orçamento sigiloso (o desconto incide sobre o orçamento estimado)."
+    },
+    {
+      "id": "R_GARANTIA_TETO",
+      "kind": "range",
+      "var": "contratacao.percentualGarantiaContratual",
+      "max": 10,
+      "message": "O percentual da garantia contratual não pode exceder 10%."
+    },
+    {
+      "id": "R_GARANTIA_ACIMA_DE_5_EXIGE_JUSTIFICATIVA",
+      "kind": "unavailable",
+      "whenActive": {
+        "op": "and",
+        "of": [
+          {
+            "op": "eq",
+            "var": "decisao.exigeGarantiaContratual",
+            "value": true
+          },
+          {
+            "op": "gt",
+            "var": "contratacao.percentualGarantiaContratual",
+            "value": 5
+          }
+        ]
+      },
+      "message": "Garantia contratual acima de 5% exige justificativa.",
+      "reason": "a justificativa da exceção não é um dado canônico modelado; a composição é bloqueada até existir essa autoridade"
+    },
+    {
+      "id": "R_CAPITAL_PL_TETO",
+      "kind": "range",
+      "var": "habilitacao.percentualCapitalPlMinimo",
+      "max": 10,
+      "message": "O percentual mínimo de capital/patrimônio líquido não pode exceder 10%."
+    },
+    {
+      "id": "R_CONSORCIO_ACRESCIMO_FAIXA_EXIGE_JUSTIFICATIVA",
+      "kind": "unavailable",
+      "whenActive": {
+        "op": "and",
+        "of": [
+          {
+            "op": "eq",
+            "var": "decisao.consorcio",
+            "value": "admite"
+          },
+          {
+            "op": "or",
+            "of": [
+              {
+                "op": "lt",
+                "var": "participacao.percentualAcrescimoConsorcio",
+                "value": 10
+              },
+              {
+                "op": "gt",
+                "var": "participacao.percentualAcrescimoConsorcio",
+                "value": 30
+              }
+            ]
+          }
+        ]
+      },
+      "message": "O acréscimo de habilitação econômica do consórcio fora da faixa de 10% a 30% exige justificativa.",
+      "reason": "a justificativa da exceção não é um dado canônico modelado; a composição é bloqueada até existir essa autoridade"
+    },
+    {
+      "id": "R_COTA_RESERVADA_TETO",
+      "kind": "range",
+      "var": "participacao.percentualCotaReservada",
+      "max": 25,
+      "message": "O percentual da cota reservada não pode exceder 25%."
+    },
+    {
+      "id": "R_COTA_RESERVADA_BEM_DIVISIVEL",
+      "kind": "unavailable",
+      "whenActive": {
+        "op": "eq",
+        "var": "decisao.cotaReservada",
+        "value": true
+      },
+      "message": "A cota reservada exige objeto de natureza divisível.",
+      "reason": "a divisibilidade do objeto não é um dado canônico dos Itens da contratação; a composição com cota reservada é bloqueada até existir essa autoridade"
+    },
+    {
+      "id": "R_PRIORIDADE_REGIONAL_TETO",
+      "kind": "range",
+      "var": "participacao.percentualPrioridadeRegional",
+      "max": 10,
+      "message": "A margem de prioridade regional não pode exceder 10%."
+    },
+    {
+      "id": "R_TABELA_MULTAS_FAIXA",
+      "kind": "tableRange",
+      "var": "sancoes.tabelaMultas",
+      "column": "percentual",
+      "min": 0.5,
+      "max": 30,
+      "message": "Os percentuais da tabela de multas devem estar entre 0,5% e 30%."
+    },
+    {
+      "id": "R_CANAL_ESCLARECIMENTOS_UNICO",
+      "kind": "singleValue",
+      "var": "instituicao.canalEsclarecimentos",
+      "message": "O canal de esclarecimentos deve ser UM canal oficial único (sem alternativas)."
+    },
+    {
+      "id": "R_CANAL_IMPUGNACOES_UNICO",
+      "kind": "singleValue",
+      "var": "instituicao.canalImpugnacoes",
+      "message": "O canal de impugnações deve ser UM canal oficial único (sem alternativas)."
+    },
+    {
+      "id": "R_VIGENCIA_ATA_MAXIMA",
+      "kind": "durationMax",
+      "var": "srp.prazoVigenciaAta",
+      "limits": {
+        "year": 1,
+        "month": 12,
+        "day": 365
+      },
+      "message": "A vigência da ata de registro de preços não pode exceder 1 ano."
+    },
+    {
+      "id": "R_ABERTURA_APOS_DIVULGACAO",
+      "kind": "dateOrder",
+      "before": "controle.dataDivulgacaoPrevista",
+      "after": "processo.dataAbertura",
+      "message": "A data de abertura da sessão deve ser posterior à data prevista de divulgação (o prazo mínimo legal é de responsabilidade da pessoa que decide; o sistema não o valida)."
+    }
+  ]
+}
