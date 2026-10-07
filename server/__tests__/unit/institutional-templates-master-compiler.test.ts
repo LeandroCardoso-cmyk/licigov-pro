@@ -54,7 +54,7 @@ describe("compilador do Modelo-Mestre — proveniência e determinismo", () => {
     const reordered = { ...miniMapping, inputs: Object.fromEntries(Object.entries(miniMapping.inputs).reverse()) } as MasterMapping;
     expect(ok(MINI_MD, reordered).astSemanticHash).toBe(a.astSemanticHash);
     expect(ok(MINI_MD.replace("Texto do modelo.", "Outro texto."), miniMapping).astSemanticHash).not.toBe(a.astSemanticHash);
-    const m2 = withMapping((m) => { (m.anchors as Record<string, string>)["2.1"] = "outro.ancora"; (m.crossReferences as { target: string }[])[0].target = "outro.ancora"; });
+    const m2 = JSON.parse(JSON.stringify(miniMapping).split("julgamento.criterio").join("outro.ancora")) as MasterMapping;
     expect(ok(MINI_MD, m2).astSemanticHash).not.toBe(a.astSemanticHash);
   });
 
@@ -76,7 +76,7 @@ describe("paridade estrutural (parametrizada pelo mapeamento)", () => {
     expect(c.report).toMatchObject({ conditionTypesMapped: 4, conditionTypesUnused: [], conditionBlocks: 4, balancedConditions: true, exclusiveGroups: 1 });
   });
   it("notas do sistema excluídas (evidência com hash por linha); placeholders das notas contabilizados", () => {
-    expect(c.report.systemNotes).toBe(2);
+    expect(c.report.systemNotes).toBe(1); // 1 nota (2 linhas de evidência)
     expect(c.report.systemNotesRendered).toBe(0);
     expect(c.systemNoteEvidence.map((e) => e.line)).toEqual([5, 6]);
     expect(c.report.placeholderOccurrences.systemNote).toBe(3);
@@ -84,7 +84,7 @@ describe("paridade estrutural (parametrizada pelo mapeamento)", () => {
   });
   it("gate passa; remissões: 4 substituídas por xref, 0 sem mapeamento", () => {
     expect(evaluateParityGate(c.report, miniMapping)).toEqual({ pass: true, failures: [] });
-    expect(c.report.crossReferences).toEqual({ mapped: 3, replaced: 4, unmappedRemissions: 0 });
+    expect(c.report.crossReferences).toMatchObject({ entries: 3, replaced: 4, unmappedRemissions: 0 });
     expect(compileAndVerifyMaster({ markdown: MINI_MD, expectedSha256: MINI_SHA, mapping: miniMapping, catalog: catalog2 }).ok).toBe(true);
   });
   it("o gate falha quando as contagens esperadas divergem (nenhum número é fixo no código)", () => {
@@ -119,7 +119,10 @@ describe("falha fechada do compilador", () => {
 
   it("controle em texto ⇒ CONTROL_ONLY_PLACEHOLDER_IN_TEXT; aiSlot/dataTable/docRef só como parágrafo inteiro", () => {
     expect(codes(compile(MINI_MD.replace("{{NOME_ORGAO}}", "{{UTILIZA_SRP}}")))).toContain("CONTROL_ONLY_PLACEHOLDER_IN_TEXT");
-    expect(codes(compile(MINI_MD.replace("{{JUSTIFICATIVA}}", "Justificativa: {{JUSTIFICATIVA}}")))).toContain("PLACEHOLDER_POSITION_INVALID");
+    expect(codes(compile(MINI_MD.replace("{{QUADRO_ITENS}}", "Quadro: {{QUADRO_ITENS}}")))).toContain("PLACEHOLDER_POSITION_INVALID");
+    // aiSlot no meio de uma frase é permitido (campo "Propõe" inline) e vira slot inline governado
+    const inlineAi = ok(MINI_MD.replace("{{JUSTIFICATIVA}}", "Justificativa: {{JUSTIFICATIVA}}."));
+    expect(JSON.stringify(inlineAi.ast)).toContain('"t":"aiSlot","slotKey":"justificativa"');
   });
 
   it("remissão literal sem xref governada ⇒ UNMAPPED_REMISSION; contagem divergente ⇒ XREF_COUNT_MISMATCH", () => {
@@ -129,14 +132,17 @@ describe("falha fechada do compilador", () => {
   });
 
   it("grupo exclusivo incompleto ⇒ EXCLUSIVE_GROUP_INCOMPLETE; ramo alternativo em grupo exclusivo recusado", () => {
-    const md = MINI_MD.replace(/\[\[SE ORC_ABERTO\]\][\s\S]*?\[\[FIM ORC_ABERTO\]\]\n\n/, "");
-    expect(codes(compile(md))).toContain("EXCLUSIVE_GROUP_INCOMPLETE");
+    // membro isolado do grupo é só um condicional simples; duplicata adjacente (mesmo membro 2x) é grupo incompleto
+    const single = MINI_MD.replace(/\[\[SE ORC_ABERTO\]\][\s\S]*?\[\[FIM ORC_ABERTO\]\]\n\n/, "");
+    expect(compile(single).ok).toBe(true);
+    const dup = MINI_MD.replace("[[SE ORC_ABERTO]]", "[[SE ORC_SIGILOSO]]").replace("[[FIM ORC_ABERTO]]", "[[FIM ORC_SIGILOSO]]");
+    expect(codes(compile(dup))).toContain("EXCLUSIVE_GROUP_INCOMPLETE");
     const els = MINI_MD.replace("2.3 O orçamento é sigiloso.\n", "2.3 O orçamento é sigiloso.\n\n[[SENAO]]\n\nX\n");
     expect(codes(compile(els))).toContain("EXCLUSIVE_GROUP_ELSE");
   });
 
   it("âncora mapeada que não existe no texto ⇒ ANCHOR_NOT_FOUND", () => {
-    const m = withMapping((x) => { (x.anchors as Record<string, string>)["9.9"] = "nao.existe"; });
+    const m = withMapping((x) => { (x.anchors as unknown[]).push({ key: "nao.existe", scope: "main", kind: "paragraph", literal: "9.9" }); });
     expect(codes(compile(MINI_MD, m))).toContain("ANCHOR_NOT_FOUND");
   });
 
@@ -236,8 +242,8 @@ describe("compilador → composer v2 (ponta a ponta)", () => {
     if (!r.ok) throw new Error(JSON.stringify(r.issues));
     const t = r.value.content.text;
     expect(t).toContain("# EDITAL SINTÉTICO Nº 2026/0007");
-    expect(t).toContain("1.2 Valor estimado: R$ 30.600,00, conforme o critério do item 2.1 deste edital.");
-    expect(t).toContain("2.2.1 Ata com vigência de 12 meses, nos termos da cláusula 1.1.");
+    expect(t).toContain("1.2. Valor estimado: R$ 30.600,00, conforme o critério do item 2.1 deste edital.");
+    expect(t).toContain("2.2.1. Ata com vigência de 12 meses, nos termos da cláusula 1.1.");
     expect(t).toContain("O orçamento é público.");
     expect(t).not.toContain("sigiloso");
     expect(t).toContain("A visita técnica é obrigatória.");
@@ -252,8 +258,8 @@ describe("compilador → composer v2 (ponta a ponta)", () => {
     if (!r.ok) throw new Error(JSON.stringify(r.issues));
     const t = r.value.content.text;
     expect(t).not.toContain("REGISTRO DE PREÇOS");
-    expect(t).toContain("2.2 O orçamento é público.");
-    expect(t).toContain("2.3 A visita técnica é dispensada.");
+    expect(t).toContain("2.2. O orçamento é público.");
+    expect(t).toContain("2.3. A visita técnica é dispensada.");
   });
 
   it("orçamento sigiloso: ramo sigiloso exige a data de controle (requiredWhen) e a data NÃO é renderizada", () => {

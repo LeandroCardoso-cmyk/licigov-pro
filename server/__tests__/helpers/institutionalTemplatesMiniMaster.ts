@@ -80,7 +80,7 @@ Texto do modelo.
 export const MINI_SHA = sha256Hex(MINI_MD);
 
 export const miniMapping: MasterMapping = {
-  format: "tpl-master-mapping/1",
+  format: "tpl-master-mapping/2",
   modelKey: "MODELO_SINTETICO",
   sourceLogicalVersion: "0.0.1-fixture",
   catalogVersion: "cat-v2-fixture/1",
@@ -92,7 +92,8 @@ export const miniMapping: MasterMapping = {
     systemNote: "^>\\s*NOTA DO SISTEMA:",
     systemNoteBlock: true,
     numberedHeading: "^(?<num>\\d+(?:\\.\\d+)*)\\.?\\s+(?<title>\\S.*)$",
-    numberedParagraph: "^(?<num>\\d+\\.\\d+(?:\\.\\d+)*)\\s+(?<text>.+)$",
+    decimalParagraph: "^(?<num>\\d+\\.\\d+(?:\\.\\d+)*)\\s+(?<text>.+)$",
+    lineBreaks: "join",
     listItem: "^\\s*(?:(?<ordered>\\d+\\))|-)\\s+(?<text>.+)$",
   },
   inputs: {
@@ -124,15 +125,18 @@ export const miniMapping: MasterMapping = {
     VISITA_SIM: { when: { op: "eq", var: "processo.visitaTecnica", value: true } },
   },
   exclusiveGroups: { sigilo: { mode: "exactly-one", branches: ["ORC_SIGILOSO", "ORC_ABERTO"] } },
-  anchors: { "1.1": "objeto.descricao", "2.1": "julgamento.criterio" },
+  anchors: [
+    { key: "objeto.descricao", scope: "main", kind: "paragraph", literal: "1.1" },
+    { key: "julgamento.criterio", scope: "main", kind: "paragraph", literal: "2.1" },
+  ],
   annexes: [
     { id: "anexo-tr", role: "tr", order: 1, title: "TERMO DE REFERÊNCIA", headingMatch: "^ANEXO I —" },
     { id: "anexo-modelo", role: "modelo", order: 2, title: "MODELO DE PROPOSTA", headingMatch: "^ANEXO II —" },
   ],
   crossReferences: [
-    { literal: "2.1", target: "julgamento.criterio", occurrences: 2 },
-    { literal: "1.1", target: "objeto.descricao", occurrences: 1 },
-    { literal: "II", target: "anexo-modelo", occurrences: 1 },
+    { scope: "*", context: "item ⟦2.1⟧", targets: ["julgamento.criterio"], occurrences: 2 },
+    { scope: "*", context: "cláusula ⟦1.1⟧", targets: ["objeto.descricao"], occurrences: 1 },
+    { scope: "*", context: "Anexo ⟦II⟧", targets: ["anexo-modelo"], occurrences: 1 },
   ],
   remissionScan: { pattern: "(?:item|cláusula|Anexo)\\s+[\\dIVX.]+" },
   requireCurrencyInMoneyHeaders: true,

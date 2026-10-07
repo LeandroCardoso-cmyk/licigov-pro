@@ -46,12 +46,12 @@ describe("composer v2 — saída completa da fixture", () => {
 
   it("numeração automática só dos blocos renderizados (seções e parágrafos), incluindo seção condicional", () => {
     expect(text).toContain("## 1. DO OBJETO");
-    expect(text).toContain("1.1 Aquisição sintética de material de expediente");
-    expect(text).toContain("1.2 Valor estimado: R$ 30.600,00 (margem de preferência 5,5%).");
+    expect(text).toContain("1.1. Aquisição sintética de material de expediente");
+    expect(text).toContain("1.2. Valor estimado: R$ 30.600,00 (margem de preferência 5,5%).");
     expect(text).toContain("## 2. DO JULGAMENTO");
-    expect(text).toContain("2.1 Critério de julgamento: menor_preco.");
+    expect(text).toContain("2.1. Critério de julgamento: menor_preco.");
     expect(text).toContain("### 2.2. DO REGISTRO DE PREÇOS");
-    expect(text).toContain("2.2.1 Ata de registro de preços com vigência de 12 meses.");
+    expect(text).toContain("2.2.1. Ata de registro de preços com vigência de 12 meses.");
   });
 
   it("xref resolve o número final (nunca texto literal fixo)", () => {
@@ -59,7 +59,7 @@ describe("composer v2 — saída completa da fixture", () => {
   });
 
   it("choice exactly-one renderiza só o ramo cuja condição vale e numera-o na sequência", () => {
-    expect(text).toContain("2.3 O orçamento estimado é público.");
+    expect(text).toContain("2.3. O orçamento estimado é público.");
     expect(text).not.toContain("sigiloso");
   });
 
@@ -103,7 +103,7 @@ describe("composer v2 — condicionais, controles e xref", () => {
   it("controle que muda a condição: SRP desligado ⇒ seção some, renumera, e o xref acompanha", () => {
     const off = compose({ sources: canonicalSources2(ORG_A, { CERTAME_CONFIG: { usesSrp: false, criterion: "menor_preco", openingAt: "2026-11-05T09:30" } }) });
     expect(off.content.text).not.toContain("REGISTRO DE PREÇOS");
-    expect(off.content.text).toContain("2.2 O orçamento estimado é público.");
+    expect(off.content.text).toContain("2.2. O orçamento estimado é público.");
     expect(off.content.text).toContain("Conforme o item 2.1 e a cláusula 1.1.");
   });
 

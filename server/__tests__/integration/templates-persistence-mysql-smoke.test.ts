@@ -20,6 +20,9 @@ import {
   withTemplatesTransaction, countRevisionReferences, type TemplatesContext,
 } from "../../db/institutionalTemplates";
 import { checkForeignKeyContract } from "../../db/schemaForeignKeyGuard";
+import { bllCatalog } from "../helpers/institutionalTemplatesBllHarness";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   computeManifestHash, computeRevalidationResultHash, createDraftRevision, deriveIssuanceManifest, resolveTemplateBinding,
   revisionDeletionIssues, sealGenerationManifest,
@@ -639,6 +642,29 @@ describe.skipIf(!DB)("Institutional Templates — T2 persistência / HD-26 (MySQ
       // a referência oficial adulterada também é detectada
       await exec("UPDATE document_composition_references SET version = 77 WHERE organization_id = ? AND manifest_id = ?", [ORG_A, m1.id]);
       expect(await codeOf(getManifest(ORG_A, m1.id))).toBe("PERSISTED_RECORD_CORRUPT");
+    });
+  });
+
+  describe("P8 — AST v2 (modelo BLL) persiste SEM alteração de schema", () => {
+    it("a AST tpl-ast/2 completa (≈380 KB) faz round-trip em ast_json, o hash é recomputado igual, e o ciclo DRAFT→APPROVED→PUBLISHED funciona (banco de teste local)", async () => {
+      const ast2 = JSON.parse(readFileSync(path.resolve(__dirname, "../../domain/institutionalTemplates/models/edital-pregao-eletronico-bll/ast.json"), "utf8"));
+      const ctx = CTX_A;
+      const identity: TemplateIdentity = { id: nid("ti"), organizationId: ORG_A, documentKind: "edital", slug: `edital-bll-v2-${RUN}`, createdAt: "2026-10-07T00:00:00Z", createdByUserId: 1 };
+      const draft = createDraftRevision({ id: nid("tr"), identity, revision: 1, ast: ast2, catalog: bllCatalog, sourceFormat: "NATIVE" });
+      if (!draft.ok) throw new Error(JSON.stringify(draft.issues).slice(0, 500));
+      expect(bllCatalog.version.length).toBeLessThanOrEqual(64);
+      const approval = await seedDecision(ORG_A); const publication = await seedDecision(ORG_A);
+      const published = await withTemplatesTransaction("test.v2", ctx, async (tx) => {
+        await insertIdentity(tx, ctx, identity);
+        await insertDraftRevision(tx, ctx, draft.value);
+        await transitionRevisionStatus(tx, ctx, { revisionId: draft.value.id, to: "APPROVED", decisionId: approval });
+        return (await transitionRevisionStatus(tx, ctx, { revisionId: draft.value.id, to: "PUBLISHED", decisionId: publication })).revision;
+      });
+      expect(published.status).toBe("PUBLISHED");
+      const back = await getRevision(ORG_A, draft.value.id);
+      expect(back?.semanticHash).toBe(draft.value.semanticHash);
+      expect(back?.ast).toEqual(ast2);
+      expect(back?.variableCatalogVersion).toBe(bllCatalog.version);
     });
   });
 });

@@ -185,7 +185,7 @@ export function formatCnpj(digits: string): string {
 }
 
 const UNIT_LABELS: Readonly<Record<DurationUnit, readonly [string, string]>> = {
-  hour: ["hora", "horas"], day: ["dia", "dias"], businessDay: ["dia útil", "dias úteis"], month: ["mês", "meses"], year: ["ano", "anos"],
+  minute: ["minuto", "minutos"], hour: ["hora", "horas"], day: ["dia", "dias"], businessDay: ["dia útil", "dias úteis"], month: ["mês", "meses"], year: ["ano", "anos"],
 };
 
 export function formatDuration(d: DurationValue): string {

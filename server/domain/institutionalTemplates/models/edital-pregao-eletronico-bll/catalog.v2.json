@@ -1,0 +1,2165 @@
+{
+  "format": "tpl-catalog/2",
+  "version": "edital-pregao-eletronico-bll/1.0.1-draft.c2",
+  "vars": [
+    {
+      "name": "contratacao.condicoesSubcontratacao",
+      "source": "TR",
+      "path": "condicoesSubcontratacao",
+      "description": "Limites e condições de subcontratação [TR; validação: Igual ao TR; CONDICOES_SUBCONTRATACAO]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.subcontratacao",
+        "value": "admite"
+      }
+    },
+    {
+      "name": "contratacao.fiscalContrato",
+      "source": "PROCESS",
+      "path": "fiscalContrato",
+      "description": "Fiscal (cargo/ato) [Processo; validação: Designação ou remissão a ato; FISCAL_CONTRATO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.formaAssinaturaContrato",
+      "source": "POLICY",
+      "path": "formaAssinaturaContrato",
+      "description": "Forma de assinatura [Política; validação: —; FORMA_ASSINATURA_CONTRATO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.formaFornecimento",
+      "source": "TR",
+      "path": "formaFornecimento",
+      "description": "Forma de fornecimento / regime [TR; validação: Igual ao TR; FORMA_FORNECIMENTO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.formaPagamento",
+      "source": "TR",
+      "path": "formaPagamento",
+      "description": "Condições de pagamento [TR; validação: Sem condição de repasse; sem antecipação; FORMA_PAGAMENTO]",
+      "type": "text",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.gestorContrato",
+      "source": "PROCESS",
+      "path": "gestorContrato",
+      "description": "Gestor (cargo/ato) [Processo; validação: Designação ou remissão a ato; GESTOR_CONTRATO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.indiceAtualizacaoFinanceira",
+      "source": "POLICY",
+      "path": "indiceAtualizacaoFinanceira",
+      "description": "Índice de atualização por atraso [Política; validação: Índice oficial; INDICE_ATUALIZACAO_FINANCEIRA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.indiceReajuste",
+      "source": "PROCESS",
+      "path": "indiceReajuste",
+      "description": "Índice de reajuste [Processo; validação: Compatível com o objeto; INDICE_REAJUSTE]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.instrumentoEquivalenteTipo",
+      "source": "PROCESS",
+      "path": "instrumentoEquivalenteTipo",
+      "description": "Instrumento substitutivo do contrato [Processo; validação: Hipótese do art. 95; INSTRUMENTO_EQUIVALENTE_TIPO]",
+      "type": "enum",
+      "renderable": true,
+      "required": false,
+      "enumValues": [
+        "nota de empenho de despesa",
+        "autorização de compra",
+        "ordem de execução de serviço",
+        "carta-contrato"
+      ],
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.instrumentoContratual",
+        "value": "equivalente"
+      }
+    },
+    {
+      "name": "contratacao.localEntrega",
+      "source": "TR",
+      "path": "localEntrega",
+      "description": "Local de execução/entrega [TR; validação: Igual ao TR; LOCAL_ENTREGA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.marcoInicialExecucao",
+      "source": "TR",
+      "path": "marcoInicialExecucao",
+      "description": "Marco inicial do prazo de execução [TR; validação: Igual ao TR; MARCO_INICIAL_EXECUCAO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.marcoInicialPagamento",
+      "source": "TR",
+      "path": "marcoInicialPagamento",
+      "description": "Marco inicial do prazo de pagamento [TR / Política; validação: Evento verificável; MARCO_INICIAL_PAGAMENTO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.marcoInicialRecebimentoProvisorio",
+      "source": "TR",
+      "path": "marcoInicialRecebimentoProvisorio",
+      "description": "Marco do recebimento provisório [TR; validação: Igual ao TR; MARCO_INICIAL_RECEBIMENTO_PROVISORIO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.marcoInicialVigencia",
+      "source": "POLICY",
+      "path": "marcoInicialVigencia",
+      "description": "Marco inicial da vigência [Política / TR; validação: —; MARCO_INICIAL_VIGENCIA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.percentualGarantiaContratual",
+      "source": "PROCESS",
+      "path": "percentualGarantiaContratual",
+      "description": "Percentual da garantia [Processo; validação: Até 5%; até 10% com justificativa; PERCENTUAL_GARANTIA_CONTRATUAL]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeGarantiaContratual",
+        "value": true
+      }
+    },
+    {
+      "name": "contratacao.prazoAssinaturaContrato",
+      "source": "POLICY",
+      "path": "prazoAssinaturaContrato",
+      "description": "Prazo para assinar/retirar [Política; validação: —; PRAZO_ASSINATURA_CONTRATO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoComunicacaoIncidenteDados",
+      "source": "POLICY",
+      "path": "prazoComunicacaoIncidenteDados",
+      "description": "Prazo de comunicação de incidente [Política; validação: —; PRAZO_COMUNICACAO_INCIDENTE_DADOS]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.tratamentoDadosPessoais",
+        "value": true
+      }
+    },
+    {
+      "name": "contratacao.prazoDecisaoAdministracao",
+      "source": "POLICY",
+      "path": "prazoDecisaoAdministracao",
+      "description": "Prazo de decisão sobre requerimentos [Política; validação: —; PRAZO_DECISAO_ADMINISTRACAO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoExecucao",
+      "source": "TR",
+      "path": "prazoExecucao",
+      "description": "Prazo de execução/entrega [TR; validação: Igual ao TR; PRAZO_EXECUCAO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoPagamento",
+      "source": "TR",
+      "path": "prazoPagamento",
+      "description": "Prazo de pagamento [TR / Política; validação: —; PRAZO_PAGAMENTO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoPrestacaoGarantia",
+      "source": "POLICY",
+      "path": "prazoPrestacaoGarantia",
+      "description": "Prazo para prestar a garantia [Política; validação: Mínimo legal do seguro-garantia; PRAZO_PRESTACAO_GARANTIA]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeGarantiaContratual",
+        "value": true
+      }
+    },
+    {
+      "name": "contratacao.prazoRecebimentoDefinitivo",
+      "source": "TR",
+      "path": "prazoRecebimentoDefinitivo",
+      "description": "Prazo do recebimento definitivo [TR; validação: Igual ao TR; PRAZO_RECEBIMENTO_DEFINITIVO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoRecebimentoProvisorio",
+      "source": "TR",
+      "path": "prazoRecebimentoProvisorio",
+      "description": "Prazo do recebimento provisório [TR; validação: Igual ao TR; PRAZO_RECEBIMENTO_PROVISORIO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoRespostaReequilibrio",
+      "source": "POLICY",
+      "path": "prazoRespostaReequilibrio",
+      "description": "Prazo de decisão do reequilíbrio [Política; validação: —; PRAZO_RESPOSTA_REEQUILIBRIO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoRespostaRepactuacao",
+      "source": "POLICY",
+      "path": "prazoRespostaRepactuacao",
+      "description": "Prazo de decisão da repactuação [Política; validação: —; PRAZO_RESPOSTA_REPACTUACAO]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.repactuacao",
+        "value": true
+      }
+    },
+    {
+      "name": "contratacao.prazoSubstituicaoObjeto",
+      "source": "TR",
+      "path": "prazoSubstituicaoObjeto",
+      "description": "Prazo para substituir/corrigir [TR; validação: Igual ao TR; PRAZO_SUBSTITUICAO_OBJETO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.prazoVigencia",
+      "source": "TR",
+      "path": "prazoVigencia",
+      "description": "Vigência contratual [TR; validação: Compatível com execução, recebimento e pagamento; PRAZO_VIGENCIA]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "contratacao.regraCustosMercadoRepactuacao",
+      "source": "TR",
+      "path": "regraCustosMercadoRepactuacao",
+      "description": "Tratamento dos custos de mercado [TR; validação: Revisão jurídica; REGRA_CUSTOS_MERCADO_REPACTUACAO]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.repactuacao",
+        "value": true
+      }
+    },
+    {
+      "name": "controle.dataDivulgacaoPrevista",
+      "source": "PROCESS",
+      "path": "dataDivulgacaoPrevista",
+      "description": "Data prevista de divulgação (controle; não exibido) [Processo; validação: Base do cálculo do prazo mínimo; DATA_DIVULGACAO_PREVISTA]",
+      "type": "date",
+      "required": true,
+      "renderable": false
+    },
+    {
+      "name": "controle.orcamentoSigilosoSimNao",
+      "source": "PROCESS",
+      "path": "orcamentoSigilosoSimNao",
+      "description": "Controle do sigilo (não exibido) [Processo; validação: Justificativa se SIM; incompatível com maior desconto; ORCAMENTO_SIGILOSO_SIM_NAO]",
+      "type": "boolean",
+      "required": true,
+      "renderable": false
+    },
+    {
+      "name": "controle.utilizaSrp",
+      "source": "PROCESS",
+      "path": "utilizaSrp",
+      "description": "Controle do módulo SRP (não exibido) [Processo; validação: Ativa SE_SRP_ATA ou SE_SEM_SRP; UTILIZA_SRP]",
+      "type": "boolean",
+      "required": true,
+      "renderable": false
+    },
+    {
+      "name": "decisao.aceitaRegistroCadastral",
+      "type": "boolean",
+      "source": "POLICY",
+      "path": "decisoes.aceitaRegistroCadastral",
+      "required": false,
+      "renderable": false,
+      "description": "Substituição de documentos por registro cadastral (decisão institucional) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.adesaoAta",
+      "type": "enum",
+      "source": "POLICY",
+      "path": "decisoes.adesaoAta",
+      "required": false,
+      "renderable": false,
+      "description": "Adesão à Ata de Registro de Preços (padrão: veda) [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "admite",
+        "veda"
+      ],
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "decisao.anexosAdicionais",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.anexosAdicionais",
+      "required": false,
+      "renderable": false,
+      "description": "Anexos adicionais exigidos pelo objeto [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.beneficioAfastado",
+      "type": "boolean",
+      "source": "ITEMS",
+      "path": "decisoes.beneficioAfastado",
+      "required": false,
+      "renderable": false,
+      "description": "Afastamento motivado da exclusividade/cota (art. 49 da LC 123/2006) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.consorcio",
+      "type": "enum",
+      "source": "PROCESS",
+      "path": "decisoes.consorcio",
+      "required": true,
+      "renderable": false,
+      "description": "Consórcio admitido (regra legal) ou vedado com justificativa no processo [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "admite",
+        "veda"
+      ]
+    },
+    {
+      "name": "decisao.contratoPorEscopo",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.contratoPorEscopo",
+      "required": false,
+      "renderable": false,
+      "description": "Prorrogação automática por escopo (natureza do objeto) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.cotaReservada",
+      "type": "boolean",
+      "source": "ITEMS",
+      "path": "decisoes.cotaReservada",
+      "required": false,
+      "renderable": false,
+      "description": "Cota reservada a ME/EPP (enquadramento dos itens) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.declaracaoEspecificaObjeto",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.declaracaoEspecificaObjeto",
+      "required": false,
+      "renderable": false,
+      "description": "Declaração exigida por lei especial aplicável ao objeto (fundamento no TR) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exclusivoMeEpp",
+      "type": "boolean",
+      "source": "ITEMS",
+      "path": "decisoes.exclusivoMeEpp",
+      "required": false,
+      "renderable": false,
+      "description": "Participação exclusiva de ME/EPP (enquadramento dos itens) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeAmostra",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.exigeAmostra",
+      "required": false,
+      "renderable": false,
+      "description": "Amostra do licitante classificado em primeiro lugar (justificativa e critérios no TR) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeBalanco",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.exigeBalanco",
+      "required": false,
+      "renderable": false,
+      "description": "Demonstrações contábeis e índices (justificativa no processo) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeCapitalOuPlMinimo",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.exigeCapitalOuPlMinimo",
+      "required": false,
+      "renderable": false,
+      "description": "Capital social ou patrimônio líquido mínimo (justificativa e hipótese legal) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeCatalogo",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.exigeCatalogo",
+      "required": false,
+      "renderable": false,
+      "description": "Catálogo ou ficha técnica exigidos (previsão no TR) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeGarantiaContratual",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.exigeGarantiaContratual",
+      "required": false,
+      "renderable": false,
+      "description": "Garantia de execução contratual (justificativa no processo) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeMarcaModelo",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.exigeMarcaModelo",
+      "required": false,
+      "renderable": false,
+      "description": "Exige indicação de marca/modelo do bem ofertado [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.exigeProvaConceito",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.exigeProvaConceito",
+      "required": false,
+      "renderable": false,
+      "description": "Prova de conceito (justificativa e critérios no TR) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.formaJulgamento",
+      "type": "enum",
+      "source": "CERTAME_CONFIG",
+      "path": "decisoes.formaJulgamento",
+      "required": true,
+      "renderable": false,
+      "description": "Julgamento por item ou por lote (lote exige justificativa técnica e econômica no processo) [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "item",
+        "lote"
+      ]
+    },
+    {
+      "name": "decisao.instrumentoContratual",
+      "type": "enum",
+      "source": "PROCESS",
+      "path": "decisoes.instrumentoContratual",
+      "required": true,
+      "renderable": false,
+      "description": "Formalização por termo de contrato ou instrumento equivalente (art. 95) [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "termo",
+        "equivalente"
+      ]
+    },
+    {
+      "name": "decisao.intervaloMinimoLances",
+      "type": "boolean",
+      "source": "CERTAME_CONFIG",
+      "path": "decisoes.intervaloMinimoLances",
+      "required": false,
+      "renderable": false,
+      "description": "Intervalo mínimo entre lances (parametrização do certame) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.inversaoFases",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.inversaoFases",
+      "required": true,
+      "renderable": false,
+      "description": "Inversão de fases (habilitação antecedente) — ato motivado no processo; padrão: não [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.matrizDeRiscos",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.matrizDeRiscos",
+      "required": false,
+      "renderable": false,
+      "description": "TR com matriz de riscos [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.modalidadeTratamentoRegional",
+      "type": "enum",
+      "source": "PROCESS",
+      "path": "decisoes.modalidadeTratamentoRegional",
+      "required": false,
+      "renderable": false,
+      "description": "Prioridade ou exclusividade regional (dentro do tratamento regional) [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "prioridade",
+        "exclusividade"
+      ],
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.tratamentoRegional",
+        "value": true
+      }
+    },
+    {
+      "name": "decisao.participacaoCooperativa",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.participacaoCooperativa",
+      "required": false,
+      "renderable": false,
+      "description": "Objeto compatível com participação de cooperativas, conforme TR [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.pastaTecnica",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.pastaTecnica",
+      "required": false,
+      "renderable": false,
+      "description": "TR com peças técnicas complementares (pasta técnica) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.propostaSemIdentificacao",
+      "type": "boolean",
+      "source": "CERTAME_CONFIG",
+      "path": "decisoes.propostaSemIdentificacao",
+      "required": false,
+      "renderable": false,
+      "description": "Proposta sem identificação até o fim dos lances (confirmação da parametrização da plataforma) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.regulamentoMunicipalVerificado",
+      "type": "boolean",
+      "source": "NORMATIVE",
+      "path": "decisoes.regulamentoMunicipalVerificado",
+      "required": false,
+      "renderable": false,
+      "description": "Regulamento municipal da Lei 14.133 com texto integral conferido pela Procuradoria (acervo normativo) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.repactuacao",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.repactuacao",
+      "required": false,
+      "renderable": false,
+      "description": "Repactuação (serviço contínuo com dedicação/predominância de mão de obra) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.servicoOuFornecimentoContinuo",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.servicoOuFornecimentoContinuo",
+      "required": false,
+      "renderable": false,
+      "description": "Serviço ou fornecimento contínuo (natureza do objeto) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.subcontratacao",
+      "type": "enum",
+      "source": "TR",
+      "path": "decisoes.subcontratacao",
+      "required": true,
+      "renderable": false,
+      "description": "Subcontratação admitida ou vedada com justificativa, conforme TR [decisão de composição; não é placeholder do mestre]",
+      "enumValues": [
+        "admite",
+        "veda"
+      ]
+    },
+    {
+      "name": "decisao.tratamentoDadosPessoais",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.tratamentoDadosPessoais",
+      "required": true,
+      "renderable": false,
+      "description": "TR indica tratamento de dados pessoais pelo contratado (padrão: não) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.tratamentoRegional",
+      "type": "boolean",
+      "source": "PROCESS",
+      "path": "decisoes.tratamentoRegional",
+      "required": false,
+      "renderable": false,
+      "description": "Tratamento local ou regional (exige base legal, decisão, justificativa, critério e análise jurídica) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "decisao.visitaTecnicaFacultativa",
+      "type": "boolean",
+      "source": "TR",
+      "path": "decisoes.visitaTecnicaFacultativa",
+      "required": false,
+      "renderable": false,
+      "description": "Vistoria facultativa e declaração substitutiva (justificativa no TR) [decisão de composição; não é placeholder do mestre]"
+    },
+    {
+      "name": "habilitacao.autorizacaoAtividadeExigida",
+      "source": "TR",
+      "path": "autorizacaoAtividadeExigida",
+      "description": "Autorização legal para a atividade [TR; validação: Lei especial indicada; AUTORIZACAO_ATIVIDADE_EXIGIDA]",
+      "type": "string",
+      "renderable": true,
+      "required": false
+    },
+    {
+      "name": "habilitacao.canalAgendamentoVisita",
+      "source": "TR",
+      "path": "canalAgendamentoVisita",
+      "description": "Canal de agendamento da vistoria [TR; validação: —; CANAL_AGENDAMENTO_VISITA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.visitaTecnicaFacultativa",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.criteriosAvaliacaoAmostra",
+      "source": "TR",
+      "path": "criteriosAvaliacaoAmostra",
+      "description": "Critérios objetivos de avaliação [TR; validação: Objetivos e mensuráveis; CRITERIOS_AVALIACAO_AMOSTRA]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeAmostra",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.criteriosProvaConceito",
+      "source": "TR",
+      "path": "criteriosProvaConceito",
+      "description": "Roteiro e critérios da prova [TR; validação: Objetivos e mensuráveis; CRITERIOS_PROVA_CONCEITO]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeProvaConceito",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.declaracoesEspecificasObjeto",
+      "source": "TR",
+      "path": "declaracoesEspecificasObjeto",
+      "description": "Declaração exigida por lei especial [TR; validação: Fundamento legal indicado; DECLARACOES_ESPECIFICAS_OBJETO]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.declaracaoEspecificaObjeto",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.indicesEconomicoFinanceiros",
+      "source": "PROCESS",
+      "path": "indicesEconomicoFinanceiros",
+      "description": "Índices e fórmulas exigidos [Processo; validação: Usuais; justificados; INDICES_ECONOMICO_FINANCEIROS]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeBalanco",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.itensExigeAmostra",
+      "source": "TR",
+      "path": "itensExigeAmostra",
+      "description": "Itens com exigência de amostra [TR / Itens; validação: Itens existentes; justificativa; ITENS_EXIGE_AMOSTRA]",
+      "type": "list",
+      "renderable": true,
+      "required": false,
+      "itemType": "string",
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeAmostra",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.itensExigeCatalogo",
+      "source": "TR",
+      "path": "itensExigeCatalogo",
+      "description": "Itens com exigência de catálogo [TR / Itens; validação: Itens existentes; ITENS_EXIGE_CATALOGO]",
+      "type": "list",
+      "renderable": true,
+      "required": false,
+      "itemType": "string",
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeCatalogo",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.localEntregaAmostra",
+      "source": "TR",
+      "path": "localEntregaAmostra",
+      "description": "Local de entrega da amostra [TR; validação: —; LOCAL_ENTREGA_AMOSTRA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeAmostra",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.localProvaConceito",
+      "source": "TR",
+      "path": "localProvaConceito",
+      "description": "Local da prova [TR; validação: —; LOCAL_PROVA_CONCEITO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeProvaConceito",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.percentualCapitalPlMinimo",
+      "source": "PROCESS",
+      "path": "percentualCapitalPlMinimo",
+      "description": "Percentual mínimo [Processo; validação: Até 10%; PERCENTUAL_CAPITAL_PL_MINIMO]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeCapitalOuPlMinimo",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.periodoVisitaTecnica",
+      "source": "TR",
+      "path": "periodoVisitaTecnica",
+      "description": "Período da vistoria [TR; validação: Encerra antes da abertura; PERIODO_VISITA_TECNICA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.visitaTecnicaFacultativa",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.prazoEntregaAmostra",
+      "source": "TR",
+      "path": "prazoEntregaAmostra",
+      "description": "Prazo de entrega da amostra [TR; validação: Razoável; PRAZO_ENTREGA_AMOSTRA]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeAmostra",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.prazoProvaConceito",
+      "source": "TR",
+      "path": "prazoProvaConceito",
+      "description": "Prazo para a prova [TR; validação: Razoável; PRAZO_PROVA_CONCEITO]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeProvaConceito",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.prazoValidadeCertidaoFalencia",
+      "source": "POLICY",
+      "path": "prazoValidadeCertidaoFalencia",
+      "description": "Validade da certidão de falência [Política; validação: Uniforme; PRAZO_VALIDADE_CERTIDAO_FALENCIA]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "habilitacao.prazoValidadeCertidoesSemPrazo",
+      "source": "POLICY",
+      "path": "prazoValidadeCertidoesSemPrazo",
+      "description": "Validade de certidões sem prazo [Política; validação: Uniforme; PRAZO_VALIDADE_CERTIDOES_SEM_PRAZO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "habilitacao.registroCadastralAceito",
+      "source": "POLICY",
+      "path": "registroCadastralAceito",
+      "description": "Cadastro aceito em substituição [Política; validação: Cadastro acessível ao Pregoeiro; REGISTRO_CADASTRAL_ACEITO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.aceitaRegistroCadastral",
+        "value": true
+      }
+    },
+    {
+      "name": "habilitacao.requisitosQualificacaoTecnica",
+      "source": "TR",
+      "path": "requisitosQualificacaoTecnica",
+      "description": "Exigências de qualificação técnica [TR / decisão da autoridade; validação: Balizas do art. 67; justificativa; texto fixo se vazio; REQUISITOS_QUALIFICACAO_TECNICA]",
+      "type": "text",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "habilitacao.tipoExigenciaCapitalPl",
+      "source": "PROCESS",
+      "path": "tipoExigenciaCapitalPl",
+      "description": "Capital social ou patrimônio líquido [Processo; validação: Hipótese legal; TIPO_EXIGENCIA_CAPITAL_PL]",
+      "type": "enum",
+      "renderable": true,
+      "required": false,
+      "enumValues": [
+        "capital social",
+        "patrimônio líquido"
+      ],
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exigeCapitalOuPlMinimo",
+        "value": true
+      }
+    },
+    {
+      "name": "instituicao.autoridadeCompetenteCargo",
+      "source": "IDENTITY",
+      "path": "autoridadeCompetenteCargo",
+      "description": "Cargo da autoridade superior [Tenant; validação: —; AUTORIDADE_COMPETENTE_CARGO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.autoridadeCompetenteNome",
+      "source": "IDENTITY",
+      "path": "autoridadeCompetenteNome",
+      "description": "Nome da autoridade superior [Tenant (vigência); validação: Titular vigente na data; AUTORIDADE_COMPETENTE_NOME]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.canalDenuncias",
+      "source": "IDENTITY",
+      "path": "canalDenuncias",
+      "description": "Canal para comunicação de irregularidades [Tenant; validação: —; CANAL_DENUNCIAS]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.canalEsclarecimentos",
+      "source": "POLICY",
+      "path": "canalEsclarecimentos",
+      "description": "Canal oficial único de esclarecimentos [Política; validação: Canal único; sem alternativas; CANAL_ESCLARECIMENTOS]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.canalImpugnacoes",
+      "source": "POLICY",
+      "path": "canalImpugnacoes",
+      "description": "Canal oficial único de impugnações [Política; validação: Canal único; sem alternativas; CANAL_IMPUGNACOES]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.decretoMunicipalRegulamentador",
+      "source": "NORMATIVE",
+      "path": "decretoMunicipalRegulamentador",
+      "description": "Regulamento municipal da Lei 14.133 [Acervo normativo verificado; validação: Texto integral conferido; DECRETO_MUNICIPAL_REGULAMENTADOR]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.regulamentoMunicipalVerificado",
+        "value": true
+      }
+    },
+    {
+      "name": "instituicao.diarioOficialMunicipio",
+      "source": "IDENTITY",
+      "path": "diarioOficialMunicipio",
+      "description": "Veículo oficial de publicação [Tenant; validação: Confirmação institucional; DIARIO_OFICIAL_MUNICIPIO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.equipeApoio",
+      "source": "IDENTITY",
+      "path": "equipeApoio",
+      "description": "Equipe de apoio [Tenant / Processo; validação: Designação vigente; EQUIPE_APOIO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.foroComarca",
+      "source": "IDENTITY",
+      "path": "foroComarca",
+      "description": "Foro competente [Tenant; validação: Igual ao cadastro; FORO_COMARCA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioCnpj",
+      "source": "IDENTITY",
+      "path": "municipioCnpj",
+      "description": "CNPJ do ente [Tenant; validação: Dígito verificador; MUNICIPIO_CNPJ]",
+      "type": "cnpj",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioEndereco",
+      "source": "IDENTITY",
+      "path": "municipioEndereco",
+      "description": "Endereço da sede [Tenant; validação: —; MUNICIPIO_ENDERECO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioNome",
+      "source": "IDENTITY",
+      "path": "municipioNome",
+      "description": "Nome do ente [Tenant; validação: Igual ao cadastro; MUNICIPIO_NOME]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioSede",
+      "source": "IDENTITY",
+      "path": "municipioSede",
+      "description": "Localidade para datação [Tenant; validação: —; MUNICIPIO_SEDE]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioSite",
+      "source": "IDENTITY",
+      "path": "municipioSite",
+      "description": "Sítio eletrônico oficial [Tenant; validação: URL válida; MUNICIPIO_SITE]",
+      "type": "url",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioTelefone",
+      "source": "IDENTITY",
+      "path": "municipioTelefone",
+      "description": "Telefone institucional [Tenant; validação: —; MUNICIPIO_TELEFONE]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.municipioUfExtenso",
+      "source": "IDENTITY",
+      "path": "municipioUfExtenso",
+      "description": "Estado por extenso [Tenant; validação: —; MUNICIPIO_UF_EXTENSO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.portalTransparenciaUrl",
+      "source": "IDENTITY",
+      "path": "portalTransparenciaUrl",
+      "description": "Endereço do portal de transparência [Tenant; validação: URL válida; PORTAL_TRANSPARENCIA_URL]",
+      "type": "url",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.pregoeiroNome",
+      "source": "IDENTITY",
+      "path": "pregoeiroNome",
+      "description": "Pregoeiro designado [Tenant / Processo; validação: Designação vigente; PREGOEIRO_NOME]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.pregoeiroPortaria",
+      "source": "IDENTITY",
+      "path": "pregoeiroPortaria",
+      "description": "Ato de designação [Tenant; validação: Ato vigente; PREGOEIRO_PORTARIA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.signatarioEditalCargo",
+      "source": "PROCESS",
+      "path": "signatarioEditalCargo",
+      "description": "Cargo do signatário [Processo; validação: —; SIGNATARIO_EDITAL_CARGO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "instituicao.signatarioEditalNome",
+      "source": "PROCESS",
+      "path": "signatarioEditalNome",
+      "description": "Quem subscreve o edital [Processo; validação: Competência interna; SIGNATARIO_EDITAL_NOME]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.antecedenciaMinimaReinicioSessao",
+      "source": "POLICY",
+      "path": "antecedenciaMinimaReinicioSessao",
+      "description": "Antecedência para retomada da sessão [Política; validação: —; ANTECEDENCIA_MINIMA_REINICIO_SESSAO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.baseDoLance",
+      "source": "CERTAME_CONFIG",
+      "path": "baseDoLance",
+      "description": "Base do lance [Config. certame; validação: Coerente com item/lote; BASE_DO_LANCE]",
+      "type": "enum",
+      "renderable": true,
+      "required": false,
+      "enumValues": [
+        "valor unitário do item",
+        "valor total do item",
+        "valor total do lote"
+      ],
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "menor preço"
+      }
+    },
+    {
+      "name": "julgamento.baseIncidenciaDesconto",
+      "source": "TR",
+      "path": "baseIncidenciaDesconto",
+      "description": "Base de incidência do desconto [TR; validação: Preço de referência público; BASE_INCIDENCIA_DESCONTO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "maior desconto"
+      }
+    },
+    {
+      "name": "julgamento.casasDecimaisDesconto",
+      "source": "CERTAME_CONFIG",
+      "path": "casasDecimaisDesconto",
+      "description": "Casas decimais do desconto [Config. certame; validação: Igual à plataforma; CASAS_DECIMAIS_DESCONTO]",
+      "type": "integer",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "maior desconto"
+      }
+    },
+    {
+      "name": "julgamento.casasDecimaisPreco",
+      "source": "CERTAME_CONFIG",
+      "path": "casasDecimaisPreco",
+      "description": "Casas decimais do preço [Config. certame; validação: Igual à plataforma; CASAS_DECIMAIS_PRECO]",
+      "type": "integer",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "menor preço"
+      }
+    },
+    {
+      "name": "julgamento.criterioJulgamento",
+      "source": "PROCESS",
+      "path": "criterioJulgamento",
+      "description": "Critério de julgamento [Processo / TR; validação: Coerente com blocos de critério; CRITERIO_JULGAMENTO]",
+      "type": "enum",
+      "renderable": true,
+      "required": true,
+      "enumValues": [
+        "menor preço",
+        "maior desconto"
+      ]
+    },
+    {
+      "name": "julgamento.dataOrcamentoEstimado",
+      "source": "BUDGET",
+      "path": "dataOrcamentoEstimado",
+      "description": "Data do orçamento estimado (data-base) [Orçamento; validação: Anterior à emissão; DATA_ORCAMENTO_ESTIMADO]",
+      "type": "date",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.dotacaoOrcamentaria",
+      "source": "PROCESS",
+      "path": "dotacaoOrcamentaria",
+      "description": "Dotação orçamentária [Processo (contabilidade); validação: Declaração de disponibilidade; DOTACAO_ORCAMENTARIA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": false
+      }
+    },
+    {
+      "name": "julgamento.duracaoEtapaLances",
+      "source": "CERTAME_CONFIG",
+      "path": "duracaoEtapaLances",
+      "description": "Duração da etapa aberta [Config. certame; validação: Igual à plataforma; DURACAO_ETAPA_LANCES]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.modoDisputa",
+        "value": "aberto"
+      }
+    },
+    {
+      "name": "julgamento.fonteRecursos",
+      "source": "PROCESS",
+      "path": "fonteRecursos",
+      "description": "Fonte de recursos [Processo (contabilidade); validação: Coerente com a dotação; FONTE_RECURSOS]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": false
+      }
+    },
+    {
+      "name": "julgamento.horarioExpedienteSessao",
+      "source": "IDENTITY",
+      "path": "horarioExpedienteSessao",
+      "description": "Expediente para contagem de prazos em horas [Tenant; validação: —; HORARIO_EXPEDIENTE_SESSAO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.intervaloMinimoLances",
+      "source": "CERTAME_CONFIG",
+      "path": "intervaloMinimoLances",
+      "description": "Intervalo mínimo entre lances [Config. certame; validação: Proporcional; igual à plataforma; INTERVALO_MINIMO_LANCES]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.intervaloMinimoLances",
+        "value": true
+      }
+    },
+    {
+      "name": "julgamento.janelaIntencaoRecurso",
+      "source": "POLICY",
+      "path": "janelaIntencaoRecurso",
+      "description": "Duração mínima do período de manifestação [Política; validação: Igual à plataforma; JANELA_INTENCAO_RECURSO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.modoDisputa",
+      "source": "CERTAME_CONFIG",
+      "path": "modoDisputa",
+      "description": "Modo de disputa [Config. certame; validação: Igual ao bloco ativo; fechado isolado vedado; MODO_DISPUTA]",
+      "type": "enum",
+      "renderable": true,
+      "required": true,
+      "enumValues": [
+        "aberto",
+        "aberto e fechado"
+      ]
+    },
+    {
+      "name": "julgamento.momentoDivulgacaoOrcamento",
+      "source": "PROCESS",
+      "path": "momentoDivulgacaoOrcamento",
+      "description": "Momento de divulgação do orçamento sigiloso [Processo; validação: Momento definido e praticável; MOMENTO_DIVULGACAO_ORCAMENTO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.orcamentoSigilosoSimNao",
+        "value": true
+      }
+    },
+    {
+      "name": "julgamento.parametroExequibilidade",
+      "source": "PROCESS",
+      "path": "parametroExequibilidade",
+      "description": "Regra de indício de inexequibilidade [Processo; validação: Sem percentual automático; nunca desclassificação direta; PARAMETRO_EXEQUIBILIDADE]",
+      "type": "text",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.prazoConvocacaoPropostaAjustada",
+      "source": "POLICY",
+      "path": "prazoConvocacaoPropostaAjustada",
+      "description": "Prazo da convocação pós-lances [Política; validação: Único em todo o conjunto documental; PRAZO_CONVOCACAO_PROPOSTA_AJUSTADA]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.prazoDiligencia",
+      "source": "POLICY",
+      "path": "prazoDiligencia",
+      "description": "Prazo padrão de diligência [Política; validação: Razoável; PRAZO_DILIGENCIA]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.prazoDiligenciaExequibilidade",
+      "source": "POLICY",
+      "path": "prazoDiligenciaExequibilidade",
+      "description": "Prazo da diligência de exequibilidade [Política; validação: Razoável; PRAZO_DILIGENCIA_EXEQUIBILIDADE]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.prazoProrrogacaoConvocacao",
+      "source": "POLICY",
+      "path": "prazoProrrogacaoConvocacao",
+      "description": "Prorrogação do prazo de convocação [Política; validação: —; PRAZO_PRORROGACAO_CONVOCACAO]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.prazoValidadeProposta",
+      "source": "PROCESS",
+      "path": "prazoValidadeProposta",
+      "description": "Validade da proposta [Processo / Política; validação: Cobre o cronograma do certame; PRAZO_VALIDADE_PROPOSTA]",
+      "type": "duration",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "julgamento.regimeParticipacao",
+      "source": "ITEMS",
+      "path": "regimeParticipacao",
+      "description": "Regime de participação (derivado) [Derivado dos Itens; validação: Coerente com a Seção 7; REGIME_PARTICIPACAO]",
+      "type": "enum",
+      "renderable": true,
+      "required": true,
+      "enumValues": [
+        "Ampla participação, com os benefícios da LC nº 123/2006",
+        "Exclusiva para ME/EPP/MEI",
+        "Ampla participação, com cota reservada para ME/EPP/MEI",
+        "Combinação por item, conforme o quadro de itens"
+      ]
+    },
+    {
+      "name": "julgamento.regraProrrogacaoAutomatica",
+      "source": "CERTAME_CONFIG",
+      "path": "regraProrrogacaoAutomatica",
+      "description": "Regra de prorrogação automática [Config. certame; validação: Igual à plataforma; REGRA_PRORROGACAO_AUTOMATICA]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.modoDisputa",
+        "value": "aberto"
+      }
+    },
+    {
+      "name": "julgamento.regrasEtapaAbertaFechada",
+      "source": "CERTAME_CONFIG",
+      "path": "regrasEtapaAbertaFechada",
+      "description": "Regras do modo aberto e fechado [Config. certame; validação: Igual à plataforma; REGRAS_ETAPA_ABERTA_FECHADA]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "julgamento.modoDisputa",
+        "value": "aberto e fechado"
+      }
+    },
+    {
+      "name": "julgamento.valorEstimado",
+      "source": "BUDGET",
+      "path": "valorEstimado",
+      "description": "Valor total estimado [Orçamento; validação: Soma dos itens; nunca exibido se sigiloso; VALOR_ESTIMADO]",
+      "type": "money",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.orcamentoSigilosoSimNao",
+        "value": false
+      }
+    },
+    {
+      "name": "participacao.abrangenciaExclusividadeMeEpp",
+      "source": "ITEMS",
+      "path": "abrangenciaExclusividadeMeEpp",
+      "description": "Alcance da exclusividade (certame ou itens) [Itens; validação: Coerente com o quadro de itens; ABRANGENCIA_EXCLUSIVIDADE_ME_EPP]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.exclusivoMeEpp",
+        "value": true
+      }
+    },
+    {
+      "name": "participacao.abrangenciaExclusividadeRegional",
+      "source": "ITEMS",
+      "path": "abrangenciaExclusividadeRegional",
+      "description": "Alcance da restrição regional [Itens; validação: Coerente com o quadro de itens; ABRANGENCIA_EXCLUSIVIDADE_REGIONAL]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.modalidadeTratamentoRegional",
+        "value": "exclusividade"
+      }
+    },
+    {
+      "name": "participacao.baseLegalTratamentoRegional",
+      "source": "PROCESS",
+      "path": "baseLegalTratamentoRegional",
+      "description": "Fundamento do tratamento regional [Processo + Procuradoria; validação: Norma verificada; BASE_LEGAL_TRATAMENTO_REGIONAL]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.tratamentoRegional",
+        "value": true
+      }
+    },
+    {
+      "name": "participacao.criterioDelimitacaoRegiao",
+      "source": "PROCESS",
+      "path": "criterioDelimitacaoRegiao",
+      "description": "Delimitação objetiva do âmbito [Processo; validação: Prévio, impessoal, uniforme; CRITERIO_DELIMITACAO_REGIAO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.tratamentoRegional",
+        "value": true
+      }
+    },
+    {
+      "name": "participacao.percentualAcrescimoConsorcio",
+      "source": "PROCESS",
+      "path": "percentualAcrescimoConsorcio",
+      "description": "Acréscimo na habilitação econômica do consórcio [Processo; validação: 10% a 30%, salvo justificativa; PERCENTUAL_ACRESCIMO_CONSORCIO]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.consorcio",
+        "value": "admite"
+      }
+    },
+    {
+      "name": "participacao.percentualCotaReservada",
+      "source": "PROCESS",
+      "path": "percentualCotaReservada",
+      "description": "Percentual da cota reservada [Processo; validação: Até 25%; bem divisível; PERCENTUAL_COTA_RESERVADA]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.cotaReservada",
+        "value": true
+      }
+    },
+    {
+      "name": "participacao.percentualPrioridadeRegional",
+      "source": "PROCESS",
+      "path": "percentualPrioridadeRegional",
+      "description": "Margem de prioridade [Processo; validação: Até 10%; PERCENTUAL_PRIORIDADE_REGIONAL]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.modalidadeTratamentoRegional",
+        "value": "prioridade"
+      }
+    },
+    {
+      "name": "pos.anoAta",
+      "source": "LIFECYCLE",
+      "path": "anoAta",
+      "description": "Exercício da Ata [Ciclo de vida; validação: —; ANO_ATA]",
+      "type": "integer",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.anoContrato",
+      "source": "LIFECYCLE",
+      "path": "anoContrato",
+      "description": "Exercício do contrato [Ciclo de vida; validação: —; ANO_CONTRATO]",
+      "type": "integer",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.contratadoCnpj",
+      "source": "RESULT",
+      "path": "contratadoCnpj",
+      "description": "CNPJ do contratado [Resultado; validação: Igual ao adjudicatário; CONTRATADO_CNPJ]",
+      "type": "cnpj",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.contratadoEndereco",
+      "source": "RESULT",
+      "path": "contratadoEndereco",
+      "description": "Endereço do contratado [Resultado; validação: Ato constitutivo; CONTRATADO_ENDERECO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.contratadoRazaoSocial",
+      "source": "RESULT",
+      "path": "contratadoRazaoSocial",
+      "description": "Razão social do contratado [Resultado; validação: Igual ao adjudicatário; CONTRATADO_RAZAO_SOCIAL]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.contratadoRepresentanteNome",
+      "source": "RESULT",
+      "path": "contratadoRepresentanteNome",
+      "description": "Representante do contratado [Resultado; validação: Poderes conferidos; CONTRATADO_REPRESENTANTE_NOME]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.contratadoRepresentanteQualificacao",
+      "source": "RESULT",
+      "path": "contratadoRepresentanteQualificacao",
+      "description": "Qualificação do representante [Resultado; validação: Minimização de dados pessoais; CONTRATADO_REPRESENTANTE_QUALIFICACAO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.dataAssinaturaAta",
+      "source": "LIFECYCLE",
+      "path": "dataAssinaturaAta",
+      "description": "Data de assinatura da Ata [Ciclo de vida; validação: —; DATA_ASSINATURA_ATA]",
+      "type": "date",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.dataAssinaturaContrato",
+      "source": "LIFECYCLE",
+      "path": "dataAssinaturaContrato",
+      "description": "Data de assinatura [Ciclo de vida; validação: —; DATA_ASSINATURA_CONTRATO]",
+      "type": "date",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.fornecedorRegistradoCnpj",
+      "source": "RESULT",
+      "path": "fornecedorRegistradoCnpj",
+      "description": "CNPJ do fornecedor [Resultado; validação: Igual ao vencedor; FORNECEDOR_REGISTRADO_CNPJ]",
+      "type": "cnpj",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.fornecedorRegistradoEndereco",
+      "source": "RESULT",
+      "path": "fornecedorRegistradoEndereco",
+      "description": "Endereço do fornecedor [Resultado; validação: —; FORNECEDOR_REGISTRADO_ENDERECO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.fornecedorRegistradoRazaoSocial",
+      "source": "RESULT",
+      "path": "fornecedorRegistradoRazaoSocial",
+      "description": "Fornecedor registrado [Resultado; validação: Igual ao vencedor; FORNECEDOR_REGISTRADO_RAZAO_SOCIAL]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.fornecedorRegistradoRepresentante",
+      "source": "RESULT",
+      "path": "fornecedorRegistradoRepresentante",
+      "description": "Representante do fornecedor [Resultado; validação: Poderes conferidos; FORNECEDOR_REGISTRADO_REPRESENTANTE]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.numeroAta",
+      "source": "LIFECYCLE",
+      "path": "numeroAta",
+      "description": "Número da Ata [Ciclo de vida; validação: Único no exercício; NUMERO_ATA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.numeroContrato",
+      "source": "LIFECYCLE",
+      "path": "numeroContrato",
+      "description": "Número do contrato [Ciclo de vida; validação: Único no exercício; NUMERO_CONTRATO]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.percentualDescontoContratado",
+      "source": "RESULT",
+      "path": "percentualDescontoContratado",
+      "description": "Desconto contratado [Resultado; validação: Igual ao lance final; PERCENTUAL_DESCONTO_CONTRATADO]",
+      "type": "percent",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.quadroCadastroReserva",
+      "source": "RESULT",
+      "path": "quadroCadastroReserva",
+      "description": "Cadastro de reserva [Resultado; validação: Ordem de classificação; QUADRO_CADASTRO_RESERVA]",
+      "type": "table",
+      "renderable": true,
+      "required": false,
+      "columns": [
+        {
+          "key": "classificacao",
+          "type": "integer",
+          "label": "Classificação"
+        },
+        {
+          "key": "razaoSocial",
+          "type": "string",
+          "label": "Razão social"
+        },
+        {
+          "key": "cnpj",
+          "type": "cnpj",
+          "label": "CNPJ"
+        },
+        {
+          "key": "item",
+          "type": "string",
+          "label": "Item/Lote"
+        },
+        {
+          "key": "valor",
+          "type": "money",
+          "label": "Preço (R$)"
+        }
+      ],
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.quadroItensContratados",
+      "source": "RESULT",
+      "path": "quadroItensContratados",
+      "description": "Itens e preços contratados [Resultado + Itens; validação: Igual à adjudicação; QUADRO_ITENS_CONTRATADOS]",
+      "type": "table",
+      "renderable": true,
+      "required": false,
+      "columns": [
+        {
+          "key": "item",
+          "type": "string",
+          "label": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "type": "text",
+          "label": "Descrição"
+        },
+        {
+          "key": "unidade",
+          "type": "string",
+          "label": "Unidade"
+        },
+        {
+          "key": "quantidade",
+          "type": "number",
+          "label": "Quantidade"
+        },
+        {
+          "key": "valorUnitario",
+          "type": "money",
+          "label": "Preço unitário (R$)"
+        },
+        {
+          "key": "valorTotal",
+          "type": "money",
+          "label": "Preço total (R$)"
+        }
+      ],
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.quadroPrecosRegistrados",
+      "source": "RESULT",
+      "path": "quadroPrecosRegistrados",
+      "description": "Preços e quantidades registrados [Resultado + Itens; validação: Igual à adjudicação; QUADRO_PRECOS_REGISTRADOS]",
+      "type": "table",
+      "renderable": true,
+      "required": false,
+      "columns": [
+        {
+          "key": "item",
+          "type": "string",
+          "label": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "type": "text",
+          "label": "Descrição"
+        },
+        {
+          "key": "unidade",
+          "type": "string",
+          "label": "Unidade"
+        },
+        {
+          "key": "quantidadeMaxima",
+          "type": "number",
+          "label": "Quantidade máxima"
+        },
+        {
+          "key": "valorUnitario",
+          "type": "money",
+          "label": "Preço unitário registrado (R$)"
+        }
+      ],
+      "absentText": "a preencher"
+    },
+    {
+      "name": "pos.valorContrato",
+      "source": "RESULT",
+      "path": "valorContrato",
+      "description": "Valor total do contrato [Resultado; validação: Soma dos itens; VALOR_CONTRATO]",
+      "type": "money",
+      "renderable": true,
+      "required": false,
+      "absentText": "a preencher"
+    },
+    {
+      "name": "processo.ano",
+      "source": "PROCESS",
+      "path": "ano",
+      "description": "Exercício [Processo; validação: —; ANO]",
+      "type": "integer",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.dataAbertura",
+      "source": "CERTAME_CONFIG",
+      "path": "dataAbertura",
+      "description": "Data da sessão [Config. certame; validação: Prazo mínimo legal desde a divulgação; dia útil; DATA_ABERTURA]",
+      "type": "date",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.dataEmissaoEdital",
+      "source": "LIFECYCLE",
+      "path": "dataEmissaoEdital",
+      "description": "Data de emissão [Ciclo de vida; validação: Atribuída na emissão; DATA_EMISSAO_EDITAL]",
+      "type": "date",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.dataFimRecebimentoPropostas",
+      "source": "CERTAME_CONFIG",
+      "path": "dataFimRecebimentoPropostas",
+      "description": "Data-limite das propostas [Config. certame; validação: Anterior ou igual à abertura; DATA_FIM_RECEBIMENTO_PROPOSTAS]",
+      "type": "date",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.dataInicioRecebimentoPropostas",
+      "source": "CERTAME_CONFIG",
+      "path": "dataInicioRecebimentoPropostas",
+      "description": "Início do recebimento de propostas [Config. certame; validação: Posterior à divulgação; DATA_INICIO_RECEBIMENTO_PROPOSTAS]",
+      "type": "datetime",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.descricaoPastaTecnica",
+      "source": "TR",
+      "path": "descricaoPastaTecnica",
+      "description": "Documentos técnicos complementares [TR; validação: Arquivos publicados; DESCRICAO_PASTA_TECNICA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.pastaTecnica",
+        "value": true
+      }
+    },
+    {
+      "name": "processo.enderecoEletronicoBll",
+      "source": "CERTAME_CONFIG",
+      "path": "enderecoEletronicoBll",
+      "description": "Endereço da plataforma [Config. certame; validação: URL oficial do provedor; ENDERECO_ELETRONICO_BLL]",
+      "type": "url",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.horarioAbertura",
+      "source": "CERTAME_CONFIG",
+      "path": "horarioAbertura",
+      "description": "Horário da sessão [Config. certame; validação: Dentro do expediente; HORARIO_ABERTURA]",
+      "type": "time",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.horarioFimRecebimentoPropostas",
+      "source": "CERTAME_CONFIG",
+      "path": "horarioFimRecebimentoPropostas",
+      "description": "Horário-limite das propostas [Config. certame; validação: Anterior à abertura; HORARIO_FIM_RECEBIMENTO_PROPOSTAS]",
+      "type": "time",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.listaAnexosAdicionais",
+      "source": "PROCESS",
+      "path": "listaAnexosAdicionais",
+      "description": "Anexos adicionais [Processo / TR; validação: Cada anexo existente e com hash; LISTA_ANEXOS_ADICIONAIS]",
+      "type": "list",
+      "renderable": true,
+      "required": false,
+      "itemType": "string",
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.anexosAdicionais",
+        "value": true
+      }
+    },
+    {
+      "name": "processo.numeroPregao",
+      "source": "PROCESS",
+      "path": "numeroPregao",
+      "description": "Número do pregão [Processo; validação: Único no exercício; NUMERO_PREGAO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.numeroProcesso",
+      "source": "PROCESS",
+      "path": "numeroProcesso",
+      "description": "Número do processo administrativo [Processo; validação: Único no exercício; NUMERO_PROCESSO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.objetoCompleto",
+      "source": "TR",
+      "path": "objetoCompleto",
+      "description": "Objeto completo [TR; validação: Idêntico ao TR; OBJETO_COMPLETO]",
+      "type": "text",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.objetoResumido",
+      "source": "PROCESS",
+      "path": "objetoResumido",
+      "description": "Objeto resumido [Processo / TR; validação: Consistência semântica com o TR; OBJETO_RESUMIDO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.quadroItensContratacao",
+      "source": "ITEMS",
+      "path": "quadroItensContratacao",
+      "description": "Quadro de itens/lotes [Itens; validação: Igual ao TR; sem valores se sigiloso; QUADRO_ITENS_CONTRATACAO]",
+      "type": "table",
+      "renderable": true,
+      "required": true,
+      "columns": [
+        {
+          "key": "item",
+          "type": "string",
+          "label": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "type": "text",
+          "label": "Descrição"
+        },
+        {
+          "key": "codigoCatalogacao",
+          "type": "string",
+          "label": "Código de catalogação"
+        },
+        {
+          "key": "unidade",
+          "type": "string",
+          "label": "Unidade"
+        },
+        {
+          "key": "quantidade",
+          "type": "number",
+          "label": "Quantidade"
+        },
+        {
+          "key": "regimeParticipacao",
+          "type": "string",
+          "label": "Regime de participação"
+        },
+        {
+          "key": "valorUnitarioEstimado",
+          "type": "money",
+          "label": "Valor unitário estimado (R$)",
+          "required": false
+        },
+        {
+          "key": "valorTotalEstimado",
+          "type": "money",
+          "label": "Valor total estimado (R$)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "processo.regulamentoBllVersao",
+      "source": "NORMATIVE",
+      "path": "regulamentoBllVersao",
+      "description": "Versão/data do regulamento do provedor [Acervo normativo; validação: Versão vigente na emissão; REGULAMENTO_BLL_VERSAO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "processo.secretariaRequisitante",
+      "source": "PROCESS",
+      "path": "secretariaRequisitante",
+      "description": "Unidade requisitante [Processo; validação: Igual ao TR; SECRETARIA_REQUISITANTE]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "sancoes.autoridadeSancionadora",
+      "source": "IDENTITY",
+      "path": "autoridadeSancionadora",
+      "description": "Autoridade que decide as sanções [Tenant / regulamento; validação: Competência legal por tipo de sanção; AUTORIDADE_SANCIONADORA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "sancoes.baseCalculoMultaMora",
+      "source": "POLICY",
+      "path": "baseCalculoMultaMora",
+      "description": "Base de cálculo da mora [Política; validação: Parcela em atraso ou valor do contrato; BASE_CALCULO_MULTA_MORA]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "sancoes.multaMoraPercentual",
+      "source": "POLICY",
+      "path": "multaMoraPercentual",
+      "description": "Multa de mora diária [Política; validação: Proporcional; MULTA_MORA_PERCENTUAL]",
+      "type": "percent",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "sancoes.multaTeto",
+      "source": "POLICY",
+      "path": "multaTeto",
+      "description": "Limite da multa de mora [Política; validação: Não superior a 30%; MULTA_TETO]",
+      "type": "string",
+      "renderable": true,
+      "required": true
+    },
+    {
+      "name": "sancoes.tabelaMultas",
+      "source": "POLICY",
+      "path": "tabelaMultas",
+      "description": "Tabela institucional de multas [Política (aprovada pela Procuradoria); validação: 0,5% a 30%; idêntica nos três documentos; TABELA_MULTAS]",
+      "type": "table",
+      "renderable": true,
+      "required": true,
+      "columns": [
+        {
+          "key": "infracao",
+          "type": "text",
+          "label": "Infração"
+        },
+        {
+          "key": "percentual",
+          "type": "percent",
+          "label": "Percentual"
+        },
+        {
+          "key": "baseCalculo",
+          "type": "string",
+          "label": "Base de cálculo"
+        }
+      ]
+    },
+    {
+      "name": "srp.condicoesAlteracaoPrecosRegistrados",
+      "source": "NORMATIVE",
+      "path": "condicoesAlteracaoPrecosRegistrados",
+      "description": "Regras de alteração de preços [Procuradoria / regulamento; validação: Revisão jurídica; CONDICOES_ALTERACAO_PRECOS_REGISTRADOS]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.limiteAdesaoAta",
+      "source": "PROCESS",
+      "path": "limiteAdesaoAta",
+      "description": "Limites de adesão [Processo / regulamento; validação: Limites legais; LIMITE_ADESAO_ATA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "decisao.adesaoAta",
+        "value": "admite"
+      }
+    },
+    {
+      "name": "srp.marcoInicialVigenciaAta",
+      "source": "POLICY",
+      "path": "marcoInicialVigenciaAta",
+      "description": "Marco inicial da vigência da Ata [Política / regulamento; validação: Revisão jurídica; MARCO_INICIAL_VIGENCIA_ATA]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.orgaoGerenciadorSrp",
+      "source": "PROCESS",
+      "path": "orgaoGerenciadorSrp",
+      "description": "Órgão gerenciador [Processo; validação: —; ORGAO_GERENCIADOR_SRP]",
+      "type": "string",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.orgaosParticipantesSrp",
+      "source": "PROCESS",
+      "path": "orgaosParticipantesSrp",
+      "description": "Órgãos participantes [Processo; validação: —; ORGAOS_PARTICIPANTES_SRP]",
+      "type": "list",
+      "renderable": true,
+      "required": false,
+      "itemType": "string",
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.prazoAssinaturaAta",
+      "source": "POLICY",
+      "path": "prazoAssinaturaAta",
+      "description": "Prazo para assinar a Ata [Política; validação: —; PRAZO_ASSINATURA_ATA]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.prazoVigenciaAta",
+      "source": "PROCESS",
+      "path": "prazoVigenciaAta",
+      "description": "Vigência da Ata [Processo; validação: Até 1 ano; PRAZO_VIGENCIA_ATA]",
+      "type": "duration",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    },
+    {
+      "name": "srp.regraQuantidadeMinimaCotacaoSrp",
+      "source": "TR",
+      "path": "regraQuantidadeMinimaCotacaoSrp",
+      "description": "Regra de cotação mínima [TR; validação: Definida no TR; REGRA_QUANTIDADE_MINIMA_COTACAO_SRP]",
+      "type": "text",
+      "renderable": true,
+      "required": false,
+      "requiredWhen": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      }
+    }
+  ]
+}

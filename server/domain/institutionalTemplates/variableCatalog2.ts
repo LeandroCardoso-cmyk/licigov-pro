@@ -44,7 +44,7 @@ export const VARIABLE_SOURCES_2: readonly VariableSource2[] = [
 export type ScalarType2 = "string" | "text" | "integer" | "number" | "boolean" | "money" | "percent" | "date" | "time" | "datetime" | "url" | "cnpj";
 export const SCALAR_TYPES_2: readonly ScalarType2[] = ["string", "text", "integer", "number", "boolean", "money", "percent", "date", "time", "datetime", "url", "cnpj"];
 
-export const DURATION_UNITS = ["hour", "day", "businessDay", "month", "year"] as const;
+export const DURATION_UNITS = ["minute", "hour", "day", "businessDay", "month", "year"] as const;
 export type DurationUnit = (typeof DURATION_UNITS)[number];
 export interface DurationValue { readonly amount: number; readonly unit: DurationUnit }
 
@@ -71,6 +71,11 @@ export interface VariableDef2 {
   readonly documentKind?: DocRefKind2;
   /** Validação condicional: obrigatória quando esta condição (sobre outras variáveis) é verdadeira. */
   readonly requiredWhen?: Cond2;
+  /**
+   * Texto governado quando o valor opcional está ausente na composição (ex.: campos pós-homologação "a preencher").
+   * Sem `absentText`, valor opcional ausente vira a marca explícita `[REVISAR: … não informado]`.
+   */
+  readonly absentText?: string;
   /** Documentação (não participa de hash de revisão). */
   readonly description?: string;
 }
@@ -111,6 +116,10 @@ export function validateVariableCatalog2(catalog: VariableCatalog2): TemplateRes
       issues.push(issue("CATALOG_INVALID", `${p}.renderable`, `controle (renderable=false) não pode ser do tipo ${v.type}`));
     }
     // Esquema por tipo: cada metadado só existe no tipo que o usa.
+    if (v.absentText !== undefined) {
+      if (typeof v.absentText !== "string" || !v.absentText.trim() || v.absentText.length > 200) issues.push(issue("CATALOG_INVALID", `${p}.absentText`, "absentText deve ser texto não vazio (≤ 200)"));
+      else if (v.required || !v.renderable) issues.push(issue("CATALOG_INVALID", `${p}.absentText`, "absentText só vale para variável opcional e renderizável"));
+    }
     if (v.type === "enum") {
       const ev = v.enumValues;
       if (!Array.isArray(ev) || ev.length === 0 || ev.some((x) => typeof x !== "string" || x === "") || new Set(ev).size !== ev.length) {

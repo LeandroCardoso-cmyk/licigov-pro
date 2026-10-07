@@ -1,8 +1,8 @@
 # Modelos Institucionais — `tpl-ast/2` + `tpl-catalog/2` + Compilador do Modelo-Mestre (Lane B)
 
-> Status: **engine pronto; fidelidade ao Modelo-Mestre BLL NÃO PROVADA** — o Markdown aprovado
-> (`modelo-mestre-edital-pregao-eletronico-bll-v1.0.1-draft.md`, sha256 `6795b2ab…7904`) não estava disponível
-> neste ambiente (ver §9). Nada foi registrado em produção, nenhuma flag foi ativada, nenhum deploy, nenhuma migration.
+> Status: **engine + modelo BLL compilado e provado estruturalmente** (paridade 160/157/3/48 sobre o Markdown aprovado, sha256
+> `6795b2ab…7904`). Nada foi registrado em produção, nenhuma flag foi ativada, nenhum binding foi criado, nenhum deploy, nenhuma migration.
+> Dados do modelo: `server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/` (ver o README de lá).
 
 ## 1. Princípio: motor genérico, modelos como dado
 
@@ -46,6 +46,17 @@ quando outro valor o exige; ele só é exigido se a AST o referencia (ex.: na co
 `eq/ne/in/gt/gte/lt/lte/present/absent/and/or/not`, profundidade ≤ 4, operandos booleanos, enum validado contra o conjunto fechado,
 comparadores só em tipos numéricos. Sem regex/função/eval/relógio/IA.
 
+### Extensões exigidas pelo mestre real (aditivas, ainda `tpl-ast/2`)
+* **Condicional e `aiSlot` inline** (`when`/`aiSlot` dentro de um parágrafo) — o mestre tem blocos no meio da frase e campos "Propõe" inline.
+* **Numeração**: parágrafo `numbered: true` (decimal; `level` 1–3 → `1.4.` / `1.4.1.`), `"alpha"` (alínea automática `a)` / `b.1)`, sem lacuna quando uma
+  alínea condicional some) e `"seq"` (`1\.`, ponto escapado para o Markdown não virar lista). Seção `style: "ordinal"` + `labelPrefix` ⇒ `CLÁUSULA DÉCIMA PRIMEIRA — …`.
+  Seções e parágrafos de nível 1 compartilham o contador do escopo; cada anexo reinicia a numeração; títulos de seção em anexo têm nível 3.
+* **Âncora repetida só em ramos excludentes** (choice / condicional×senão): o mestre repete `1.4`, `4.1`, `14.1` nas variantes; fora disso continua `ANCHOR_DUPLICATE`.
+* **`dataTable.columns[].when`**: coluna condicional (valores estimados somem com orçamento sigiloso).
+* **`controlRef`**: declara dependência de um controle (resolve, valida, entra no manifest) sem renderizar nada.
+* **`absentText`** (catálogo): texto governado para valor opcional ausente (ex.: `a preencher`), no lugar da marca `[REVISAR…]`.
+* **Duração em minutos.**
+
 ## 4. Catálogo v2
 
 Tipos (17): `string text integer number boolean money percent date time datetime duration enum list table url cnpj document_ref`.
@@ -70,11 +81,18 @@ determinística (`R$ 30.600,00`, `5,5%`, `05/11/2026 às 09h30`, `12 meses`, `5 
 * **Gate de paridade** (`evaluateParityGate`) parametrizado por `expectations` do mapeamento (nenhuma contagem fixa no código):
   entradas mapeadas / renderizáveis / controles, 0 placeholders desconhecidos, 0 entradas sem ocorrência, tipos de condição
   mapeados = usados, blocos balanceados, notas renderizadas = 0, 0 remissões sem xref.
+* **Dialeto real**: notas `[SYSTEM NOTE … ]` multilinha, `{{#X}}…{{/X}}` em bloco e inline (inclusive blocos que abrem com um título: a seção condicional vira
+  irmã, não filha), seções/anexos/cláusulas condicionais, alíneas/sub-alíneas/sequência, títulos ordinais e em negrito numerados, separadores e títulos de
+  scaffolding do arquivo-mestre (excluídos e contabilizados), remissões por contexto exato (`⟦ ⟧`) + varredura de remissão residual, citações externas explícitas,
+  `guards` governados.
+* **Auditoria de numeração** (`auditLiterals`): embute o rótulo literal do mestre; compondo com os mesmos blocos ativos, rótulo automático = literal e rótulo de
+  remissão = literal (591 rótulos + 120 remissões no cenário completo, 0 divergências).
 * **CLI offline**: `pnpm templates:compile-master --md … --sha256 … --mapping … --catalog … [--out dir]`.
 
 ## 6. Achado de fidelidade do DOCX (linhagem)
 
-O DOCX congelado do Anexo II tem defeito editorial em "Preço unitário (R$)" / "Preço total (R$)". O snapshot é imutável e **não foi
+O DOCX congelado (sha256 `5927f257…38fa9`) tem o Anexo II (bloco `SE_MENOR_PRECO`) quebrado: o par de "$" em "Preço unitário (R$)" / "Preço total (R$)"
+foi lido como matemática em linha (1 objeto OMML), sumiram os "$" e os espaços ("Preçototal(R)") e a tabela virou texto com barras. O snapshot é imutável e **não foi
 alterado**. A AST deriva da semântica do Markdown e declara "(R$)" nas colunas monetárias (regra do compilador
 `requireCurrencyInMoneyHeaders` ⇒ `DATATABLE_MONEY_HEADER_MISSING_CURRENCY`). O achado viaja no relatório de compilação
 (`findings`), nunca na AST. O DOCX futuro é renderizado pelo Document Engine **a partir da AST**.
@@ -93,13 +111,19 @@ canônico, publicação, aprovação ou emissão. Toda narrativa entra com `huma
 1. **Serviços v1-only**: geração/emissão por serviço falham fechadas para revisão `tpl-ast/2` (`TEMPLATE_AST_VERSION_UNSUPPORTED`)
    até existirem adapters canônicos das fontes novas (`BUDGET`, `CERTAME_CONFIG`, `POLICY`, `NORMATIVE`, `RESULT`, `LIFECYCLE`).
 2. Workflow/router de importação (Lane C) continuam v1 (aceitam só `{{variavel}}`); seleção de catálogo v2 é follow-up.
-3. Registro de `tpl-catalog/2` com as entradas BLL no `catalogRegistry` (precisa do arquivo aprovado).
+3. Registro de `tpl-catalog/2` com as entradas BLL no `catalogRegistry` — decisão posterior (nesta lane o catálogo BLL é só dado versionado, NÃO registrado).
 4. Renderização DOCX final do edital a partir da AST pelo Document Engine (esta lane só garante que o renderer não perde tabela/`R$`).
 
-## 9. Bloqueio: Modelo-Mestre aprovado indisponível
+## 9. Bloqueio anterior — RESOLVIDO
 
-O MD/DOCX/relatório/manifesto de congelamento do `EDITAL_PREGAO_ELETRONICO_BLL` (v`1.0.1-draft`) não estão no repositório, nas
-branches/tags/refs de PR nem no disco do ambiente. **Não** foram buscados em Drive/Notion/outros repositórios (sem autorização).
-Consequência: o hash `6795b2ab…7904`, a paridade (160 entradas = 157 + 3 controles, 48 tipos de condição) e o mapeamento BLL
-**não foram provados**. O compilador, o gate e o CLI estão prontos e testados com mini-mestre sintético; basta o arquivo (ou o
-caminho autorizado) para escrever o mapeamento BLL como **dado** e rodar `templates:compile-master`.
+O Markdown aprovado (sha256 `6795b2ab…7904`) e o DOCX congelado (`5927f257…38fa9`) foram entregues. O relatório de controle entregue é o **1.0.0** (não o 1.0.1
+congelado, `a3601b21…7cd0`); foi usado só como dicionário de campos — os 160 nomes do MD coincidem com os dele (exceto `ID_BLL`, removido na 1.0.1).
+
+Prova (compilação do MD aprovado): 160 entradas = 157 renderizáveis + 3 controles; 0 desconhecidas; 0 sem ocorrência; 0 marcações `{{ }}` residuais; 48 tipos de bloco em
+80 blocos (2 inline), todos balanceados; 51 notas, 0 renderizadas; 58 remissões governadas (127 substituições), 0 remissões literais sem xref; hash da AST estável
+entre compilações e com chaves do mapeamento reordenadas; reescrever todas as notas não altera a AST.
+
+## 10. Pendências (follow-ups)
+
+Ver o README do modelo: decisões a confirmar (32 `decisao.*`, esquemas de tabelas, enums, textos `a preencher`), regras de nota ainda não executáveis por desenho
+(validações de sistema), adapters das fontes novas, workflow/seleção de catálogo v2 e registro `tpl-catalog/2`.

@@ -113,12 +113,15 @@ export function resolveTemplateVariables2(
 /** Segmento de texto: literal ou remissão simbólica (resolvida só depois da numeração). */
 type RInline = string | { readonly xref: string };
 
+/** Numeração pedida pelo parágrafo (decimal hierárquica, alínea automática ou sequência simples). */
+interface PNum { readonly kind: "decimal" | "alpha" | "seq"; readonly level: number }
+
 type RNode =
   | { k: "heading"; level: number; text: RInline[] }
-  | { k: "paragraph"; text: RInline[]; numbered: boolean; anchor?: string; protectId?: string; number?: string }
+  | { k: "paragraph"; text: RInline[]; num: PNum | null; anchor?: string; protectId?: string; printed?: string }
   | { k: "list"; ordered: boolean; items: RNode[][] }
   | { k: "table"; header: RInline[][]; rows: RInline[][][]; protectId?: string }
-  | { k: "section"; key: string; numbered: boolean; title: RInline[] | null; children: RNode[]; number?: string };
+  | { k: "section"; key: string; numbered: boolean; style: "decimal" | "ordinal"; prefix: string | null; title: RInline[] | null; children: RNode[]; number?: string; seq?: number };
 
 interface RAnnex { readonly id: string; readonly role: string; readonly order: number; readonly title: RInline[]; readonly children: RNode[] }
 
@@ -157,6 +160,17 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
       case "strong": pushStr(out, "**"); expandInlines(x.v, `${p}.v`, ctx, out); pushStr(out, "**"); break;
       case "em": pushStr(out, "_"); expandInlines(x.v, `${p}.v`, ctx, out); pushStr(out, "_"); break;
       case "xref": out.push({ xref: x.target }); break;
+      case "when": {
+        const ev = evaluateCondition2(x.when, ctx.values, `${p}.when`);
+        if (ctx.record) ctx.decisions.push({ nodePath: p, result: ev.result, traceHash: templateHash(ev.trace) });
+        if (ev.result) expandInlines(x.then, `${p}.then`, ctx, out);
+        break;
+      }
+      case "aiSlot": {
+        const text = aiNarrativeText(x, p, ctx);
+        if (text) pushStr(out, text.replace(/\s*[\r\n]+\s*/g, " ").trim());
+        break;
+      }
       case "var": {
         const def = findVariable2(ctx.catalog, x.name);
         if (!def || !def.renderable) {
@@ -164,7 +178,7 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
           break;
         }
         const v = ctx.values[x.name];
-        if (v === undefined) { pushStr(out, MISSING_VALUE_MARK(x.name)); break; }
+        if (v === undefined) { pushStr(out, def.absentText ?? MISSING_VALUE_MARK(x.name)); break; }
         const text = formatValue2(def, v);
         if (ctx.record && text.trim()) ctx.fragments.push({ nodeId: p, text, fragmentHash: sha256Hex(text) });
         pushStr(out, text);
@@ -173,6 +187,20 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
     }
   });
   return out;
+}
+
+/** Texto de uma narrativa de IA para um slot (bloco ou inline): limite de palavras, sem autoridade numérica, registrada no M1. */
+function aiNarrativeText(slot: { readonly slotKey: string; readonly maxTokens: number }, path: string, ctx: ECtx): string | null {
+  const out = ctx.narratives.get(slot.slotKey);
+  if (!out) return PENDING_AI_SLOT_MARK(slot.slotKey);
+  if (narrativeWordCount(out.text) > slot.maxTokens) {
+    if (ctx.record) ctx.issues.push({ code: "AI_OUTPUT_INVALID", path, message: `narrativa do slot "${slot.slotKey}" excede ${slot.maxTokens} palavras` });
+    return null;
+  }
+  // A IA não cria autoridade numérica: valor monetário fora do quadro canônico recebe [REVISAR…].
+  const { prose } = flagUnverifiedAmounts(neutralizeNarrative(out.text), ctx.allowedCents);
+  if (ctx.record) ctx.ai.push({ slotKey: slot.slotKey, executionId: out.executionId, outputHash: sha256Hex(out.text), humanAccepted: false });
+  return prose || null;
 }
 
 /** Âncora estrutural de um conjunto de nós: texto inicial (sem número e sem remissão) do primeiro nó com texto. */
@@ -205,7 +233,8 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
       return [{ k: "heading", level: n.level, text: expandInlines(n.text, `${path}.text`, ctx) }];
     case "paragraph": {
       const text = expandInlines(n.inline, `${path}.inline`, ctx);
-      return [{ k: "paragraph", text, numbered: n.numbered === true, ...(n.anchor ? { anchor: n.anchor } : {}) }];
+      const kind = n.numbered === true ? "decimal" : n.numbered === "alpha" ? "alpha" : n.numbered === "seq" ? "seq" : null;
+      return [{ k: "paragraph", text, num: kind ? { kind, level: n.level ?? 1 } : null, ...(n.anchor ? { anchor: n.anchor } : {}) }];
     }
     case "list":
       return [{ k: "list", ordered: n.ordered, items: n.items.map((item, i) => expandNodes(item, `${path}.items[${i}]`, ctx)) }];
@@ -218,19 +247,30 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
     case "dataTable": {
       const def = findVariable2(ctx.catalog, n.source);
       const rows = ctx.values[n.source] as readonly Record<string, unknown>[] | undefined;
-      if (!def || rows === undefined) return [{ k: "paragraph", text: [MISSING_VALUE_MARK(n.tableKey)], numbered: false }];
-      const cols = n.columns.map((c) => ({ c, def: (def.columns ?? []).find((x) => x.key === c.key)! }));
+      if (!def || rows === undefined) return [{ k: "paragraph", text: [def?.absentText ?? MISSING_VALUE_MARK(n.tableKey)], num: null }];
+      // Colunas condicionais (ex.: valores estimados só com orçamento público): a condição é avaliada UMA vez por tabela.
+      const visible = n.columns
+        .map((c, i) => ({ c, i, def: (def.columns ?? []).find((x) => x.key === c.key)! }))
+        .filter(({ c, i }) => {
+          if (!c.when) return true;
+          const ev = evaluateCondition2(c.when, ctx.values, `${path}.columns[${i}].when`);
+          if (ctx.record) ctx.decisions.push({ nodePath: `${path}.columns[${i}]`, result: ev.result, traceHash: templateHash(ev.trace) });
+          return ev.result;
+        });
       return [{
         k: "table",
-        header: n.columns.map((c, i) => expandInlines(c.header, `${path}.columns[${i}].header`, ctx)),
-        rows: rows.map((row) => cols.map(({ c, def: cd }) => (row[c.key] === undefined ? [] : [formatScalar(cd.type, row[c.key])] as RInline[]))),
+        header: visible.map(({ c, i }) => expandInlines(c.header, `${path}.columns[${i}].header`, ctx)),
+        rows: rows.map((row) => visible.map(({ c, def: cd }) => (row[c.key] === undefined ? [] : [formatScalar(cd.type, row[c.key])] as RInline[]))),
         protectId: path,
       }];
     }
     case "section": {
       const children = expandNodes(n.children, `${path}.children`, ctx);
       if (children.length === 0) return []; // seção sem nada renderizado some inteira (e não consome número)
-      return [{ k: "section", key: n.key, numbered: n.numbering === "auto", title: n.title ? expandInlines(n.title, `${path}.title`, ctx) : null, children }];
+      return [{
+        k: "section", key: n.key, numbered: n.numbering === "auto", style: n.style ?? "decimal", prefix: n.labelPrefix ?? null,
+        title: n.title ? expandInlines(n.title, `${path}.title`, ctx) : null, children,
+      }];
     }
     case "conditional": {
       const ev = evaluateCondition2(n.when, ctx.values, `${path}.when`);
@@ -281,7 +321,7 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
           version: pin.version, contentHash: pin.contentHash, title: inlineText(pin.title),
         });
       }
-      return [{ k: "paragraph", text, numbered: false, protectId: path }];
+      return [{ k: "paragraph", text, num: null, protectId: path }];
     }
     case "annex": {
       const children = expandNodes(n.children, `${path}.children`, ctx);
@@ -289,41 +329,81 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
       return [];
     }
     case "aiSlot": {
-      const out = ctx.narratives.get(n.slotKey);
-      if (!out) return [{ k: "paragraph", text: [PENDING_AI_SLOT_MARK(n.slotKey)], numbered: false }];
-      if (narrativeWordCount(out.text) > n.maxTokens) {
-        if (ctx.record) ctx.issues.push({ code: "AI_OUTPUT_INVALID", path, message: `narrativa do slot "${n.slotKey}" excede ${n.maxTokens} palavras` });
-        return [];
-      }
-      // A IA não cria autoridade numérica: valor monetário fora do quadro canônico recebe [REVISAR…].
-      const { prose } = flagUnverifiedAmounts(neutralizeNarrative(out.text), ctx.allowedCents);
-      if (ctx.record) ctx.ai.push({ slotKey: n.slotKey, executionId: out.executionId, outputHash: sha256Hex(out.text), humanAccepted: false });
-      return prose ? [{ k: "paragraph", text: [prose], numbered: false }] : [];
+      const prose = aiNarrativeText(n, path, ctx);
+      return prose ? [{ k: "paragraph", text: [prose], num: null }] : [];
     }
+    case "controlRef":
+      return []; // dependência declarada: já resolvida/validada em resolveTemplateVariables2; nunca vira texto
   }
 }
 
 // ─── Numeração (só do que foi renderizado) ──────────────────────────────────────────────────────────────────────────
 
-interface Counter { n: number }
+interface Scope {
+  readonly prefix: string | null;
+  /** contadores decimais por nível (1.4 / 1.4.1 / 1.4.1.1) */
+  d: [number, number, number];
+  /** alíneas: nível 1 (`a`) e nível 2 (`b.1`) */
+  a1: number;
+  a2: number;
+  seq: number;
+}
 
-function assignNumbers(nodes: readonly RNode[], parent: string | null, counter: Counter, labels: Map<string, string>): void {
+const newScope = (prefix: string | null): Scope => ({ prefix, d: [0, 0, 0], a1: 0, a2: 0, seq: 0 });
+
+/** a, b, … z, aa, ab, … */
+export function alphaLabel(n: number): string {
+  let x = n; let out = "";
+  while (x > 0) { x -= 1; out = String.fromCharCode(97 + (x % 26)) + out; x = Math.floor(x / 26); }
+  return out || "a";
+}
+
+const ORD_UNITS = ["", "PRIMEIRA", "SEGUNDA", "TERCEIRA", "QUARTA", "QUINTA", "SEXTA", "SÉTIMA", "OITAVA", "NONA"];
+const ORD_TENS = ["", "DÉCIMA", "VIGÉSIMA", "TRIGÉSIMA", "QUADRAGÉSIMA", "QUINQUAGÉSIMA", "SEXAGÉSIMA", "SEPTUAGÉSIMA", "OCTOGÉSIMA", "NONAGÉSIMA"];
+/** Ordinal feminino por extenso (1–99): PRIMEIRA … DÉCIMA PRIMEIRA … VIGÉSIMA TERCEIRA. Fora disso: `Nª`. */
+export function ordinalFeminine(n: number): string {
+  if (!Number.isInteger(n) || n < 1 || n > 99) return `${n}ª`;
+  const t = Math.floor(n / 10); const u = n % 10;
+  return [ORD_TENS[t], ORD_UNITS[u]].filter(Boolean).join(" ");
+}
+const titleCaseWords = (s: string): string => s.toLowerCase().split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+function assignNumbers(nodes: readonly RNode[], scope: Scope, labels: Map<string, string>): void {
   for (const n of nodes) {
     if (n.k === "section") {
       if (n.numbered) {
-        counter.n += 1;
-        const num = parent ? `${parent}.${counter.n}` : `${counter.n}`;
+        // Seções e parágrafos decimais de nível 1 compartilham o contador do escopo (evita "2.1" seção × "2.1." parágrafo).
+        scope.d[0] += 1; scope.d[1] = 0; scope.d[2] = 0;
+        const seq = scope.d[0];
+        const num = scope.prefix ? `${scope.prefix}.${seq}` : `${seq}`;
         n.number = num;
-        labels.set(n.key, num);
-        assignNumbers(n.children, num, { n: 0 }, labels);
+        n.seq = seq;
+        labels.set(n.key, n.style === "ordinal" ? titleCaseWords(ordinalFeminine(seq)) : num);
+        scope.a1 = 0; scope.a2 = 0;
+        assignNumbers(n.children, newScope(num), labels);
       } else {
-        assignNumbers(n.children, parent, counter, labels); // seção sem numeração é transparente: continua a contagem do pai
+        assignNumbers(n.children, scope, labels); // seção sem numeração é transparente: continua a contagem do pai
       }
-    } else if (n.k === "paragraph" && n.numbered) {
-      counter.n += 1;
-      const num = parent ? `${parent}.${counter.n}` : `${counter.n}`;
-      n.number = num;
-      if (n.anchor) labels.set(n.anchor, num);
+    } else if (n.k === "paragraph" && n.num) {
+      const { kind, level } = n.num;
+      let label: string; let printed: string;
+      if (kind === "decimal") {
+        scope.d[level - 1] += 1;
+        for (let i = level; i < 3; i++) scope.d[i] = 0;
+        scope.a1 = 0; scope.a2 = 0;
+        label = [...(scope.prefix ? [scope.prefix] : []), ...scope.d.slice(0, level)].join(".");
+        printed = `${label}.`;
+      } else if (kind === "alpha") {
+        if (level === 1) { scope.a1 += 1; scope.a2 = 0; label = alphaLabel(scope.a1); }
+        else { scope.a2 += 1; label = `${alphaLabel(Math.max(scope.a1, 1))}.${scope.a2}`; }
+        printed = `${label})`;
+      } else {
+        scope.seq += 1;
+        label = String(scope.seq);
+        printed = `${label}\\.`; // "1\." evita que o Markdown trate a linha como item de lista (perderia o número no DOCX/PDF)
+      }
+      n.printed = printed;
+      if (n.anchor) labels.set(n.anchor, label);
     }
     // list/table/heading: não participam da numeração hierárquica
   }
@@ -355,28 +435,29 @@ function resolveInlines(xs: readonly RInline[], ctx: SCtx): string {
   }).join("");
 }
 
-function serializeNodes(nodes: readonly RNode[], ctx: SCtx, depth = 0): string[] {
-  return nodes.flatMap((n) => serializeNode(n, ctx, depth));
+/** `level` = nível de título (Markdown) das seções numeradas deste escopo: 2 no corpo, 3 dentro de anexos. */
+function serializeNodes(nodes: readonly RNode[], ctx: SCtx, level = 2): string[] {
+  return nodes.flatMap((n) => serializeNode(n, ctx, level));
 }
 
 function protectFinal(ctx: SCtx, id: string | undefined, text: string): void {
   if (id && ctx.record && text.trim()) ctx.fragments.push({ nodeId: id, text, fragmentHash: sha256Hex(text) });
 }
 
-function serializeNode(n: RNode, ctx: SCtx, depth: number): string[] {
+function serializeNode(n: RNode, ctx: SCtx, level: number): string[] {
   switch (n.k) {
     case "heading":
       return [`${"#".repeat(n.level)} ${inlineText(resolveInlines(n.text, ctx))}`];
     case "paragraph": {
       const body = resolveInlines(n.text, ctx).trim();
       if (!body) return [];
-      const text = n.number ? `${n.number} ${body}` : body;
+      const text = n.printed ? `${n.printed} ${body}` : body;
       protectFinal(ctx, n.protectId, text);
       return [text];
     }
     case "list": {
       const lines = n.items.map((item, k) => {
-        const body = serializeNodes(item, ctx, depth).join("\n").split("\n");
+        const body = serializeNodes(item, ctx, level).join("\n").split("\n");
         const bullet = n.ordered ? `${k + 1}. ` : "- ";
         const pad = " ".repeat(bullet.length);
         return body.map((l, j) => (j === 0 ? `${bullet}${l}` : l ? `${pad}${l}` : "")).join("\n");
@@ -393,16 +474,19 @@ function serializeNode(n: RNode, ctx: SCtx, depth: number): string[] {
     }
     case "section": {
       const out: string[] = [];
-      if (n.title) {
-        const title = inlineText(resolveInlines(n.title, ctx));
-        if (n.number) {
-          const level = Math.min(2 + (n.number.split(".").length - 1), 6);
-          out.push(`${"#".repeat(level)} ${n.number}. ${title}`);
-        } else if (title) {
-          out.push(`## ${title}`);
+      const title = n.title ? inlineText(resolveInlines(n.title, ctx)) : "";
+      const hashes = "#".repeat(Math.min(level, 6));
+      if (n.number && n.seq !== undefined) {
+        if (n.style === "ordinal") {
+          const head = `${n.prefix ? `${n.prefix} ` : ""}${ordinalFeminine(n.seq)}`;
+          out.push(`${hashes} ${head}${title ? ` — ${title}` : ""}`);
+        } else {
+          out.push(`${hashes} ${n.number}. ${title}`);
         }
+      } else if (title) {
+        out.push(`${hashes} ${title}`);
       }
-      out.push(...serializeNodes(n.children, ctx, depth + 1));
+      out.push(...serializeNodes(n.children, ctx, n.number ? level + 1 : level));
       return out;
     }
   }
@@ -473,16 +557,17 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
   if (ectx.issues.length) return { ok: false, issues: ectx.issues };
 
   const labels = new Map<string, string>();
-  assignNumbers(tree, null, { n: 0 }, labels);
+  assignNumbers(tree, newScope(null), labels);
   const annexes = [...ectx.annexes].sort((a, b) => a.order - b.order);
   annexes.forEach((a, i) => labels.set(a.id, toRoman(i + 1)));
+  annexes.forEach((a) => assignNumbers(a.children, newScope(null), labels)); // cada anexo reinicia a numeração
 
   const sctx: SCtx = { labels, record: true, fragments: ectx.fragments, missingXrefs: new Set() };
   const body = serializeNodes(tree, sctx);
   const annexRefs: AnnexRef[] = [];
   const annexBlocks = annexes.flatMap((a, i) => {
     const title = inlineText(resolveInlines(a.title, sctx));
-    const blocks = [`## ANEXO ${toRoman(i + 1)}${title ? ` — ${title}` : ""}`, ...serializeNodes(a.children, sctx)];
+    const blocks = [`## ANEXO ${toRoman(i + 1)}${title ? ` — ${title}` : ""}`, ...serializeNodes(a.children, sctx, 3)];
     annexRefs.push({ id: a.id, contentHash: sha256Hex(blocks.join("\n\n")) });
     return blocks;
   });

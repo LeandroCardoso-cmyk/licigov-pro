@@ -32,7 +32,11 @@ export type Inline2 =
   | { readonly t: "text"; readonly v: string }
   | { readonly t: "var"; readonly name: string }
   | { readonly t: "strong" | "em"; readonly v: readonly Inline2[] }
-  | { readonly t: "xref"; readonly target: string };
+  | { readonly t: "xref"; readonly target: string }
+  /** Trecho condicional DENTRO de um parágrafo (mesma DSL fechada dos blocos). */
+  | { readonly t: "when"; readonly when: Cond2; readonly then: readonly Inline2[] }
+  /** Slot de IA inline (campo "Propõe" no meio de uma frase): mesma governança do `aiSlot` de bloco. */
+  | { readonly t: "aiSlot"; readonly slotKey: string; readonly maxTokens: number; readonly instructionsKey: string };
 export type TextExpr2 = readonly Inline2[];
 
 export type ChoiceMode = "exactly-one" | "at-most-one";
@@ -45,20 +49,27 @@ export interface DataTableColumn {
   /** Chave da coluna no esquema da variável `table` do catálogo. */
   readonly key: string;
   readonly header: TextExpr2;
+  /** Coluna só é renderizada quando a condição vale (ex.: valores estimados com orçamento público). */
+  readonly when?: Cond2;
 }
+
+/** Numeração de parágrafo: decimal hierárquica (`1.4.`), alínea automática (`a)`, `b.1)`) ou sequência simples (`1.`). */
+export type ParagraphNumbering = boolean | "alpha" | "seq";
 
 export type TemplateNode2 =
   | { readonly t: "heading"; readonly level: 1 | 2 | 3 | 4 | 5 | 6; readonly text: TextExpr2 }
-  | { readonly t: "paragraph"; readonly inline: readonly Inline2[]; readonly numbered?: boolean; readonly anchor?: string }
+  | { readonly t: "paragraph"; readonly inline: readonly Inline2[]; readonly numbered?: ParagraphNumbering; readonly level?: 1 | 2 | 3; readonly anchor?: string }
   | { readonly t: "list"; readonly ordered: boolean; readonly items: readonly (readonly TemplateNode2[])[] }
   | { readonly t: "table"; readonly header: readonly TextExpr2[]; readonly rows: readonly (readonly TextExpr2[])[] }
   | { readonly t: "dataTable"; readonly tableKey: string; readonly source: string; readonly columns: readonly DataTableColumn[] }
-  | { readonly t: "section"; readonly key: string; readonly numbering: "auto" | "none"; readonly title?: TextExpr2; readonly legalRef?: string; readonly children: readonly TemplateNode2[] }
+  | { readonly t: "section"; readonly key: string; readonly numbering: "auto" | "none"; readonly style?: "decimal" | "ordinal"; readonly labelPrefix?: string; readonly title?: TextExpr2; readonly legalRef?: string; readonly children: readonly TemplateNode2[] }
   | { readonly t: "conditional"; readonly when: Cond2; readonly then: readonly TemplateNode2[]; readonly else?: readonly TemplateNode2[] }
   | { readonly t: "choice"; readonly groupKey: string; readonly mode: ChoiceMode; readonly branches: readonly ChoiceBranch[] }
   | { readonly t: "docRef"; readonly kind: DocRefKind2; readonly mode: "EXACT_PINNED"; readonly role: string; readonly order: number; readonly label?: TextExpr2 }
   | { readonly t: "annex"; readonly id: string; readonly role: string; readonly order: number; readonly title: TextExpr2; readonly children: readonly TemplateNode2[] }
-  | { readonly t: "aiSlot"; readonly slotKey: string; readonly maxTokens: number; readonly instructionsKey: string };
+  | { readonly t: "aiSlot"; readonly slotKey: string; readonly maxTokens: number; readonly instructionsKey: string }
+  /** Declara dependência de um CONTROLE (renderable=false) sem renderizar nada: resolve, valida tipo/obrigatoriedade e entra no manifest. */
+  | { readonly t: "controlRef"; readonly var: string };
 
 export interface TemplateAST2 {
   readonly schema: typeof AST_SCHEMA_2;
@@ -70,31 +81,37 @@ export const MAX_AST_NODES_2 = 20000;
 
 const NODE_KEYS: Record<TemplateNode2["t"], { readonly required: readonly string[]; readonly optional: readonly string[] }> = {
   heading: { required: ["t", "level", "text"], optional: [] },
-  paragraph: { required: ["t", "inline"], optional: ["numbered", "anchor"] },
+  paragraph: { required: ["t", "inline"], optional: ["numbered", "level", "anchor"] },
   list: { required: ["t", "ordered", "items"], optional: [] },
   table: { required: ["t", "header", "rows"], optional: [] },
   dataTable: { required: ["t", "tableKey", "source", "columns"], optional: [] },
-  section: { required: ["t", "key", "numbering", "children"], optional: ["title", "legalRef"] },
+  section: { required: ["t", "key", "numbering", "children"], optional: ["style", "labelPrefix", "title", "legalRef"] },
   conditional: { required: ["t", "when", "then"], optional: ["else"] },
   choice: { required: ["t", "groupKey", "mode", "branches"], optional: [] },
   docRef: { required: ["t", "kind", "mode", "role", "order"], optional: ["label"] },
   annex: { required: ["t", "id", "role", "order", "title", "children"], optional: [] },
   aiSlot: { required: ["t", "slotKey", "maxTokens", "instructionsKey"], optional: [] },
+  controlRef: { required: ["t", "var"], optional: [] },
 };
 const INLINE_KEYS: Record<Inline2["t"], readonly string[]> = {
   text: ["t", "v"], var: ["t", "name"], strong: ["t", "v"], em: ["t", "v"], xref: ["t", "target"],
+  when: ["t", "when", "then"], aiSlot: ["t", "slotKey", "maxTokens", "instructionsKey"],
 };
 
 type AnchorKind = "section" | "paragraph" | "annex";
-interface Anchor { readonly kind: AnchorKind; readonly numbered: boolean }
+/** Marcador de ramo: `[nó, ramo]`. Duas âncoras iguais só coexistem se divergem num mesmo nó exclusivo (condicional/escolha). */
+type BranchMark = readonly [string, string];
+interface Anchor { readonly kind: AnchorKind; readonly numbered: boolean; readonly branch: readonly BranchMark[] }
 interface Ctx {
   /** `annex` só é admitido na raiz ou dentro de `conditional`/`choice` que estejam na raiz (nunca em seção/lista/anexo). */
   readonly annexAllowed: boolean;
+  /** Ramos exclusivos em que o nó está (para permitir a MESMA âncora em variantes que nunca coexistem). */
+  readonly branch: readonly BranchMark[];
 }
 interface WalkState {
   readonly catalog: VariableCatalog2;
   readonly issues: TemplateIssue[];
-  readonly anchors: Map<string, Anchor>;
+  readonly anchors: Map<string, Anchor[]>;
   readonly xrefs: { target: string; path: string }[];
   readonly slotKeys: Set<string>;
   readonly tableKeys: Set<string>;
@@ -106,9 +123,17 @@ interface WalkState {
   nodes: number;
 }
 
+/** true ⇒ as duas posições nunca coexistem no documento (divergem num mesmo condicional/escolha). */
+function mutuallyExclusive(a: readonly BranchMark[], b: readonly BranchMark[]): boolean {
+  return a.some(([nodeA, brA]) => b.some(([nodeB, brB]) => nodeA === nodeB && brA !== brB));
+}
+
 function addAnchor(s: WalkState, key: string, anchor: Anchor, path: string): void {
-  if (s.anchors.has(key)) s.issues.push(issue("ANCHOR_DUPLICATE", path, `âncora duplicada: ${key}`));
-  else s.anchors.set(key, anchor);
+  const prev = s.anchors.get(key) ?? [];
+  const clash = prev.find((p) => !mutuallyExclusive(p.branch, anchor.branch));
+  if (clash) s.issues.push(issue("ANCHOR_DUPLICATE", path, `âncora duplicada: ${key}`));
+  else if (prev.some((p) => p.numbered !== anchor.numbered || p.kind !== anchor.kind)) s.issues.push(issue("ANCHOR_DUPLICATE", path, `âncora ${key} repetida com natureza diferente`));
+  else s.anchors.set(key, [...prev, anchor]);
 }
 
 function walkInline(value: unknown, path: string, depth: number, s: WalkState): void {
@@ -130,9 +155,22 @@ function walkInline(value: unknown, path: string, depth: number, s: WalkState): 
   } else if (t === "xref") {
     if (typeof value.target !== "string" || !KEY_RE.test(value.target)) s.issues.push(issue("AST_INVALID", `${path}.target`, "alvo da remissão inválido"));
     else s.xrefs.push({ target: value.target, path });
+  } else if (t === "when") {
+    s.issues.push(...validateCondition2(value.when, s.catalog, `${path}.when`));
+    walkInlineList(value.then, `${path}.then`, depth + 1, s);
+  } else if (t === "aiSlot") {
+    checkAiSlot(value, path, s);
   } else {
     walkInlineList(value.v, `${path}.v`, depth + 1, s);
   }
+}
+
+function checkAiSlot(value: Record<string, unknown>, path: string, s: WalkState): void {
+  if (typeof value.slotKey !== "string" || !KEY_RE.test(value.slotKey)) s.issues.push(issue("AST_INVALID", `${path}.slotKey`, "slotKey inválido"));
+  else if (s.slotKeys.has(value.slotKey)) s.issues.push(issue("AST_INVALID", `${path}.slotKey`, `slot de IA duplicado: ${value.slotKey}`));
+  else s.slotKeys.add(value.slotKey);
+  if (!Number.isSafeInteger(value.maxTokens) || (value.maxTokens as number) <= 0) s.issues.push(issue("AST_INVALID", `${path}.maxTokens`, "maxTokens deve ser inteiro positivo"));
+  if (typeof value.instructionsKey !== "string" || !KEY_RE.test(value.instructionsKey)) s.issues.push(issue("AST_INVALID", `${path}.instructionsKey`, "instructionsKey inválido"));
 }
 
 function walkInlineList(value: unknown, path: string, depth: number, s: WalkState): void {
@@ -163,7 +201,7 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
   const spec = NODE_KEYS[t];
   const keyIssues = closedKeyIssues(value, [...spec.required, ...spec.optional], spec.required, path);
   if (keyIssues.length) { s.issues.push(...keyIssues); return; }
-  const inner: Ctx = { annexAllowed: false };
+  const inner: Ctx = { annexAllowed: false, branch: ctx.branch };
 
   switch (t) {
     case "heading":
@@ -172,11 +210,19 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
       return;
     case "paragraph": {
       walkInlineList(value.inline, `${path}.inline`, depth + 1, s);
-      if (value.numbered !== undefined && typeof value.numbered !== "boolean") s.issues.push(issue("AST_INVALID", `${path}.numbered`, "numbered deve ser booleano"));
+      if (value.numbered !== undefined && typeof value.numbered !== "boolean" && value.numbered !== "alpha" && value.numbered !== "seq") {
+        s.issues.push(issue("AST_INVALID", `${path}.numbered`, "numbered deve ser booleano, \"alpha\" ou \"seq\""));
+      }
+      const numbered = value.numbered === true || value.numbered === "alpha" || value.numbered === "seq";
+      if (value.level !== undefined) {
+        const max = value.numbered === true ? 3 : value.numbered === "alpha" ? 2 : 1;
+        if (!numbered) s.issues.push(issue("AST_INVALID", `${path}.level`, "level exige parágrafo numerado"));
+        else if (!Number.isSafeInteger(value.level) || (value.level as number) < 1 || (value.level as number) > max) s.issues.push(issue("AST_INVALID", `${path}.level`, `level deve ser 1–${max} para este tipo de numeração`));
+      }
       if (value.anchor !== undefined) {
         if (typeof value.anchor !== "string" || !KEY_RE.test(value.anchor)) s.issues.push(issue("AST_INVALID", `${path}.anchor`, "âncora inválida"));
-        else if (value.numbered !== true) s.issues.push(issue("AST_INVALID", `${path}.anchor`, "parágrafo âncora precisa ser numerado (numbered: true)"));
-        else addAnchor(s, value.anchor, { kind: "paragraph", numbered: true }, `${path}.anchor`);
+        else if (!numbered) s.issues.push(issue("AST_INVALID", `${path}.anchor`, "parágrafo âncora precisa ser numerado"));
+        else addAnchor(s, value.anchor, { kind: "paragraph", numbered: true, branch: ctx.branch }, `${path}.anchor`);
       }
       return;
     }
@@ -207,30 +253,36 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
       value.columns.forEach((c, i) => {
         const cp = `${path}.columns[${i}]`;
         if (!isPlainObject(c)) { s.issues.push(issue("AST_INVALID", cp, "coluna deve ser objeto")); return; }
-        const ki = closedKeyIssues(c, ["key", "header"], ["key", "header"], cp);
+        const ki = closedKeyIssues(c, ["key", "header", "when"], ["key", "header"], cp);
         if (ki.length) { s.issues.push(...ki); return; }
         if (typeof c.key !== "string" || !(def.columns ?? []).some((x) => x.key === c.key)) {
           s.issues.push(issue("TABLE_BINDING_INVALID", `${cp}.key`, `coluna fora do esquema de ${def.name}: ${String(c.key)}`));
         } else if (used.has(c.key)) s.issues.push(issue("TABLE_BINDING_INVALID", `${cp}.key`, `coluna repetida: ${c.key}`));
         else used.add(c.key);
         walkInlineList(c.header, `${cp}.header`, depth + 1, s);
+        if (c.when !== undefined) s.issues.push(...validateCondition2(c.when, s.catalog, `${cp}.when`));
       });
       return;
     }
     case "section": {
       if (value.numbering !== "auto" && value.numbering !== "none") s.issues.push(issue("AST_INVALID", `${path}.numbering`, "numbering deve ser auto ou none"));
       if (value.numbering === "auto" && value.title === undefined) s.issues.push(issue("AST_INVALID", `${path}.title`, "seção numerada exige título"));
+      if (value.style !== undefined && value.style !== "decimal" && value.style !== "ordinal") s.issues.push(issue("AST_INVALID", `${path}.style`, "style deve ser decimal ou ordinal"));
+      if ((value.style === "ordinal" || value.labelPrefix !== undefined) && value.numbering !== "auto") s.issues.push(issue("AST_INVALID", `${path}.style`, "style ordinal/labelPrefix exige numbering auto"));
+      if (value.labelPrefix !== undefined && (typeof value.labelPrefix !== "string" || !value.labelPrefix.trim() || value.style !== "ordinal")) {
+        s.issues.push(issue("AST_INVALID", `${path}.labelPrefix`, "labelPrefix é texto não vazio e só vale com style ordinal"));
+      }
       if (value.title !== undefined) walkInlineList(value.title, `${path}.title`, depth + 1, s);
       if (typeof value.key !== "string" || !KEY_RE.test(value.key)) s.issues.push(issue("AST_INVALID", `${path}.key`, "chave de seção inválida"));
-      else addAnchor(s, value.key, { kind: "section", numbered: value.numbering === "auto" }, `${path}.key`);
+      else addAnchor(s, value.key, { kind: "section", numbered: value.numbering === "auto", branch: ctx.branch }, `${path}.key`);
       if (value.legalRef !== undefined && typeof value.legalRef !== "string") s.issues.push(issue("AST_INVALID", `${path}.legalRef`, "legalRef deve ser string"));
       walkNodes(value.children, `${path}.children`, depth + 1, inner, s);
       return;
     }
     case "conditional":
       s.issues.push(...validateCondition2(value.when, s.catalog, `${path}.when`));
-      walkNodes(value.then, `${path}.then`, depth + 1, ctx, s);
-      if (value.else !== undefined) walkNodes(value.else, `${path}.else`, depth + 1, ctx, s);
+      walkNodes(value.then, `${path}.then`, depth + 1, { ...ctx, branch: [...ctx.branch, [path, "then"]] }, s);
+      if (value.else !== undefined) walkNodes(value.else, `${path}.else`, depth + 1, { ...ctx, branch: [...ctx.branch, [path, "else"]] }, s);
       return;
     case "choice": {
       if (typeof value.groupKey !== "string" || !KEY_RE.test(value.groupKey)) s.issues.push(issue("CHOICE_INVALID", `${path}.groupKey`, "groupKey inválida"));
@@ -248,7 +300,7 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
         else if (keys.has(b.key)) s.issues.push(issue("CHOICE_INVALID", `${bp}.key`, `ramo duplicado: ${b.key}`));
         else keys.add(b.key);
         s.issues.push(...validateCondition2(b.when, s.catalog, `${bp}.when`));
-        walkNodes(b.children, `${bp}.children`, depth + 1, ctx, s);
+        walkNodes(b.children, `${bp}.children`, depth + 1, { ...ctx, branch: [...ctx.branch, [path, `b${i}`]] }, s);
       });
       return;
     }
@@ -267,7 +319,7 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
     case "annex": {
       if (!ctx.annexAllowed) s.issues.push(issue("ANNEX_INVALID", path, "anexo só na raiz do documento (ou em condicional/grupo na raiz)"));
       if (typeof value.id !== "string" || !KEY_RE.test(value.id)) s.issues.push(issue("ANNEX_INVALID", `${path}.id`, "id de anexo inválido"));
-      else addAnchor(s, value.id, { kind: "annex", numbered: true }, `${path}.id`);
+      else addAnchor(s, value.id, { kind: "annex", numbered: true, branch: ctx.branch }, `${path}.id`);
       if (typeof value.role !== "string" || !KEY_RE.test(value.role)) s.issues.push(issue("ANNEX_INVALID", `${path}.role`, "role de anexo inválido"));
       else if (s.annexRoles.has(value.role)) s.issues.push(issue("ANNEX_INVALID", `${path}.role`, `role de anexo duplicado: ${value.role}`));
       else s.annexRoles.add(value.role);
@@ -280,12 +332,14 @@ function walkNode(value: unknown, path: string, depth: number, ctx: Ctx, s: Walk
       return;
     }
     case "aiSlot":
-      if (typeof value.slotKey !== "string" || !KEY_RE.test(value.slotKey)) s.issues.push(issue("AST_INVALID", `${path}.slotKey`, "slotKey inválido"));
-      else if (s.slotKeys.has(value.slotKey)) s.issues.push(issue("AST_INVALID", `${path}.slotKey`, `slot de IA duplicado: ${value.slotKey}`));
-      else s.slotKeys.add(value.slotKey);
-      if (!Number.isSafeInteger(value.maxTokens) || (value.maxTokens as number) <= 0) s.issues.push(issue("AST_INVALID", `${path}.maxTokens`, "maxTokens deve ser inteiro positivo"));
-      if (typeof value.instructionsKey !== "string" || !KEY_RE.test(value.instructionsKey)) s.issues.push(issue("AST_INVALID", `${path}.instructionsKey`, "instructionsKey inválido"));
+      checkAiSlot(value, path, s);
       return;
+    case "controlRef": {
+      const def = typeof value.var === "string" ? findVariable2(s.catalog, value.var) : undefined;
+      if (!def) s.issues.push(issue("UNKNOWN_VARIABLE", `${path}.var`, `variável fora do catálogo ${s.catalog.version}: ${String(value.var)}`));
+      else if (def.renderable) s.issues.push(issue("AST_INVALID", `${path}.var`, `controlRef exige um controle (renderable=false); ${def.name} é renderizável`));
+      return;
+    }
   }
 }
 
@@ -299,12 +353,12 @@ export function validateTemplateAst2(ast: unknown, catalog: VariableCatalog2): T
     catalog, issues: [], anchors: new Map(), xrefs: [], slotKeys: new Set(), tableKeys: new Set(), groupKeys: new Set(),
     docRoles: new Set(), docOrders: new Set(), annexRoles: new Set(), annexOrders: new Set(), nodes: 0,
   };
-  walkNodes(ast.root, "root", 1, { annexAllowed: true }, s);
+  walkNodes(ast.root, "root", 1, { annexAllowed: true, branch: [] }, s);
   // Remissões: alvo precisa existir e ser NUMERADO (a remissão resolve o número final, nunca um texto literal).
   for (const x of s.xrefs) {
     const a = s.anchors.get(x.target);
-    if (!a) s.issues.push(issue("XREF_TARGET_UNKNOWN", x.path, `remissão para âncora inexistente: ${x.target}`));
-    else if (!a.numbered) s.issues.push(issue("XREF_TARGET_NOT_NUMBERED", x.path, `a âncora ${x.target} não é numerada`));
+    if (!a || a.length === 0) s.issues.push(issue("XREF_TARGET_UNKNOWN", x.path, `remissão para âncora inexistente: ${x.target}`));
+    else if (!a[0].numbered) s.issues.push(issue("XREF_TARGET_NOT_NUMBERED", x.path, `a âncora ${x.target} não é numerada`));
   }
   return s.issues.length ? fail(s.issues) : ok(ast as unknown as TemplateAST2);
 }
@@ -312,24 +366,26 @@ export function validateTemplateAst2(ast: unknown, catalog: VariableCatalog2): T
 /** Variáveis referenciadas pelo AST v2 (texto, condições, grupos excludentes e fontes de tabelas), ordenadas e sem repetição. */
 export function referencedVariables2(ast: TemplateAST2): string[] {
   const names = new Set<string>();
+  const fromCond = (c: Cond2): void => conditionVariables(c).forEach((n) => names.add(n));
   const fromInline = (i: Inline2): void => {
     if (i.t === "var") names.add(i.name);
     else if (i.t === "strong" || i.t === "em") i.v.forEach(fromInline);
+    else if (i.t === "when") { fromCond(i.when); i.then.forEach(fromInline); }
   };
-  const fromCond = (c: Cond2): void => conditionVariables(c).forEach((n) => names.add(n));
   const fromNodes = (ns: readonly TemplateNode2[]): void => ns.forEach((n) => {
     switch (n.t) {
       case "heading": n.text.forEach(fromInline); break;
       case "paragraph": n.inline.forEach(fromInline); break;
       case "list": n.items.forEach(fromNodes); break;
       case "table": n.header.forEach((h) => h.forEach(fromInline)); n.rows.forEach((r) => r.forEach((c) => c.forEach(fromInline))); break;
-      case "dataTable": names.add(n.source); n.columns.forEach((c) => c.header.forEach(fromInline)); break;
+      case "dataTable": names.add(n.source); n.columns.forEach((c) => { c.header.forEach(fromInline); if (c.when) fromCond(c.when); }); break;
       case "section": n.title?.forEach(fromInline); fromNodes(n.children); break;
       case "conditional": fromCond(n.when); fromNodes(n.then); if (n.else) fromNodes(n.else); break;
       case "choice": n.branches.forEach((b) => { fromCond(b.when); fromNodes(b.children); }); break;
       case "docRef": n.label?.forEach(fromInline); break;
       case "annex": n.title.forEach(fromInline); fromNodes(n.children); break;
       case "aiSlot": break;
+      case "controlRef": names.add(n.var); break;
     }
   });
   fromNodes(ast.root);
@@ -348,10 +404,18 @@ export function templateRequirements2(nodes: readonly TemplateNode2[]): Template
   const docRefs: { kind: DocRefKind2; role: string; order: number }[] = [];
   const annexes: { id: string; role: string; order: number }[] = [];
   const aiSlots: string[] = [];
+  const inl = (xs: readonly Inline2[] | undefined): void => xs?.forEach((i) => {
+    if (i.t === "aiSlot") aiSlots.push(i.slotKey);
+    else if (i.t === "strong" || i.t === "em") inl(i.v);
+    else if (i.t === "when") inl(i.then);
+  });
   const walk = (ns: readonly TemplateNode2[]): void => ns.forEach((n) => {
     switch (n.t) {
+      case "heading": inl(n.text); break;
+      case "paragraph": inl(n.inline); break;
+      case "table": n.header.forEach(inl); n.rows.forEach((r) => r.forEach(inl)); break;
       case "list": n.items.forEach(walk); break;
-      case "section": walk(n.children); break;
+      case "section": inl(n.title); walk(n.children); break;
       case "conditional": walk(n.then); if (n.else) walk(n.else); break;
       case "choice": n.branches.forEach((b) => walk(b.children)); break;
       case "annex": annexes.push({ id: n.id, role: n.role, order: n.order }); walk(n.children); break;
