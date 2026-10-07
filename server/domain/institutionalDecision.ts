@@ -35,6 +35,10 @@ export const DECISION_OUTCOMES = {
   // estrutural. A IA nunca registra nenhuma delas.
   template_ai_acceptance: ["aceito"],
   template_deviation_acknowledgment: ["reconhecido"],
+  // Governança do modelo (piloto Edital): PROCEDÊNCIA da importação e EVIDÊNCIA de aprovação jurídica externa. São REGISTROS
+  // de governança (append-only; nova versão supera a anterior) — NÃO transitam a revisão e NÃO são um status do lifecycle.
+  template_import_provenance: ["registrado"],
+  template_legal_approval_evidence: ["registrado"],
 } as const satisfies Record<string, readonly string[]>;
 export type InstitutionalDecisionType = keyof typeof DECISION_OUTCOMES;
 
@@ -48,6 +52,9 @@ export const DECISION_SUBJECT_TYPES = [
   // O assunto é `<manifestId>:<sha256(chave)[0..16]>` (M1 + slot/bloco); o lock é do M1 (`document_composition_manifests`).
   "institutional_template.ai_acceptance",
   "institutional_template.deviation_acknowledgment",
+  // O assunto é o id EXATO da revisão do modelo (lock da linha da revisão; nenhuma transição de estado).
+  "institutional_template.import_provenance",
+  "institutional_template.legal_evidence",
 ] as const;
 export type DecisionSubjectType = (typeof DECISION_SUBJECT_TYPES)[number];
 

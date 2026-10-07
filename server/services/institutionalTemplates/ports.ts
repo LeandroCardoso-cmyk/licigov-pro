@@ -27,7 +27,8 @@ import type { AiNarrativeOutput, CanonicalSourceSnapshot, OfficialDocumentPin } 
 import type { GenerationManifest, IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
 import type { AiNarrativeAcceptance, HumanEditLink, StructuralDeviationAcknowledgment } from "../../domain/institutionalTemplates/revalidation";
 import type { VariableSource } from "../../domain/institutionalTemplates/variableCatalog";
-import type { InstitutionalDecision } from "../../domain/institutionalDecision";
+import type { DecisionRequest, DecisionSubjectType, InstitutionalDecision } from "../../domain/institutionalDecision";
+import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
 import type { OfficialDocsExecutor } from "../../db/officialDocuments";
 
 /** Executor transacional (o mesmo do Document Engine/Lifecycle e dos repositórios da Lane A). */
@@ -126,6 +127,26 @@ export class DuplicateTemplateRevisionError extends Error {
   constructor() { super("Número de revisão já existe para a identidade."); this.name = "DuplicateTemplateRevisionError"; }
 }
 
+// ─── Governança do modelo (procedência da importação · evidência jurídica) ─────────────────────────────────────
+
+export type GovernanceCommitResult =
+  | { readonly status: "COMMITTED" | "REPLAYED"; readonly decision: InstitutionalDecision }
+  | { readonly status: "SUBJECT_NOT_FOUND" }
+  | { readonly status: "STALE_VERSION"; readonly currentVersion: number }
+  | { readonly status: "DECISION_IDEMPOTENCY_CONFLICT" };
+
+/**
+ * Registros de governança SOBRE uma revisão exata, no ledger institucional EXISTENTE (append-only). Não há transição da
+ * revisão: procedência e evidência jurídica NÃO são status do ciclo de vida. O adapter trava a linha da revisão
+ * (`lockDecisionSubject`), faz replay pela chave de idempotência, CAS pela versão corrente e INSERT — numa transação.
+ */
+export interface TemplateGovernancePort {
+  /** `request` já validado (`validateDecisionRequest`). `request.expectedRevision` é a versão corrente que o chamador viu (0 = nenhuma). */
+  recordGovernanceDecision(request: DecisionRequest): Promise<GovernanceCommitResult>;
+  /** Histórico completo (v1…corrente) do assunto (= revisão), tenant-scoped. Revisão de outro tenant ⇒ lista vazia. */
+  listGovernanceDecisions(organizationId: OrgId, subjectType: DecisionSubjectType, revisionId: string): Promise<readonly InstitutionalDecision[]>;
+}
+
 // ─── Manifests M1/M2 ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Manifests M1/M2 — INSERT-only; leitura tenant-scoped. */
@@ -193,6 +214,10 @@ export interface TemplateWorkflowPorts {
   readonly flag: TemplateEnablementPort;
   readonly clock: ClockPort;
   readonly ids: IdPort;
+  /** Procedência + evidência jurídica (ledger existente). Ausente ⇒ essas operações falham fechado (`PORTS_NOT_CONFIGURED`). */
+  readonly governance?: TemplateGovernancePort;
+  /** Capacidades reais do sistema (matriz de prontidão, dimensões de escopo). Ausente ⇒ `BASELINE_CAPABILITIES_D4BB209`. */
+  readonly capabilities?: TemplateCapabilities;
 }
 
 /** Composição e emissão governadas (Lane B). */

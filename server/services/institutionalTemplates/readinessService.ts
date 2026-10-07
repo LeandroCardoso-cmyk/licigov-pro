@@ -1,0 +1,41 @@
+/**
+ * Prontidão antes da publicação (piloto Edital): reúne os FATOS (revisão exata, catálogo, procedência, evidência jurídica,
+ * capacidades do sistema, inventário reenviado) e delega a avaliação ao domínio puro. Só leitura: nenhuma escrita, nenhuma IA,
+ * nenhuma transição. O inventário reenviado só vale se o SHA-256 coincidir com o registrado na procedência.
+ */
+import { evaluateReadiness, type ReadinessMatrix } from "../../domain/institutionalTemplates/governance/readinessMatrix";
+import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplates/governance/capabilities";
+import { parseSourceInventory, type SourceInventory } from "../../domain/institutionalTemplates/governance/sourceInventory";
+import { TemplateWorkflowError } from "./errors";
+import { TemplateGovernanceService } from "./governanceService";
+import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
+
+export interface ReadinessResult {
+  readonly matrix: ReadinessMatrix;
+  readonly inventory: { readonly supplied: boolean; readonly shapeIssues: readonly string[] };
+  readonly revision: { readonly id: string; readonly revision: number; readonly status: string; readonly semanticHash: string };
+}
+
+export class TemplateReadinessService {
+  constructor(private readonly ports: TemplateWorkflowPorts) {}
+
+  async evaluate(ctx: WorkflowContext, input: { revisionId: string; inventory?: unknown }): Promise<ReadinessResult> {
+    const revision = await this.ports.repository.getRevision(ctx.organizationId, input.revisionId);
+    if (!revision || revision.organizationId !== ctx.organizationId) throw new TemplateWorkflowError("NOT_FOUND", "revisão não encontrada nesta organização");
+    const governance = new TemplateGovernanceService(this.ports);
+    // sem port de governança, procedência/evidência são desconhecidas ⇒ a matriz as mostra BLOCKED (nunca esconde)
+    const gov = this.ports.governance ? await governance.get(ctx, revision.id) : null;
+    let inventory: SourceInventory | null = null;
+    let shapeIssues: string[] = [];
+    if (input.inventory !== undefined) {
+      const parsed = parseSourceInventory(input.inventory);
+      if (parsed.ok) inventory = parsed.value; else shapeIssues = parsed.issues;
+    }
+    const matrix = evaluateReadiness({
+      revision, catalog: this.ports.catalog.byVersion(revision.variableCatalogVersion),
+      provenance: gov?.provenance ?? null, legalEvidence: gov?.legalEvidence ?? null, inventory,
+      capabilities: this.ports.capabilities ?? BASELINE_CAPABILITIES_D4BB209,
+    });
+    return { matrix, inventory: { supplied: input.inventory !== undefined, shapeIssues }, revision: { id: revision.id, revision: revision.revision, status: revision.status, semanticHash: revision.semanticHash } };
+  }
+}

@@ -21,6 +21,14 @@ import {
 } from "../services/institutionalTemplates/portsRegistry";
 import { describeResolution, InstitutionalTemplatesWorkflow } from "../services/institutionalTemplates/workflowService";
 import type { WorkflowContext } from "../services/institutionalTemplates/ports";
+import { TemplateCatalogService } from "../services/institutionalTemplates/catalogService";
+import { TemplateGovernanceService } from "../services/institutionalTemplates/governanceService";
+import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../services/institutionalTemplates/modelRegistrationService";
+import { TemplatePreviewDossierService } from "../services/institutionalTemplates/previewDossierService";
+import { TemplateReadinessService } from "../services/institutionalTemplates/readinessService";
+import { BASELINE_CAPABILITIES_D4BB209 } from "../domain/institutionalTemplates/governance/capabilities";
+import { READINESS_CHECK_IDS } from "../domain/institutionalTemplates/governance/readinessMatrix";
+import { SCOPE_DIMENSIONS, SCOPE_DIMENSION_LABEL, SCOPE_VOCABULARY } from "../domain/institutionalTemplates/governance/scopeDimensions";
 
 
 const KINDS = TEMPLATE_DOCUMENT_KINDS as readonly [TemplateDocumentKind, ...TemplateDocumentKind[]];
@@ -30,6 +38,8 @@ const id = z.string().min(1).max(24).regex(/^[A-Za-z0-9_-]+$/);
 const iso = z.string().min(20).max(30);
 const scope = z.object({
   modality: z.string().min(1).max(100).optional(),
+  form: z.string().min(1).max(100).optional(),
+  platform: z.string().min(1).max(100).optional(),
   regime: z.string().min(1).max(100).optional(),
   criterion: z.string().min(1).max(100).optional(),
 }).strict();
@@ -59,6 +69,43 @@ const lifecycleInput = z.object({
   decision: decisionSchema,
 }).strict();
 
+const publishInput = lifecycleInput.extend({
+  /** Rastro da matriz de prontidão que a pessoa viu (hash) e dos bloqueios aceitos conscientemente — informativo, não autoriza nada. */
+  readiness: z.object({ matrixHash: z.string().length(64), acceptedBlockedChecks: z.array(z.enum(READINESS_CHECK_IDS)).max(20) }).strict().optional(),
+}).strict();
+
+const sha64 = z.string().regex(/^[0-9a-f]{64}$/);
+const declaredAuthority = z.object({
+  decidedByName: z.string().min(1).max(255), decidedByRole: z.string().min(1).max(255), decidedByUserId: z.number().int().positive().nullable().optional(),
+  decidedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basisReference: z.string().min(1).max(500), reason: z.string().min(1).max(5000),
+}).strict();
+const legalEvidenceInput = z.object({
+  revisionId: id, expectedVersion: z.number().int().min(0).max(100000), confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+  evidence: z.object({
+    sourceLogicalVersion: z.string().min(1).max(64), sourceSha256: sha64,
+    // metadados OPCIONAIS: ausentes ⇒ não gravados (nada é inventado)
+    parecerNumber: z.string().min(1).max(480).optional(), parecerDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    protocol: z.string().min(1).max(480).optional(), procurador: z.string().min(1).max(480).optional(),
+    evidenceRefs: z.array(z.string().min(1).max(480)).max(20).optional(),
+  }).strict(),
+}).strict();
+const inventoryInput = z.unknown().refine((v) => { try { return JSON.stringify(v).length <= 1024 * 1024; } catch { return false; } }, "inventário acima do limite");
+const registerInput = z.object({
+  target: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("NEW_IDENTITY"), documentKind: z.enum(KINDS), slug: z.string().min(1).max(120) }).strict(),
+    z.object({ kind: z.literal("EXISTING_IDENTITY"), identityId: id }).strict(),
+  ]),
+  templateKey: z.string().min(3).max(64), displayName: z.string().min(1).max(200), declaredScope: scope,
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("AST"), ast: astInput }).strict(),
+    z.object({ kind: z.literal("MARKDOWN"), markdown: z.string().max(IMPORT_LIMITS.maxMarkdownChars), filename: z.string().max(255).optional() }).strict(),
+    z.object({ kind: z.literal("DOCX"), docxBase64: z.string().max(Math.ceil((IMPORT_LIMITS.maxDocxBytes * 4) / 3) + 8), filename: z.string().max(255).optional() }).strict(),
+  ]),
+  sourceLogicalVersion: z.string().min(1).max(64), sourceSha256: sha64, inventory: inventoryInput.optional(),
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+}).strict();
+const previewContext = z.object({ scope, sampleValues }).strict();
+
 const importInput = z.object({
   format: z.enum(["markdown", "docx"]),
   markdown: z.string().max(IMPORT_LIMITS.maxMarkdownChars).optional(),
@@ -87,7 +134,7 @@ function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
   switch (code) {
     case "HUMAN_ACTION_REQUIRED": return "FORBIDDEN";
     case "NOT_FOUND": return "NOT_FOUND";
-    case "VALIDATION_FAILED": case "IMPORT_REJECTED": case "DECISION_REJECTED": case "BINDING_NOT_PINNED": return "BAD_REQUEST";
+    case "VALIDATION_FAILED": case "IMPORT_REJECTED": case "DECISION_REJECTED": case "BINDING_NOT_PINNED": case "SCOPE_INVALID": case "SCOPE_DIMENSION_UNSUPPORTED": return "BAD_REQUEST";
     case "CONFLICT": case "REVISION_IMMUTABLE": case "TRANSITION_INVALID": case "STALE_STATE": case "BINDING_AMBIGUOUS":
     case "BINDING_NOT_PUBLISHED": case "REVISION_PINNED_BY_BINDING": return "CONFLICT";
     case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": return "PRECONDITION_FAILED";
@@ -123,7 +170,7 @@ function templatesProcedure(action: TemplateAction) {
     const wctx: WorkflowContext = {
       organizationId: ctx.organizationId!, actor: { kind: "human", userId: ctx.user.id }, correlationId: ctx.correlationId ?? "",
     };
-    return next({ ctx: { ...ctx, wf, wctx } });
+    return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts() } });
   });
 }
 
@@ -137,6 +184,9 @@ export const institutionalTemplatesRouter = router({
       enabled, portsConfigured: configured, flag: FF_INSTITUTIONAL_TEMPLATES_V1,
       lifecycle: STATUSES, documentKinds: TEMPLATE_DOCUMENT_KINDS, roleFloors: TEMPLATE_ACTION_MIN_ROLE,
       importLimits: IMPORT_LIMITS, role: ctx.orgMembership?.role ?? null,
+      scopeDimensions: SCOPE_DIMENSIONS.map((d) => ({ dimension: d, label: SCOPE_DIMENSION_LABEL[d], suggestions: SCOPE_VOCABULARY[d] })),
+      persistedScopeDimensions: configured ? (getTemplateWorkflowPorts().capabilities ?? BASELINE_CAPABILITIES_D4BB209).scopeDimensions : [],
+      registrationPresets: MODEL_REGISTRATION_PRESETS, readinessChecks: READINESS_CHECK_IDS,
     };
   }),
 
@@ -163,7 +213,7 @@ export const institutionalTemplatesRouter = router({
     validateAst: templatesProcedure("read").input(z.object({ ast: astInput }).strict())
       .query(({ ctx, input }) => guarded(() => ctx.wf.validateAst(ctx.wctx, input.ast))),
     approve: templatesProcedure("approve").input(lifecycleInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.approve(ctx.wctx, input))),
-    publish: templatesProcedure("publish").input(lifecycleInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.publish(ctx.wctx, input))),
+    publish: templatesProcedure("publish").input(publishInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.publish(ctx.wctx, input))),
     deprecate: templatesProcedure("deprecate").input(lifecycleInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.deprecate(ctx.wctx, input))),
   }),
 
@@ -182,6 +232,51 @@ export const institutionalTemplatesRouter = router({
     resolve: templatesProcedure("read")
       .input(z.object({ documentKind: z.enum(KINDS), scope, asOf: iso.optional() }).strict())
       .query(({ ctx, input }) => guarded(async () => describeResolution(await ctx.wf.resolveBinding(ctx.wctx, input)))),
+  }),
+
+  /** Catálogo multi-modelo: várias identidades do mesmo tipo, com aplicabilidade explícita e revisão exata (só leitura). */
+  catalog: router({
+    list: templatesProcedure("read")
+      .input(z.object({ documentKind: z.enum(KINDS).optional(), modality: z.string().min(1).max(100).optional(), form: z.string().min(1).max(100).optional(), platform: z.string().min(1).max(100).optional(), status: z.enum(STATUSES).optional() }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplateCatalogService(ctx.ports).list(ctx.wctx, input))),
+  }),
+
+  /** Governança da revisão: procedência da importação e evidência de aprovação jurídica externa (não são status do ciclo de vida). */
+  governance: router({
+    get: templatesProcedure("read").input(z.object({ revisionId: id }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).get(ctx.wctx, input.revisionId))),
+    recordLegalEvidence: templatesProcedure("evidence").input(legalEvidenceInput)
+      .mutation(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordLegalEvidence(ctx.wctx, input))),
+  }),
+
+  /** Registro/importação do modelo: cria (ou reutiliza) a identidade, uma revisão DRAFT e a procedência. Nunca aprova nem publica. */
+  registration: router({
+    register: templatesProcedure("register").input(registerInput)
+      .mutation(({ ctx, input }) => guarded(() => new ModelRegistrationService(ctx.ports).register(ctx.wctx, {
+        ...input,
+        source: input.source.kind === "DOCX" ? { kind: "DOCX", docx: Buffer.from(input.source.docxBase64, "base64"), filename: input.source.filename } : input.source,
+      }))),
+  }),
+
+  /** Matriz de prontidão antes de publicar (só leitura; informativa — não aprova, não publica). */
+  readiness: router({
+    evaluate: templatesProcedure("read").input(z.object({ revisionId: id, inventory: inventoryInput.optional() }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplateReadinessService(ctx.ports).evaluate(ctx.wctx, input))),
+  }),
+
+  /** Dossiê de pré-visualização com contexto de teste (sem persistência, emissão, publicação ou IA). */
+  previewDossier: router({
+    hints: templatesProcedure("preview").input(z.object({ revisionId: id }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplatePreviewDossierService(ctx.ports).variableHints(ctx.wctx, input.revisionId))),
+    run: templatesProcedure("preview")
+      .input(z.object({
+        target: z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("REVISION"), revisionId: id }).strict(),
+          z.object({ kind: z.literal("BOUND"), documentKind: z.enum(KINDS), asOf: iso.optional() }).strict(),
+        ]),
+        context: previewContext,
+      }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplatePreviewDossierService(ctx.ports).dossier(ctx.wctx, input.target, input.context))),
   }),
 
   preview: templatesProcedure("preview").input(z.object({ revisionId: id, sampleValues }).strict())

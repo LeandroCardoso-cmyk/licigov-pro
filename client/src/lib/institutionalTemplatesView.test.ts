@@ -104,7 +104,7 @@ describe("binding / resolução: revisão exata explícita; ambiguidade bloqueia
   });
 
   it("rótulos de escopo e de issues", () => {
-    expect(scopeLabel({})).toMatch(/qualquer escopo/);
+    expect(scopeLabel({})).toMatch(/escopo não declarado/);
     expect(scopeLabel({ modality: "pregao", criterion: "menor preço" })).toBe("modalidade: pregao · critério: menor preço");
     expect(formatIssues([{ code: "UNKNOWN_VARIABLE", path: "root[0]", message: "fora do catálogo" }])).toEqual(["root[0]: fora do catálogo (UNKNOWN_VARIABLE)"]);
   });

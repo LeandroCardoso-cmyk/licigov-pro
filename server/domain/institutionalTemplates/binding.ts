@@ -14,6 +14,10 @@ import { issue, type OrgId, type TemplateDocumentKind, type TemplateIssue } from
 
 export interface BindingScope {
   readonly modality?: string;
+  /** Forma da licitação (ex.: ELETRONICA | PRESENCIAL). Piloto Edital multi-modelo: igualdade EXATA, nunca inferida. */
+  readonly form?: string;
+  /** Plataforma do certame (ex.: BLL). Igualdade EXATA, nunca inferida. */
+  readonly platform?: string;
   readonly regime?: string;
   readonly criterion?: string;
 }
@@ -44,7 +48,9 @@ export type BindingResolution =
   | { readonly status: "INVALID"; readonly issues: readonly TemplateIssue[] };
 
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-const SCOPE_KEYS = ["modality", "regime", "criterion"] as const;
+/** Dimensões do escopo, na ordem canônica. `form`/`platform` ausentes ≡ `null` (só casa com pedido que também não os declara). */
+export const BINDING_SCOPE_KEYS = ["modality", "form", "platform", "regime", "criterion"] as const;
+const SCOPE_KEYS = BINDING_SCOPE_KEYS;
 
 export function sameScope(a: BindingScope, b: BindingScope): boolean {
   return SCOPE_KEYS.every((k) => (a[k] ?? null) === (b[k] ?? null));

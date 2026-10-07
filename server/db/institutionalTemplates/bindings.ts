@@ -82,6 +82,11 @@ export async function insertBinding(tx: TemplatesTx, ctx: TemplatesContext, bind
   if (!TEMPLATE_DOCUMENT_KINDS.includes(binding.documentKind)) throw new TemplatePersistenceError("INVALID_INPUT", "tipo documental fora do contrato");
   if (!binding.active) throw new TemplatePersistenceError("INVALID_INPUT", "um binding novo nasce ativo");
   if (!ISO_UTC_RE.test(binding.effectiveFrom)) throw new TemplatePersistenceError("INVALID_INPUT", "effectiveFrom deve ser ISO-8601 UTC");
+  // `form`/`platform` ainda NÃO têm coluna (migration pendente da Lane A do piloto): recusar é fail-closed — descartar em
+  // silêncio faria dois escopos distintos colidirem (ou um binding eletrônico valer para presencial).
+  if (binding.scope.form !== undefined || binding.scope.platform !== undefined) {
+    throw new TemplatePersistenceError("INVALID_INPUT", "escopo 'form'/'platform' ainda não é suportado pela persistência atual (SCOPE_DIMENSION_UNSUPPORTED)");
+  }
   const scope = { modality: scopeColumn(binding.scope, "modality"), regime: scopeColumn(binding.scope, "regime"), criterion: scopeColumn(binding.scope, "criterion") };
 
   const revision = await lockRevisionForShare(tx, ctx.organizationId, binding.pinnedRevisionId);

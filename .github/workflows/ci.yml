@@ -388,7 +388,8 @@ jobs:
           server/__tests__/integration/sem043-migration-0315-mysql-smoke.test.ts \
           server/__tests__/integration/templates-persistence-mysql-smoke.test.ts \
           server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts \
-          server/__tests__/integration/templates-integration-mysql-smoke.test.ts
+          server/__tests__/integration/templates-integration-mysql-smoke.test.ts \
+          server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts
 
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:

@@ -7,6 +7,7 @@
  */
 import { createCanonicalReferenceAdapter } from "./adapters/canonicalAdapter";
 import { createTemplateDraftAdapter } from "./adapters/draftAdapter";
+import { createTemplateGovernanceAdapter } from "./adapters/governanceAdapter";
 import { createTemplateManifestAdapter } from "./adapters/manifestAdapter";
 import { createPreviewCompositionPort } from "./adapters/previewAdapter";
 import { createTemplateRepositoryAdapter } from "./adapters/repositoryAdapter";
@@ -26,6 +27,7 @@ export function createTemplateWorkflowPorts(): TemplateWorkflowPorts {
     catalog: createVariableCatalogPort(),
     composition: createPreviewCompositionPort(),
     manifests: createTemplateManifestAdapter(),
+    governance: createTemplateGovernanceAdapter(),
     flag: platformTemplatesFlagPort(),
     clock: systemClock,
     ids: randomIds,

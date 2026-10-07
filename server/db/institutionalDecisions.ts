@@ -54,7 +54,8 @@ export async function lockDecisionSubject(
   // Modelos Institucionais — o assunto é a REVISÃO EXATA (aprovação/publicação/depreciação). Lock da linha-pai da revisão,
   // tenant-scoped; revisão de outro tenant é indistinguível de inexistente (anti-enumeração, fail-closed).
   if (subjectType === "institutional_template.approval" || subjectType === "institutional_template.publication"
-    || subjectType === "institutional_template.deprecation") {
+    || subjectType === "institutional_template.deprecation" || subjectType === "institutional_template.import_provenance"
+    || subjectType === "institutional_template.legal_evidence") {
     const rows = await tx.select({ id: institutionalTemplateRevisionsTable.id }).from(institutionalTemplateRevisionsTable)
       .where(and(eq(institutionalTemplateRevisionsTable.id, subjectId), eq(institutionalTemplateRevisionsTable.organizationId, organizationId)))
       .for("update");

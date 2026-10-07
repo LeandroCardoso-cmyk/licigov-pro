@@ -15,7 +15,9 @@ export type TemplateWorkflowErrorCode =
   | "BINDING_NOT_PUBLISHED"
   | "REVISION_PINNED_BY_BINDING"
   | "IMPORT_REJECTED"
-  | "DECISION_REJECTED";
+  | "DECISION_REJECTED"
+  | "SCOPE_INVALID"
+  | "SCOPE_DIMENSION_UNSUPPORTED";
 
 export interface TemplateWorkflowIssue { readonly code: string; readonly path: string; readonly message: string }
 

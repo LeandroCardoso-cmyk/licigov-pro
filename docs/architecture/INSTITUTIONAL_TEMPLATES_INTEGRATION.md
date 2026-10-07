@@ -71,7 +71,7 @@ fontes canônicas → binding exato (PUBLISHED, pin) → composição determiní
 
 ## 7. Decisões e limites conhecidos (não bloqueantes)
 
-* `displayName` não existe no T1: a UX usa `slug` + tipo documental (`POST_FAST_TRACK_UX_ENHANCEMENT`).
+* `displayName` não existe no T1: a UX usa `slug` + tipo documental (`POST_FAST_TRACK_UX_ENHANCEMENT`). O piloto Edital (lane C) exibe, quando existir, o nome da identidade e, senão, o nome da **procedência** registrada, com a origem sempre visível — ver [`EDITAL_PILOT_LANE_C.md`](EDITAL_PILOT_LANE_C.md).
 * Só `dfd/etp/tr/edital` têm rascunho canônico; demais tipos falham fechado na geração por modelo.
 * O produtor das execuções de IA para modelos (orquestração que grava `ai_orchestrations.outputs.templateNarrative`) é fase posterior; o consumidor e o aceite estão prontos e testados.
 * Flag: sem rollout percentual; ligar/desligar por organização é decisão operacional futura (nesta entrega: OFF).

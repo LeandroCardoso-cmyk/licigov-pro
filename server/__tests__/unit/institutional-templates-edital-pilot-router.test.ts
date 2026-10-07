@@ -1,0 +1,223 @@
+/**
+ * Piloto Edital — ROUTER tRPC (sem DB; tenant mockado; ports em memória; composer REAL de prévia).
+ * Cobre: feature OFF bloqueada no backend mesmo por rota direta, RBAC das novas ações, tenant do contexto, cross-tenant,
+ * registro nascendo DRAFT, evidência jurídica opcional/humana, prontidão e dossiê só-leitura, binding de escopo explícito.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn(async () => ({
+    organizationId: tenant.org,
+    membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  })),
+}));
+
+import { institutionalTemplatesRouter } from "../../routers/institutionalTemplatesRouter";
+import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplates/governance/capabilities";
+import { SCOPE_DIMENSIONS } from "../../domain/institutionalTemplates/governance/scopeDimensions";
+import { previewComposeOutcome } from "../../services/institutionalTemplates/adapters/previewAdapter";
+import { buildPilotAst, buildPilotCatalog, buildPilotInventory, PILOT_SOURCE_LOGICAL_VERSION, pilotSourceSha256 } from "../../services/institutionalTemplates/pilot/editalPilotFixture";
+import { configureTemplateWorkflowPorts, resetTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { makeContext, mockUser } from "../helpers/fixtures";
+import { decisionInput, makeTestPorts, type InMemoryTemplateRepository } from "../helpers/institutionalTemplatesFakes";
+import type { InMemoryGovernance } from "../helpers/institutionalTemplatesGovernanceFakes";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const caller = () => institutionalTemplatesRouter.createCaller(makeContext(mockUser) as any);
+const as = (role: string, org = 1) => { tenant.role = role; tenant.org = org; return caller(); };
+const trpcErr = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as { code?: string; message?: string } | null;
+
+let repo: InMemoryTemplateRepository;
+let gov: InMemoryGovernance;
+let flagOn = true;
+const FULL = { modality: "PREGAO", form: "ELETRONICA", platform: "BLL", regime: "EMPREITADA_PRECO_UNITARIO", criterion: "MENOR_PRECO" };
+const ast = buildPilotAst();
+const sha = pilotSourceSha256(ast);
+
+beforeEach(() => {
+  flagOn = true;
+  const t = makeTestPorts({ flag: () => flagOn, catalog: buildPilotCatalog(), composer: previewComposeOutcome, capabilities: { ...BASELINE_CAPABILITIES_D4BB209, scopeDimensions: SCOPE_DIMENSIONS } });
+  repo = t.repo; gov = t.governance;
+  configureTemplateWorkflowPorts(t.ports);
+  tenant.org = 1; tenant.role = "owner";
+});
+afterEach(() => resetTemplateWorkflowPorts());
+
+let n = 0;
+const k = (p: string) => `${p}-router-key-${++n}`;
+const registerInput = (over: Record<string, unknown> = {}) => ({
+  target: { kind: "NEW_IDENTITY" as const, documentKind: "edital" as const, slug: "edital-pregao-eletronico-bll" }, templateKey: "EDITAL_PREGAO_ELETRONICO_BLL",
+  displayName: "Edital — Pregão Eletrônico — BLL", declaredScope: FULL, source: { kind: "AST" as const, ast }, sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: sha,
+  inventory: buildPilotInventory(ast), confirm: true, idempotencyKey: k("reg"), decision: decisionInput(), ...over,
+});
+const life = (revisionId: string, expectedStatus: "DRAFT" | "APPROVED", extra: Record<string, unknown> = {}) =>
+  ({ revisionId, expectedStatus, confirm: true, idempotencyKey: k("life"), decision: decisionInput(), ...extra });
+
+describe("FEATURE OFF — o backend bloqueia mesmo por rota direta; nada é lido nem escrito", () => {
+  it("catálogo, governança, registro, prontidão e dossiê ⇒ PRECONDITION_FAILED/MODULE_DISABLED; getCapabilities informa enabled=false", async () => {
+    const seeded = await as("owner").registration.register(registerInput());
+    flagOn = false;
+    const c = as("owner");
+    const before = repo.writes + gov.writes;
+    const calls = [
+      c.catalog.list({}), c.governance.get({ revisionId: seeded.revision.id }),
+      c.governance.recordLegalEvidence({ revisionId: seeded.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: k("ev"), decision: decisionInput(), evidence: { sourceLogicalVersion: "v", sourceSha256: sha } }),
+      c.registration.register(registerInput({ idempotencyKey: k("off"), target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: "outro" } })),
+      c.readiness.evaluate({ revisionId: seeded.revision.id }), c.previewDossier.hints({ revisionId: seeded.revision.id }),
+      c.previewDossier.run({ target: { kind: "REVISION", revisionId: seeded.revision.id }, context: { scope: FULL, sampleValues: {} } }),
+    ];
+    for (const p of calls) {
+      const e = await trpcErr(p);
+      expect(e?.code).toBe("PRECONDITION_FAILED");
+      expect(e?.message).toMatch(/MODULE_DISABLED/);
+    }
+    expect(repo.writes + gov.writes).toBe(before);
+    const caps = await c.getCapabilities();
+    expect(caps).toMatchObject({ enabled: false, flag: "FF_INSTITUTIONAL_TEMPLATES_V1" });
+  });
+
+  it("ports não configurados ⇒ PORTS_NOT_CONFIGURED (fail-closed) e a capacidade não habilita nada", async () => {
+    resetTemplateWorkflowPorts();
+    const c = as("owner");
+    expect((await trpcErr(c.catalog.list({})))?.message).toMatch(/PORTS_NOT_CONFIGURED/);
+    expect(await c.getCapabilities()).toMatchObject({ enabled: false, portsConfigured: false });
+  });
+});
+
+describe("capacidades expostas à UX", () => {
+  it("presets (BLL primeiro), dimensões de escopo, dimensões persistidas, 11 verificações de prontidão e pisos novos", async () => {
+    const caps = await as("viewer").getCapabilities();
+    expect(caps.enabled).toBe(true);
+    expect(caps.registrationPresets[0]).toMatchObject({ templateKey: "EDITAL_PREGAO_ELETRONICO_BLL", slug: "edital-pregao-eletronico-bll", displayName: "Edital — Pregão Eletrônico — BLL" });
+    expect(caps.scopeDimensions.map((d) => d.dimension)).toEqual(["modality", "form", "platform", "regime", "criterion"]);
+    expect(caps.persistedScopeDimensions).toEqual(["modality", "form", "platform", "regime", "criterion"]);
+    expect(caps.readinessChecks).toHaveLength(11);
+    expect(caps.roleFloors).toMatchObject({ register: "operator", evidence: "manager" });
+  });
+});
+
+describe("RBAC das novas ações", () => {
+  it("viewer: lê catálogo, governança, prontidão e dossiê; NÃO registra nem registra evidência", async () => {
+    const seeded = await as("operator").registration.register(registerInput());
+    const v = as("viewer");
+    expect((await v.catalog.list({})).map((r) => r.slug)).toEqual(["edital-pregao-eletronico-bll"]);
+    expect((await v.governance.get({ revisionId: seeded.revision.id })).provenance?.templateKey).toBe("EDITAL_PREGAO_ELETRONICO_BLL");
+    expect((await v.readiness.evaluate({ revisionId: seeded.revision.id })).matrix.checks).toHaveLength(11);
+    expect((await v.previewDossier.run({ target: { kind: "REVISION", revisionId: seeded.revision.id }, context: { scope: FULL, sampleValues: {} } })).status).toMatch(/COMPOSED|COMPOSE_ERROR/);
+    const before = repo.writes + gov.writes;
+    expect((await trpcErr(v.registration.register(registerInput({ target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: "x1" }, idempotencyKey: k("v")}))))?.code).toBe("FORBIDDEN");
+    expect((await trpcErr(v.governance.recordLegalEvidence({ revisionId: seeded.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: k("v2"), decision: decisionInput(), evidence: { sourceLogicalVersion: "v", sourceSha256: sha } })))?.code).toBe("FORBIDDEN");
+    expect(repo.writes + gov.writes).toBe(before);
+  });
+
+  it("operator registra (DRAFT) mas NÃO registra evidência jurídica; manager registra; ambos só com confirmação explícita", async () => {
+    const seeded = await as("operator").registration.register(registerInput());
+    const ev = (confirm = true, key = k("ev")) => ({ revisionId: seeded.revision.id, expectedVersion: 0, confirm, idempotencyKey: key, decision: decisionInput(), evidence: { sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: sha } });
+    expect((await trpcErr(as("operator").governance.recordLegalEvidence(ev())))?.code).toBe("FORBIDDEN");
+    expect((await trpcErr(as("manager").governance.recordLegalEvidence(ev(false))))?.message).toMatch(/CONFIRMATION_REQUIRED/);
+    const out = await as("manager").governance.recordLegalEvidence(ev());
+    expect(out.evidence).toMatchObject({ version: 1, parecerNumber: null, protocol: null, procurador: null });
+    expect((await as("viewer").governance.get({ revisionId: seeded.revision.id })).legalEvidence?.version).toBe(1);
+  });
+});
+
+describe("registro pelo router — nasce DRAFT; tenant nunca vem do cliente", () => {
+  it("revisão DRAFT + procedência; escopo incompleto ⇒ BAD_REQUEST sem escrita; ator/campos estritos", async () => {
+    const o = as("operator");
+    const out = await o.registration.register(registerInput());
+    expect(out.revision.status).toBe("DRAFT");
+    expect(out.provenance.status).toBe("RECORDED");
+    const before = repo.writes + gov.writes;
+    const cast = (v: unknown) => v as never;
+    expect((await trpcErr(o.registration.register(registerInput({ declaredScope: { modality: "PREGAO" }, target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: "y1" }, idempotencyKey: k("y")}))))?.code).toBe("BAD_REQUEST");
+    expect((await trpcErr(o.registration.register(cast(registerInput({ organizationId: 999, idempotencyKey: k("z") })))))?.code).toBe("BAD_REQUEST");
+    expect((await trpcErr(o.registration.register(cast(registerInput({ sourceSha256: "nope", idempotencyKey: k("w") })))))?.code).toBe("BAD_REQUEST");
+    expect((await trpcErr(as("manager").governance.recordLegalEvidence(cast({ revisionId: out.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: k("q"), decision: decisionInput(), evidence: { sourceLogicalVersion: "v", sourceSha256: sha }, organizationId: 5 }))))?.code).toBe("BAD_REQUEST");
+    expect(repo.writes + gov.writes).toBe(before);
+  });
+
+  it("cross-tenant: o tenant B não vê catálogo, governança, prontidão nem dossiê do A (NOT_FOUND idêntico ao inexistente)", async () => {
+    const seeded = await as("operator").registration.register(registerInput());
+    const b = as("owner", 2);
+    expect(await b.catalog.list({})).toEqual([]);
+    const ghost = "tr_inexistente";
+    const pairs: Array<[string, (id: string) => Promise<unknown>]> = [
+      ["governance.get", (id) => b.governance.get({ revisionId: id })],
+      ["readiness.evaluate", (id) => b.readiness.evaluate({ revisionId: id })],
+      ["previewDossier.run", (id) => b.previewDossier.run({ target: { kind: "REVISION", revisionId: id }, context: { scope: FULL, sampleValues: {} } })],
+      ["previewDossier.hints", (id) => b.previewDossier.hints({ revisionId: id })],
+    ];
+    for (const [label, call] of pairs) {
+      const foreign = await trpcErr(call(seeded.revision.id));
+      const missing = await trpcErr(call(ghost));
+      expect(foreign?.code, label).toBe("NOT_FOUND");
+      expect(foreign?.message, label).toBe(missing?.message);   // sem oráculo de existência entre tenants
+    }
+  });
+});
+
+describe("binding de escopo explícito e publicação com rastro de prontidão", () => {
+  async function publishedModel() {
+    const o = as("operator");
+    const reg = await o.registration.register(registerInput());
+    await as("manager").revisions.approve(life(reg.revision.id, "DRAFT"));
+    return { reg };
+  }
+
+  it("Edital: escopo incompleto ou dimensão sem backing ⇒ BAD_REQUEST; escopo completo ⇒ binding na revisão exata", async () => {
+    const { reg } = await publishedModel();
+    const pub = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED"));
+    expect(pub.revision.status).toBe("PUBLISHED");
+    const input = (scope: Record<string, string>) => ({ documentKind: "edital" as const, scope, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, effectiveFrom: "2026-10-01T00:00:00.000Z", confirm: true });
+    expect((await trpcErr(as("manager").bindings.set(input({ modality: "PREGAO" }))))?.message).toMatch(/SCOPE_INVALID/);
+    const b = await as("manager").bindings.set(input(FULL));
+    expect(b).toMatchObject({ pinnedRevisionId: reg.revision.id, scope: FULL });
+    const res = await as("viewer").bindings.resolve({ documentKind: "edital", scope: FULL, asOf: "2026-10-07T00:00:00.000Z" });
+    expect(res).toMatchObject({ status: "RESOLVED", revisionId: reg.revision.id });
+    expect((await as("viewer").bindings.resolve({ documentKind: "edital", scope: { ...FULL, form: "PRESENCIAL", platform: "BLL" }, asOf: "2026-10-07T00:00:00.000Z" })).status).toBe("NOT_BOUND");
+  });
+
+  it("publish aceita o rastro da matriz (hash + bloqueios conhecidos) e o grava na evidência da decisão; id de verificação inválido ⇒ BAD_REQUEST", async () => {
+    const { reg } = await publishedModel();
+    const matrix = (await as("viewer").readiness.evaluate({ revisionId: reg.revision.id, inventory: buildPilotInventory(ast) })).matrix;
+    expect((await trpcErr(as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: ["NAO_EXISTE"] } }))))?.code).toBe("BAD_REQUEST");
+    const out = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { readiness: { matrixHash: matrix.matrixHash, acceptedBlockedChecks: ["LEGAL_APPROVAL_EVIDENCE"] } }));
+    expect(out.decision.evidence).toEqual([`readiness.matrixHash=${matrix.matrixHash}`, "readiness.acceptedBlockers=LEGAL_APPROVAL_EVIDENCE"]);
+  });
+
+  it("a matriz via router espelha o domínio: evidência ausente ⇒ BLOCKED; com evidência + inventário ⇒ READY", async () => {
+    const { reg } = await publishedModel();
+    const v = as("viewer");
+    const before = (await v.readiness.evaluate({ revisionId: reg.revision.id, inventory: buildPilotInventory(ast) })).matrix;
+    expect(before.checks.find((c) => c.id === "LEGAL_APPROVAL_EVIDENCE")!.status).toBe("BLOCKED");
+    await as("manager").governance.recordLegalEvidence({ revisionId: reg.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: k("ev"), decision: decisionInput(), evidence: { sourceLogicalVersion: PILOT_SOURCE_LOGICAL_VERSION, sourceSha256: sha } });
+    const after = (await v.readiness.evaluate({ revisionId: reg.revision.id, inventory: buildPilotInventory(ast) })).matrix;
+    expect(after.overall).toBe("READY");
+  });
+});
+
+describe("catálogo e dossiê pelo router", () => {
+  it("catalog.list aceita os 5 filtros e valida o domínio dos valores (status/tipo fora da lista ⇒ BAD_REQUEST)", async () => {
+    await as("operator").registration.register(registerInput());
+    const v = as("viewer");
+    expect((await v.catalog.list({ documentKind: "edital", modality: "PREGAO", form: "ELETRONICA", platform: "BLL", status: "DRAFT" })).map((r) => r.slug)).toEqual(["edital-pregao-eletronico-bll"]);
+    expect(await v.catalog.list({ platform: "OUTRA" })).toEqual([]);
+    expect((await trpcErr(v.catalog.list({ status: "ATIVO" } as never)))?.code).toBe("BAD_REQUEST");
+    expect((await trpcErr(v.catalog.list({ documentKind: "nada" } as never)))?.code).toBe("BAD_REQUEST");
+  });
+
+  it("dossiê por revisão exata: sem escrita, sem IA; dicas de variáveis disponíveis para o contexto de teste", async () => {
+    const reg = await as("operator").registration.register(registerInput());
+    const before = repo.writes + gov.writes;
+    const v = as("viewer");
+    const hints = await v.previewDossier.hints({ revisionId: reg.revision.id });
+    expect(hints.variables.length).toBeGreaterThan(100);
+    const values = Object.fromEntries(hints.variables.filter((h) => h.name.startsWith("ent.")).map((h) => [h.name, "SIM"]));
+    const d = await v.previewDossier.run({ target: { kind: "REVISION", revisionId: reg.revision.id }, context: { scope: FULL, sampleValues: values } });
+    expect(d.status).toBe("COMPOSED");
+    expect(d.sideEffects).toMatchObject({ persisted: false, aiCalled: false, issued: false, published: false });
+    expect(d.conditionDecisions).toHaveLength(48);
+    expect(repo.writes + gov.writes).toBe(before);
+  });
+});

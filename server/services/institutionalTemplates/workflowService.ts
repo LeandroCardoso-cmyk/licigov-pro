@@ -23,6 +23,8 @@ import {
   type TemplateIssue, type TemplateRevision, type VariableCatalog, validateTemplateRevision,
 } from "../../domain/institutionalTemplates";
 import { serviceLogger } from "../observabilityService";
+import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplates/governance/capabilities";
+import { scopeHeadline, unsupportedScopeDimensions, validateExplicitScope } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { assertHumanActor } from "./authority";
 import { summarizeAst, type AstSummary } from "./astSummary";
 import { TemplateWorkflowError, type TemplateWorkflowIssue } from "./errors";
@@ -227,7 +229,18 @@ export class InstitutionalTemplatesWorkflow {
   // ─── ciclo de vida: aprovar · publicar · depreciar ─────────────────────────
 
   approve(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "APPROVED", input); }
-  publish(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "PUBLISHED", input); }
+  /**
+   * Publicar (decisão humana DISTINTA da aprovação). `readiness` (opcional) registra no ledger o hash da matriz de prontidão que
+   * a pessoa viu e os bloqueios que ela aceitou publicar mesmo assim — rastreabilidade, não validação: o sistema não bloqueia nem
+   * libera a publicação pela matriz (a decisão é humana; endurecer isso é decisão do owner).
+   */
+  publish(ctx: WorkflowContext, input: LifecycleInput & { readonly readiness?: PublishReadinessTrace }) {
+    if (input.readiness) {
+      const lines = [`readiness.matrixHash=${input.readiness.matrixHash}`, ...(input.readiness.acceptedBlockedChecks.length ? [`readiness.acceptedBlockers=${[...input.readiness.acceptedBlockedChecks].sort().join(",")}`] : [])];
+      return this.transition(ctx, "PUBLISHED", { ...input, decision: { ...input.decision, evidence: [...(input.decision.evidence ?? []), ...lines] } });
+    }
+    return this.transition(ctx, "PUBLISHED", input);
+  }
   deprecate(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "DEPRECATED", input); }
 
   private async transition(ctx: WorkflowContext, to: "APPROVED" | "PUBLISHED" | "DEPRECATED", input: LifecycleInput) {
@@ -336,6 +349,16 @@ export class InstitutionalTemplatesWorkflow {
     if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para vincular (nada foi alterado)");
     if (!TEMPLATE_DOCUMENT_KINDS.includes(input.documentKind)) throw new TemplateWorkflowError("VALIDATION_FAILED", "tipo documental fora do contrato");
     if (!input.pinnedRevisionId) throw new TemplateWorkflowError("BINDING_NOT_PINNED", "o binding exige o id exato da revisão; 'última publicada' não é permitido");
+    // Aplicabilidade EXPLÍCITA (Edital: modalidade, forma, regime, critério e — se eletrônica — plataforma). Nada é inferido.
+    const scopeIssues = validateExplicitScope(input.documentKind, input.scope);
+    if (scopeIssues.length) {
+      throw new TemplateWorkflowError("SCOPE_INVALID", "aplicabilidade do vínculo incompleta ou inválida (nada foi alterado)", scopeIssues.map((i) => ({ code: i.code, path: i.dimension, message: i.message })));
+    }
+    // Dimensão que a persistência não suporta ⇒ recusa fechada (descartar em silêncio faria escopos distintos colidirem).
+    const unsupported = unsupportedScopeDimensions(input.scope, (this.ports.capabilities ?? BASELINE_CAPABILITIES_D4BB209).scopeDimensions);
+    if (unsupported.length) {
+      throw new TemplateWorkflowError("SCOPE_DIMENSION_UNSUPPORTED", `a persistência atual não suporta as dimensões de escopo: ${unsupported.join(", ")} (nada foi alterado)`, unsupported.map((d) => ({ code: "SCOPE_DIMENSION_UNSUPPORTED", path: d, message: "dimensão ainda não persistida" })));
+    }
     const identity = await this.requireIdentity(ctx, input.identityId);
     if (identity.documentKind !== input.documentKind) throw new TemplateWorkflowError("VALIDATION_FAILED", "o tipo documental do binding difere do tipo do modelo");
     const revision = await this.ports.repository.getRevision(ctx.organizationId, input.pinnedRevisionId);
@@ -362,7 +385,7 @@ export class InstitutionalTemplatesWorkflow {
     }
     // Substituição ATÔMICA: desativar o anterior e criar o novo acontecem na mesma transação (nunca zero nem dois ativos).
     await this.ports.repository.insertBinding(binding, pctx(ctx), input.replacesBindingId);
-    log.info("template_binding_set", { organizationId: ctx.organizationId, bindingId: binding.id, revisionId: revision.id, replaced: input.replacesBindingId ?? null, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+    log.info("template_binding_set", { organizationId: ctx.organizationId, bindingId: binding.id, scope: scopeHeadline(input.scope), revisionId: revision.id, replaced: input.replacesBindingId ?? null, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return binding;
   }
 
@@ -466,6 +489,13 @@ export class InstitutionalTemplatesWorkflow {
     for (const id of ids) all.push(...(await this.ports.repository.listRevisions(ctx.organizationId, id)));
     return all;
   }
+}
+
+export interface PublishReadinessTrace {
+  /** `ReadinessMatrix.matrixHash` que a pessoa viu na tela. */
+  readonly matrixHash: string;
+  /** Ids das verificações BLOCKED que a pessoa aceitou conscientemente (vazio = matriz sem bloqueios). */
+  readonly acceptedBlockedChecks: readonly string[];
 }
 
 export interface LifecycleInput {

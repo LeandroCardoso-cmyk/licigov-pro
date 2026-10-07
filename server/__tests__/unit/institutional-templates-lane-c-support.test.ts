@@ -80,6 +80,8 @@ describe("matriz de papéis e autoridade humana", () => {
       read: "viewer", preview: "viewer", draft: "operator", import: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager",
       // integração A+B+C: revisão humana do documento composto e geração por modelo (piso de edição, não competência jurídica)
       review: "operator", generate: "operator",
+      // piloto Edital: registrar/importar o modelo (operator) e registrar a evidência de aprovação jurídica externa (manager)
+      register: "operator", evidence: "manager",
     });
     expect(Object.isFrozen(TEMPLATE_ACTION_MIN_ROLE)).toBe(true);
   });

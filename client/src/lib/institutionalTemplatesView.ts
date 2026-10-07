@@ -98,10 +98,13 @@ export function makeIdempotencyKey(random: () => string = () => globalThis.crypt
 
 // ─── binding / resolução ────────────────────────────────────────────────────────
 
-export interface ScopeLike { modality?: string; regime?: string; criterion?: string }
+export interface ScopeLike { modality?: string; form?: string; platform?: string; regime?: string; criterion?: string }
 export function scopeLabel(scope: ScopeLike): string {
-  const parts = [scope.modality && `modalidade: ${scope.modality}`, scope.regime && `regime: ${scope.regime}`, scope.criterion && `critério: ${scope.criterion}`].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "qualquer escopo (sem restrição)";
+  const parts = [
+    scope.modality && `modalidade: ${scope.modality}`, scope.form && `forma: ${scope.form}`, scope.platform && `plataforma: ${scope.platform}`,
+    scope.regime && `regime: ${scope.regime}`, scope.criterion && `critério: ${scope.criterion}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "escopo não declarado (só casa com pedido que também não declara escopo)";
 }
 
 export type ResolutionView =
@@ -196,4 +199,168 @@ export function sampleValuesFromText(text: string): { values: Record<string, str
     values[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
   });
   return { values, errors };
+}
+
+
+// ─── aplicabilidade explícita (piloto Edital multi-modelo) ──────────────────────────────
+
+export const SCOPE_DIMENSION_ORDER = ["modality", "form", "platform", "regime", "criterion"] as const;
+export type ScopeDimensionKey = (typeof SCOPE_DIMENSION_ORDER)[number];
+export const SCOPE_DIMENSION_COPY: Record<ScopeDimensionKey, string> = {
+  modality: "Modalidade", form: "Forma", platform: "Plataforma", regime: "Regime de contratação", criterion: "Critério de julgamento",
+};
+export type ScopeFormState = Record<ScopeDimensionKey, string>;
+export const emptyScopeForm = (): ScopeFormState => ({ modality: "", form: "", platform: "", regime: "", criterion: "" });
+
+/** Escopo do formulário → objeto da API (dimensão vazia = não declarada; nada é preenchido por inferência). */
+export function scopeFromForm(f: ScopeFormState): Partial<Record<ScopeDimensionKey, string>> {
+  const out: Partial<Record<ScopeDimensionKey, string>> = {};
+  for (const k of SCOPE_DIMENSION_ORDER) if (f[k].trim()) out[k] = f[k].trim();
+  return out;
+}
+
+const norm = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+/** Espelha (só para habilitar o botão e explicar) a regra do servidor: Edital exige modalidade, forma, regime e critério; forma eletrônica exige plataforma. */
+export function scopeFormProblems(documentKind: string, f: ScopeFormState): Partial<Record<ScopeDimensionKey, string>> {
+  const out: Partial<Record<ScopeDimensionKey, string>> = {};
+  const v = scopeFromForm(f);
+  for (const k of SCOPE_DIMENSION_ORDER) if (v[k] && !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(v[k]!)) out[k] = "Use um token estável (letras, números, _ - .; sem espaços).";
+  if (documentKind === "edital") {
+    for (const k of ["modality", "form", "regime", "criterion"] as const) if (!v[k]) out[k] = `${SCOPE_DIMENSION_COPY[k]}: declare explicitamente (sem seleção automática).`;
+    if (v.form && /^ELETRONIC[AO]$/.test(norm(v.form)) && !v.platform) out.platform = "Forma eletrônica exige a plataforma do certame.";
+  }
+  return out;
+}
+
+export type DisplayNameSource = "IDENTITY" | "REGISTRATION_PROVENANCE" | "SLUG";
+export const DISPLAY_NAME_SOURCE_LABEL: Record<DisplayNameSource, string> = {
+  IDENTITY: "nome do modelo", REGISTRATION_PROVENANCE: "nome do registro de procedência", SLUG: "slug (sem nome de exibição registrado)",
+};
+export type BindingHealth = "OK" | "REVISION_NOT_PUBLISHED" | "REVISION_MISSING" | "SCOPE_CONFLICT";
+export const BINDING_HEALTH_LABEL: Record<BindingHealth, { label: string; tone: StatusTone }> = {
+  OK: { label: "Vínculo íntegro (revisão exata publicada)", tone: "success" },
+  REVISION_NOT_PUBLISHED: { label: "Revisão fixada não está publicada — geração bloqueada", tone: "danger" },
+  REVISION_MISSING: { label: "Revisão fixada inexistente — geração bloqueada", tone: "danger" },
+  SCOPE_CONFLICT: { label: "Conflito: mais de um vínculo ativo para o mesmo escopo — falha fechada", tone: "danger" },
+};
+export const BINDING_STATUS_LABEL: Record<"BOUND" | "NOT_BOUND" | "CONFLICT", { label: string; tone: StatusTone }> = {
+  BOUND: { label: "Vinculado", tone: "success" }, NOT_BOUND: { label: "Sem vínculo ativo", tone: "neutral" }, CONFLICT: { label: "Conflito de vínculo", tone: "danger" },
+};
+
+export interface CatalogRowView {
+  readonly identityId: string; readonly documentKind: string; readonly slug: string; readonly displayName: string; readonly displayNameSource: DisplayNameSource;
+  readonly templateKey: string | null; readonly declaredScope: ScopeLike; readonly headline: string; readonly bindingStatus: "BOUND" | "NOT_BOUND" | "CONFLICT";
+  readonly revisions: readonly { id: string; revision: number; status: RevisionStatus; semanticHash: string }[];
+  readonly bindings: readonly { bindingId: string; active: boolean; scope: ScopeLike; scopeHeadline: string; pinnedRevisionId: string | null; pinnedRevision: number | null; pinnedRevisionStatus: RevisionStatus | null; pinnedSemanticHash: string | null; health: BindingHealth; effectiveFrom: string }[];
+}
+export interface CatalogFilterState { documentKind: string; modality: string; form: string; platform: string; status: string }
+export const EMPTY_CATALOG_FILTER: CatalogFilterState = { documentKind: "", modality: "", form: "", platform: "", status: "" };
+
+/** Opções dos filtros = o que existe nos modelos listados (mais as sugestões do vocabulário), sem inventar valores. */
+export function catalogFilterOptions(rows: readonly CatalogRowView[], suggestions?: Partial<Record<"modality" | "form" | "platform", Record<string, string>>>) {
+  const collect = (d: "modality" | "form" | "platform"): string[] => {
+    const set = new Set<string>(Object.keys(suggestions?.[d] ?? {}));
+    for (const r of rows) { if (r.declaredScope[d]) set.add(r.declaredScope[d]!); r.bindings.forEach((b) => { if (b.scope[d]) set.add(b.scope[d]!); }); }
+    return [...set].sort();
+  };
+  return { modality: collect("modality"), form: collect("form"), platform: collect("platform") };
+}
+
+/** Rótulo curto da revisão exata mostrada no catálogo: "PUBLISHED revisão 2 (ab12cd34)". */
+export function pinnedRevisionLabel(b: CatalogRowView["bindings"][number]): string {
+  return b.pinnedRevision == null ? "revisão fixada indisponível" : `${b.pinnedRevisionStatus} revisão ${b.pinnedRevision} (${(b.pinnedSemanticHash ?? "").slice(0, 8)})`;
+}
+
+// ─── prontidão antes de publicar ───────────────────────────────────────────────────────
+
+export type ReadinessStatusKey = "PASS" | "BLOCKED" | "NOT_APPLICABLE";
+export const READINESS_STATUS_LABEL: Record<ReadinessStatusKey, { label: string; tone: StatusTone }> = {
+  PASS: { label: "PASS", tone: "success" }, BLOCKED: { label: "BLOCKED", tone: "danger" }, NOT_APPLICABLE: { label: "NOT_APPLICABLE", tone: "neutral" },
+};
+export interface ReadinessMatrixView {
+  readonly revisionId: string; readonly revisionSemanticHash: string; readonly overall: "READY" | "BLOCKED"; readonly matrixHash: string;
+  readonly summary: { pass: number; blocked: number; notApplicable: number }; readonly notices: readonly string[];
+  readonly checks: readonly { id: string; label: string; status: ReadinessStatusKey; detail: string; findings: readonly string[]; findingsTotal: number }[];
+}
+export function readinessHeadline(m: ReadinessMatrixView): string {
+  return m.overall === "READY"
+    ? `Sem bloqueios (${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE). A publicação continua sendo uma decisão humana.`
+    : `${m.summary.blocked} verificação(ões) BLOCKED · ${m.summary.pass} PASS · ${m.summary.notApplicable} NOT_APPLICABLE. Os bloqueios não são ocultados.`;
+}
+
+// ─── evidência de aprovação jurídica ───────────────────────────────────────────────────
+
+export interface LegalEvidenceFormState {
+  sourceLogicalVersion: string; sourceSha256: string; parecerNumber: string; parecerDate: string; protocol: string; procurador: string; refs: string;
+  decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
+}
+export const emptyLegalEvidenceForm = (today: string): LegalEvidenceFormState => ({
+  sourceLogicalVersion: "", sourceSha256: "", parecerNumber: "", parecerDate: "", protocol: "", procurador: "", refs: "",
+  decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false,
+});
+export function validateLegalEvidenceForm(f: LegalEvidenceFormState): { valid: boolean; errors: Partial<Record<keyof LegalEvidenceFormState, string>> } {
+  const errors: Partial<Record<keyof LegalEvidenceFormState, string>> = {};
+  if (!f.sourceLogicalVersion.trim()) errors.sourceLogicalVersion = "Informe a versão lógica do conteúdo-fonte aprovado (ex.: 1.0.1-draft).";
+  if (!/^[0-9a-f]{64}$/.test(f.sourceSha256.trim())) errors.sourceSha256 = "Informe o SHA-256 (64 caracteres hexadecimais minúsculos) do conteúdo-fonte.";
+  if (f.parecerDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(f.parecerDate.trim())) errors.parecerDate = "Data do parecer: AAAA-MM-DD (ou deixe em branco).";
+  if (!f.decidedByName.trim()) errors.decidedByName = "Informe a autoridade/órgão que aprovou (como declarado por você).";
+  if (!f.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.decidedAt) || Number.isNaN(Date.parse(`${f.decidedAt}T00:00:00Z`))) errors.decidedAt = "Informe a data do ato (AAAA-MM-DD).";
+  if (!f.basisReference.trim()) errors.basisReference = "Informe a base/referência da aprovação.";
+  if (f.reason.trim().length < 10) errors.reason = "Informe a justificativa (mínimo de 10 caracteres).";
+  if (!f.confirmed) errors.confirmed = "É necessária a confirmação humana explícita.";
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+/** Só envia o que foi informado: campos opcionais vazios NUNCA viram texto inventado. */
+export function legalEvidencePayload(f: LegalEvidenceFormState) {
+  const opt = (v: string): string | undefined => (v.trim() ? v.trim() : undefined);
+  const refs = f.refs.split("\n").map((l) => l.trim()).filter(Boolean);
+  return {
+    sourceLogicalVersion: f.sourceLogicalVersion.trim(), sourceSha256: f.sourceSha256.trim(),
+    ...(opt(f.parecerNumber) ? { parecerNumber: opt(f.parecerNumber) } : {}), ...(opt(f.parecerDate) ? { parecerDate: opt(f.parecerDate) } : {}),
+    ...(opt(f.protocol) ? { protocol: opt(f.protocol) } : {}), ...(opt(f.procurador) ? { procurador: opt(f.procurador) } : {}),
+    ...(refs.length ? { evidenceRefs: refs } : {}),
+  };
+}
+
+// ─── registro / importação de modelo (nasce DRAFT) ─────────────────────────────────────
+
+export interface RegistrationPresetView { presetId: string; templateKey: string; documentKind: string; slug: string; displayName: string; scope: ScopeLike }
+export interface RegisterFormState {
+  targetKind: "NEW_IDENTITY" | "EXISTING_IDENTITY";
+  existingIdentityId: string;
+  documentKind: string; slug: string; templateKey: string; displayName: string; scope: ScopeFormState;
+  sourceKind: "AST" | "MARKDOWN" | "DOCX"; sourceText: string;
+  sourceLogicalVersion: string; sourceSha256: string; inventoryText: string;
+  decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
+}
+
+export const emptyRegisterForm = (today: string, preset?: RegistrationPresetView): RegisterFormState => ({
+  targetKind: "NEW_IDENTITY", existingIdentityId: "",
+  documentKind: preset?.documentKind ?? "edital", slug: preset?.slug ?? "", templateKey: preset?.templateKey ?? "", displayName: preset?.displayName ?? "",
+  scope: { ...emptyScopeForm(), ...(preset?.scope ?? {}) } as ScopeFormState,
+  sourceKind: "AST", sourceText: "", sourceLogicalVersion: "", sourceSha256: "", inventoryText: "",
+  decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false,
+});
+
+export function validateRegisterForm(f: RegisterFormState, hasDocx: boolean): { valid: boolean; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  if (f.targetKind === "NEW_IDENTITY") {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(f.slug)) errors.slug = "Slug: minúsculas, números e hífens.";
+  } else if (!f.existingIdentityId.trim()) errors.existingIdentityId = "Informe o modelo existente.";
+  if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(f.templateKey)) errors.templateKey = "templateKey: MAIÚSCULAS, dígitos e _ (ex.: EDITAL_PREGAO_ELETRONICO_BLL).";
+  if (!f.displayName.trim()) errors.displayName = "Informe o nome de exibição.";
+  Object.assign(errors, Object.fromEntries(Object.entries(scopeFormProblems(f.documentKind, f.scope)).map(([k, v]) => [`scope.${k}`, v as string])));
+  if (f.sourceKind === "DOCX" ? !hasDocx : !f.sourceText.trim()) errors.source = "Informe o conteúdo-fonte.";
+  if (f.sourceKind === "AST") { try { JSON.parse(f.sourceText); } catch { if (f.sourceText.trim()) errors.source = "AST: JSON inválido."; } }
+  if (!f.sourceLogicalVersion.trim()) errors.sourceLogicalVersion = "Informe a versão lógica da fonte.";
+  if (!/^[0-9a-f]{64}$/.test(f.sourceSha256.trim())) errors.sourceSha256 = "SHA-256 da fonte: 64 hexadecimais minúsculos.";
+  if (f.inventoryText.trim()) { try { JSON.parse(f.inventoryText); } catch { errors.inventoryText = "Inventário: JSON inválido."; } }
+  if (!f.decidedByName.trim()) errors.decidedByName = "Informe quem registra (nome).";
+  if (!f.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.decidedAt)) errors.decidedAt = "Data AAAA-MM-DD.";
+  if (!f.basisReference.trim()) errors.basisReference = "Informe a referência da fonte/ato.";
+  if (f.reason.trim().length < 10) errors.reason = "Justificativa (mín. 10 caracteres).";
+  if (!f.confirmed) errors.confirmed = "É necessária a confirmação humana explícita.";
+  return { valid: Object.keys(errors).length === 0, errors };
 }
