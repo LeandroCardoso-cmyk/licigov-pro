@@ -6584,6 +6584,8 @@ export const institutionalTemplateIdentitiesTable = mysqlTable("institutional_te
   organizationId:  int("organization_id").notNull(),
   documentKind:    varchar("document_kind", { length: 16 }).notNull(),
   slug:            varchar("slug", { length: 120 }).notNull(),
+  /** 0317 — rótulo de APRESENTAÇÃO (metadado puro; '' = ausente ⇒ a UX usa o slug). Não é regra nem aplicabilidade. */
+  displayName:     varchar("display_name", { length: 160 }).notNull().default(""),
   /** ISO-8601 informado pelo domínio (tempo é input explícito); `recorded_at` é só metadado operacional. */
   createdAtIso:    varchar("created_at_iso", { length: 40 }).notNull(),
   createdByUserId: int("created_by_user_id").notNull(),
@@ -6627,6 +6629,9 @@ export const institutionalTemplateBindingsTable = mysqlTable("institutional_temp
   documentKind:     varchar("document_kind", { length: 16 }).notNull(),
   /** Escopo exato; '' = não especificado (o repositório recusa '' como valor de escopo, mapeamento bijetivo). */
   scopeModality:    varchar("scope_modality", { length: 64 }).notNull().default(""),
+  /** 0317 — forma (slug) e plataforma (slug extensível): parte da chave de unicidade do binding ativo. */
+  scopeForm:        varchar("scope_form", { length: 64 }).notNull().default(""),
+  scopePlatform:    varchar("scope_platform", { length: 64 }).notNull().default(""),
   scopeRegime:      varchar("scope_regime", { length: 64 }).notNull().default(""),
   scopeCriterion:   varchar("scope_criterion", { length: 64 }).notNull().default(""),
   identityId:       varchar("identity_id", { length: 24 }).notNull(),
@@ -6634,7 +6639,7 @@ export const institutionalTemplateBindingsTable = mysqlTable("institutional_temp
   active:           tinyint("active").notNull().default(1),
   effectiveFromIso: varchar("effective_from_iso", { length: 40 }).notNull(),
   /** No máximo UM binding ATIVO por (organização, tipo, escopo): ambiguidade estrutural impossível. */
-  activeScopeKey:   varchar("active_scope_key", { length: 224 }).generatedAlwaysAs(sql`if((\`active\` = 1),concat_ws('|',\`document_kind\`,\`scope_modality\`,\`scope_regime\`,\`scope_criterion\`),NULL)`, { mode: "stored" }),
+  activeScopeKey:   varchar("active_scope_key", { length: 352 }).generatedAlwaysAs(sql`if((\`active\` = 1),concat_ws('|',\`document_kind\`,\`scope_modality\`,\`scope_form\`,\`scope_platform\`,\`scope_regime\`,\`scope_criterion\`),NULL)`, { mode: "stored" }),
   recordedAt:       datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
 }, (table) => [
   unique("uq_itb_org_id").on(table.organizationId, table.id),

@@ -13,6 +13,7 @@ import type { AiNarrativeAcceptance, HumanEditLink } from "../../domain/institut
 import {
   ORG_A, ORG_B, canonicalSources, catalog, identity, narrative, publishedRevision, trPin,
 } from "../helpers/institutionalTemplatesFixture";
+import { identity2, publishedRevision2 } from "../helpers/institutionalTemplatesV2Fixture";
 
 // ─── Banco fake transacional ───────────────────────────────────────────────────────────────────────────────────────
 type Row = { table: string; row: any };
@@ -117,6 +118,7 @@ function makePorts(): TemplatePorts {
     canonical: {
       resolveSources: async (_org, _subject, keys) => Object.fromEntries(keys.filter((k) => state.sources[k]).map((k) => [k, state.sources[k]])),
       resolveOfficialDocuments: async () => state.docs,
+      pinOfficialDocuments: async () => state.docs,
       identityFingerprint: async () => state.fingerprint,
     },
     drafts: {
@@ -197,6 +199,20 @@ describe("Lane B — geração governada (fail-closed)", () => {
     state.sources = { ...canonicalSources(), TR: { organizationId: ORG_B, data: { object: "x" } } };
     expect((await err(generateTemplatedDocument(genParams(), makePorts())))?.message).toBe("TEMPLATE_COMPOSITION_FAILED: CROSS_TENANT_REFERENCE");
     expect(txAttempts).toBe(0);
+  });
+
+  it("revisão `tpl-ast/2` vinculada cujo catálogo v2 não é resolvível ⇒ TEMPLATE_COMPOSITION_FAILED (falha fechada, sem escrita; o caminho v2 positivo é provado em MySQL real)", async () => {
+    const id2 = { ...identity2, id: identity.id, organizationId: ORG_A };
+    const rev2 = publishedRevision2({ identity: id2 });
+    state.bindings = [binding({ pinnedRevisionId: rev2.id })];
+    const ports = makePorts();
+    const v2Ports: TemplatePorts = {
+      ...ports,
+      repository: { ...ports.repository, getRevision: async () => rev2, listRevisions: async () => [rev2] },
+    };
+    expect((await err(generateTemplatedDocument(genParams(), v2Ports)))?.message).toMatch(/^TEMPLATE_COMPOSITION_FAILED.*CATALOG_VERSION_MISMATCH/);
+    expect(txAttempts).toBe(0);
+    expect(generateOfficialDocument).not.toHaveBeenCalled();
   });
 
   it("tipo oficial incompatível ou ator ausente ⇒ BAD_REQUEST", async () => {

@@ -12,17 +12,22 @@
  *  - todo acesso é tenant-scoped pelo `organizationId` do contexto autenticado (nunca do cliente).
  */
 import {
-  AUTHORITY_NOT_VALIDATED, DECISION_MESSAGES, decisionRequestHash, planDecision, validateDecisionRequest,
+  AUTHORITY_NOT_VALIDATED, DECISION_MESSAGES, decisionRequestHash, normalizeDecisionRequest, planDecision, validateDecisionRequest,
   type DecisionRequest, type InstitutionalDecision,
 } from "../../domain/institutionalDecision";
 import {
   createDraftRevision, resolveTemplateBinding, REVISION_STATUSES, revisionSemanticHash, revisionUpdateIssues, sameScope,
-  TEMPLATE_DOCUMENT_KINDS, transitionRevision, validateTemplateAst, validateTemplateIdentity,
+  TEMPLATE_DOCUMENT_KINDS, transitionRevision, validateTemplateIdentity,
   type BindingRequest, type BindingResolution, type BindingScope, type ComposeOutcome, type OrgId, type RevisionSourceFormat,
   type RevisionStatus, type TemplateBinding, type TemplateDocumentKind, type TemplateIdentity,
-  type TemplateIssue, type TemplateRevision, type VariableCatalog, validateTemplateRevision,
+  type TemplateIssue, type TemplateRevision, validateTemplateRevision,
+  type AnyVariableCatalog, isAstV2, isCatalogV2, validateAnyTemplateAst,
 } from "../../domain/institutionalTemplates";
 import { serviceLogger } from "../observabilityService";
+import type { ReadinessMatrix } from "../../domain/institutionalTemplates/governance/readinessMatrix";
+import { witnessRefs, type ReadinessWitness } from "../../domain/institutionalTemplates/governance/readinessWitness";
+import { INTEGRATED_CAPABILITIES } from "../../domain/institutionalTemplates/governance/capabilities";
+import { scopeHeadline, unsupportedScopeDimensions, validateExplicitScope } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { assertHumanActor } from "./authority";
 import { summarizeAst, type AstSummary } from "./astSummary";
 import { TemplateWorkflowError, type TemplateWorkflowIssue } from "./errors";
@@ -33,6 +38,11 @@ import {
 } from "./ports";
 
 const log = serviceLogger("institutionalTemplatesWorkflow");
+
+/** Tipos documentais cuja PUBLICAÇÃO exige matriz de prontidão sem BLOCKED (piloto: Edital). Estender = decisão de produto. */
+export const READINESS_GATED_KINDS: readonly TemplateDocumentKind[] = Object.freeze(["edital"] as TemplateDocumentKind[]);
+/** Prefixo das linhas de evidência ACRESCENTADAS PELO SERVIDOR à decisão de publicação. */
+export const READINESS_EVIDENCE_PREFIX = "readiness.";
 
 const toIssues = (issues: readonly TemplateIssue[]): TemplateWorkflowIssue[] => issues.map((i) => ({ code: i.code, path: i.path, message: i.message }));
 
@@ -127,10 +137,27 @@ export class InstitutionalTemplatesWorkflow {
     return (await this.ports.repository.listRevisions(ctx.organizationId, identity.id)).map(summarizeRevision);
   }
 
-  validateAst(ctx: WorkflowContext, ast: unknown): { valid: boolean; issues: TemplateWorkflowIssue[]; summary: AstSummary | null; catalogVersion: string } {
+  /**
+   * Catálogo da AST: `tpl-ast/1` ⇒ catálogo v1 corrente (comportamento histórico); `tpl-ast/2` ⇒ catálogo v2 da MESMA versão
+   * informada (um por modelo). Sem versão para v2, ou versão que não seja v2 ⇒ falha (nunca coerção silenciosa).
+   */
+  private catalogForAst(ast: unknown, catalogVersion?: string): AnyVariableCatalog {
+    if (!isAstV2(ast)) {
+      if (catalogVersion !== undefined && catalogVersion !== this.ports.catalog.current().version) {
+        throw new TemplateWorkflowError("VALIDATION_FAILED", `tpl-ast/1 usa o catálogo ${this.ports.catalog.current().version}`);
+      }
+      return this.ports.catalog.current();
+    }
+    if (!catalogVersion) throw new TemplateWorkflowError("VALIDATION_FAILED", "tpl-ast/2 exige a versão do catálogo (catalogVersion) do modelo");
+    const c = this.ports.catalog.byVersion(catalogVersion);
+    if (!c || !isCatalogV2(c)) throw new TemplateWorkflowError("VALIDATION_FAILED", `catálogo ${catalogVersion} indisponível ou não é um catálogo tpl-catalog/2`);
+    return c;
+  }
+
+  validateAst(ctx: WorkflowContext, ast: unknown, catalogVersion?: string): { valid: boolean; issues: TemplateWorkflowIssue[]; summary: AstSummary | null; catalogVersion: string } {
     void ctx;
-    const catalog = this.ports.catalog.current();
-    const result = validateTemplateAst(ast, catalog);
+    const catalog = this.catalogForAst(ast, catalogVersion);
+    const result = validateAnyTemplateAst(ast, catalog);
     return result.ok
       ? { valid: true, issues: [], summary: summarizeAst(result.value), catalogVersion: catalog.version }
       : { valid: false, issues: toIssues(result.issues), summary: null, catalogVersion: catalog.version };
@@ -138,10 +165,11 @@ export class InstitutionalTemplatesWorkflow {
 
   // ─── identidade e revisões (DRAFT) ─────────────────────────────────────────
 
-  async createIdentity(ctx: WorkflowContext, input: { documentKind: TemplateDocumentKind; slug: string }): Promise<TemplateIdentity> {
+  async createIdentity(ctx: WorkflowContext, input: { documentKind: TemplateDocumentKind; slug: string; displayName?: string }): Promise<TemplateIdentity> {
     assertHumanActor(ctx.actor);
     const identity: TemplateIdentity = {
       id: this.ports.ids.newId("ti"), organizationId: ctx.organizationId, documentKind: input.documentKind, slug: input.slug,
+      ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       createdAt: this.ports.clock.now(), createdByUserId: ctx.actor.userId,
     };
     const valid = validateTemplateIdentity(identity);
@@ -164,21 +192,23 @@ export class InstitutionalTemplatesWorkflow {
    */
   async createDraft(
     ctx: WorkflowContext,
-    input: { identityId: string; ast?: unknown; fromRevisionId?: string; sourceFormat?: RevisionSourceFormat },
+    input: { identityId: string; ast?: unknown; fromRevisionId?: string; sourceFormat?: RevisionSourceFormat; catalogVersion?: string },
   ): Promise<TemplateRevision> {
     assertHumanActor(ctx.actor);
     const identity = await this.requireIdentity(ctx, input.identityId);
-    const catalog = this.ports.catalog.current();
     let ast: unknown = input.ast;
     let sourceFormat: RevisionSourceFormat = input.sourceFormat ?? "NATIVE";
+    let catalogVersion = input.catalogVersion;
     if (input.fromRevisionId !== undefined) {
       const source = await this.ports.repository.getRevision(ctx.organizationId, input.fromRevisionId);
       if (!source || source.identityId !== identity.id) throw notFound("revisão de origem");
       ast = source.ast;
       sourceFormat = "NATIVE";
+      if (isAstV2(source.ast)) catalogVersion = source.variableCatalogVersion;
     }
     if (ast === undefined) throw new TemplateWorkflowError("VALIDATION_FAILED", "informe o conteúdo (AST) ou a revisão de origem");
-    const astCheck = validateTemplateAst(ast, catalog);
+    const catalog = this.catalogForAst(ast, catalogVersion);
+    const astCheck = validateAnyTemplateAst(ast, catalog);
     if (!astCheck.ok) throw validationFailed("a estrutura do modelo é inválida", astCheck.issues);
 
     const existing = await this.ports.repository.listRevisions(ctx.organizationId, identity.id);
@@ -207,8 +237,9 @@ export class InstitutionalTemplatesWorkflow {
     if (before.semanticHash !== input.expectedSemanticHash) {
       throw new TemplateWorkflowError("STALE_STATE", "o rascunho foi alterado por outra pessoa desde que você o abriu; recarregue antes de salvar");
     }
-    const catalog = this.ports.catalog.current();
-    const astCheck = validateTemplateAst(input.ast, catalog);
+    // v2: o catálogo do rascunho NÃO muda em edição (a versão do catálogo faz parte do hash semântico da revisão).
+    const catalog = this.catalogForAst(input.ast, isAstV2(input.ast) ? before.variableCatalogVersion : undefined);
+    const astCheck = validateAnyTemplateAst(input.ast, catalog);
     if (!astCheck.ok) throw validationFailed("a estrutura do modelo é inválida", astCheck.issues);
     const after: TemplateRevision = {
       ...before, ast: astCheck.value, variableCatalogVersion: catalog.version,
@@ -227,6 +258,13 @@ export class InstitutionalTemplatesWorkflow {
   // ─── ciclo de vida: aprovar · publicar · depreciar ─────────────────────────
 
   approve(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "APPROVED", input); }
+  /**
+   * Publicar (decisão humana DISTINTA da aprovação). Para tipos sob `READINESS_GATED_KINDS` (Edital), ANTES da transição o BACKEND
+   * recalcula a matriz de prontidão com o estado autoritativo atual: qualquer verificação BLOCKED ⇒ `PUBLICATION_BLOCKED` (zero
+   * decisão, zero mudança de status, zero evento). Uma decisão humana NÃO substitui pré-condição estrutural/técnica ausente e não existe
+   * "aceite de bloqueio". `input.inventory` é só DADO (o inventário da fonte), autenticado pelo SHA-256 registrado na procedência —
+   * nunca uma matriz do cliente.
+   */
   publish(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "PUBLISHED", input); }
   deprecate(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "DEPRECATED", input); }
 
@@ -257,6 +295,10 @@ export class InstitutionalTemplatesWorkflow {
     }
     const catalog = this.catalogFor(before);
     if (!catalog) throw new TemplateWorkflowError("VALIDATION_FAILED", `catálogo de variáveis ${before.variableCatalogVersion} indisponível; a revisão não pode ser decidida`);
+    // Prontidão: recalculada AQUI, com estado autoritativo, antes de qualquer decisão/escrita. BLOCKED ⇒ nada é persistido.
+    const readiness = to === "PUBLISHED" ? await this.assertPublicationReadiness(ctx, identity, before, input.inventory) : null;
+    const readinessEvidence = readiness?.evidence ?? [];
+    const planned: DecisionRequest = readinessEvidence.length ? { ...request, evidence: [...request.evidence, ...readinessEvidence] } : request;
 
     if (to === "DEPRECATED") {
       const pinning = (await this.ports.repository.listBindings(ctx.organizationId, { activeOnly: true })).filter((b) => b.pinnedRevisionId === before.id);
@@ -265,12 +307,12 @@ export class InstitutionalTemplatesWorkflow {
       }
     }
 
-    const valid = validateDecisionRequest(request);
+    const valid = validateDecisionRequest(planned);
     if (!valid.ok) {
       throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[valid.code] ?? valid.code,
         (valid.fields ?? []).map((f) => ({ code: valid.code, path: f, message: "campo obrigatório ou inválido" })));
     }
-    const plan = planDecision(request, { byIdempotencyKey: null, current: null });
+    const plan = planDecision(planned, { byIdempotencyKey: null, current: null });
     if (plan.kind !== "insert") throw new TemplateWorkflowError("DECISION_REJECTED", "decisão não pôde ser planejada");
     const decision: InstitutionalDecision = plan.decision;
 
@@ -285,7 +327,12 @@ export class InstitutionalTemplatesWorkflow {
     const result = await this.ports.repository.commitLifecycleTransition({
       organizationId: ctx.organizationId, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId,
       expectedStatus: before.status, before, after: next.value, decision,
+      ...(readiness?.witness ? { readinessWitness: witnessRefs(readiness.witness) } : {}),
     });
+    if (result.status === "READINESS_STALE") {
+      // TOCTOU-001: a procedência/evidência/revisão mudou entre o cálculo da prontidão e o COMMIT. Nada foi gravado.
+      throw new TemplateWorkflowError("READINESS_STALE", `a prontidão foi calculada sobre um estado que mudou antes da publicação (${result.drift.join(", ")}); recalcule e publique novamente (nada foi alterado)`);
+    }
     if (result.status === "STALE_STATUS") {
       throw new TemplateWorkflowError("STALE_STATE", `o estado da revisão mudou (agora ${result.currentStatus}); recarregue antes de decidir`);
     }
@@ -309,8 +356,13 @@ export class InstitutionalTemplatesWorkflow {
     const prior = await this.ports.repository.getDecisionByIdempotencyKey(ctx.organizationId, request.idempotencyKey);
     if (!prior) return null;
     const target = DECISION_BY_TARGET[to];
+    // A decisão de publicação carrega linhas `readiness.*` ACRESCENTADAS PELO SERVIDOR (hash/instante/estados da matriz): o replay
+    // compara o pedido do humano com a decisão gravada SEM essas linhas e só então confere o hash com as linhas originais.
+    const humanEvidence = prior.evidence.filter((l) => !l.startsWith(READINESS_EVIDENCE_PREFIX));
+    const normalized = normalizeDecisionRequest(request).evidence;
+    const sameHumanEvidence = humanEvidence.length === normalized.length && humanEvidence.every((l, i) => l === normalized[i]);
     if (prior.subjectId !== current.id || prior.subjectType !== target.subjectType || prior.decisionType !== target.decisionType
-      || prior.requestHash !== decisionRequestHash(request)) {
+      || !sameHumanEvidence || prior.requestHash !== decisionRequestHash({ ...request, evidence: prior.evidence })) {
       throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES.DECISION_IDEMPOTENCY_CONFLICT);
     }
     if (REVISION_STATUSES.indexOf(current.status) < REVISION_STATUSES.indexOf(to)) return null;
@@ -319,6 +371,44 @@ export class InstitutionalTemplatesWorkflow {
       authorityValidation: AUTHORITY_NOT_VALIDATED, replayed: true, correlationId: ctx.correlationId,
     });
     return { revision: current, decision: prior, replayed: true };
+  }
+
+  /**
+   * Gate de prontidão da publicação. Devolve as linhas `readiness.*` (hash, instante, estados) a gravar NA decisão de publicação.
+   * Não confia em nada do cliente: a matriz é recalculada pelo port a partir do estado atual. Indisponível ⇒ falha fechada.
+   */
+  private async assertPublicationReadiness(ctx: WorkflowContext, identity: TemplateIdentity, revision: TemplateRevision, inventory: unknown): Promise<{ evidence: string[]; witness: ReadinessWitness | null }> {
+    if (!READINESS_GATED_KINDS.includes(identity.documentKind)) return { evidence: [], witness: null };
+    const port = this.ports.readiness;
+    if (!port) throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a prontidão para publicar não pôde ser verificada (port não configurado); a publicação foi bloqueada (nada foi alterado)");
+    let matrix: ReadinessMatrix;
+    try {
+      matrix = await port.evaluateForPublication(ctx, { revisionId: revision.id, ...(inventory !== undefined ? { inventory } : {}) });
+    } catch (err) {
+      if (err instanceof TemplateWorkflowError && err.code === "NOT_FOUND") throw err;
+      throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a prontidão para publicar não pôde ser verificada; a publicação foi bloqueada (nada foi alterado)");
+    }
+    if (!matrix || matrix.revisionId !== revision.id || matrix.revisionSemanticHash !== revision.semanticHash || !Array.isArray(matrix.checks)) {
+      throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a matriz de prontidão não corresponde à revisão exata; a publicação foi bloqueada (nada foi alterado)");
+    }
+    const blocked = matrix.checks.filter((c) => c.status === "BLOCKED");
+    if (blocked.length > 0) {
+      throw new TemplateWorkflowError("PUBLICATION_BLOCKED", `a revisão não pode ser publicada: ${blocked.length} verificação(ões) de prontidão BLOCKED (matrixHash=${matrix.matrixHash}); nada foi alterado`,
+        blocked.map((c) => ({ code: c.id, path: `readiness.${c.id}`, message: `${c.label}: ${c.detail}` })));
+    }
+    // A testemunha é OBRIGATÓRIA no gate: sem ela não há como provar, dentro da transação, que o estado não mudou.
+    if (!matrix.witness || matrix.witness.revisionId !== revision.id || matrix.witness.matrixHash !== matrix.matrixHash) {
+      throw new TemplateWorkflowError("READINESS_UNAVAILABLE", "a matriz de prontidão não trouxe a testemunha do estado provado; a publicação foi bloqueada (nada foi alterado)");
+    }
+    return {
+      witness: matrix.witness,
+      evidence: [
+        `${READINESS_EVIDENCE_PREFIX}matrixHash=${matrix.matrixHash}`,
+        `${READINESS_EVIDENCE_PREFIX}witnessHash=${matrix.witness.witnessHash}`,
+        `${READINESS_EVIDENCE_PREFIX}checkedAt=${this.ports.clock.now()}`,
+        `${READINESS_EVIDENCE_PREFIX}statuses=${matrix.checks.map((c) => `${c.id}:${c.status}`).join(",")}`,
+      ],
+    };
   }
 
   // ─── bindings por revisão EXATA ────────────────────────────────────────────
@@ -336,6 +426,16 @@ export class InstitutionalTemplatesWorkflow {
     if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para vincular (nada foi alterado)");
     if (!TEMPLATE_DOCUMENT_KINDS.includes(input.documentKind)) throw new TemplateWorkflowError("VALIDATION_FAILED", "tipo documental fora do contrato");
     if (!input.pinnedRevisionId) throw new TemplateWorkflowError("BINDING_NOT_PINNED", "o binding exige o id exato da revisão; 'última publicada' não é permitido");
+    // Aplicabilidade EXPLÍCITA (Edital: modalidade, forma, regime, critério e — se eletrônica — plataforma). Nada é inferido.
+    const scopeIssues = validateExplicitScope(input.documentKind, input.scope);
+    if (scopeIssues.length) {
+      throw new TemplateWorkflowError("SCOPE_INVALID", "aplicabilidade do vínculo incompleta ou inválida (nada foi alterado)", scopeIssues.map((i) => ({ code: i.code, path: i.dimension, message: i.message })));
+    }
+    // Dimensão que a persistência não suporta ⇒ recusa fechada (descartar em silêncio faria escopos distintos colidirem).
+    const unsupported = unsupportedScopeDimensions(input.scope, (this.ports.capabilities ?? INTEGRATED_CAPABILITIES).scopeDimensions);
+    if (unsupported.length) {
+      throw new TemplateWorkflowError("SCOPE_DIMENSION_UNSUPPORTED", `a persistência atual não suporta as dimensões de escopo: ${unsupported.join(", ")} (nada foi alterado)`, unsupported.map((d) => ({ code: "SCOPE_DIMENSION_UNSUPPORTED", path: d, message: "dimensão ainda não persistida" })));
+    }
     const identity = await this.requireIdentity(ctx, input.identityId);
     if (identity.documentKind !== input.documentKind) throw new TemplateWorkflowError("VALIDATION_FAILED", "o tipo documental do binding difere do tipo do modelo");
     const revision = await this.ports.repository.getRevision(ctx.organizationId, input.pinnedRevisionId);
@@ -362,7 +462,7 @@ export class InstitutionalTemplatesWorkflow {
     }
     // Substituição ATÔMICA: desativar o anterior e criar o novo acontecem na mesma transação (nunca zero nem dois ativos).
     await this.ports.repository.insertBinding(binding, pctx(ctx), input.replacesBindingId);
-    log.info("template_binding_set", { organizationId: ctx.organizationId, bindingId: binding.id, revisionId: revision.id, replaced: input.replacesBindingId ?? null, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+    log.info("template_binding_set", { organizationId: ctx.organizationId, bindingId: binding.id, scope: scopeHeadline(input.scope), revisionId: revision.id, replaced: input.replacesBindingId ?? null, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return binding;
   }
 
@@ -430,7 +530,7 @@ export class InstitutionalTemplatesWorkflow {
     };
   }
 
-  private catalogFor(revision: TemplateRevision): VariableCatalog | null {
+  private catalogFor(revision: TemplateRevision): AnyVariableCatalog | null {
     return this.ports.catalog.byVersion(revision.variableCatalogVersion);
   }
 
@@ -475,6 +575,8 @@ export interface LifecycleInput {
   /** Confirmação humana EXPLÍCITA (literal `true`). */
   readonly confirm: boolean;
   readonly idempotencyKey: string;
+  /** Só para PUBLICAR: o inventário da fonte (dado). O servidor o autentica pelo SHA-256 da procedência e recalcula a matriz. */
+  readonly inventory?: unknown;
   readonly decision: {
     readonly decidedByName: string;
     readonly decidedByRole: string;

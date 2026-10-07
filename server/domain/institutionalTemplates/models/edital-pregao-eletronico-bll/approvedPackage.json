@@ -1,0 +1,29 @@
+{
+  "modelKey": "EDITAL_PREGAO_ELETRONICO_BLL",
+  "sourceLogicalVersion": "1.0.1-draft",
+  "approvedPackage": {
+    "status": "APROVADO_PELA_PROCURADORIA_EXTERNO_AO_SISTEMA",
+    "controlReportVersion": "1.0.1",
+    "model": {
+      "md": { "sha256": "6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904", "role": "AUTORIDADE DE CONTEÚDO da compilação" },
+      "docx": { "sha256": "5927f257c82599faff208994b02aae8a9b094c491b66b0bc12cdf0f6d8f38fa9", "role": "versão formatada (achado de fidelidade DOCX-ANEXO-II-PRECO)" }
+    },
+    "controlReport": {
+      "md": { "sha256": "a3601b21454bf66e3c27529950beeb06bc6b5f2a70085fc44bbb0702fada7cd0", "role": "evidência/mapeamento de apoio (não é modelo de runtime)" },
+      "docx": { "sha256": "999422abcebd66d7a093952acebdc44bfb0a4976c1bed46d3cc4c3a2ac5c2ca9", "role": "evidência/mapeamento de apoio (não é modelo de runtime)" }
+    },
+    "manifestSha256": null,
+    "manifestNote": "O hash do manifesto do pacote não foi fornecido; nenhum valor foi inventado."
+  },
+  "provenanceCorrection": {
+    "note": "A Lane B derivou o mapeamento a partir do relatório de controle 1.0.0-draft (sha256 efe20d2a…17a7), único disponível naquele ambiente, e confirmou os 160 nomes diretamente no Markdown aprovado. O pacote juridicamente aprovado usa o relatório de controle 1.0.1 (hashes acima). O MD continua sendo a autoridade de conteúdo; o relatório é evidência/mapeamento de apoio.",
+    "supersedes": { "controlReportVersion": "1.0.0-draft", "controlReportMdSha256Prefix": "efe20d2a" }
+  },
+  "findings": [
+    {
+      "id": "DOCX-ANEXO-II-PRECO",
+      "preserved": true,
+      "note": "O DOCX congelado perdeu a tabela de preços do Anexo II (conversão leu o par de \"$\" como matemática em linha). O snapshot congelado NÃO é alterado; o runtime usa a semântica correta do MD: colunas \"Preço unitário (R$)\" e \"Preço total (R$)\" em tabela real."
+    }
+  ]
+}

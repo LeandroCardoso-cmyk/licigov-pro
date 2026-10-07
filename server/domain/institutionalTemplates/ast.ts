@@ -56,13 +56,13 @@ const INLINE_KEYS: Record<Inline["t"], readonly string[]> = {
   text: ["t", "v"], var: ["t", "name"], strong: ["t", "v"], em: ["t", "v"],
 };
 const DOC_REF_KINDS: readonly DocRefKind[] = ["TR", "ETP", "DFD", "ANNEX"];
-const KEY_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/;
+export const KEY_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/;
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
+export function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function closedKeyIssues(obj: Record<string, unknown>, allowed: readonly string[], required: readonly string[], path: string): TemplateIssue[] {
+export function closedKeyIssues(obj: Record<string, unknown>, allowed: readonly string[], required: readonly string[], path: string): TemplateIssue[] {
   const out: TemplateIssue[] = [];
   for (const k of Object.keys(obj)) {
     if (!allowed.includes(k)) out.push(issue("AST_INVALID", path, `propriedade não permitida: ${k}`));

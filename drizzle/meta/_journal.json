@@ -2131,6 +2131,13 @@
       "when": 1791311351240,
       "tag": "0316_institutional_templates_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 317,
+      "version": "5",
+      "when": 1791347562029,
+      "tag": "0317_institutional_template_multimodel_scope",
+      "breakpoints": true
     }
   ]
 }

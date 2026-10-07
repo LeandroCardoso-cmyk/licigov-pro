@@ -13,16 +13,20 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AstOutline } from "@/components/institutionalTemplates/AstOutline";
-import { CompositionExplanationPanel } from "@/components/institutionalTemplates/CompositionExplanationPanel";
 import { DecisionForm } from "@/components/institutionalTemplates/DecisionForm";
 import { ImportResultPanel, type ImportResultView } from "@/components/institutionalTemplates/ImportResultPanel";
+import { GovernanceSummary, LegalEvidenceForm, type GovernanceView } from "@/components/institutionalTemplates/LegalEvidencePanel";
+import { PreviewDossierPanel, type PreviewDossierView } from "@/components/institutionalTemplates/PreviewDossierPanel";
+import { ReadinessMatrixPanel } from "@/components/institutionalTemplates/ReadinessMatrixPanel";
+import { ScopeFields } from "@/components/institutionalTemplates/ScopeFields";
 import { ResolutionNotice } from "@/components/institutionalTemplates/ResolutionNotice";
 import { RevisionStatusBadge } from "@/components/institutionalTemplates/RevisionStatusBadge";
 import { RevisionTable, type RevisionRow } from "@/components/institutionalTemplates/RevisionTable";
 import {
-  ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyDecisionForm, formatIssues, hasRoleAtLeast, makeIdempotencyKey,
-  revisionLabel, sampleValuesFromText, scopeLabel, STATUS_EXPLANATION, validateDecisionForm,
-  type DecisionFormState, type LifecycleAction, type RevisionStatus, type ResolutionView,
+  ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyDecisionForm, emptyLegalEvidenceForm, emptyScopeForm, formatIssues, hasRoleAtLeast,
+  legalEvidencePayload, makeIdempotencyKey, revisionLabel, sampleValuesFromText, scopeFormProblems, scopeFromForm, scopeLabel, STATUS_EXPLANATION,
+  validateDecisionForm, validateLegalEvidenceForm,
+  type DecisionFormState, type LegalEvidenceFormState, type LifecycleAction, type ReadinessMatrixView, type RevisionStatus, type ResolutionView, type ScopeFormState,
 } from "@/lib/institutionalTemplatesView";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -46,6 +50,9 @@ export default function InstitutionalTemplateDetail() {
   const floors = caps.data?.roleFloors as Record<string, string> | undefined;
   const canDraft = hasRoleAtLeast(role, floors?.draft);
   const canBind = hasRoleAtLeast(role, floors?.bind);
+  const canEvidence = hasRoleAtLeast(role, floors?.evidence);
+  const scopeSuggestions = useMemo(() => Object.fromEntries((caps.data?.scopeDimensions ?? []).map((d) => [d.dimension, d.suggestions])), [caps.data]);
+  const persistedDims = caps.data?.persistedScopeDimensions;
 
   const invalidate = () => { utils.institutionalTemplates.identities.get.invalidate(); utils.institutionalTemplates.identities.list.invalidate(); utils.institutionalTemplates.revisions.get.invalidate(); };
   const onError = (e: { message: string }) => toast.error(e.message);
@@ -70,9 +77,10 @@ export default function InstitutionalTemplateDetail() {
       revisionId: pending.revision.id, expectedStatus: pending.expectedStatus, confirm: true, idempotencyKey: pending.idempotencyKey,
       decision: { decidedByName: form.decidedByName.trim(), decidedByRole: form.decidedByRole.trim(), decidedAt: form.decidedAt, basisReference: form.basisReference.trim(), reason: form.reason.trim() },
     };
-    const run = pending.action === "APPROVE" ? approve : pending.action === "PUBLISH" ? publish : deprecate;
     try {
-      await run.mutateAsync(input);
+      // Publicar: o servidor RECALCULA a prontidão; o cliente envia só o inventário (dado) — nunca uma matriz nem "aceite de bloqueio".
+      if (pending.action === "PUBLISH") await publish.mutateAsync({ ...input, ...(inventoryJson !== undefined && !inventoryBad ? { inventory: inventoryJson } : {}) });
+      else await (pending.action === "APPROVE" ? approve : deprecate).mutateAsync(input);
       toast.success(`${ACTION_COPY[pending.action].title}: decisão registrada.`);
       setPending(null); invalidate();
     } catch { /* mensagem já exibida pelo onError */ }
@@ -90,21 +98,60 @@ export default function InstitutionalTemplateDetail() {
   const parsedAst = useMemo(() => { try { return { ok: true as const, value: JSON.parse(astText) as unknown }; } catch { return { ok: false as const }; } }, [astText]);
   const validation = trpc.institutionalTemplates.revisions.validateAst.useQuery({ ast: parsedAst.ok ? parsedAst.value : {} }, { enabled: enabled && parsedAst.ok && !!rev && rev.status === "DRAFT" });
 
-  // ── prévia ──
+  // ── prévia (dossiê com contexto de teste; sem persistência, emissão, publicação ou IA) ──
   const [sampleText, setSampleText] = useState("processo.objeto=Objeto de exemplo");
   const sample = sampleValuesFromText(sampleText);
+  const [ctxScope, setCtxScope] = useState<ScopeFormState>(emptyScopeForm());
   const [previewKey, setPreviewKey] = useState<string | null>(null);
-  const preview = trpc.institutionalTemplates.preview.useQuery({ revisionId: selectedId ?? "", sampleValues: sample.values }, { enabled: enabled && !!selectedId && previewKey === `${selectedId}|${sampleText}` && sample.errors.length === 0 });
+  const ctxScopeInput = scopeFromForm(ctxScope);
+  const dossier = trpc.institutionalTemplates.previewDossier.run.useQuery(
+    { target: { kind: "REVISION", revisionId: selectedId ?? "" }, context: { scope: ctxScopeInput, sampleValues: sample.values } },
+    { enabled: enabled && !!selectedId && previewKey === `${selectedId}|${sampleText}|${JSON.stringify(ctxScopeInput)}` && sample.errors.length === 0 },
+  );
+  const hints = trpc.institutionalTemplates.previewDossier.hints.useQuery({ revisionId: selectedId ?? "" }, { enabled: enabled && !!selectedId });
+
+  // ── governança: evidência jurídica ──
+  const governance = trpc.institutionalTemplates.governance.get.useQuery({ revisionId: selectedId ?? "" }, { enabled: enabled && !!selectedId });
+  const [evForm, setEvForm] = useState<LegalEvidenceFormState>(emptyLegalEvidenceForm(today()));
+  const [evKey, setEvKey] = useState(makeIdempotencyKey());
+  const [evErrors, setEvErrors] = useState(false);
+  const recordEvidence = trpc.institutionalTemplates.governance.recordLegalEvidence.useMutation({
+    onSuccess: () => { toast.success("Evidência registrada (não altera o status da revisão)."); setEvForm(emptyLegalEvidenceForm(today())); setEvKey(makeIdempotencyKey()); setEvErrors(false); governance.refetch(); readiness.refetch(); },
+    onError,
+  });
+  const submitEvidence = () => {
+    if (!selectedId) return;
+    if (!validateLegalEvidenceForm(evForm).valid) { setEvErrors(true); return; }
+    recordEvidence.mutate({
+      revisionId: selectedId, expectedVersion: (governance.data as unknown as GovernanceView | undefined)?.legalEvidence?.version ?? 0, confirm: true, idempotencyKey: evKey,
+      decision: { decidedByName: evForm.decidedByName.trim(), decidedByRole: evForm.decidedByRole.trim(), decidedAt: evForm.decidedAt, basisReference: evForm.basisReference.trim(), reason: evForm.reason.trim() },
+      evidence: legalEvidencePayload(evForm),
+    });
+  };
+
+  // ── prontidão antes de publicar ──
+  const [inventoryText, setInventoryText] = useState("");
+  const [readyKey, setReadyKey] = useState<string | null>(null);
+  let inventoryJson: unknown;
+  let inventoryBad = false;
+  if (inventoryText.trim()) { try { inventoryJson = JSON.parse(inventoryText); } catch { inventoryBad = true; } }
+  const readiness = trpc.institutionalTemplates.readiness.evaluate.useQuery(
+    { revisionId: selectedId ?? "", ...(inventoryJson !== undefined ? { inventory: inventoryJson } : {}) },
+    { enabled: enabled && !!selectedId && readyKey === `${selectedId}|${inventoryText}` && !inventoryBad },
+  );
 
   // ── vínculos ──
   const bindings = trpc.institutionalTemplates.bindings.list.useQuery({ documentKind: detail.data?.identity.documentKind, activeOnly: false }, { enabled: enabled && !!detail.data });
   const setBinding = trpc.institutionalTemplates.bindings.set.useMutation({ onSuccess: () => { toast.success("Vínculo criado para a revisão exata."); invalidate(); bindings.refetch(); }, onError });
   const deactivate = trpc.institutionalTemplates.bindings.deactivate.useMutation({ onSuccess: () => { toast.success("Vínculo desativado."); bindings.refetch(); invalidate(); }, onError });
   const [bindRev, setBindRev] = useState("");
-  const [bindScope, setBindScope] = useState({ modality: "", regime: "", criterion: "" });
+  const [bindScope, setBindScope] = useState<ScopeFormState>(emptyScopeForm());
   const [bindConfirm, setBindConfirm] = useState(false);
-  const scopeInput = { ...(bindScope.modality.trim() ? { modality: bindScope.modality.trim() } : {}), ...(bindScope.regime.trim() ? { regime: bindScope.regime.trim() } : {}), ...(bindScope.criterion.trim() ? { criterion: bindScope.criterion.trim() } : {}) };
+  const [bindShowErrors, setBindShowErrors] = useState(false);
+  const scopeInput = scopeFromForm(bindScope);
   const resolve = trpc.institutionalTemplates.bindings.resolve.useQuery({ documentKind: detail.data?.identity.documentKind ?? "tr", scope: scopeInput }, { enabled: enabled && !!detail.data });
+  const catalogRows = trpc.institutionalTemplates.catalog.list.useQuery({ documentKind: detail.data?.identity.documentKind }, { enabled: enabled && !!detail.data });
+  const catalogRow = (catalogRows.data ?? []).find((r) => r.identityId === identityId);
 
   // ── importação ──
   const [importFormat, setImportFormat] = useState<"markdown" | "docx">("markdown");
@@ -134,16 +181,18 @@ export default function InstitutionalTemplateDetail() {
   return (
     <PageShell
       icon={LibraryBig} showBack
-      breadcrumbs={[{ label: "Modelos Institucionais", href: "/modelos-institucionais" }, { label: identity.slug }]}
-      title={identity.slug}
-      description={`${DOCUMENT_KIND_LABEL[identity.documentKind] ?? identity.documentKind} — a revisão aplicada é sempre a EXATA fixada por um vínculo; não existe "última revisão" como autoridade.`}
+      breadcrumbs={[{ label: "Modelos Institucionais", href: "/modelos-institucionais" }, { label: catalogRow?.displayName ?? identity.slug }]}
+      title={catalogRow?.displayName ?? identity.slug}
+      description={`${DOCUMENT_KIND_LABEL[identity.documentKind] ?? identity.documentKind} · ${identity.slug} — a revisão aplicada é sempre a EXATA fixada por um vínculo; não existe "última revisão" como autoridade.`}
     >
       <Tabs defaultValue="revisoes">
         <TabsList className="flex-wrap">
           <TabsTrigger value="revisoes">Revisões</TabsTrigger>
           <TabsTrigger value="estrutura">Estrutura e edição</TabsTrigger>
           <TabsTrigger value="previa">Prévia e explicação</TabsTrigger>
-          <TabsTrigger value="vinculos">Vínculos</TabsTrigger>
+          <TabsTrigger value="vinculos">Vínculos e aplicabilidade</TabsTrigger>
+          <TabsTrigger value="governanca">Governança</TabsTrigger>
+          <TabsTrigger value="prontidao">Prontidão</TabsTrigger>
           <TabsTrigger value="importar">Importar</TabsTrigger>
         </TabsList>
 
@@ -185,20 +234,22 @@ export default function InstitutionalTemplateDetail() {
         <TabsContent value="previa" className="space-y-4 pt-4">
           {!rev ? <p className="text-sm text-muted-foreground">Selecione uma revisão na aba Revisões.</p> : (
             <>
+              <ScopeFields idPrefix="ctx-scope" documentKind={identity.documentKind} value={ctxScope} onChange={setCtxScope} suggestions={scopeSuggestions} />
+              <p className="text-xs text-muted-foreground">O contexto de teste preenche os parâmetros do edital (modalidade, forma, plataforma, critério, regime) usados pelas condições. Não é um vínculo e não escolhe modelo.</p>
+              {hints.data && hints.data.variables.length > 0 && (
+                <details className="rounded-md border p-2 text-xs">
+                  <summary className="cursor-pointer">Variáveis usadas por este modelo ({hints.data.variables.length})</summary>
+                  <ul className="mt-2 space-y-1">{hints.data.variables.map((v) => <li key={v.name}><span className="font-mono">{v.name}</span> · {v.type} · {v.source} · {v.usedIn === "CONDITION" ? "só controla condição" : v.usedIn === "TEXT" ? "aparece no texto" : "texto e condição"}{v.filledByScope ? " · preenchida pelo contexto" : ` · sugestão: ${String(v.suggested)}`}</li>)}</ul>
+                </details>
+              )}
               <div className="space-y-1">
                 <Label htmlFor="sample-values">Valores de exemplo (um por linha: nome=valor)</Label>
                 <Textarea id="sample-values" rows={4} className="font-mono text-xs" value={sampleText} onChange={(e) => setSampleText(e.target.value)} />
                 {sample.errors.map((er) => <p key={er} role="alert" className="text-xs text-destructive">{er}</p>)}
               </div>
-              <Button size="sm" onClick={() => setPreviewKey(`${rev.id}|${sampleText}`)} disabled={sample.errors.length > 0}>Pré-visualizar {revisionLabel(rev)}</Button>
-              {preview.data?.status === "COMPOSED" && (
-                <div className="space-y-3">
-                  <pre className="whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-sm">{preview.data.content.text}</pre>
-                  <CompositionExplanationPanel explanation={preview.data.explanation} />
-                </div>
-              )}
-              {preview.data?.status === "COMPOSE_ERROR" && <p role="alert" className="text-sm text-destructive">A composição falhou ({preview.data.error}). Nada foi gerado nem salvo; ajuste os valores ou o modelo.</p>}
-              {preview.error && <p role="alert" className="text-sm text-destructive">{preview.error.message}</p>}
+              <Button size="sm" onClick={() => setPreviewKey(`${rev.id}|${sampleText}|${JSON.stringify(ctxScopeInput)}`)} disabled={sample.errors.length > 0}>Pré-visualizar {revisionLabel(rev)}</Button>
+              {dossier.data && <PreviewDossierPanel dossier={dossier.data as unknown as PreviewDossierView} />}
+              {dossier.error && <p role="alert" className="text-sm text-destructive">{dossier.error.message}</p>}
             </>
           )}
         </TabsContent>
@@ -227,17 +278,53 @@ export default function InstitutionalTemplateDetail() {
                 <select id="bind-rev" className="w-full rounded-md border bg-background p-2" value={bindRev} onChange={(e) => setBindRev(e.target.value)}>
                   <option value="">Selecione…</option>{published.map((r) => <option key={r.id} value={r.id}>{revisionLabel(r)}</option>)}
                 </select></div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {(["modality", "regime", "criterion"] as const).map((k) => (
-                  <div key={k} className="space-y-1"><Label htmlFor={`bind-${k}`}>{k === "modality" ? "Modalidade" : k === "regime" ? "Regime" : "Critério"} (opcional)</Label>
-                    <Input id={`bind-${k}`} value={bindScope[k]} onChange={(e) => setBindScope({ ...bindScope, [k]: e.target.value })} /></div>
-                ))}
-              </div>
+              <ScopeFields idPrefix="bind-scope" documentKind={identity.documentKind} value={bindScope} onChange={setBindScope} suggestions={scopeSuggestions}
+                persistedDimensions={persistedDims} showErrors={bindShowErrors} />
               <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={bindConfirm} onChange={(e) => setBindConfirm(e.target.checked)} /><span>Confirmo que a revisão selecionada passa a ser a aplicada para este tipo e escopo.</span></label>
               <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending}
-                onClick={() => setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, effectiveFrom: new Date().toISOString(), confirm: true })}>Criar vínculo</Button>
+                onClick={() => {
+                  if (Object.keys(scopeFormProblems(identity.documentKind, bindScope)).length) { setBindShowErrors(true); return; }
+                  setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, effectiveFrom: new Date().toISOString(), confirm: true });
+                }}>Criar vínculo</Button>
             </CardContent></Card>
           ) : <p className="text-sm text-muted-foreground">Gerenciar vínculos exige papel de gestor ou superior.</p>}
+        </TabsContent>
+
+        <TabsContent value="governanca" className="space-y-4 pt-4">
+          {!rev ? <p className="text-sm text-muted-foreground">Selecione uma revisão na aba Revisões.</p> : (
+            <>
+              <p className="flex items-center gap-2 text-sm"><span className="font-medium">{revisionLabel(rev)}</span><RevisionStatusBadge status={rev.status} /></p>
+              {governance.data && <GovernanceSummary governance={governance.data as unknown as GovernanceView} />}
+              {governance.error && <p role="alert" className="text-sm text-destructive">{governance.error.message}</p>}
+              {canEvidence ? (
+                <Card><CardHeader><CardTitle className="text-base">Registrar evidência de aprovação jurídica externa</CardTitle></CardHeader><CardContent className="space-y-3">
+                  <LegalEvidenceForm value={evForm} onChange={setEvForm} showErrors={evErrors} />
+                  <Button size="sm" disabled={recordEvidence.isPending} onClick={submitEvidence}>Registrar evidência</Button>
+                </CardContent></Card>
+              ) : <p className="text-sm text-muted-foreground">Registrar evidência jurídica exige papel de gestor ou superior.</p>}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="prontidao" className="space-y-4 pt-4">
+          {!rev ? <p className="text-sm text-muted-foreground">Selecione uma revisão na aba Revisões.</p> : (
+            <>
+              <p className="text-sm text-muted-foreground">A matriz mostra o que impede a publicação: qualquer BLOCKED a recusa no servidor (PUBLICATION_BLOCKED). Ela não aprova nem publica sozinha. O inventário da fonte precisa ser reenviado (só o hash fica registrado) e deve coincidir com a procedência.</p>
+              <div className="space-y-1">
+                <Label htmlFor="inv-json">Inventário da fonte (JSON, opcional)</Label>
+                <Textarea id="inv-json" rows={5} className="font-mono text-xs" value={inventoryText} onChange={(e) => setInventoryText(e.target.value)} />
+                {inventoryBad && <p role="alert" className="text-xs text-destructive">JSON inválido.</p>}
+              </div>
+              <Button size="sm" disabled={inventoryBad} onClick={() => setReadyKey(`${rev.id}|${inventoryText}`)}>Avaliar prontidão de {revisionLabel(rev)}</Button>
+              {readiness.data && (
+                <>
+                  {readiness.data.inventory.shapeIssues.length > 0 && <ul role="alert" className="list-disc pl-5 text-xs text-destructive">{readiness.data.inventory.shapeIssues.map((m) => <li key={m}>{m}</li>)}</ul>}
+                  <ReadinessMatrixPanel matrix={readiness.data.matrix as unknown as ReadinessMatrixView} />
+                </>
+              )}
+              {readiness.error && <p role="alert" className="text-sm text-destructive">{readiness.error.message}</p>}
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="importar" className="space-y-4 pt-4">
@@ -264,10 +351,27 @@ export default function InstitutionalTemplateDetail() {
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>{pending ? ACTION_COPY[pending.action].title : ""}</AlertDialogTitle>
             <AlertDialogDescription>Esta é uma decisão institucional registrada com a autoridade que você declarar. Revise antes de confirmar.</AlertDialogDescription></AlertDialogHeader>
+          {pending && pending.action === "PUBLISH" && (() => {
+            const m = readiness.data?.matrix.revisionId === pending.revision.id ? (readiness.data.matrix as unknown as ReadinessMatrixView) : null;
+            const blocked = m ? m.checks.filter((c) => c.status === "BLOCKED") : [];
+            return (
+              <div className="space-y-2 rounded-md border p-3 text-sm" aria-label="Prontidão para publicar">
+                <p>O servidor recalcula a prontidão ao publicar: qualquer verificação BLOCKED impede a publicação e nenhuma decisão humana a substitui.</p>
+                {!m ? <p>A matriz ainda não foi avaliada nesta sessão; avalie na aba Prontidão (com o inventário da fonte) para ver os bloqueios antes de decidir.</p>
+                  : blocked.length === 0 ? <p>Última avaliação sem bloqueios (hash {m.matrixHash.slice(0, 12)}…).</p> : (
+                    <>
+                      <p role="alert" className="font-medium text-destructive">{blocked.length} verificação(ões) BLOCKED — a publicação será recusada:</p>
+                      <ul className="list-disc pl-5">{blocked.map((c) => <li key={c.id}>{c.label}</li>)}</ul>
+                    </>
+                  )}
+              </div>
+            );
+          })()}
           {pending && <DecisionForm action={pending.action} revisionLabel={revisionLabel(pending.revision)} value={form} onChange={setForm} showErrors={showErrors} />}
           <AlertDialogFooter>
             <Button variant="outline" onClick={() => setPending(null)}>Cancelar</Button>
-            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].title : "Confirmar"}</Button>
+            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending
+              || (pending?.action === "PUBLISH" && readiness.data?.matrix.revisionId === pending.revision.id && readiness.data.matrix.overall === "BLOCKED")} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].title : "Confirmar"}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

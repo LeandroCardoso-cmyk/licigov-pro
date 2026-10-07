@@ -14,8 +14,14 @@ import { organizationIssues, sameOrganizationIssues } from "./tenant";
 import type { TemplateRevision } from "./revision";
 import { TEMPLATE_HASH_VERSION, fail, issue, isSha256, ok, type HashVersion, type OrgId, type Sha256, type TemplateIssue, type TemplateResult } from "./types";
 
-export type ManifestSourceKey = "processo" | "dfd" | "etp" | "tr" | "itens" | "parametros";
-export const MANIFEST_SOURCE_KEYS: readonly ManifestSourceKey[] = ["processo", "dfd", "etp", "tr", "itens", "parametros"];
+export type ManifestSourceKey =
+  | "processo" | "dfd" | "etp" | "tr" | "itens" | "parametros"
+  // tpl-catalog/2 — fontes explícitas (aditivas, ao FINAL da lista: a ordem dos manifests v1 nunca muda)
+  | "orcamento" | "certame" | "politica" | "normativo" | "resultado" | "ciclo";
+export const MANIFEST_SOURCE_KEYS: readonly ManifestSourceKey[] = [
+  "processo", "dfd", "etp", "tr", "itens", "parametros",
+  "orcamento", "certame", "politica", "normativo", "resultado", "ciclo",
+];
 
 export interface ManifestSourceRef {
   readonly key: ManifestSourceKey;

@@ -12,8 +12,20 @@ import { organizationIssues, sameOrganizationIssues } from "./tenant";
 import type { TemplateRevision } from "./revision";
 import { issue, type OrgId, type TemplateDocumentKind, type TemplateIssue } from "./types";
 
+/**
+ * Escopo EXATO de aplicabilidade de um binding (multi-modelo). Todas as chaves são opcionais e comparadas por IGUALDADE EXATA
+ * (ausente só casa com ausente): sem curinga, sem fuzzy, sem "mais específico vence", sem IA.
+ *  - `modality`  modalidade (ex.: pregao, concorrencia)
+ *  - `form`      forma de realização (ex.: eletronico, presencial)
+ *  - `platform`  plataforma como SLUG normalizado e EXTENSÍVEL (ex.: bll, licitanet, portal-compras-publicas) — nunca enum
+ *                fechado: uma nova plataforma é só um novo binding, sem novo engine
+ *  - `regime`    regime de execução; `criterion` critério de julgamento
+ * A mesma revisão PUBLISHED pode ter vários bindings exatos (uma combinação cada).
+ */
 export interface BindingScope {
   readonly modality?: string;
+  readonly form?: string;
+  readonly platform?: string;
   readonly regime?: string;
   readonly criterion?: string;
 }
@@ -44,10 +56,44 @@ export type BindingResolution =
   | { readonly status: "INVALID"; readonly issues: readonly TemplateIssue[] };
 
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-const SCOPE_KEYS = ["modality", "regime", "criterion"] as const;
+/** Ordem CANÔNICA das chaves do escopo (também a ordem da chave de unicidade persistida). */
+export const BINDING_SCOPE_KEYS = ["modality", "form", "platform", "regime", "criterion"] as const;
+export type BindingScopeKey = (typeof BINDING_SCOPE_KEYS)[number];
+/** Chaves cujo valor é SLUG normalizado (minúsculas ASCII, dígitos e hífens): todas as dimensões do escopo exato. */
+export const BINDING_SCOPE_SLUG_KEYS: readonly BindingScopeKey[] = BINDING_SCOPE_KEYS;
+
+export const SCOPE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SCOPE_VALUE_MAX = 64;
+
+/**
+ * Normaliza um valor canônico (ex.: `compras_gov`) para slug de escopo: minúsculas, `_` → `-`. Determinística e SEM
+ * aproximação: o que não for slug válido depois disso é RECUSADO (nunca "consertado").
+ */
+export function normalizeScopeSlug(value: string): string {
+  return value.trim().toLowerCase().replace(/_/g, "-");
+}
+
+/** Problemas do escopo (valor vazio, separador reservado `|`, slug inválido, chave desconhecida). Pura. */
+export function scopeIssues(scope: BindingScope, path = "scope"): TemplateIssue[] {
+  const out: TemplateIssue[] = [];
+  const raw = scope as unknown as Record<string, unknown>;
+  for (const k of Object.keys(raw)) {
+    if (!(BINDING_SCOPE_KEYS as readonly string[]).includes(k)) out.push(issue("BINDING_INVALID", `${path}.${k}`, `chave de escopo desconhecida: ${k}`));
+  }
+  for (const k of BINDING_SCOPE_KEYS) {
+    const v = raw[k];
+    if (v === undefined) continue;
+    if (typeof v !== "string" || v.trim() === "" || v !== v.trim() || v.length > SCOPE_VALUE_MAX || v.includes("|")) {
+      out.push(issue("BINDING_INVALID", `${path}.${k}`, `escopo '${k}' inválido (texto não vazio, sem espaços nas pontas, sem '|', até ${SCOPE_VALUE_MAX} caracteres)`));
+    } else if (BINDING_SCOPE_SLUG_KEYS.includes(k) && !SCOPE_SLUG_RE.test(v)) {
+      out.push(issue("BINDING_INVALID", `${path}.${k}`, `escopo '${k}' deve ser slug normalizado (a-z, 0-9 e hífens)`));
+    }
+  }
+  return out;
+}
 
 export function sameScope(a: BindingScope, b: BindingScope): boolean {
-  return SCOPE_KEYS.every((k) => (a[k] ?? null) === (b[k] ?? null));
+  return BINDING_SCOPE_KEYS.every((k) => (a[k] ?? null) === (b[k] ?? null));
 }
 
 /**
@@ -61,6 +107,7 @@ export function resolveTemplateBinding(
 ): BindingResolution {
   const requestIssues = organizationIssues(request, "request.organizationId");
   if (!ISO_UTC_RE.test(request.asOf)) requestIssues.push(issue("BINDING_INVALID", "request.asOf", "asOf deve ser ISO-8601 UTC explícito"));
+  requestIssues.push(...scopeIssues(request.scope, "request.scope"));
   if (requestIssues.length) return { status: "INVALID", issues: requestIssues };
 
   const foreign = [

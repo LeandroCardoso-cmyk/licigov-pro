@@ -10,6 +10,7 @@ import { and, asc, desc, eq, like } from "drizzle-orm";
 import { getDb } from "./connection";
 import {
   institutionalDecisionsTable, directProcurementWorkspacesTable, institutionalTemplateRevisionsTable, documentCompositionManifestsTable,
+  procurementProcessesTable, organizations,
 } from "../../drizzle/schema";
 import { isDuplicateKeyError, type ProcurementExecutor } from "./procurement";
 import type { DecisionSubjectType, InstitutionalDecision, InstitutionalDecisionType, AuthorityValidation } from "../domain/institutionalDecision";
@@ -54,10 +55,25 @@ export async function lockDecisionSubject(
   // Modelos Institucionais — o assunto é a REVISÃO EXATA (aprovação/publicação/depreciação). Lock da linha-pai da revisão,
   // tenant-scoped; revisão de outro tenant é indistinguível de inexistente (anti-enumeração, fail-closed).
   if (subjectType === "institutional_template.approval" || subjectType === "institutional_template.publication"
-    || subjectType === "institutional_template.deprecation") {
+    || subjectType === "institutional_template.deprecation" || subjectType === "institutional_template.import_provenance"
+    || subjectType === "institutional_template.legal_evidence") {
     const rows = await tx.select({ id: institutionalTemplateRevisionsTable.id }).from(institutionalTemplateRevisionsTable)
       .where(and(eq(institutionalTemplateRevisionsTable.id, subjectId), eq(institutionalTemplateRevisionsTable.organizationId, organizationId)))
       .for("update");
+    return rows.length === 1;
+  }
+  // Institutional Templates (multi-modelo) — fontes governadas por decisão. Cada lock é
+  // tenant-scoped; recurso de outro tenant é indistinguível de inexistente (fail-closed).
+  if (subjectType === "procurement.source_fields" || subjectType === "procurement.budget_disclosure") {
+    const rows = await tx.select({ id: procurementProcessesTable.id }).from(procurementProcessesTable)
+      .where(and(eq(procurementProcessesTable.id, subjectId), eq(procurementProcessesTable.organizationId, organizationId)))
+      .for("update");
+    return rows.length === 1;
+  }
+  if (subjectType === "institutional.policy") {
+    // A política é do ÓRGÃO: serializa as decisões do órgão pelo lock da linha da própria organização.
+    const rows = await tx.select({ id: organizations.id }).from(organizations)
+      .where(eq(organizations.id, organizationId)).for("update");
     return rows.length === 1;
   }
   // Revisão humana de um documento composto — o assunto é `<manifestId>:<chave>`; o lock é do M1 (INSERT-only; o lock
@@ -151,4 +167,23 @@ export async function listDecisionsBySubjectPrefix(
     ))
     .orderBy(asc(institutionalDecisionsTable.subjectId), asc(institutionalDecisionsTable.revision));
   return rows.map(fromRow).filter((d) => d.subjectId.startsWith(prefix));
+}
+
+/** Decisão CORRENTE (maior revisão) de CADA assunto do tipo, tenant-scoped, em ordem estável de assunto. */
+export async function listCurrentDecisionsBySubjectType(
+  organizationId: number, subjectType: DecisionSubjectType, exec?: ProcurementExecutor,
+): Promise<InstitutionalDecision[]> {
+  const db = exec ?? await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(institutionalDecisionsTable)
+    .where(and(eq(institutionalDecisionsTable.organizationId, organizationId), eq(institutionalDecisionsTable.subjectType, subjectType)))
+    .orderBy(asc(institutionalDecisionsTable.subjectId), desc(institutionalDecisionsTable.revision));
+  const out: InstitutionalDecision[] = [];
+  let last: string | null = null;
+  for (const r of rows) {
+    if (r.subjectId === last) continue; // já pegou a maior revisão deste assunto
+    last = r.subjectId;
+    out.push(fromRow(r));
+  }
+  return out;
 }

@@ -59,6 +59,14 @@ export interface AiNarrativeAcceptance {
   readonly acceptedByUserId: number;
 }
 
+/** Ocorrências não sobrepostas de `needle` em `hay` (0 para needle vazio). */
+function countOccurrences(hay: string, needle: string): number {
+  if (!needle) return 0;
+  let n = 0;
+  for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) n++;
+  return n;
+}
+
 export type StructuralDeviationKind = "INCLUDED_BLOCK_REMOVED" | "EXCLUDED_BLOCK_INSERTED";
 
 /** Reconhecimento humano registrado de um desvio estrutural (decisão revisável). */
@@ -198,8 +206,10 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
   const deviations: { blockId: string; kind: StructuralDeviationKind; acknowledgmentRef: string }[] = [];
   for (const b of re.structuralBlocks) {
     const found: StructuralDeviationKind[] = [];
-    if (b.includedAnchor && !input.issuedContent.includes(b.includedAnchor)) found.push("INCLUDED_BLOCK_REMOVED");
-    if (b.excludedAnchor && b.excludedAnchor !== b.includedAnchor && input.issuedContent.includes(b.excludedAnchor)) found.push("EXCLUDED_BLOCK_INSERTED");
+    // Âncoras podem se repetir em OUTROS trechos do documento (ex.: título de tabela igual em ramos diferentes): a comparação é por
+    // OCORRÊNCIAS contra a própria composição — remoção = menos ocorrências que o composto; inserção = mais ocorrências que o composto.
+    if (b.includedAnchor && countOccurrences(input.issuedContent, b.includedAnchor) < countOccurrences(re.content.text, b.includedAnchor)) found.push("INCLUDED_BLOCK_REMOVED");
+    if (b.excludedAnchor && b.excludedAnchor !== b.includedAnchor && countOccurrences(input.issuedContent, b.excludedAnchor) > countOccurrences(re.content.text, b.excludedAnchor)) found.push("EXCLUDED_BLOCK_INSERTED");
     for (const kind of found) {
       const ack = input.acknowledgments.find((a) => a.blockId === b.blockId && a.kind === kind && a.acknowledgmentRef);
       if (ack) deviations.push({ blockId: b.blockId, kind, acknowledgmentRef: ack.acknowledgmentRef });

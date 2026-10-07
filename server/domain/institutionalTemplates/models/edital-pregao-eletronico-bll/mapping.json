@@ -1,0 +1,2163 @@
+{
+  "format": "tpl-master-mapping/2",
+  "modelKey": "EDITAL_PREGAO_ELETRONICO_BLL",
+  "sourceLogicalVersion": "1.0.1-draft",
+  "catalogVersion": "edital-pregao-eletronico-bll/1.0.1-draft.c2",
+  "dialect": {
+    "placeholder": "\\{\\{(?<name>[A-Z][A-Z0-9_]*)\\}\\}",
+    "conditionOpen": "^\\{\\{#(?<type>[A-Z][A-Z0-9_]*)\\}\\}$",
+    "conditionClose": "^\\{\\{/(?<type>[A-Z][A-Z0-9_]*)\\}\\}$",
+    "inlineConditionOpen": "\\{\\{#(?<type>[A-Z][A-Z0-9_]*)\\}\\}",
+    "inlineConditionClose": "\\{\\{/(?<type>[A-Z][A-Z0-9_]*)\\}\\}",
+    "systemNote": "^\\[SYSTEM NOTE",
+    "systemNoteEnd": "\\]\\s*$",
+    "systemNoteBlock": true,
+    "ignoreLine": "^---\\s*$",
+    "scaffoldingHeadings": "^(?:MODELO-MESTRE INSTITUCIONAL\\b|PARTE [12] —)",
+    "numberedHeading": "^(?<num>\\d+(?:\\.\\d+)*)\\.\\s+(?<title>\\S.*)$",
+    "boldNumberedHeading": "^\\*\\*(?<num>\\d+)\\.\\s+(?<title>.+?)\\*\\*$",
+    "ordinalHeading": "^(?<prefix>CLÁUSULA)\\s+(?<ordinal>[A-ZÀ-Ý]+(?: [A-ZÀ-Ý]+)*?)\\s+—\\s+(?<title>.+)$",
+    "decimalParagraph": "^(?<num>\\d+(?:\\.\\d+)+)\\.\\s+(?<text>.+)$",
+    "alphaParagraph": "^(?<letter>[a-z])\\)\\s+(?<text>.+)$",
+    "alphaSubParagraph": "^(?<letter>[a-z])\\.(?<sub>\\d+)\\)\\s+(?<text>.+)$",
+    "seqParagraph": "^(?<num>\\d+)\\.\\s+(?<text>.+)$",
+    "lineBreaks": "paragraph"
+  },
+  "inputs": {
+    "ABRANGENCIA_EXCLUSIVIDADE_ME_EPP": {
+      "kind": "variable",
+      "var": "participacao.abrangenciaExclusividadeMeEpp"
+    },
+    "ABRANGENCIA_EXCLUSIVIDADE_REGIONAL": {
+      "kind": "variable",
+      "var": "participacao.abrangenciaExclusividadeRegional"
+    },
+    "ANEXO_I_TERMO_DE_REFERENCIA": {
+      "kind": "docRef",
+      "docKind": "TR",
+      "role": "termo-referencia",
+      "order": 1
+    },
+    "ANO": {
+      "kind": "variable",
+      "var": "processo.ano"
+    },
+    "ANO_ATA": {
+      "kind": "variable",
+      "var": "pos.anoAta"
+    },
+    "ANO_CONTRATO": {
+      "kind": "variable",
+      "var": "pos.anoContrato"
+    },
+    "ANTECEDENCIA_MINIMA_REINICIO_SESSAO": {
+      "kind": "variable",
+      "var": "julgamento.antecedenciaMinimaReinicioSessao"
+    },
+    "AUTORIDADE_COMPETENTE_CARGO": {
+      "kind": "variable",
+      "var": "instituicao.autoridadeCompetenteCargo"
+    },
+    "AUTORIDADE_COMPETENTE_NOME": {
+      "kind": "variable",
+      "var": "instituicao.autoridadeCompetenteNome"
+    },
+    "AUTORIDADE_SANCIONADORA": {
+      "kind": "variable",
+      "var": "sancoes.autoridadeSancionadora"
+    },
+    "AUTORIZACAO_ATIVIDADE_EXIGIDA": {
+      "kind": "variable",
+      "var": "habilitacao.autorizacaoAtividadeExigida"
+    },
+    "BASE_CALCULO_MULTA_MORA": {
+      "kind": "variable",
+      "var": "sancoes.baseCalculoMultaMora"
+    },
+    "BASE_DO_LANCE": {
+      "kind": "variable",
+      "var": "julgamento.baseDoLance"
+    },
+    "BASE_INCIDENCIA_DESCONTO": {
+      "kind": "variable",
+      "var": "julgamento.baseIncidenciaDesconto"
+    },
+    "BASE_LEGAL_TRATAMENTO_REGIONAL": {
+      "kind": "variable",
+      "var": "participacao.baseLegalTratamentoRegional"
+    },
+    "CANAL_AGENDAMENTO_VISITA": {
+      "kind": "variable",
+      "var": "habilitacao.canalAgendamentoVisita"
+    },
+    "CANAL_DENUNCIAS": {
+      "kind": "variable",
+      "var": "instituicao.canalDenuncias"
+    },
+    "CANAL_ESCLARECIMENTOS": {
+      "kind": "variable",
+      "var": "instituicao.canalEsclarecimentos"
+    },
+    "CANAL_IMPUGNACOES": {
+      "kind": "variable",
+      "var": "instituicao.canalImpugnacoes"
+    },
+    "CASAS_DECIMAIS_DESCONTO": {
+      "kind": "variable",
+      "var": "julgamento.casasDecimaisDesconto"
+    },
+    "CASAS_DECIMAIS_PRECO": {
+      "kind": "variable",
+      "var": "julgamento.casasDecimaisPreco"
+    },
+    "CONDICOES_ALTERACAO_PRECOS_REGISTRADOS": {
+      "kind": "variable",
+      "var": "srp.condicoesAlteracaoPrecosRegistrados"
+    },
+    "CONDICOES_SUBCONTRATACAO": {
+      "kind": "variable",
+      "var": "contratacao.condicoesSubcontratacao"
+    },
+    "CONTRATADO_CNPJ": {
+      "kind": "variable",
+      "var": "pos.contratadoCnpj"
+    },
+    "CONTRATADO_ENDERECO": {
+      "kind": "variable",
+      "var": "pos.contratadoEndereco"
+    },
+    "CONTRATADO_RAZAO_SOCIAL": {
+      "kind": "variable",
+      "var": "pos.contratadoRazaoSocial"
+    },
+    "CONTRATADO_REPRESENTANTE_NOME": {
+      "kind": "variable",
+      "var": "pos.contratadoRepresentanteNome"
+    },
+    "CONTRATADO_REPRESENTANTE_QUALIFICACAO": {
+      "kind": "variable",
+      "var": "pos.contratadoRepresentanteQualificacao"
+    },
+    "CRITERIOS_AVALIACAO_AMOSTRA": {
+      "kind": "variable",
+      "var": "habilitacao.criteriosAvaliacaoAmostra"
+    },
+    "CRITERIOS_PROVA_CONCEITO": {
+      "kind": "variable",
+      "var": "habilitacao.criteriosProvaConceito"
+    },
+    "CRITERIO_DELIMITACAO_REGIAO": {
+      "kind": "variable",
+      "var": "participacao.criterioDelimitacaoRegiao"
+    },
+    "CRITERIO_JULGAMENTO": {
+      "kind": "variable",
+      "var": "julgamento.criterioJulgamento"
+    },
+    "DATA_ABERTURA": {
+      "kind": "variable",
+      "var": "processo.dataAbertura"
+    },
+    "DATA_ASSINATURA_ATA": {
+      "kind": "variable",
+      "var": "pos.dataAssinaturaAta"
+    },
+    "DATA_ASSINATURA_CONTRATO": {
+      "kind": "variable",
+      "var": "pos.dataAssinaturaContrato"
+    },
+    "DATA_DIVULGACAO_PREVISTA": {
+      "kind": "control",
+      "var": "controle.dataDivulgacaoPrevista"
+    },
+    "DATA_EMISSAO_EDITAL": {
+      "kind": "variable",
+      "var": "processo.dataEmissaoEdital"
+    },
+    "DATA_FIM_RECEBIMENTO_PROPOSTAS": {
+      "kind": "variable",
+      "var": "processo.dataFimRecebimentoPropostas"
+    },
+    "DATA_INICIO_RECEBIMENTO_PROPOSTAS": {
+      "kind": "variable",
+      "var": "processo.dataInicioRecebimentoPropostas"
+    },
+    "DATA_ORCAMENTO_ESTIMADO": {
+      "kind": "variable",
+      "var": "julgamento.dataOrcamentoEstimado"
+    },
+    "DECLARACOES_ESPECIFICAS_OBJETO": {
+      "kind": "variable",
+      "var": "habilitacao.declaracoesEspecificasObjeto"
+    },
+    "DECRETO_MUNICIPAL_REGULAMENTADOR": {
+      "kind": "variable",
+      "var": "instituicao.decretoMunicipalRegulamentador"
+    },
+    "DESCRICAO_PASTA_TECNICA": {
+      "kind": "variable",
+      "var": "processo.descricaoPastaTecnica"
+    },
+    "DIARIO_OFICIAL_MUNICIPIO": {
+      "kind": "variable",
+      "var": "instituicao.diarioOficialMunicipio"
+    },
+    "DOTACAO_ORCAMENTARIA": {
+      "kind": "variable",
+      "var": "julgamento.dotacaoOrcamentaria"
+    },
+    "DURACAO_ETAPA_LANCES": {
+      "kind": "variable",
+      "var": "julgamento.duracaoEtapaLances"
+    },
+    "ENDERECO_ELETRONICO_BLL": {
+      "kind": "variable",
+      "var": "processo.enderecoEletronicoBll"
+    },
+    "EQUIPE_APOIO": {
+      "kind": "variable",
+      "var": "instituicao.equipeApoio"
+    },
+    "FINALIDADES_TRATAMENTO_DADOS": {
+      "kind": "aiSlot",
+      "slotKey": "finalidades-tratamento-dados",
+      "maxTokens": 200,
+      "instructionsKey": "edital.finalidades-tratamento-dados"
+    },
+    "FISCAL_CONTRATO": {
+      "kind": "variable",
+      "var": "contratacao.fiscalContrato"
+    },
+    "FONTE_RECURSOS": {
+      "kind": "variable",
+      "var": "julgamento.fonteRecursos"
+    },
+    "FORMA_ASSINATURA_CONTRATO": {
+      "kind": "variable",
+      "var": "contratacao.formaAssinaturaContrato"
+    },
+    "FORMA_FORNECIMENTO": {
+      "kind": "variable",
+      "var": "contratacao.formaFornecimento"
+    },
+    "FORMA_PAGAMENTO": {
+      "kind": "variable",
+      "var": "contratacao.formaPagamento"
+    },
+    "FORNECEDOR_REGISTRADO_CNPJ": {
+      "kind": "variable",
+      "var": "pos.fornecedorRegistradoCnpj"
+    },
+    "FORNECEDOR_REGISTRADO_ENDERECO": {
+      "kind": "variable",
+      "var": "pos.fornecedorRegistradoEndereco"
+    },
+    "FORNECEDOR_REGISTRADO_RAZAO_SOCIAL": {
+      "kind": "variable",
+      "var": "pos.fornecedorRegistradoRazaoSocial"
+    },
+    "FORNECEDOR_REGISTRADO_REPRESENTANTE": {
+      "kind": "variable",
+      "var": "pos.fornecedorRegistradoRepresentante"
+    },
+    "FORO_COMARCA": {
+      "kind": "variable",
+      "var": "instituicao.foroComarca"
+    },
+    "GESTOR_CONTRATO": {
+      "kind": "variable",
+      "var": "contratacao.gestorContrato"
+    },
+    "HORARIO_ABERTURA": {
+      "kind": "variable",
+      "var": "processo.horarioAbertura"
+    },
+    "HORARIO_EXPEDIENTE_SESSAO": {
+      "kind": "variable",
+      "var": "julgamento.horarioExpedienteSessao"
+    },
+    "HORARIO_FIM_RECEBIMENTO_PROPOSTAS": {
+      "kind": "variable",
+      "var": "processo.horarioFimRecebimentoPropostas"
+    },
+    "INDICES_ECONOMICO_FINANCEIROS": {
+      "kind": "variable",
+      "var": "habilitacao.indicesEconomicoFinanceiros"
+    },
+    "INDICE_ATUALIZACAO_FINANCEIRA": {
+      "kind": "variable",
+      "var": "contratacao.indiceAtualizacaoFinanceira"
+    },
+    "INDICE_REAJUSTE": {
+      "kind": "variable",
+      "var": "contratacao.indiceReajuste"
+    },
+    "INSTRUMENTO_EQUIVALENTE_TIPO": {
+      "kind": "variable",
+      "var": "contratacao.instrumentoEquivalenteTipo"
+    },
+    "INTERVALO_MINIMO_LANCES": {
+      "kind": "variable",
+      "var": "julgamento.intervaloMinimoLances"
+    },
+    "ITENS_EXIGE_AMOSTRA": {
+      "kind": "variable",
+      "var": "habilitacao.itensExigeAmostra"
+    },
+    "ITENS_EXIGE_CATALOGO": {
+      "kind": "variable",
+      "var": "habilitacao.itensExigeCatalogo"
+    },
+    "JANELA_INTENCAO_RECURSO": {
+      "kind": "variable",
+      "var": "julgamento.janelaIntencaoRecurso"
+    },
+    "JUSTIFICATIVA_ART_49_LC123": {
+      "kind": "aiSlot",
+      "slotKey": "justificativa-art49-lc123",
+      "maxTokens": 200,
+      "instructionsKey": "edital.justificativa-art49-lc123"
+    },
+    "JUSTIFICATIVA_VEDACAO_CONSORCIO": {
+      "kind": "aiSlot",
+      "slotKey": "justificativa-vedacao-consorcio",
+      "maxTokens": 200,
+      "instructionsKey": "edital.justificativa-vedacao-consorcio"
+    },
+    "JUSTIFICATIVA_VEDACAO_SUBCONTRATACAO": {
+      "kind": "aiSlot",
+      "slotKey": "justificativa-vedacao-subcontratacao",
+      "maxTokens": 200,
+      "instructionsKey": "edital.justificativa-vedacao-subcontratacao"
+    },
+    "LIMITE_ADESAO_ATA": {
+      "kind": "variable",
+      "var": "srp.limiteAdesaoAta"
+    },
+    "LISTA_ANEXOS_ADICIONAIS": {
+      "kind": "variable",
+      "var": "processo.listaAnexosAdicionais"
+    },
+    "LOCAL_ENTREGA": {
+      "kind": "variable",
+      "var": "contratacao.localEntrega"
+    },
+    "LOCAL_ENTREGA_AMOSTRA": {
+      "kind": "variable",
+      "var": "habilitacao.localEntregaAmostra"
+    },
+    "LOCAL_PROVA_CONCEITO": {
+      "kind": "variable",
+      "var": "habilitacao.localProvaConceito"
+    },
+    "MARCO_INICIAL_EXECUCAO": {
+      "kind": "variable",
+      "var": "contratacao.marcoInicialExecucao"
+    },
+    "MARCO_INICIAL_PAGAMENTO": {
+      "kind": "variable",
+      "var": "contratacao.marcoInicialPagamento"
+    },
+    "MARCO_INICIAL_RECEBIMENTO_PROVISORIO": {
+      "kind": "variable",
+      "var": "contratacao.marcoInicialRecebimentoProvisorio"
+    },
+    "MARCO_INICIAL_VIGENCIA": {
+      "kind": "variable",
+      "var": "contratacao.marcoInicialVigencia"
+    },
+    "MARCO_INICIAL_VIGENCIA_ATA": {
+      "kind": "variable",
+      "var": "srp.marcoInicialVigenciaAta"
+    },
+    "MODO_DISPUTA": {
+      "kind": "variable",
+      "var": "julgamento.modoDisputa"
+    },
+    "MOMENTO_DIVULGACAO_ORCAMENTO": {
+      "kind": "variable",
+      "var": "julgamento.momentoDivulgacaoOrcamento"
+    },
+    "MULTA_MORA_PERCENTUAL": {
+      "kind": "variable",
+      "var": "sancoes.multaMoraPercentual"
+    },
+    "MULTA_TETO": {
+      "kind": "variable",
+      "var": "sancoes.multaTeto"
+    },
+    "MUNICIPIO_CNPJ": {
+      "kind": "variable",
+      "var": "instituicao.municipioCnpj"
+    },
+    "MUNICIPIO_ENDERECO": {
+      "kind": "variable",
+      "var": "instituicao.municipioEndereco"
+    },
+    "MUNICIPIO_NOME": {
+      "kind": "variable",
+      "var": "instituicao.municipioNome"
+    },
+    "MUNICIPIO_SEDE": {
+      "kind": "variable",
+      "var": "instituicao.municipioSede"
+    },
+    "MUNICIPIO_SITE": {
+      "kind": "variable",
+      "var": "instituicao.municipioSite"
+    },
+    "MUNICIPIO_TELEFONE": {
+      "kind": "variable",
+      "var": "instituicao.municipioTelefone"
+    },
+    "MUNICIPIO_UF_EXTENSO": {
+      "kind": "variable",
+      "var": "instituicao.municipioUfExtenso"
+    },
+    "NUMERO_ATA": {
+      "kind": "variable",
+      "var": "pos.numeroAta"
+    },
+    "NUMERO_CONTRATO": {
+      "kind": "variable",
+      "var": "pos.numeroContrato"
+    },
+    "NUMERO_PREGAO": {
+      "kind": "variable",
+      "var": "processo.numeroPregao"
+    },
+    "NUMERO_PROCESSO": {
+      "kind": "variable",
+      "var": "processo.numeroProcesso"
+    },
+    "OBJETO_COMPLETO": {
+      "kind": "variable",
+      "var": "processo.objetoCompleto"
+    },
+    "OBJETO_RESUMIDO": {
+      "kind": "variable",
+      "var": "processo.objetoResumido"
+    },
+    "OBRIGACOES_ESPECIFICAS_CONTRATADO": {
+      "kind": "aiSlot",
+      "slotKey": "obrigacoes-especificas-contratado",
+      "maxTokens": 400,
+      "instructionsKey": "edital.obrigacoes-especificas-contratado"
+    },
+    "OBRIGACOES_ESPECIFICAS_CONTRATANTE": {
+      "kind": "aiSlot",
+      "slotKey": "obrigacoes-especificas-contratante",
+      "maxTokens": 400,
+      "instructionsKey": "edital.obrigacoes-especificas-contratante"
+    },
+    "ORCAMENTO_SIGILOSO_SIM_NAO": {
+      "kind": "control",
+      "var": "controle.orcamentoSigilosoSimNao"
+    },
+    "ORGAOS_PARTICIPANTES_SRP": {
+      "kind": "variable",
+      "var": "srp.orgaosParticipantesSrp"
+    },
+    "ORGAO_GERENCIADOR_SRP": {
+      "kind": "variable",
+      "var": "srp.orgaoGerenciadorSrp"
+    },
+    "PARAMETRO_EXEQUIBILIDADE": {
+      "kind": "variable",
+      "var": "julgamento.parametroExequibilidade"
+    },
+    "PERCENTUAL_ACRESCIMO_CONSORCIO": {
+      "kind": "variable",
+      "var": "participacao.percentualAcrescimoConsorcio"
+    },
+    "PERCENTUAL_CAPITAL_PL_MINIMO": {
+      "kind": "variable",
+      "var": "habilitacao.percentualCapitalPlMinimo"
+    },
+    "PERCENTUAL_COTA_RESERVADA": {
+      "kind": "variable",
+      "var": "participacao.percentualCotaReservada"
+    },
+    "PERCENTUAL_DESCONTO_CONTRATADO": {
+      "kind": "variable",
+      "var": "pos.percentualDescontoContratado"
+    },
+    "PERCENTUAL_GARANTIA_CONTRATUAL": {
+      "kind": "variable",
+      "var": "contratacao.percentualGarantiaContratual"
+    },
+    "PERCENTUAL_PRIORIDADE_REGIONAL": {
+      "kind": "variable",
+      "var": "participacao.percentualPrioridadeRegional"
+    },
+    "PERIODO_VISITA_TECNICA": {
+      "kind": "variable",
+      "var": "habilitacao.periodoVisitaTecnica"
+    },
+    "PORTAL_TRANSPARENCIA_URL": {
+      "kind": "variable",
+      "var": "instituicao.portalTransparenciaUrl"
+    },
+    "PRAZO_ASSINATURA_ATA": {
+      "kind": "variable",
+      "var": "srp.prazoAssinaturaAta"
+    },
+    "PRAZO_ASSINATURA_CONTRATO": {
+      "kind": "variable",
+      "var": "contratacao.prazoAssinaturaContrato"
+    },
+    "PRAZO_COMUNICACAO_INCIDENTE_DADOS": {
+      "kind": "variable",
+      "var": "contratacao.prazoComunicacaoIncidenteDados"
+    },
+    "PRAZO_CONVOCACAO_PROPOSTA_AJUSTADA": {
+      "kind": "variable",
+      "var": "julgamento.prazoConvocacaoPropostaAjustada"
+    },
+    "PRAZO_DECISAO_ADMINISTRACAO": {
+      "kind": "variable",
+      "var": "contratacao.prazoDecisaoAdministracao"
+    },
+    "PRAZO_DILIGENCIA": {
+      "kind": "variable",
+      "var": "julgamento.prazoDiligencia"
+    },
+    "PRAZO_DILIGENCIA_EXEQUIBILIDADE": {
+      "kind": "variable",
+      "var": "julgamento.prazoDiligenciaExequibilidade"
+    },
+    "PRAZO_ENTREGA_AMOSTRA": {
+      "kind": "variable",
+      "var": "habilitacao.prazoEntregaAmostra"
+    },
+    "PRAZO_EXECUCAO": {
+      "kind": "variable",
+      "var": "contratacao.prazoExecucao"
+    },
+    "PRAZO_PAGAMENTO": {
+      "kind": "variable",
+      "var": "contratacao.prazoPagamento"
+    },
+    "PRAZO_PRESTACAO_GARANTIA": {
+      "kind": "variable",
+      "var": "contratacao.prazoPrestacaoGarantia"
+    },
+    "PRAZO_PRORROGACAO_CONVOCACAO": {
+      "kind": "variable",
+      "var": "julgamento.prazoProrrogacaoConvocacao"
+    },
+    "PRAZO_PROVA_CONCEITO": {
+      "kind": "variable",
+      "var": "habilitacao.prazoProvaConceito"
+    },
+    "PRAZO_RECEBIMENTO_DEFINITIVO": {
+      "kind": "variable",
+      "var": "contratacao.prazoRecebimentoDefinitivo"
+    },
+    "PRAZO_RECEBIMENTO_PROVISORIO": {
+      "kind": "variable",
+      "var": "contratacao.prazoRecebimentoProvisorio"
+    },
+    "PRAZO_RESPOSTA_REEQUILIBRIO": {
+      "kind": "variable",
+      "var": "contratacao.prazoRespostaReequilibrio"
+    },
+    "PRAZO_RESPOSTA_REPACTUACAO": {
+      "kind": "variable",
+      "var": "contratacao.prazoRespostaRepactuacao"
+    },
+    "PRAZO_SUBSTITUICAO_OBJETO": {
+      "kind": "variable",
+      "var": "contratacao.prazoSubstituicaoObjeto"
+    },
+    "PRAZO_VALIDADE_CERTIDAO_FALENCIA": {
+      "kind": "variable",
+      "var": "habilitacao.prazoValidadeCertidaoFalencia"
+    },
+    "PRAZO_VALIDADE_CERTIDOES_SEM_PRAZO": {
+      "kind": "variable",
+      "var": "habilitacao.prazoValidadeCertidoesSemPrazo"
+    },
+    "PRAZO_VALIDADE_PROPOSTA": {
+      "kind": "variable",
+      "var": "julgamento.prazoValidadeProposta"
+    },
+    "PRAZO_VIGENCIA": {
+      "kind": "variable",
+      "var": "contratacao.prazoVigencia"
+    },
+    "PRAZO_VIGENCIA_ATA": {
+      "kind": "variable",
+      "var": "srp.prazoVigenciaAta"
+    },
+    "PREGOEIRO_NOME": {
+      "kind": "variable",
+      "var": "instituicao.pregoeiroNome"
+    },
+    "PREGOEIRO_PORTARIA": {
+      "kind": "variable",
+      "var": "instituicao.pregoeiroPortaria"
+    },
+    "QUADRO_CADASTRO_RESERVA": {
+      "kind": "dataTable",
+      "tableKey": "quadro-cadastro-reserva",
+      "source": "pos.quadroCadastroReserva",
+      "columns": [
+        {
+          "key": "classificacao",
+          "header": "Classificação"
+        },
+        {
+          "key": "razaoSocial",
+          "header": "Razão social"
+        },
+        {
+          "key": "cnpj",
+          "header": "CNPJ"
+        },
+        {
+          "key": "item",
+          "header": "Item/Lote"
+        },
+        {
+          "key": "valor",
+          "header": "Preço (R$)"
+        }
+      ]
+    },
+    "QUADRO_ITENS_CONTRATACAO": {
+      "kind": "dataTable",
+      "tableKey": "quadro-itens-contratacao",
+      "source": "processo.quadroItensContratacao",
+      "columns": [
+        {
+          "key": "item",
+          "header": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "header": "Descrição"
+        },
+        {
+          "key": "codigoCatalogacao",
+          "header": "Código de catalogação"
+        },
+        {
+          "key": "unidade",
+          "header": "Unidade"
+        },
+        {
+          "key": "quantidade",
+          "header": "Quantidade"
+        },
+        {
+          "key": "regimeParticipacao",
+          "header": "Regime de participação"
+        },
+        {
+          "key": "valorUnitarioEstimado",
+          "header": "Valor unitário estimado (R$)",
+          "when": {
+            "op": "eq",
+            "var": "controle.orcamentoSigilosoSimNao",
+            "value": false
+          }
+        },
+        {
+          "key": "valorTotalEstimado",
+          "header": "Valor total estimado (R$)",
+          "when": {
+            "op": "eq",
+            "var": "controle.orcamentoSigilosoSimNao",
+            "value": false
+          }
+        }
+      ]
+    },
+    "QUADRO_ITENS_CONTRATADOS": {
+      "kind": "dataTable",
+      "tableKey": "quadro-itens-contratados",
+      "source": "pos.quadroItensContratados",
+      "columns": [
+        {
+          "key": "item",
+          "header": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "header": "Descrição"
+        },
+        {
+          "key": "unidade",
+          "header": "Unidade"
+        },
+        {
+          "key": "quantidade",
+          "header": "Quantidade"
+        },
+        {
+          "key": "valorUnitario",
+          "header": "Preço unitário (R$)"
+        },
+        {
+          "key": "valorTotal",
+          "header": "Preço total (R$)"
+        }
+      ]
+    },
+    "QUADRO_PRECOS_REGISTRADOS": {
+      "kind": "dataTable",
+      "tableKey": "quadro-precos-registrados",
+      "source": "pos.quadroPrecosRegistrados",
+      "columns": [
+        {
+          "key": "item",
+          "header": "Item/Lote"
+        },
+        {
+          "key": "descricao",
+          "header": "Descrição"
+        },
+        {
+          "key": "unidade",
+          "header": "Unidade"
+        },
+        {
+          "key": "quantidadeMaxima",
+          "header": "Quantidade máxima"
+        },
+        {
+          "key": "valorUnitario",
+          "header": "Preço unitário registrado (R$)"
+        }
+      ]
+    },
+    "REGIME_PARTICIPACAO": {
+      "kind": "variable",
+      "var": "julgamento.regimeParticipacao"
+    },
+    "REGISTRO_CADASTRAL_ACEITO": {
+      "kind": "variable",
+      "var": "habilitacao.registroCadastralAceito"
+    },
+    "REGRAS_ETAPA_ABERTA_FECHADA": {
+      "kind": "variable",
+      "var": "julgamento.regrasEtapaAbertaFechada"
+    },
+    "REGRA_CUSTOS_MERCADO_REPACTUACAO": {
+      "kind": "variable",
+      "var": "contratacao.regraCustosMercadoRepactuacao"
+    },
+    "REGRA_PRORROGACAO_AUTOMATICA": {
+      "kind": "variable",
+      "var": "julgamento.regraProrrogacaoAutomatica"
+    },
+    "REGRA_QUANTIDADE_MINIMA_COTACAO_SRP": {
+      "kind": "variable",
+      "var": "srp.regraQuantidadeMinimaCotacaoSrp"
+    },
+    "REGULAMENTO_BLL_VERSAO": {
+      "kind": "variable",
+      "var": "processo.regulamentoBllVersao"
+    },
+    "REQUISITOS_QUALIFICACAO_TECNICA": {
+      "kind": "variable",
+      "var": "habilitacao.requisitosQualificacaoTecnica"
+    },
+    "SECRETARIA_REQUISITANTE": {
+      "kind": "variable",
+      "var": "processo.secretariaRequisitante"
+    },
+    "SIGNATARIO_EDITAL_CARGO": {
+      "kind": "variable",
+      "var": "instituicao.signatarioEditalCargo"
+    },
+    "SIGNATARIO_EDITAL_NOME": {
+      "kind": "variable",
+      "var": "instituicao.signatarioEditalNome"
+    },
+    "TABELA_MULTAS": {
+      "kind": "dataTable",
+      "tableKey": "tabela-multas",
+      "source": "sancoes.tabelaMultas",
+      "columns": [
+        {
+          "key": "infracao",
+          "header": "Infração"
+        },
+        {
+          "key": "percentual",
+          "header": "Percentual"
+        },
+        {
+          "key": "baseCalculo",
+          "header": "Base de cálculo"
+        }
+      ]
+    },
+    "TIPO_EXIGENCIA_CAPITAL_PL": {
+      "kind": "variable",
+      "var": "habilitacao.tipoExigenciaCapitalPl"
+    },
+    "UTILIZA_SRP": {
+      "kind": "control",
+      "var": "controle.utilizaSrp"
+    },
+    "VALOR_CONTRATO": {
+      "kind": "variable",
+      "var": "pos.valorContrato"
+    },
+    "VALOR_ESTIMADO": {
+      "kind": "variable",
+      "var": "julgamento.valorEstimado"
+    }
+  },
+  "conditions": {
+    "SE_ACEITA_REGISTRO_CADASTRAL": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.aceitaRegistroCadastral",
+        "value": true
+      }
+    },
+    "SE_ADMITE_ADESAO_ATA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.adesaoAta",
+        "value": "admite"
+      },
+      "group": "adesao_ata"
+    },
+    "SE_ADMITE_SUBCONTRATACAO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.subcontratacao",
+        "value": "admite"
+      },
+      "group": "subcontratacao"
+    },
+    "SE_ANEXOS_ADICIONAIS": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.anexosAdicionais",
+        "value": true
+      }
+    },
+    "SE_BENEFICIO_AFASTADO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.beneficioAfastado",
+        "value": true
+      }
+    },
+    "SE_CONTRATO_POR_ESCOPO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.contratoPorEscopo",
+        "value": true
+      },
+      "group": "prorrogacao"
+    },
+    "SE_COTA_RESERVADA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.cotaReservada",
+        "value": true
+      }
+    },
+    "SE_DECLARACAO_ESPECIFICA_OBJETO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.declaracaoEspecificaObjeto",
+        "value": true
+      }
+    },
+    "SE_DISPUTA_ABERTA": {
+      "when": {
+        "op": "eq",
+        "var": "julgamento.modoDisputa",
+        "value": "aberto"
+      },
+      "group": "disputa"
+    },
+    "SE_DISPUTA_ABERTA_FECHADA": {
+      "when": {
+        "op": "eq",
+        "var": "julgamento.modoDisputa",
+        "value": "aberto e fechado"
+      },
+      "group": "disputa"
+    },
+    "SE_EXCLUSIVIDADE_REGIONAL": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.modalidadeTratamentoRegional",
+        "value": "exclusividade"
+      },
+      "group": "regional"
+    },
+    "SE_EXCLUSIVO_ME_EPP": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exclusivoMeEpp",
+        "value": true
+      }
+    },
+    "SE_EXIGE_AMOSTRA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeAmostra",
+        "value": true
+      }
+    },
+    "SE_EXIGE_BALANCO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeBalanco",
+        "value": true
+      }
+    },
+    "SE_EXIGE_CAPITAL_OU_PL_MINIMO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeCapitalOuPlMinimo",
+        "value": true
+      }
+    },
+    "SE_EXIGE_CATALOGO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeCatalogo",
+        "value": true
+      }
+    },
+    "SE_EXIGE_GARANTIA_CONTRATUAL": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeGarantiaContratual",
+        "value": true
+      }
+    },
+    "SE_EXIGE_MARCA_MODELO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeMarcaModelo",
+        "value": true
+      }
+    },
+    "SE_EXIGE_PROVA_CONCEITO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.exigeProvaConceito",
+        "value": true
+      }
+    },
+    "SE_INSTRUMENTO_EQUIVALENTE": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.instrumentoContratual",
+        "value": "equivalente"
+      },
+      "group": "instrumento"
+    },
+    "SE_INTERVALO_MINIMO_LANCES": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.intervaloMinimoLances",
+        "value": true
+      }
+    },
+    "SE_INVERSAO_FASES": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.inversaoFases",
+        "value": true
+      },
+      "group": "fases"
+    },
+    "SE_JULGAMENTO_POR_ITEM": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.formaJulgamento",
+        "value": "item"
+      },
+      "group": "forma_julgamento"
+    },
+    "SE_JULGAMENTO_POR_LOTE": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.formaJulgamento",
+        "value": "lote"
+      },
+      "group": "forma_julgamento"
+    },
+    "SE_MAIOR_DESCONTO": {
+      "when": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "maior desconto"
+      },
+      "group": "criterio"
+    },
+    "SE_MATRIZ_DE_RISCOS": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.matrizDeRiscos",
+        "value": true
+      }
+    },
+    "SE_MENOR_PRECO": {
+      "when": {
+        "op": "eq",
+        "var": "julgamento.criterioJulgamento",
+        "value": "menor preço"
+      },
+      "group": "criterio"
+    },
+    "SE_ORCAMENTO_PUBLICO": {
+      "when": {
+        "op": "eq",
+        "var": "controle.orcamentoSigilosoSimNao",
+        "value": false
+      },
+      "group": "orcamento"
+    },
+    "SE_ORCAMENTO_SIGILOSO": {
+      "when": {
+        "op": "eq",
+        "var": "controle.orcamentoSigilosoSimNao",
+        "value": true
+      },
+      "group": "orcamento"
+    },
+    "SE_PARTICIPACAO_CONSORCIO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.consorcio",
+        "value": "admite"
+      },
+      "group": "consorcio"
+    },
+    "SE_PARTICIPACAO_COOPERATIVA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.participacaoCooperativa",
+        "value": true
+      }
+    },
+    "SE_PASTA_TECNICA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.pastaTecnica",
+        "value": true
+      }
+    },
+    "SE_PRIORIDADE_REGIONAL": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.modalidadeTratamentoRegional",
+        "value": "prioridade"
+      },
+      "group": "regional"
+    },
+    "SE_PROPOSTA_SEM_IDENTIFICACAO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.propostaSemIdentificacao",
+        "value": true
+      }
+    },
+    "SE_REGULAMENTO_MUNICIPAL_VERIFICADO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.regulamentoMunicipalVerificado",
+        "value": true
+      }
+    },
+    "SE_REPACTUACAO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.repactuacao",
+        "value": true
+      }
+    },
+    "SE_SEM_INVERSAO_FASES": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.inversaoFases",
+        "value": false
+      },
+      "group": "fases"
+    },
+    "SE_SEM_SRP": {
+      "when": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": false
+      },
+      "group": "srp"
+    },
+    "SE_SEM_TRATAMENTO_DADOS_PESSOAIS": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.tratamentoDadosPessoais",
+        "value": false
+      },
+      "group": "dados_pessoais"
+    },
+    "SE_SERVICO_OU_FORNECIMENTO_CONTINUO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.servicoOuFornecimentoContinuo",
+        "value": true
+      },
+      "group": "prorrogacao"
+    },
+    "SE_SRP_ATA": {
+      "when": {
+        "op": "eq",
+        "var": "controle.utilizaSrp",
+        "value": true
+      },
+      "group": "srp"
+    },
+    "SE_TERMO_DE_CONTRATO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.instrumentoContratual",
+        "value": "termo"
+      },
+      "group": "instrumento"
+    },
+    "SE_TRATAMENTO_DADOS_PESSOAIS": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.tratamentoDadosPessoais",
+        "value": true
+      },
+      "group": "dados_pessoais"
+    },
+    "SE_TRATAMENTO_REGIONAL": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.tratamentoRegional",
+        "value": true
+      }
+    },
+    "SE_VEDACAO_CONSORCIO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.consorcio",
+        "value": "veda"
+      },
+      "group": "consorcio"
+    },
+    "SE_VEDA_ADESAO_ATA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.adesaoAta",
+        "value": "veda"
+      },
+      "group": "adesao_ata"
+    },
+    "SE_VEDA_SUBCONTRATACAO": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.subcontratacao",
+        "value": "veda"
+      },
+      "group": "subcontratacao"
+    },
+    "SE_VISITA_TECNICA_FACULTATIVA": {
+      "when": {
+        "op": "eq",
+        "var": "decisao.visitaTecnicaFacultativa",
+        "value": true
+      }
+    }
+  },
+  "exclusiveGroups": {
+    "criterio": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_MENOR_PRECO",
+        "SE_MAIOR_DESCONTO"
+      ]
+    },
+    "disputa": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_DISPUTA_ABERTA",
+        "SE_DISPUTA_ABERTA_FECHADA"
+      ]
+    },
+    "orcamento": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_ORCAMENTO_PUBLICO",
+        "SE_ORCAMENTO_SIGILOSO"
+      ]
+    },
+    "srp": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_SRP_ATA",
+        "SE_SEM_SRP"
+      ]
+    },
+    "forma_julgamento": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_JULGAMENTO_POR_ITEM",
+        "SE_JULGAMENTO_POR_LOTE"
+      ]
+    },
+    "adesao_ata": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_ADMITE_ADESAO_ATA",
+        "SE_VEDA_ADESAO_ATA"
+      ]
+    },
+    "consorcio": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_PARTICIPACAO_CONSORCIO",
+        "SE_VEDACAO_CONSORCIO"
+      ]
+    },
+    "regional": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_PRIORIDADE_REGIONAL",
+        "SE_EXCLUSIVIDADE_REGIONAL"
+      ]
+    },
+    "fases": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_INVERSAO_FASES",
+        "SE_SEM_INVERSAO_FASES"
+      ]
+    },
+    "instrumento": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_TERMO_DE_CONTRATO",
+        "SE_INSTRUMENTO_EQUIVALENTE"
+      ]
+    },
+    "subcontratacao": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_ADMITE_SUBCONTRATACAO",
+        "SE_VEDA_SUBCONTRATACAO"
+      ]
+    },
+    "prorrogacao": {
+      "mode": "at-most-one",
+      "branches": [
+        "SE_CONTRATO_POR_ESCOPO",
+        "SE_SERVICO_OU_FORNECIMENTO_CONTINUO"
+      ]
+    },
+    "dados_pessoais": {
+      "mode": "exactly-one",
+      "branches": [
+        "SE_TRATAMENTO_DADOS_PESSOAIS",
+        "SE_SEM_TRATAMENTO_DADOS_PESSOAIS"
+      ]
+    }
+  },
+  "anchors": [
+    {
+      "key": "anexo-contrato.item.19-1",
+      "scope": "anexo-contrato",
+      "kind": "paragraph",
+      "literal": "19.1"
+    },
+    {
+      "key": "anexo-contrato.clausula.primeira",
+      "scope": "anexo-contrato",
+      "kind": "section",
+      "literal": "PRIMEIRA"
+    },
+    {
+      "key": "edital.item.17-4.alinea-b",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "b",
+      "parent": "17.4"
+    },
+    {
+      "key": "edital.item.20-1.alinea-a",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "a",
+      "parent": "20.1"
+    },
+    {
+      "key": "edital.item.20-1.alinea-b",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "b",
+      "parent": "20.1"
+    },
+    {
+      "key": "edital.item.30-1.alinea-a",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "a",
+      "parent": "30.1"
+    },
+    {
+      "key": "edital.item.30-1.alinea-b",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "b",
+      "parent": "30.1"
+    },
+    {
+      "key": "edital.item.30-1.alinea-g",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "g",
+      "parent": "30.1"
+    },
+    {
+      "key": "edital.item.30-1.alinea-h",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "h",
+      "parent": "30.1"
+    },
+    {
+      "key": "edital.item.30-1.alinea-l",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "l",
+      "parent": "30.1"
+    },
+    {
+      "key": "edital.item.30-2.alinea-a",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "a",
+      "parent": "30.2"
+    },
+    {
+      "key": "edital.item.30-2.alinea-c",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "c",
+      "parent": "30.2"
+    },
+    {
+      "key": "edital.item.30-2.alinea-d",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "d",
+      "parent": "30.2"
+    },
+    {
+      "key": "edital.item.6-3.alinea-b",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "b",
+      "parent": "6.3"
+    },
+    {
+      "key": "edital.item.6-6.alinea-a",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "a",
+      "parent": "6.6"
+    },
+    {
+      "key": "edital.item.7-6.alinea-a",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "a",
+      "parent": "7.6"
+    },
+    {
+      "key": "edital.item.9-9.alinea-d",
+      "scope": "main",
+      "kind": "alpha",
+      "literal": "d",
+      "parent": "9.9"
+    },
+    {
+      "key": "edital.item.1-3",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "1.3"
+    },
+    {
+      "key": "edital.item.14-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "14.1"
+    },
+    {
+      "key": "edital.item.15-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "15.1"
+    },
+    {
+      "key": "edital.acceptability.criteria",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "15.4"
+    },
+    {
+      "key": "edital.item.15-5-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "15.5.1"
+    },
+    {
+      "key": "edital.item.20-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "20.1"
+    },
+    {
+      "key": "edital.item.20-2",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "20.2"
+    },
+    {
+      "key": "edital.item.20-3",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "20.3"
+    },
+    {
+      "key": "edital.item.20-6",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "20.6"
+    },
+    {
+      "key": "edital.item.22-4",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "22.4"
+    },
+    {
+      "key": "edital.item.23-4",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "23.4"
+    },
+    {
+      "key": "edital.item.23-4-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "23.4.1"
+    },
+    {
+      "key": "edital.item.26-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "26.1"
+    },
+    {
+      "key": "edital.item.3-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "3.1"
+    },
+    {
+      "key": "edital.item.3-6",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "3.6"
+    },
+    {
+      "key": "edital.item.30-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "30.1"
+    },
+    {
+      "key": "edital.item.30-2",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "30.2"
+    },
+    {
+      "key": "edital.item.30-3",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "30.3"
+    },
+    {
+      "key": "edital.item.35-4",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "35.4"
+    },
+    {
+      "key": "edital.item.4-1",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "4.1"
+    },
+    {
+      "key": "edital.item.6-3",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "6.3"
+    },
+    {
+      "key": "edital.item.6-4",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "6.4"
+    },
+    {
+      "key": "edital.item.7-10",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "7.10"
+    },
+    {
+      "key": "edital.item.7-3",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "7.3"
+    },
+    {
+      "key": "edital.item.7-5",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "7.5"
+    },
+    {
+      "key": "edital.item.7-6",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "7.6"
+    },
+    {
+      "key": "edital.item.9-5",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "9.5"
+    },
+    {
+      "key": "edital.item.9-8",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "9.8"
+    },
+    {
+      "key": "edital.item.9-9",
+      "scope": "main",
+      "kind": "paragraph",
+      "literal": "9.9"
+    },
+    {
+      "key": "edital.secao.13",
+      "scope": "main",
+      "kind": "section",
+      "literal": "13"
+    },
+    {
+      "key": "edital.secao.14",
+      "scope": "main",
+      "kind": "section",
+      "literal": "14"
+    },
+    {
+      "key": "edital.secao.15",
+      "scope": "main",
+      "kind": "section",
+      "literal": "15"
+    },
+    {
+      "key": "edital.secao.17",
+      "scope": "main",
+      "kind": "section",
+      "literal": "17"
+    },
+    {
+      "key": "edital.secao.18",
+      "scope": "main",
+      "kind": "section",
+      "literal": "18"
+    },
+    {
+      "key": "edital.secao.22",
+      "scope": "main",
+      "kind": "section",
+      "literal": "22"
+    },
+    {
+      "key": "edital.secao.29",
+      "scope": "main",
+      "kind": "section",
+      "literal": "29"
+    },
+    {
+      "key": "edital.secao.30",
+      "scope": "main",
+      "kind": "section",
+      "literal": "30"
+    },
+    {
+      "key": "edital.secao.8",
+      "scope": "main",
+      "kind": "section",
+      "literal": "8"
+    }
+  ],
+  "annexes": [
+    {
+      "id": "anexo-termo-referencia",
+      "role": "termo-referencia",
+      "order": 1,
+      "title": "TERMO DE REFERÊNCIA",
+      "headingMatch": "^ANEXO I —"
+    },
+    {
+      "id": "anexo-proposta",
+      "role": "proposta",
+      "order": 2,
+      "title": "MODELO DE PROPOSTA COMERCIAL / PROPOSTA AJUSTADA",
+      "headingMatch": "^ANEXO II —"
+    },
+    {
+      "id": "anexo-declaracoes",
+      "role": "declaracoes",
+      "order": 3,
+      "title": "MODELO DE DECLARAÇÕES",
+      "headingMatch": "^ANEXO III —"
+    },
+    {
+      "id": "anexo-contrato",
+      "role": "contrato",
+      "order": 4,
+      "title": "MINUTA DE CONTRATO",
+      "headingMatch": "^ANEXO IV —"
+    },
+    {
+      "id": "anexo-ata",
+      "role": "ata",
+      "order": 5,
+      "title": "MINUTA DE ATA DE REGISTRO DE PREÇOS",
+      "headingMatch": "^ANEXO V —"
+    }
+  ],
+  "crossReferences": [
+    {
+      "scope": "*",
+      "context": "Anexo ⟦III⟧",
+      "targets": [
+        "anexo-declaracoes"
+      ],
+      "occurrences": 5
+    },
+    {
+      "scope": "*",
+      "context": "Anexo ⟦II⟧",
+      "targets": [
+        "anexo-proposta"
+      ],
+      "occurrences": 3
+    },
+    {
+      "scope": "*",
+      "context": "Anexo ⟦IV⟧",
+      "targets": [
+        "anexo-contrato"
+      ],
+      "occurrences": 16
+    },
+    {
+      "scope": "*",
+      "context": "Anexo ⟦I⟧",
+      "targets": [
+        "anexo-termo-referencia"
+      ],
+      "occurrences": 7
+    },
+    {
+      "scope": "*",
+      "context": "Anexo ⟦V⟧",
+      "targets": [
+        "anexo-ata"
+      ],
+      "occurrences": 4
+    },
+    {
+      "scope": "anexo-ata",
+      "context": "Seção ⟦30⟧",
+      "targets": [
+        "edital.secao.30"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "anexo-contrato",
+      "context": "Cláusula ⟦Primeira⟧",
+      "targets": [
+        "anexo-contrato.clausula.primeira"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "anexo-contrato",
+      "context": "Seção ⟦30⟧",
+      "targets": [
+        "edital.secao.30"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "anexo-contrato",
+      "context": "item ⟦19.1⟧",
+      "targets": [
+        "anexo-contrato.item.19-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "anexo-declaracoes",
+      "context": "item ⟦6.3⟧",
+      "targets": [
+        "edital.item.6-3"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦13⟧",
+      "targets": [
+        "edital.secao.13"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦14⟧",
+      "targets": [
+        "edital.secao.14"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦15⟧",
+      "targets": [
+        "edital.secao.15"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦17⟧",
+      "targets": [
+        "edital.secao.17"
+      ],
+      "occurrences": 4
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦18⟧",
+      "targets": [
+        "edital.secao.18"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦22⟧",
+      "targets": [
+        "edital.secao.22"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦29⟧",
+      "targets": [
+        "edital.secao.29"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦30⟧",
+      "targets": [
+        "edital.secao.30"
+      ],
+      "occurrences": 6
+    },
+    {
+      "scope": "main",
+      "context": "Seção ⟦8⟧",
+      "targets": [
+        "edital.secao.8"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "Seções ⟦13⟧ a ⟦17⟧",
+      "targets": [
+        "edital.secao.13",
+        "edital.secao.17"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "alínea \"⟦a⟧\" do item ⟦30.1⟧",
+      "targets": [
+        "edital.item.30-1.alinea-a",
+        "edital.item.30-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "alínea \"⟦b⟧\" do item ⟦6.3⟧",
+      "targets": [
+        "edital.item.6-3.alinea-b",
+        "edital.item.6-3"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "alíneas \"⟦a⟧\" e \"⟦b⟧\" do item ⟦20.1⟧",
+      "targets": [
+        "edital.item.20-1.alinea-a",
+        "edital.item.20-1.alinea-b",
+        "edital.item.20-1"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "alíneas \"⟦a⟧\", \"⟦c⟧\" e \"⟦d⟧\" do item ⟦30.2⟧",
+      "targets": [
+        "edital.item.30-2.alinea-a",
+        "edital.item.30-2.alinea-c",
+        "edital.item.30-2.alinea-d",
+        "edital.item.30-2"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "alíneas \"⟦b⟧\" a \"⟦g⟧\" do item ⟦30.1⟧",
+      "targets": [
+        "edital.item.30-1.alinea-b",
+        "edital.item.30-1.alinea-g",
+        "edital.item.30-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "alíneas \"⟦h⟧\" a \"⟦l⟧\" do item ⟦30.1⟧",
+      "targets": [
+        "edital.item.30-1.alinea-h",
+        "edital.item.30-1.alinea-l",
+        "edital.item.30-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "compromisso da alínea \"⟦a⟧\"",
+      "targets": [
+        "edital.item.6-6.alinea-a"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "das alíneas \"⟦b⟧\" a \"⟦g⟧\" que justifiquem",
+      "targets": [
+        "edital.item.30-1.alinea-b",
+        "edital.item.30-1.alinea-g"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦1.3⟧",
+      "targets": [
+        "edital.item.1-3"
+      ],
+      "occurrences": 3
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦14.1⟧",
+      "targets": [
+        "edital.item.14-1"
+      ],
+      "occurrences": 3
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦15.1⟧",
+      "targets": [
+        "edital.item.15-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦15.4⟧",
+      "targets": [
+        "edital.acceptability.criteria"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦15.5.1⟧",
+      "targets": [
+        "edital.item.15-5-1"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦20.2⟧",
+      "targets": [
+        "edital.item.20-2"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦20.3⟧",
+      "targets": [
+        "edital.item.20-3"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦20.6⟧",
+      "targets": [
+        "edital.item.20-6"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦22.4⟧",
+      "targets": [
+        "edital.item.22-4"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦23.4.1⟧",
+      "targets": [
+        "edital.item.23-4-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦23.4⟧",
+      "targets": [
+        "edital.item.23-4"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦26.1⟧",
+      "targets": [
+        "edital.item.26-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦3.1⟧",
+      "targets": [
+        "edital.item.3-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦3.6⟧",
+      "targets": [
+        "edital.item.3-6"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦30.1⟧",
+      "targets": [
+        "edital.item.30-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦30.3⟧",
+      "targets": [
+        "edital.item.30-3"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦35.4⟧",
+      "targets": [
+        "edital.item.35-4"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦4.1⟧",
+      "targets": [
+        "edital.item.4-1"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦6.3⟧",
+      "targets": [
+        "edital.item.6-3"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦6.4⟧",
+      "targets": [
+        "edital.item.6-4"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦7.10⟧",
+      "targets": [
+        "edital.item.7-10"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦7.3⟧",
+      "targets": [
+        "edital.item.7-3"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦7.5⟧",
+      "targets": [
+        "edital.item.7-5"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦7.6⟧",
+      "targets": [
+        "edital.item.7-6"
+      ],
+      "occurrences": 2
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦9.5⟧",
+      "targets": [
+        "edital.item.9-5"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦9.8⟧",
+      "targets": [
+        "edital.item.9-8"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "item ⟦9.9⟧, alínea \"⟦d⟧\"",
+      "targets": [
+        "edital.item.9-9",
+        "edital.item.9-9.alinea-d"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "itens ⟦7.5⟧ e ⟦7.6⟧",
+      "targets": [
+        "edital.item.7-5",
+        "edital.item.7-6"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "na forma da alínea \"⟦a⟧\"",
+      "targets": [
+        "edital.item.7-6.alinea-a"
+      ],
+      "occurrences": 1
+    },
+    {
+      "scope": "main",
+      "context": "os documentos da alínea \"⟦b⟧\"",
+      "targets": [
+        "edital.item.17-4.alinea-b"
+      ],
+      "occurrences": 1
+    }
+  ],
+  "externalCitations": [
+    "alínea \"d\", da Lei"
+  ],
+  "remissionScan": {
+    "pattern": "\\b(?:itens?|subitens?)\\s+\\d|\\bSeç(?:ão|ões)\\s+\\d|\\bCláusulas?\\s+[A-Z]|\\bAnexos?\\s+[IVX]+\\b|\\balíneas?\\s+\"[a-z]\""
+  },
+  "guards": [
+    {
+      "placeholder": "AUTORIZACAO_ATIVIDADE_EXIGIDA",
+      "rationale": "Nota do mestre (item 17.2, alínea \"f\"): a alínea só é renderizada quando o campo vier preenchido a partir do TR; vazio = suprimir. A nota é documentação — a regra entra aqui, por mapeamento governado."
+    }
+  ],
+  "requireCurrencyInMoneyHeaders": true,
+  "expectations": {
+    "inputs": 160,
+    "renderCapable": 157,
+    "controls": 3,
+    "conditionTypes": 48,
+    "conditionBlocks": 80
+  },
+  "findings": [
+    {
+      "id": "DOCX-ANEXO-II-PRECO",
+      "description": "O DOCX congelado (sha256 5927f257c82599faff208994b02aae8a9b094c491b66b0bc12cdf0f6d8f38fa9) perdeu a tabela de preços do Anexo II (bloco SE_MENOR_PRECO): o par de \"$\" em \"Preço unitário (R$)\" / \"Preço total (R$)\" foi lido pela conversão como matemática em linha (1 objeto OMML), removendo os \"$\" e os espaços (\"Preçototal(R)\") e deixando a linha em texto com barras. O Markdown aprovado (sha256 6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904) está íntegro; a AST deriva dele e declara \"(R$)\" nas colunas monetárias. O snapshot congelado não foi alterado."
+    }
+  ]
+}

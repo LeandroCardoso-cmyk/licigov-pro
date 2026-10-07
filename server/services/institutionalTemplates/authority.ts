@@ -9,7 +9,8 @@ import { TemplateWorkflowError } from "./errors";
 import type { HumanActor } from "./ports";
 
 export type TemplateAction =
-  | "read" | "preview" | "draft" | "import" | "approve" | "publish" | "deprecate" | "bind" | "review" | "generate";
+  | "read" | "preview" | "draft" | "import" | "approve" | "publish" | "deprecate" | "bind" | "review" | "generate" | "govern"
+  | "register" | "evidence";
 
 /** Piso de papel por ação (aplicado no router por `orgRoleProcedure`; reafirmado nos testes). */
 export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>> = Object.freeze({
@@ -24,6 +25,12 @@ export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>>
   // revisão humana do documento composto (aceite de IA, reconhecimento de desvio) e geração por modelo: mesmo piso de edição
   review: "operator",
   generate: "operator",
+  // atos institucionais do órgão sobre as fontes governadas (certame, política, orçamento)
+  govern: "manager",
+  // piloto Edital: registrar/importar o modelo (nasce DRAFT + procedência) = mesmo piso de importar; registrar a EVIDÊNCIA de
+  // aprovação jurídica externa = piso de aprovar (ato de governança com autoridade declarada, nunca competência validada).
+  register: "operator",
+  evidence: "manager",
 });
 
 /** Ações que exigem ator humano autenticado (todas as que mudam estado institucional). */
