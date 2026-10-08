@@ -32,24 +32,26 @@ import { invalidateFlagCache } from "./featureFlagService";
 import { APP_ENV, IS_PRODUCTION, type AppEnv } from "../config/env";
 import { FF_DIRECT_CONTRACT_SHADOW } from "./directContractShadowService";
 import { CANONICAL_INGESTION_FLAG } from "./ingestionUploadService";
+import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "./institutionalTemplates/portsRegistry";
 import { serviceLogger } from "./observabilityService";
 
 const log = serviceLogger("FeatureFlagAdminService");
 
 /**
  * Allowlist canônico de flags governáveis por ESTA superfície institucional (decisão explícita).
- * Contém a flag da C.3A (`FF_DIRECT_CONTRACT_SHADOW`) e a ingestão canônica (`FF_CANONICAL_INGESTION`).
+ * Contém a flag da C.3A (`FF_DIRECT_CONTRACT_SHADOW`), a ingestão canônica (`FF_CANONICAL_INGESTION`) e os Modelos
+ * Institucionais (`FF_INSTITUTIONAL_TEMPLATES_V1`; default OFF — liberar a governança NÃO ativa a feature).
  * Ampliar este conjunto é decisão arquitetural explícita, nunca um atalho: um nome fora daqui é
  * recusado. As flags aqui NÃO são kill-switches globais (que seguem o caminho `isGlobalFlagEnabled`).
  */
-export const GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [FF_DIRECT_CONTRACT_SHADOW, CANONICAL_INGESTION_FLAG];
+export const GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [FF_DIRECT_CONTRACT_SHADOW, CANONICAL_INGESTION_FLAG, FF_INSTITUTIONAL_TEMPLATES_V1];
 
 /**
  * Subconjunto EXTREMAMENTE restrito de `GOVERNABLE_TENANT_FLAGS` cuja ESCRITA é permitida em PRODUÇÃO
  * (sempre tenant-scoped, pelo mesmo caminho auditado). Match exato — sem wildcard, sem prefixo.
  * `FF_DIRECT_CONTRACT_SHADOW` fica de fora de propósito: continua mutável só em development/staging.
  */
-export const PRODUCTION_GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [CANONICAL_INGESTION_FLAG];
+export const PRODUCTION_GOVERNABLE_TENANT_FLAGS: ReadonlyArray<string> = [CANONICAL_INGESTION_FLAG, FF_INSTITUTIONAL_TEMPLATES_V1];
 
 /** Justificativa mínima (após trim) exigida para alterações em PRODUÇÃO. */
 export const PRODUCTION_REASON_MIN_LENGTH = 15;

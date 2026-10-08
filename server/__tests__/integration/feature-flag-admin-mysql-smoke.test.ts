@@ -18,6 +18,7 @@ import { setTenantFlag, resolveTenantFlag } from "../../services/featureFlagAdmi
 import { FF_DIRECT_CONTRACT_SHADOW } from "../../services/directContractShadowService";
 import { isFeatureEnabled, invalidateAllFlagsForTenant } from "../../services/featureFlagService";
 import { CANONICAL_INGESTION_FLAG } from "../../services/ingestionUploadService";
+import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../../services/institutionalTemplates/portsRegistry";
 
 const DB = process.env.DATABASE_URL;
 const ORG_A = 970501;
@@ -347,5 +348,117 @@ describe.skipIf(!DB)("Produção governada — FF_CANONICAL_INGESTION por tenant
   it("D: nenhuma linha GLOBAL criada em feature_flags para FF_CANONICAL_INGESTION", async () => {
     const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM feature_flags WHERE name = ?", [CANONICAL_INGESTION_FLAG]);
     expect(Number((rows[0] as any).n)).toBe(0);
+  });
+});
+
+describe.skipIf(!DB)("Produção governada — FF_INSTITUTIONAL_TEMPLATES_V1 por tenant (MySQL real)", () => {
+  const ORG_A = 970521;
+  const ORG_B = 970522;
+  const FLAG = FF_INSTITUTIONAL_TEMPLATES_V1;
+  const REASON = "Piloto do Edital — liberação governada dos Modelos Institucionais";
+  let prod: typeof import("../../services/featureFlagAdminService");
+
+  const tenantRow = async (org: number) => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT enabled, percentage FROM tenant_feature_flags WHERE organizationId = ? AND flagName = ?", [org, FLAG]);
+    return rows[0] ? { enabled: Boolean((rows[0] as any).enabled), percentage: Number((rows[0] as any).percentage) } : null;
+  };
+  const audits = async (org: number) => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT action, userId, correlationId, details FROM activity_logs WHERE organizationId = ? AND entityType = 'feature_flag' ORDER BY id", [org]);
+    return rows as any[];
+  };
+  const effective = async (org: number) => { invalidateAllFlagsForTenant(org); return isFeatureEnabled(FLAG, org); };
+  const write = (org: number, enabled: boolean, key: string, reason = REASON) =>
+    prod.setTenantFlag({ organizationId: org, flagName: FLAG, enabled, reason, idempotencyKey: key,
+      actorUserId: ACTOR, actorName: "Admin Plataforma", actorRole: "admin", correlationId: `corr-${key}`, requestId: `req-${key}` });
+  const globalRows = async () => {
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) n FROM feature_flags WHERE name = ?", [FLAG]);
+    return Number((rows[0] as any).n);
+  };
+
+  async function cleanupTpl() {
+    for (const org of [ORG_A, ORG_B]) {
+      await conn.execute("DELETE FROM tenant_feature_flags WHERE organizationId = ?", [org]).catch(() => {});
+      await conn.execute("DELETE FROM activity_logs WHERE organizationId = ? AND entityType = 'feature_flag'", [org]).catch(() => {});
+      await conn.execute("DELETE FROM idempotency_keys WHERE organizationId = ?", [org]).catch(() => {});
+      invalidateAllFlagsForTenant(org);
+    }
+  }
+
+  beforeAll(async () => {
+    conn = await mysql.createConnection(DB!);
+    for (const [org, slug] of [[ORG_A, "fftpl-a"], [ORG_B, "fftpl-b"]] as const) {
+      await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [org, `FF Tpl Org ${org}`, slug]).catch(() => {});
+    }
+    await cleanupTpl();
+    vi.resetModules();
+    vi.doMock("../../config/env", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../config/env")>()), IS_PRODUCTION: true }));
+    prod = await import("../../services/featureFlagAdminService");
+  }, 120_000);
+
+  afterAll(async () => {
+    vi.doUnmock("../../config/env");
+    vi.resetModules();
+    await cleanupTpl();
+    await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG_A, ORG_B]).catch(() => {});
+    await conn.end().catch(() => {});
+  });
+
+  it("A e B começam OFF (default global OFF, sem override e sem linha global)", async () => {
+    expect(await effective(ORG_A)).toBe(false);
+    expect(await effective(ORG_B)).toBe(false);
+    expect(await tenantRow(ORG_A)).toBeNull();
+    expect(await tenantRow(ORG_B)).toBeNull();
+    expect(await prod.resolveTenantFlag(FLAG, ORG_A)).toMatchObject({ origin: "default", effectiveValue: false, writeAllowed: true });
+  });
+
+  it("enable A ⇒ A TRUE, B FALSE; percentage 100; auditoria atômica com before/after", async () => {
+    const r = await write(ORG_A, true, "fftpl-on-1");
+    expect(r).toMatchObject({ replayed: false, before: null, after: { enabled: true, percentage: 100 }, effectiveValue: true, origin: "tenant" });
+    expect(await tenantRow(ORG_A)).toEqual({ enabled: true, percentage: 100 });
+    expect(await effective(ORG_A)).toBe(true);
+    expect(await tenantRow(ORG_B)).toBeNull();
+    expect(await effective(ORG_B)).toBe(false);
+    const a = await audits(ORG_A);
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatchObject({ action: "feature_flag_enabled", userId: ACTOR, correlationId: "corr-fftpl-on-1" });
+    expect(JSON.parse(a[0].details)).toMatchObject({ flagName: FLAG, organizationId: ORG_A, before: null, after: { enabled: true }, reason: REASON, idempotencyKey: "fftpl-on-1" });
+    expect(await audits(ORG_B)).toHaveLength(0);
+  });
+
+  it("replay (mesma chave e payload) ⇒ replayed, sem 2º activity_log", async () => {
+    const before = (await audits(ORG_A)).length;
+    expect((await write(ORG_A, true, "fftpl-on-1")).replayed).toBe(true);
+    expect((await audits(ORG_A)).length).toBe(before);
+    expect(await tenantRow(ORG_A)).toEqual({ enabled: true, percentage: 100 });
+  });
+
+  it("mesma chave com payload diferente ⇒ CONFLICT, sem alterar o estado", async () => {
+    const before = (await audits(ORG_A)).length;
+    await expect(write(ORG_A, false, "fftpl-on-1")).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await tenantRow(ORG_A)).toEqual({ enabled: true, percentage: 100 });
+    expect((await audits(ORG_A)).length).toBe(before);
+  });
+
+  it("disable A ⇒ A FALSE; auditoria com before/after; B segue intocada", async () => {
+    const r = await write(ORG_A, false, "fftpl-off-1");
+    expect(r).toMatchObject({ before: { enabled: true }, after: { enabled: false }, effectiveValue: false });
+    expect(await effective(ORG_A)).toBe(false);
+    const last = (await audits(ORG_A)).at(-1);
+    expect(last.action).toBe("feature_flag_disabled");
+    expect(JSON.parse(last.details)).toMatchObject({ before: { enabled: true }, after: { enabled: false } });
+    expect(await tenantRow(ORG_B)).toBeNull();
+    expect(await audits(ORG_B)).toHaveLength(0);
+  });
+
+  it("reason curta é recusada em produção (BAD_REQUEST) sem efeito; FF_DIRECT_CONTRACT_SHADOW segue FORBIDDEN", async () => {
+    await expect(write(ORG_B, true, "fftpl-short", "curta")).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(prod.setTenantFlag({ organizationId: ORG_B, flagName: FF_DIRECT_CONTRACT_SHADOW, enabled: true, reason: REASON,
+      idempotencyKey: "fftpl-shadow", actorUserId: ACTOR, correlationId: "corr-fftpl-shadow" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await tenantRow(ORG_B)).toBeNull();
+    expect(await audits(ORG_B)).toHaveLength(0);
+  });
+
+  it("nenhuma escrita global em feature_flags para a flag", async () => {
+    expect(await globalRows()).toBe(0);
   });
 });
