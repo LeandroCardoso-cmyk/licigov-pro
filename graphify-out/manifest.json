@@ -13675,18 +13675,18 @@
     "semantic_hash": ""
   },
   "client/src/lib/institutionalTemplatesView.ts": {
-    "mtime": 1791379519.8689384,
-    "ast_hash": "a9d833ff0c791bb7f078af15fa3028e7",
+    "mtime": 1791420943.3308856,
+    "ast_hash": "520cac0a9aecd3efcc2155e694de022c",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplateDetail.tsx": {
-    "mtime": 1791377379.6415315,
-    "ast_hash": "10ab7db99499e9a87e8de8c0a6b55029",
+    "mtime": 1791421022.2954936,
+    "ast_hash": "91e99423756b7b4d19d1024ffb7a7f99",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplates.tsx": {
-    "mtime": 1791377733.384339,
-    "ast_hash": "152cf65b899f09c83e7b2fd5b7be56f4",
+    "mtime": 1791420943.3313386,
+    "ast_hash": "0081c8557ddb744a0bcea00def9eccde",
     "semantic_hash": ""
   },
   "drizzle/0316_institutional_templates_persistence.sql": {
@@ -13835,8 +13835,8 @@
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
-    "mtime": 1791383021.327689,
-    "ast_hash": "5a21687823ec3c40f3ce20817a8f413c",
+    "mtime": 1791420943.3303852,
+    "ast_hash": "d263c8ee14d5c06ccc265b5c26a4dab4",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalAdapter.ts": {
@@ -13975,8 +13975,8 @@
     "semantic_hash": ""
   },
   "client/src/components/institutionalTemplates/RegisterModelForm.tsx": {
-    "mtime": 1791377294.497021,
-    "ast_hash": "850e4eb7d535128031222fc04ef1ebf1",
+    "mtime": 1791420943.3311489,
+    "ast_hash": "73c439765cfb19a40cfed424beb5820b",
     "semantic_hash": ""
   },
   "client/src/components/institutionalTemplates/ScopeFields.tsx": {
@@ -14100,8 +14100,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-pilot-router.test.ts": {
-    "mtime": 1791379414.0961843,
-    "ast_hash": "378a87a413f06bdb44024949c7b7d9a5",
+    "mtime": 1791421075.3190482,
+    "ast_hash": "29c07df1c93ca0a0b79b9b5e54185299",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-pilot-services.test.ts": {
@@ -14310,8 +14310,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/modelRegistrationService.ts": {
-    "mtime": 1791380941.8341048,
-    "ast_hash": "409605a06798177b988345c16cdc7e9e",
+    "mtime": 1791420943.3299217,
+    "ast_hash": "d22d1f429abb368110da8ac1ab03290b",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/pilot/editalPilotFixture.ts": {
@@ -14352,6 +14352,21 @@
   "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll/README.md": {
     "mtime": 1791383717.0912273,
     "ast_hash": "1f80147bb2333e93fa1c9b63417116ec",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/TemplateActivationCard.tsx": {
+    "mtime": 1791420966.01829,
+    "ast_hash": "2f572a3f2a656bf331c45a09054028d9",
+    "semantic_hash": ""
+  },
+  "client/src/components/institutionalTemplates/templateFirstModelOps.test.ts": {
+    "mtime": 1791421057.5622957,
+    "ast_hash": "14951e61646c119e691954a8c7dfbf1d",
+    "semantic_hash": ""
+  },
+  "client/src/lib/featureFlags/templatesFlagSurface.ts": {
+    "mtime": 1791420966.0176644,
+    "ast_hash": "f7be908e9ff83084aad89a33c0769085",
     "semantic_hash": ""
   }
 }

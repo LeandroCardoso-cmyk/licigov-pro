@@ -196,6 +196,8 @@ export const institutionalTemplatesRouter = router({
     let enabled = false;
     if (configured) enabled = await getTemplateWorkflowPorts().flag.isEnabled(ctx.organizationId!);
     return {
+      /** Contexto do tenant autenticado (metadata somente leitura; derivado de ctx, nunca do cliente). */
+      organizationId: ctx.organizationId!,
       enabled, portsConfigured: configured, flag: FF_INSTITUTIONAL_TEMPLATES_V1,
       lifecycle: STATUSES, documentKinds: TEMPLATE_DOCUMENT_KINDS, roleFloors: TEMPLATE_ACTION_MIN_ROLE,
       importLimits: IMPORT_LIMITS, role: ctx.orgMembership?.role ?? null,
