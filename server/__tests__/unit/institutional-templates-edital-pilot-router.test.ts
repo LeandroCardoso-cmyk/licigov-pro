@@ -18,6 +18,7 @@ import { BASELINE_CAPABILITIES_D4BB209 } from "../../domain/institutionalTemplat
 import { SCOPE_DIMENSIONS } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { previewComposeOutcome } from "../../services/institutionalTemplates/adapters/previewAdapter";
 import { buildPilotAst, buildPilotCatalog, buildPilotInventory, PILOT_SOURCE_LOGICAL_VERSION, pilotSourceSha256 } from "../../services/institutionalTemplates/pilot/editalPilotFixture";
+import { getModelPackage } from "../../services/institutionalTemplates/modelPackages";
 import { configureTemplateWorkflowPorts, resetTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { decisionInput, makeTestPorts, type InMemoryTemplateRepository } from "../helpers/institutionalTemplatesFakes";
@@ -94,6 +95,27 @@ describe("capacidades expostas à UX", () => {
     expect(caps.persistedScopeDimensions).toEqual(["modality", "form", "platform", "regime", "criterion"]);
     expect(caps.readinessChecks).toHaveLength(12);
     expect(caps.roleFloors).toMatchObject({ register: "operator", evidence: "manager" });
+  });
+});
+
+describe("getCapabilities — contexto do tenant e metadados do pacote (somente leitura)", () => {
+  it("organizationId vem de ctx (nunca do cliente) e o preset BLL traz a procedência do pacote servidor, sem conteúdo jurídico", async () => {
+    const caps = await as("viewer", 7).getCapabilities();
+    expect(caps.organizationId).toBe(7);                                  // do contexto autenticado
+    const bll = getModelPackage("EDITAL_PREGAO_ELETRONICO_BLL")!;
+    expect(caps.registrationPresets[0]).toMatchObject({
+      sourceKind: "MODEL_PACKAGE", sourceLogicalVersion: bll.provenance.sourceLogicalVersion, sourceSha256: bll.provenance.sourceSha256,
+    });
+    expect(caps.registrationPresets[0].sourceSha256).toMatch(/^[0-9a-f]{64}$/);
+    const json = JSON.stringify(caps.registrationPresets);
+    for (const forbidden of ['"ast"', '"root"', '"mapping"', '"catalog"', '"inventory"', "tpl-ast/"]) expect(json).not.toContain(forbidden);
+  });
+  it("o cliente não consegue fornecer organizationId (input estrito) e o query não escreve nada", async () => {
+    const before = JSON.stringify(await as("viewer", 3).catalog.list({}));
+    // @ts-expect-error getCapabilities não aceita input
+    const withInput = await as("viewer", 3).getCapabilities({ organizationId: 999 });
+    expect(withInput.organizationId).toBe(3);
+    expect(JSON.stringify(await as("viewer", 3).catalog.list({}))).toBe(before);
   });
 });
 

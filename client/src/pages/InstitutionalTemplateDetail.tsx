@@ -311,13 +311,14 @@ export default function InstitutionalTemplateDetail() {
             <>
               <p className="text-sm text-muted-foreground">A matriz mostra o que impede a publicação: qualquer BLOCKED a recusa no servidor (PUBLICATION_BLOCKED). Ela não aprova nem publica sozinha. O inventário da fonte precisa ser reenviado (só o hash fica registrado) e deve coincidir com a procedência.</p>
               <div className="space-y-1">
-                <Label htmlFor="inv-json">Inventário da fonte (JSON, opcional)</Label>
+                <Label htmlFor="inv-json">Inventário da fonte (JSON, opcional — dispensado para pacotes aprovados do servidor)</Label>
                 <Textarea id="inv-json" rows={5} className="font-mono text-xs" value={inventoryText} onChange={(e) => setInventoryText(e.target.value)} />
                 {inventoryBad && <p role="alert" className="text-xs text-destructive">JSON inválido.</p>}
               </div>
               <Button size="sm" disabled={inventoryBad} onClick={() => setReadyKey(`${rev.id}|${inventoryText}`)}>Avaliar prontidão de {revisionLabel(rev)}</Button>
               {readiness.data && (
                 <>
+                  {readiness.data.inventory.derivedFromPackage && <p className="text-xs text-muted-foreground">Inventário derivado do pacote aprovado versionado no servidor (derivedFromPackage = true); nada foi copiado pelo navegador.</p>}
                   {readiness.data.inventory.shapeIssues.length > 0 && <ul role="alert" className="list-disc pl-5 text-xs text-destructive">{readiness.data.inventory.shapeIssues.map((m) => <li key={m}>{m}</li>)}</ul>}
                   <ReadinessMatrixPanel matrix={readiness.data.matrix as unknown as ReadinessMatrixView} />
                 </>

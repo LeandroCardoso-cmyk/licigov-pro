@@ -26,10 +26,15 @@ import { InstitutionalTemplatesWorkflow } from "./workflowService";
 
 const log = serviceLogger("templateRegistration");
 
-/** Presets de registro (apenas rótulos e escopo declarado; nenhum conteúdo jurídico). O primeiro modelo do piloto é o BLL. */
+/**
+ * Presets de registro: rótulos, escopo declarado e a PROCEDÊNCIA do pacote (versão lógica + SHA-256 da fonte aprovada), todos derivados do
+ * pacote versionado no servidor. Nenhum conteúdo jurídico (AST/Markdown/DOCX/inventário) é exposto. O registro por pacote envia só `modelKey`.
+ */
 export const MODEL_REGISTRATION_PRESETS = Object.freeze(MODEL_PACKAGES.map((p) => Object.freeze({
   presetId: p.modelKey, templateKey: p.modelKey, documentKind: p.documentKind as TemplateDocumentKind,
   slug: p.slug, displayName: p.displayName, scope: Object.freeze({ ...p.declaredScope }) as ScopeView,
+  sourceKind: "MODEL_PACKAGE" as const,
+  sourceLogicalVersion: p.provenance.sourceLogicalVersion, sourceSha256: p.provenance.sourceSha256,
 })));
 
 export type RegistrationSource =

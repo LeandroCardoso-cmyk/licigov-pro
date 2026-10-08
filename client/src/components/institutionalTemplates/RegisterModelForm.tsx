@@ -24,10 +24,12 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
   const { errors } = validateRegisterForm(value, hasDocx);
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const set = (patch: Partial<RegisterFormState>) => onChange({ ...value, ...patch });
-  const text = (key: keyof RegisterFormState & string, label: string, placeholder = "", type = "text") => (
+  const isPackage = value.sourceKind === "MODEL_PACKAGE";
+  const pkgPreset = presets.find((x) => x.presetId === value.templateKey && x.sourceKind === "MODEL_PACKAGE");
+  const text = (key: keyof RegisterFormState & string, label: string, placeholder = "", type = "text", readOnly = false) => (
     <div className="space-y-1" key={key}>
       <Label htmlFor={`reg-${key}`}>{label}</Label>
-      <Input id={`reg-${key}`} type={type} value={String(value[key])} placeholder={placeholder} aria-invalid={err(key) ? true : undefined} onChange={(e) => set({ [key]: e.target.value } as Partial<RegisterFormState>)} />
+      <Input id={`reg-${key}`} type={type} value={String(value[key])} placeholder={placeholder} readOnly={readOnly} aria-invalid={err(key) ? true : undefined} onChange={(e) => set({ [key]: e.target.value } as Partial<RegisterFormState>)} />
       {err(key) && <p role="alert" className="text-xs text-destructive">{err(key)}</p>}
     </div>
   );
@@ -62,29 +64,48 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
           </div>
         ) : text("existingIdentityId", "Id do modelo existente")}
         {value.targetKind === "NEW_IDENTITY" && text("slug", "Identificador (slug)", "ex.: edital-pregao-eletronico-bll")}
-        {text("templateKey", "templateKey", "EDITAL_PREGAO_ELETRONICO_BLL")}
+        {text("templateKey", "templateKey", "EDITAL_PREGAO_ELETRONICO_BLL", "text", isPackage)}
         <div className="sm:col-span-2">{text("displayName", "Nome de exibição", "Edital — Pregão Eletrônico — BLL")}</div>
       </div>
       <ScopeFields idPrefix="reg-scope" documentKind={value.documentKind} value={value.scope} onChange={(scope) => set({ scope })} suggestions={scopeSuggestions} showErrors={showErrors} />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Conteúdo-fonte</legend>
         <div className="flex gap-4 text-sm">
-          {(["AST", "MARKDOWN", "DOCX"] as const).map((k) => <label key={k} className="flex items-center gap-1"><input type="radio" name="reg-source" checked={value.sourceKind === k} onChange={() => set({ sourceKind: k })} />{k === "AST" ? "AST nativo (JSON)" : k === "MARKDOWN" ? "Markdown" : "DOCX"}</label>)}
+          {pkgPreset && (
+            <label className="flex items-center gap-1">
+              <input type="radio" name="reg-source" checked={isPackage} onChange={() => set({ sourceKind: "MODEL_PACKAGE", sourceText: "", inventoryText: "", sourceLogicalVersion: pkgPreset.sourceLogicalVersion ?? "", sourceSha256: pkgPreset.sourceSha256 ?? "" })} />
+              Pacote aprovado versionado no servidor
+            </label>
+          )}
+          {(["AST", "MARKDOWN", "DOCX"] as const).map((k) => <label key={k} className="flex items-center gap-1"><input type="radio" name="reg-source" checked={value.sourceKind === k} onChange={() => set(isPackage ? { sourceKind: k, sourceLogicalVersion: "", sourceSha256: "" } : { sourceKind: k })} />{k === "AST" ? "AST nativo (JSON)" : k === "MARKDOWN" ? "Markdown" : "DOCX"}</label>)}
         </div>
-        {value.sourceKind === "DOCX"
+        {isPackage ? (
+          <div className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm" aria-label="Pacote aprovado versionado no servidor">
+            <p className="font-medium">Pacote aprovado versionado no servidor</p>
+            <p className="text-muted-foreground">O conteúdo, o catálogo e o inventário são resolvidos no servidor a partir do pacote aprovado; nada é enviado pelo navegador.</p>
+            <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
+              <dt className="text-muted-foreground">templateKey</dt><dd className="font-mono">{value.templateKey}</dd>
+              <dt className="text-muted-foreground">Versão lógica</dt><dd className="font-mono">{value.sourceLogicalVersion}</dd>
+              <dt className="text-muted-foreground">SHA-256</dt><dd className="break-all font-mono text-xs">{value.sourceSha256}</dd>
+              <dt className="text-muted-foreground">Escopo</dt><dd>{[value.scope.modality, value.scope.form, value.scope.platform].filter(Boolean).join(" · ")}</dd>
+            </dl>
+          </div>
+        ) : value.sourceKind === "DOCX"
           ? <Input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => onDocxFile?.(e.target.files?.[0])} />
           : <Textarea rows={8} className="font-mono text-xs" value={value.sourceText} aria-label="Conteúdo-fonte" onChange={(e) => set({ sourceText: e.target.value })} />}
         {err("source") && <p role="alert" className="text-xs text-destructive">{err("source")}</p>}
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
-        {text("sourceLogicalVersion", "Versão lógica da fonte", "ex.: 1.0.1-draft")}
-        {text("sourceSha256", "SHA-256 da fonte", "64 hexadecimais")}
+        {text("sourceLogicalVersion", "Versão lógica da fonte", "ex.: 1.0.1-draft", "text", isPackage)}
+        {text("sourceSha256", "SHA-256 da fonte", "64 hexadecimais", "text", isPackage)}
       </div>
-      <div className="space-y-1">
-        <Label htmlFor="reg-inventory">Inventário da fonte (JSON, opcional — só o hash e as contagens são gravados)</Label>
-        <Textarea id="reg-inventory" rows={3} className="font-mono text-xs" value={value.inventoryText} onChange={(e) => set({ inventoryText: e.target.value })} />
-        {err("inventoryText") && <p role="alert" className="text-xs text-destructive">{err("inventoryText")}</p>}
-      </div>
+      {!isPackage && (
+        <div className="space-y-1">
+          <Label htmlFor="reg-inventory">Inventário da fonte (JSON, opcional — só o hash e as contagens são gravados)</Label>
+          <Textarea id="reg-inventory" rows={3} className="font-mono text-xs" value={value.inventoryText} onChange={(e) => set({ inventoryText: e.target.value })} />
+          {err("inventoryText") && <p role="alert" className="text-xs text-destructive">{err("inventoryText")}</p>}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {text("decidedByName", "Quem registra (nome)")}
         {text("decidedByRole", "Cargo / função")}

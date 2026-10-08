@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import { PageLoader } from "@/components/ui/PageLoader";
 import { CatalogCard } from "@/components/institutionalTemplates/CatalogCard";
 import { CatalogFilters } from "@/components/institutionalTemplates/CatalogFilters";
+import { TemplateActivationCard } from "@/components/institutionalTemplates/TemplateActivationCard";
 import { RegisterModelForm } from "@/components/institutionalTemplates/RegisterModelForm";
 import {
-  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, emptyRegisterForm, hasRoleAtLeast, makeIdempotencyKey, scopeFromForm, validateRegisterForm,
+  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, emptyRegisterForm, hasRoleAtLeast, makeIdempotencyKey, packageSourceOf, scopeFromForm, validateRegisterForm,
   type CatalogFilterState, type CatalogRowView, type RegisterFormState, type RegistrationPresetView,
 } from "@/lib/institutionalTemplatesView";
 
@@ -66,8 +67,8 @@ export default function InstitutionalTemplates() {
   const submitRegister = () => {
     if (!validateRegisterForm(reg, docx !== null).valid) { setShowErrors(true); return; }
     let inventory: unknown;
-    if (reg.inventoryText.trim()) inventory = JSON.parse(reg.inventoryText);
-    const source = reg.sourceKind === "AST" ? { kind: "AST" as const, ast: JSON.parse(reg.sourceText) as unknown }
+    if (reg.sourceKind !== "MODEL_PACKAGE" && reg.inventoryText.trim()) inventory = JSON.parse(reg.inventoryText);
+    const source = reg.sourceKind === "MODEL_PACKAGE" ? packageSourceOf(reg) : reg.sourceKind === "AST" ? { kind: "AST" as const, ast: JSON.parse(reg.sourceText) as unknown }
       : reg.sourceKind === "MARKDOWN" ? { kind: "MARKDOWN" as const, markdown: reg.sourceText } : { kind: "DOCX" as const, docxBase64: docx!.base64, filename: docx!.name };
     register.mutate({
       target: reg.targetKind === "NEW_IDENTITY" ? { kind: "NEW_IDENTITY", documentKind: reg.documentKind as never, slug: reg.slug } : { kind: "EXISTING_IDENTITY", identityId: reg.existingIdentityId.trim() },
@@ -100,6 +101,9 @@ export default function InstitutionalTemplates() {
         </div>
       ) : undefined}
     >
+      {caps.data?.portsConfigured && caps.data.organizationId != null && (
+        <TemplateActivationCard organizationId={caps.data.organizationId} enabled={enabled} onChanged={() => { void utils.institutionalTemplates.getCapabilities.invalidate(); }} />
+      )}
       {caps.isLoading ? <PageLoader /> : !enabled ? (
         <Card>
           <CardHeader><CardTitle>Módulo não habilitado</CardTitle><CardDescription>

@@ -329,12 +329,16 @@ export function legalEvidencePayload(f: LegalEvidenceFormState) {
 
 // ─── registro / importação de modelo (nasce DRAFT) ─────────────────────────────────────
 
-export interface RegistrationPresetView { presetId: string; templateKey: string; documentKind: string; slug: string; displayName: string; scope: ScopeLike }
+export interface RegistrationPresetView {
+  presetId: string; templateKey: string; documentKind: string; slug: string; displayName: string; scope: ScopeLike;
+  /** Pacote aprovado versionado NO SERVIDOR: versão lógica e SHA-256 vêm do servidor (nunca digitados). */
+  sourceKind?: "MODEL_PACKAGE"; sourceLogicalVersion?: string; sourceSha256?: string;
+}
 export interface RegisterFormState {
   targetKind: "NEW_IDENTITY" | "EXISTING_IDENTITY";
   existingIdentityId: string;
   documentKind: string; slug: string; templateKey: string; displayName: string; scope: ScopeFormState;
-  sourceKind: "AST" | "MARKDOWN" | "DOCX"; sourceText: string;
+  sourceKind: "AST" | "MARKDOWN" | "DOCX" | "MODEL_PACKAGE"; sourceText: string;
   sourceLogicalVersion: string; sourceSha256: string; inventoryText: string;
   decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
 }
@@ -343,7 +347,9 @@ export const emptyRegisterForm = (today: string, preset?: RegistrationPresetView
   targetKind: "NEW_IDENTITY", existingIdentityId: "",
   documentKind: preset?.documentKind ?? "edital", slug: preset?.slug ?? "", templateKey: preset?.templateKey ?? "", displayName: preset?.displayName ?? "",
   scope: { ...emptyScopeForm(), ...(preset?.scope ?? {}) } as ScopeFormState,
-  sourceKind: "AST", sourceText: "", sourceLogicalVersion: "", sourceSha256: "", inventoryText: "",
+  ...(preset?.sourceKind === "MODEL_PACKAGE"
+    ? { sourceKind: "MODEL_PACKAGE" as const, sourceText: "", sourceLogicalVersion: preset.sourceLogicalVersion ?? "", sourceSha256: preset.sourceSha256 ?? "", inventoryText: "" }
+    : { sourceKind: "AST" as const, sourceText: "", sourceLogicalVersion: "", sourceSha256: "", inventoryText: "" }),
   decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false,
 });
 
@@ -355,11 +361,12 @@ export function validateRegisterForm(f: RegisterFormState, hasDocx: boolean): { 
   if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(f.templateKey)) errors.templateKey = "templateKey: MAIÚSCULAS, dígitos e _ (ex.: EDITAL_PREGAO_ELETRONICO_BLL).";
   if (!f.displayName.trim()) errors.displayName = "Informe o nome de exibição.";
   Object.assign(errors, Object.fromEntries(Object.entries(scopeFormProblems(f.documentKind, f.scope)).map(([k, v]) => [`scope.${k}`, v as string])));
-  if (f.sourceKind === "DOCX" ? !hasDocx : !f.sourceText.trim()) errors.source = "Informe o conteúdo-fonte.";
+  const isPackage = f.sourceKind === "MODEL_PACKAGE";   // pacote do servidor: sem AST/Markdown/DOCX/inventário no cliente
+  if (!isPackage && (f.sourceKind === "DOCX" ? !hasDocx : !f.sourceText.trim())) errors.source = "Informe o conteúdo-fonte.";
   if (f.sourceKind === "AST") { try { JSON.parse(f.sourceText); } catch { if (f.sourceText.trim()) errors.source = "AST: JSON inválido."; } }
   if (!f.sourceLogicalVersion.trim()) errors.sourceLogicalVersion = "Informe a versão lógica da fonte.";
   if (!/^[0-9a-f]{64}$/.test(f.sourceSha256.trim())) errors.sourceSha256 = "SHA-256 da fonte: 64 hexadecimais minúsculos.";
-  if (f.inventoryText.trim()) { try { JSON.parse(f.inventoryText); } catch { errors.inventoryText = "Inventário: JSON inválido."; } }
+  if (!isPackage && f.inventoryText.trim()) { try { JSON.parse(f.inventoryText); } catch { errors.inventoryText = "Inventário: JSON inválido."; } }
   if (!f.decidedByName.trim()) errors.decidedByName = "Informe quem registra (nome).";
   if (!f.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função.";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.decidedAt)) errors.decidedAt = "Data AAAA-MM-DD.";
@@ -368,3 +375,6 @@ export function validateRegisterForm(f: RegisterFormState, hasDocx: boolean): { 
   if (!f.confirmed) errors.confirmed = "É necessária a confirmação humana explícita.";
   return { valid: Object.keys(errors).length === 0, errors };
 }
+
+/** Payload de `source` do registro: pacote do servidor envia SÓ o `modelKey` (nenhum conteúdo jurídico trafega no browser). */
+export const packageSourceOf = (f: Pick<RegisterFormState, "templateKey">) => ({ kind: "MODEL_PACKAGE" as const, modelKey: f.templateKey });
