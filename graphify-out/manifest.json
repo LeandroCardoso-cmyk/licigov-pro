@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1791509487.3879838,
-    "ast_hash": "18a2f028ebff9891e46c29305da81c8a",
+    "mtime": 1791564387.9275851,
+    "ast_hash": "e1ce19ceadf90b18c52f1148da019b24",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791509565.79658,
-    "ast_hash": "360eeb1f6c43248e5d607dd9ec48c475",
+    "mtime": 1791565215.0040314,
+    "ast_hash": "71b89732b164653124579388e542aac6",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -14020,8 +14020,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
-    "mtime": 1791380584.1573539,
-    "ast_hash": "1dc31a4e77ab63e07070fa1f060fe5fb",
+    "mtime": 1791564946.121819,
+    "ast_hash": "b9363fefc228e764df1c18eb11eaf7ea",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesGovernanceFakes.ts": {
@@ -14270,8 +14270,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalSources.ts": {
-    "mtime": 1791378045.4749546,
-    "ast_hash": "502f4d5de82dc81e6153d237eabb73a1",
+    "mtime": 1791564501.7339911,
+    "ast_hash": "9633595cb1ec74230470864ede387115",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/governanceAdapter.ts": {
@@ -14405,13 +14405,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreflightCard.tsx": {
-    "mtime": 1791509689.4244,
-    "ast_hash": "054e01aa0c8070ee6d6f359c2bdf1299",
+    "mtime": 1791564822.6306994,
+    "ast_hash": "9d474a5258538861bd0c6e01f8fef3c8",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationPanel.tsx": {
-    "mtime": 1791509689.4219851,
-    "ast_hash": "a1727849cf3f684308d8fb9800ee56a7",
+    "mtime": 1791564799.6316097,
+    "ast_hash": "9f88d2a9557415aa2026a9d9dcda0728",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
@@ -14425,13 +14425,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalPreparation.test.ts": {
-    "mtime": 1791509858.5984788,
-    "ast_hash": "4207e44ad2136ebdb03a2382e5702b7f",
+    "mtime": 1791565191.8014097,
+    "ast_hash": "ca5581e1b6c26cd45c711c7ed669deec",
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1791509646.3346322,
-    "ast_hash": "9f16b55689eaa8d001cfd48a380779d7",
+    "mtime": 1791564822.63006,
+    "ast_hash": "6ae198fd96f2a2743857fce85afbe600",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14445,8 +14445,38 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalPreparationService.ts": {
-    "mtime": 1791509150.5166383,
-    "ast_hash": "8c28cebc99087014066954b4d476fab5",
+    "mtime": 1791565233.1414602,
+    "ast_hash": "614ecb13f20c2f1f71a095908e0d6f1c",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalPreparationView.tsx": {
+    "mtime": 1791564962.3646407,
+    "ast_hash": "7632c23e46a8ba901d653d82ec2bc305",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
+    "mtime": 1791565162.8451252,
+    "ast_hash": "7792b3cbfd98531c9b8a964c729de5f1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-preparation-model.test.ts": {
+    "mtime": 1791564901.7996156,
+    "ast_hash": "e073a7c88b83687f8a25fc2ca7b81437",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/editalPreparationModel.ts": {
+    "mtime": 1791564179.7555728,
+    "ast_hash": "ded9ab23606bfc79990075e89bae9166",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/editalProjections.ts": {
+    "mtime": 1791564244.6870658,
+    "ast_hash": "9306c5dc99df2f01a2d14fa76c5f51d0",
+    "semantic_hash": ""
+  },
+  "docs/architecture/EDITAL_PREPARATION_ZERO_REENTRY.md": {
+    "mtime": 1791565215.0076344,
+    "ast_hash": "258071f9eaa96bb54df0d5cb80c9feea",
     "semantic_hash": ""
   }
 }

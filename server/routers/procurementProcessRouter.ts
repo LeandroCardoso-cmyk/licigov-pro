@@ -706,13 +706,15 @@ export const procurementProcessRouter = router({
         scope: resolution.normalizedScope, asOf: deps.now(), title: "Edital (preflight)", actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
         officialPins: input.officialPins?.TR ? { TR: input.officialPins.TR } : {},
       }, deps.ports);
-      if (result.status === "READY_FOR_COMPOSITION") return { ...result, resolution: resolution.status };
-      // Fontes governadas ainda pendentes ficam visíveis também no preflight (a composição para no primeiro erro de forma/tabela).
+      if (result.status === "READY_FOR_COMPOSITION") return { ...result, pendingDecisions: 0, resolution: resolution.status };
+      // Resumo para a pessoa (decisões humanas pendentes) + detalhes técnicos em `issues` (expansão na UI). A composição para no
+      // primeiro erro de forma/tabela; as pendências governadas por fonte vêm do estado de preparação (mesma fonte da tela).
       const prep = await getEditalPreparationState(deps, orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
-      const pending = prep.status === "READY_FOR_PREPARATION"
+      const pendingBySource = prep.status === "READY_FOR_PREPARATION"
         ? prep.sections.filter((s) => s.pendingRequired > 0).map((s) => ({ code: "GOVERNED_SOURCE_PENDING", source: s.source, message: `${s.pendingRequired} campo(s) obrigatório(s) pendente(s) na fonte ${s.source}` }))
         : [];
-      return { ...result, issues: [...pending, ...result.issues], resolution: resolution.status };
+      const pendingDecisions = prep.status === "READY_FOR_PREPARATION" ? prep.summary.pendingDecisions : 0;
+      return { ...result, pendingDecisions, issues: [...pendingBySource, ...result.issues], resolution: resolution.status };
     }),
 
   /** Estado de revisão do rascunho composto por modelo (marcadores, desvios estruturais, narrativas de IA e revalidação canônica). */

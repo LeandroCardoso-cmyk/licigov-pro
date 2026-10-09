@@ -8,11 +8,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
-  buildSectionFields, generateReady, groupSections, groupStatus, isStaleSave, missingRequired, parseField, parseScalar, pendingDeviations,
-  reviewReadiness, scalarToText, sectionStatus, summarizeAcks, toFormValue, totalPending, type PrepField, type PrepSection, type ReviewStateView,
+  buildSavePlan, buildSectionFields, executeSavePlan, formatDisplay, generateReady, isStaleSave, liveOptionalItems, livePendingItems, liveStatuses,
+  optionalItems, orgProfilePending, parseField, parseScalar, pendingDeviations, pendingItems, processPending, reusedItems, reviewReadiness,
+  scalarToText, summarizeAcks, toFormValue, type PlannedWrite, type PrepField, type PrepSection, type PreparationStateView, type ReviewStateView,
 } from "@/lib/editalPreparation";
 
-const f = (over: Partial<PrepField>): PrepField => ({ name: "n", source: "PROCESS", path: "p", type: "string", description: "Campo", required: true, conditional: false, requiredWhenVariables: [], hasValue: false, ...over });
+const f = (over: Partial<PrepField>): PrepField => ({ name: "n", source: "PROCESS", path: "p", type: "string", description: "Campo", required: true, conditional: false, requiredWhenVariables: [], hasValue: false, class: "PROCESS_DECISION", rule: "PROCESS_SOURCE", status: "PENDING", editable: true, ...over });
 const read = (rel: string) => readFileSync(path.resolve(rel), "utf8");
 
 describe("conversão tipada → valor canônico", () => {
@@ -53,36 +54,122 @@ describe("conversão tipada → valor canônico", () => {
   });
 });
 
-describe("seção completa, status e agrupamento", () => {
-  const sec: PrepSection = {
-    source: "POLICY", scope: "ORG", pendingRequired: 1,
-    fields: [f({ path: "a", hasValue: true, currentValue: "x" }), f({ path: "b", type: "money" }), f({ path: "c", required: false, conditional: true })],
-  };
-  it("mantém os valores correntes, aplica edições e acusa erro de tipo", () => {
+const mkField = (over: Partial<PrepField>): PrepField => ({
+  name: "n", source: "PROCESS", path: "p", type: "string", description: "Campo", required: true, conditional: false, requiredWhenVariables: [],
+  hasValue: false, class: "PROCESS_DECISION", rule: "PROCESS_SOURCE", status: "PENDING", editable: true, ...over,
+});
+const mkSection = (source: string, scope: "ORG" | "PROCESS", fields: PrepField[]): PrepSection => ({ source, scope, fields, pendingRequired: fields.filter((x) => x.status === "PENDING").length });
+const mkState = (sections: PrepSection[], over: Partial<PreparationStateView> = {}): PreparationStateView => ({
+  status: "READY_FOR_PREPARATION", revisionId: "r1", catalogVersion: "cat/1", revisions: { process: 0, organization: 0, budget: 0 },
+  budgetDisclosure: "publico", participation: { default: "Ampla participação" }, participationPending: false, sections, facts: {}, canonicalFields: [], orgProfile: null,
+  summary: { groups: [], reusedAutomatically: 0, pendingDecisions: 0 },
+  metrics: { TOTAL_TEMPLATE_FIELDS: 0, AUTO_RESOLVED: 0, ORG_REUSED: 0, TR_PROJECTED: 0, DECIDED: 0, CONDITIONAL_HIDDEN: 0, POST_AWARD_HIDDEN: 0, OPTIONAL_HIDDEN: 0, MANUAL_DECISIONS_VISIBLE: 0 },
+  ...over,
+});
+
+describe("seção completa e visões orientadas por exceção", () => {
+  const sec = mkSection("POLICY", "ORG", [
+    mkField({ path: "a", name: "a", hasValue: true, currentValue: "x", status: "ORG_REUSED", editable: true }),
+    mkField({ path: "b", name: "b", type: "money" }),
+    mkField({ path: "c", name: "c", required: false, status: "OPTIONAL" }),
+  ]);
+  it("mantém os valores declarados, aplica edições e acusa erro de tipo", () => {
     expect(buildSectionFields(sec, {}).fields).toEqual({ a: "x" });
     expect(buildSectionFields(sec, { b: "10,00" }).fields).toEqual({ a: "x", b: 1000 });
     expect(buildSectionFields(sec, { b: "zz" }).errors.b).toBeTruthy();
     expect(buildSectionFields(sec, { a: "" }).fields).toEqual({});   // limpar = remover da seção declarada
-    expect(missingRequired(sec, {}).map((x) => x.path)).toEqual(["b"]);
-    expect(missingRequired(sec, { b: "1" })).toEqual([]);
   });
-  it("status Completo / Pendente / Condicional", () => {
-    expect(sectionStatus(sec)).toBe("PENDENTE");
-    expect(sectionStatus({ ...sec, pendingRequired: 0 })).toBe("CONDICIONAL");
-    expect(sectionStatus({ ...sec, pendingRequired: 0, fields: [f({ hasValue: true })] })).toBe("COMPLETO");
-    expect(groupStatus([sec])).toBe("PENDENTE");
-    expect(groupStatus([{ ...sec, pendingRequired: 0, fields: [f({ hasValue: true })] }], false)).toBe("PENDENTE");   // divulgação ausente
-    expect(totalPending([sec, sec])).toBe(2);
-  });
-  it("grupos na ordem operacional, só os que existem", () => {
-    const mk = (source: string): PrepSection => ({ source, scope: "PROCESS", fields: [], pendingRequired: 0 });
-    expect(groupSections(["LIFECYCLE", "IDENTITY", "ITEMS", "POLICY"].map(mk)).map((g) => g.group.id)).toEqual(["orgao", "itens", "ciclo"]);
-    expect(groupSections(["POLICY", "IDENTITY"].map(mk))[0].sections.map((s) => s.source)).toEqual(["IDENTITY", "POLICY"]);
+  it("só as pendências aparecem; reaproveitados/opcionais ficam recolhidos; perfil do órgão separado do processo", () => {
+    const proc = mkSection("PROCESS", "PROCESS", [mkField({ name: "p1", path: "p1" }), mkField({ name: "p2", path: "p2", status: "DECIDED", hasValue: true, currentValue: "v", displayValue: "v" }), mkField({ name: "p3", path: "p3", status: "HIDDEN_CONDITIONAL" })]);
+    const st = mkState([sec, proc]);
+    expect(pendingItems(st).map((i) => i.field.name)).toEqual(["b", "p1"]);
+    expect(orgProfilePending(st).map((i) => i.field.name)).toEqual(["b"]);
+    expect(processPending(st).map((i) => i.field.name)).toEqual(["p1"]);
+    expect(optionalItems(st).map((i) => i.field.name)).toEqual(["c"]);
+    expect(reusedItems(st).map((i) => i.field.name)).toEqual(["a", "p2"]);
+    expect(pendingItems(st).some((i) => i.field.status === "HIDDEN_CONDITIONAL")).toBe(false);
   });
   it("CAS obsoleto é reconhecido", () => {
     expect(isStaleSave("CONFLICT", "x")).toBe(true);
     expect(isStaleSave(undefined, "STALE_STATE: outra pessoa registrou")).toBe(true);
     expect(isStaleSave("BAD_REQUEST", "VALIDATION_FAILED")).toBe(false);
+  });
+  it("formatação legível de valores canônicos", () => {
+    expect(formatDisplay("money", 123456)).toBe("R$ 1.234,56");
+    expect(formatDisplay("percent", 15.5)).toBe("15,5%");
+    expect(formatDisplay("boolean", true)).toBe("Sim");
+    expect(formatDisplay("date", "2026-10-20")).toBe("20/10/2026");
+    expect(formatDisplay("duration", { amount: 5, unit: "businessDay" })).toContain("dia(s) útil(eis)");
+    expect(formatDisplay("table", [{}, {}])).toBe("2 linha(s)");
+    expect(formatDisplay("string", undefined)).toBe("—");
+  });
+});
+
+describe("condicionais ao vivo (espelho do servidor) — ativar/ocultar conforme a decisão", () => {
+  const ctrl = mkField({ name: "decisao.exigeAmostra", path: "decisoes.exigeAmostra", type: "boolean", required: false, status: "OPTIONAL" });
+  const child = mkField({
+    name: "habilitacao.localEntregaAmostra", path: "localEntregaAmostra", required: false, conditional: true, status: "HIDDEN_CONDITIONAL",
+    requiredWhen: { op: "eq", var: "decisao.exigeAmostra", value: true }, requiredWhenVariables: ["decisao.exigeAmostra"],
+  });
+  const st = mkState([mkSection("TR", "PROCESS", [ctrl, child])]);
+  it("oculto enquanto a condição está inativa; aparece como pendência ao ativar; some ao desativar", () => {
+    expect(livePendingItems(st, {}).map((i) => i.field.name)).toEqual([]);
+    expect(liveStatuses(st, {}).get(child.name)?.status).toBe("HIDDEN_CONDITIONAL");
+    const on = livePendingItems(st, { TR: { "decisoes.exigeAmostra": "true" } });
+    expect(on.map((i) => i.field.name)).toEqual([child.name]);
+    expect(livePendingItems(st, { TR: { "decisoes.exigeAmostra": "false" } })).toEqual([]);
+    // preenchida a filha, deixa de ser pendência
+    expect(livePendingItems(st, { TR: { "decisoes.exigeAmostra": "true", localEntregaAmostra: "Almoxarifado" } })).toEqual([]);
+  });
+  it("o controle opcional aparece em 'decisões opcionais'", () => {
+    expect(liveOptionalItems(st, {}).map((i) => i.field.name)).toEqual([ctrl.name]);
+  });
+});
+
+describe("Salvar preparação: uma confirmação, escritas sequenciais, CAS encadeado", () => {
+  const org = mkSection("POLICY", "ORG", [mkField({ name: "o1", path: "o1", description: "Canal de esclarecimentos" })]);
+  const tr = mkSection("TR", "PROCESS", [mkField({ name: "t1", path: "t1", description: "Local de entrega", source: "TR" })]);
+  const cert = mkSection("CERTAME_CONFIG", "PROCESS", [mkField({ name: "c1", path: "c1", type: "date", description: "Data de abertura", source: "CERTAME_CONFIG" })]);
+  const st = mkState([org, tr, cert], { budgetDisclosure: null, participationPending: true, participation: null, revisions: { process: 3, organization: 5, budget: 1 } });
+  it("planeja na ordem órgão → divulgação → processo e lista cada decisão", () => {
+    const plan = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "2026-10-20" }, TR: { t1: "Almoxarifado" }, POLICY: { o1: "licitacao@exemplo.gov.br" } }, disclosure: "sigiloso", participationDefault: "Ampla participação" });
+    expect(plan.writes.map((w) => w.id)).toEqual(["ORG-POLICY", "DISCLOSURE", "PROCESS-TR", "PROCESS-CERTAME_CONFIG", "PROCESS-ITEMS"]);
+    expect(plan.decisionCount).toBe(5);
+    expect(plan.writes.flatMap((w) => w.lines)).toEqual(expect.arrayContaining(["Data de abertura: 20/10/2026", "Local de entrega: Almoxarifado", "Divulgação do orçamento: sigiloso", "Regime de participação padrão dos itens: Ampla participação"]));
+    expect(plan.writes.find((w) => w.id === "PROCESS-ITEMS")?.participation).toEqual({ default: "Ampla participação" });
+    expect(plan.errors).toEqual({});
+  });
+  it("sem alteração ⇒ nenhuma escrita; erro de tipo ⇒ nada planejado para a seção", () => {
+    expect(buildSavePlan(st, { edits: {}, disclosure: "", participationDefault: null }).writes).toEqual([]);
+    const bad = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "20/10/2026" } }, disclosure: "", participationDefault: null });
+    expect(bad.errors.CERTAME_CONFIG?.c1).toBeTruthy();
+    expect(bad.writes).toEqual([]);
+  });
+  it("execução SEQUENCIAL com CAS encadeado por escopo (a revisão devolvida é a esperada da próxima)", async () => {
+    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } }, disclosure: "publico", participationDefault: null });
+    const calls: string[] = []; let inFlight = 0; let maxInFlight = 0;
+    const writer = {
+      async write(w: PlannedWrite, expected: number) {
+        inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        calls.push(`${w.id}@${expected}`); inFlight--;
+        return { revision: expected + 1 };
+      },
+    };
+    const out = await executeSavePlan(plan.writes, st.revisions, writer, () => false);
+    expect(out.failed).toBeNull();
+    expect(maxInFlight).toBe(1);
+    expect(calls).toEqual(["ORG-POLICY@5", "DISCLOSURE@1", "PROCESS-TR@3", "PROCESS-CERTAME_CONFIG@4"]);
+  });
+  it("conflito (CAS obsoleto): PARA, informa o que já foi registrado e o que não executou — nunca sobrescreve", async () => {
+    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } }, disclosure: "", participationDefault: null });
+    const stale = new Error("STALE_STATE: outra pessoa registrou");
+    let n = 0;
+    const out = await executeSavePlan(plan.writes, st.revisions, { async write(_w, expected) { if (++n === 2) throw stale; return { revision: expected + 1 }; } }, (e) => e === stale);
+    expect(out.registered.map((w) => w.id)).toEqual(["ORG-POLICY"]);
+    expect(out.failed?.write.id).toBe("PROCESS-TR");
+    expect(out.failed?.stale).toBe(true);
+    expect(out.notExecuted.map((w) => w.id)).toEqual(["PROCESS-CERTAME_CONFIG"]);
   });
 });
 
@@ -167,6 +254,75 @@ describe("SSR dos controles e painéis apresentacionais", () => {
   });
 });
 
+describe("SSR da preparação orientada por exceções", () => {
+  let View: typeof import("./EditalPreparationView").default;
+  beforeAll(async () => { (globalThis as { React?: unknown }).React = React; View = (await import("./EditalPreparationView")).default; });
+  const noop = () => {};
+  const base = (state: PreparationStateView, over: object = {}) => ({
+    state, edits: {}, fieldErrors: {}, pending: pendingItems(state), optional: optionalItems(state), onEdit: noop, disclosure: "", onDisclosure: noop,
+    participationDefault: null, onParticipationDefault: noop, plan: { writes: [], errors: {}, decisionCount: 0 }, reviewing: false, onStartReview: noop,
+    onCancelReview: noop, decision: { decidedByName: "", decidedByRole: "", decidedAt: "2026-10-09", basisReference: "", reason: "", confirmed: false }, onDecision: noop,
+    showErrors: false, busy: false, outcome: null, notice: null, onConfirm: noop, ...over,
+  });
+  const html = (props: object) => renderToStaticMarkup(React.createElement(View as unknown as React.ComponentType<never>, props as never));
+  const org = mkSection("POLICY", "ORG", [mkField({ name: "o1", path: "o1", source: "POLICY", description: "Canal de esclarecimentos", class: "ORG_PROFILE", rule: "ORG_SOURCE" })]);
+  const reusedOrg = mkSection("IDENTITY", "ORG", [mkField({ name: "o2", path: "o2", source: "IDENTITY", description: "Foro competente", class: "ORG_PROFILE", status: "ORG_REUSED", hasValue: true, currentValue: "Comarca X", displayValue: "Comarca X", origin: { label: "Perfil institucional do órgão", ref: { revision: 2, hash: "abc" } } })]);
+  const tr = mkSection("TR", "PROCESS", [mkField({ name: "t1", path: "t1", source: "TR", description: "Local de entrega", class: "TR_PROJECTION", rule: "TR_SOURCE" })]);
+  const st = mkState([org, reusedOrg, tr], {
+    budgetDisclosure: null, participationPending: true, orgProfile: { revision: 2, hash: "abc" },
+    canonicalFields: [{ name: "processo.numeroProcesso", source: "PROCESS", path: "numeroProcesso", type: "string", description: "Número do processo", status: "AUTO", displayValue: "2026/0001", origin: { label: "Processo", ref: { processId: "p1" } } }],
+    summary: { reusedAutomatically: 12, pendingDecisions: 4, groups: [{ id: "institucional", title: "Dados institucionais", total: 18, resolved: 18, reused: 18, pending: 0, blockedCanonical: 0 }, { id: "certame", title: "Configuração do certame", total: 9, resolved: 5, reused: 0, pending: 4, blockedCanonical: 0 }] },
+  });
+  it("resumo operacional, pendências em blocos separados e dados reaproveitados RECOLHIDOS (explicabilidade sob expansão)", () => {
+    const out = html(base(st));
+    expect(out).toContain("12</strong> informações reaproveitadas automaticamente");
+    expect(out).toContain("de você");
+    expect(out).toContain("✓ 18/18");
+    expect(out).toContain("⚠ 4 pendências");
+    expect(out).toContain("Configuração institucional pendente");
+    expect(out).toContain("Canal de esclarecimentos");
+    expect(out).toContain("Decisões deste processo");
+    expect(out).toContain("Local de entrega");
+    expect(out).toContain("Divulgação do orçamento");
+    expect(out).toContain("Regime de participação padrão dos itens");
+    // recolhidos por padrão: <details> sem atributo open
+    expect(out).toContain("Ver dados reaproveitados — 2");
+    expect(out).toContain("Ver detalhes técnicos");
+    expect(out).not.toMatch(/<details[^>]*\sopen/);
+    expect(out).toContain("Reutilizado do perfil institucional");
+    expect(out).toContain("Perfil institucional para Editais — revisão 2");
+    // o dado reaproveitado NÃO é input na tela principal; o canônico dono não tem controle
+    expect(out).not.toMatch(/JSON|\{"/);
+  });
+  it("sem pendências e sem alterações: mensagem de conclusão e nenhum botão de salvar", () => {
+    const clean = mkState([reusedOrg], { summary: { reusedAutomatically: 1, pendingDecisions: 0, groups: [] } });
+    const out = html(base(clean));
+    expect(out).toContain("Nenhuma decisão pendente");
+    expect(out).not.toContain("Salvar preparação do Edital");
+  });
+  it("UMA confirmação: botão 'Salvar preparação do Edital', resumo das decisões e autoridade humana antes de registrar", () => {
+    const plan = { writes: [{ id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: ["Local de entrega: Almoxarifado", "Prazo de execução: 5 dia(s)"] }, { id: "DISCLOSURE", kind: "DISCLOSURE" as const, lines: ["Divulgação do orçamento: público"] }], errors: {}, decisionCount: 3 };
+    const before = html(base(st, { plan }));
+    expect(before).toContain("Salvar preparação do Edital");
+    expect(before).toContain("3 decisões para registrar");
+    expect(before).not.toContain("Confirmar e registrar");
+    const review = html(base(st, { plan, reviewing: true }));
+    expect(review).toContain("3 decisões serão registradas");
+    expect(review).toContain("Local de entrega: Almoxarifado");
+    expect(review).toContain("Divulgação do orçamento: público");
+    expect(review).toContain("Autoridade humana");
+    expect(review).toContain("Confirmar e registrar");
+    expect((review.match(/Confirmar e registrar/g) ?? []).length).toBe(1);
+  });
+  it("conflito: informa o que já foi registrado e o que não executou", () => {
+    const outcome = { registered: [{ id: "DISCLOSURE", kind: "DISCLOSURE" as const, lines: [] }], failed: { write: { id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: [] }, stale: true, message: "x" }, notExecuted: [{ id: "PROCESS-CERTAME_CONFIG", kind: "PROCESS" as const, source: "CERTAME_CONFIG", lines: [] }] };
+    const out = html(base(st, { outcome }));
+    expect(out).toContain("Já registrado: Divulgação do orçamento");
+    expect(out).toContain("Parou em Dados do TR: nada foi sobrescrito");
+    expect(out).toContain("1 registro(s) não executado(s)");
+  });
+});
+
 describe("guardas estruturais", () => {
   const ws = read("client/src/components/procurement/EditalWorkspace.tsx");
   const prep = read("client/src/components/procurement/EditalPreparationPanel.tsx");
@@ -185,6 +341,10 @@ describe("guardas estruturais", () => {
     expect(prep).toContain("expectedRevision");
     expect(prep).toContain("idempotencyKey");
     expect(prep).not.toMatch(/JSON\.parse|fetch\(|localStorage|AUTHORITY_OWNED/);
+    // escritas SEQUENCIAIS (nunca em paralelo) via executeSavePlan; uma confirmação humana
+    expect(prep).toContain("executeSavePlan");
+    expect(prep).not.toContain("Promise.all");
+    expect(read("client/src/lib/editalPreparation.ts")).not.toContain("Promise.all");
     expect(review).toContain("institutionalTemplates.reviews.acknowledgeDeviation");
     expect(review).toContain("idempotencyKey");
     // reconhecimento nunca é automático: só por clique (individual) ou seleção explícita
