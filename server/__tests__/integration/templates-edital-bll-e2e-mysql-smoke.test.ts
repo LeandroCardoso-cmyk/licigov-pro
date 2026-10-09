@@ -247,7 +247,9 @@ describe.skipIf(!DB)("Piloto Edital — E2E integrado A+B+C (MySQL real, dados s
   const LEAKS = ["25,50", "1,75", "3.060,00", "700,00", "3.760,00", "2550", "306000", "37600", "175"];
   const noMoney = (label: string, s: string) => {
     expect(s, `${label}: valor monetário`).not.toMatch(/R\$\s?\d/);
-    for (const v of LEAKS) expect(s, `${label}: ${v}`).not.toContain(v);
+    // Ids/hashes aleatórios (hex ≥16, dígitos ≥7: organizationId, timestamps) podem conter "2550"/"175" por acaso: não são valores.
+    const scan = s.replace(/[0-9a-f]{16,}/gi, "#").replace(/\d{7,}/g, "#");
+    for (const v of LEAKS) expect(scan, `${label}: ${v}`).not.toContain(v);
   };
 
   it("E2 — orçamento SIGILOSO: nenhum valor estimado em texto, tabela, anexo, título, metadados nem manifest", async () => {
