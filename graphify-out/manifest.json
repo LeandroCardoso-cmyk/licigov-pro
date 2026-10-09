@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791505478.9521124,
-    "ast_hash": "456180837aeaaa7120864d138e94d987",
+    "mtime": 1791509737.3196683,
+    "ast_hash": "53ac7bfb226c3906a501a74a4135bf5d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1791249269.2005389,
-    "ast_hash": "8556271c3069f9afc3b38ee4bac312db",
+    "mtime": 1791509732.182323,
+    "ast_hash": "c4ddcfccbbf1dd0c702d8610178e0dfc",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1791505274.699695,
-    "ast_hash": "cbb02d7a2b629a6ceb6697e2ae8a1843",
+    "mtime": 1791509487.3879838,
+    "ast_hash": "18a2f028ebff9891e46c29305da81c8a",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791505849.751953,
-    "ast_hash": "ecb466bc8404f9bd11b64e6ab8488d65",
+    "mtime": 1791509565.79658,
+    "ast_hash": "360eeb1f6c43248e5d607dd9ec48c475",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13830,13 +13830,13 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revalidation.ts": {
-    "mtime": 1791505752.0931923,
-    "ast_hash": "73f15a6b6275c693d730d95b9153db40",
+    "mtime": 1791508947.3799467,
+    "ast_hash": "7bb6ed1e9ecf5d7c2334b49bdb9aac4b",
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
-    "mtime": 1791420943.3303852,
-    "ast_hash": "d263c8ee14d5c06ccc265b5c26a4dab4",
+    "mtime": 1791509241.8369482,
+    "ast_hash": "018e5d332f2467a26d9f48b922624501",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalAdapter.ts": {
@@ -13925,8 +13925,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1791505092.8171136,
-    "ast_hash": "1e90ff245483ab1f8a1bb1f28099abf1",
+    "mtime": 1791509037.0334275,
+    "ast_hash": "d731d5f2f18cfed66365357ddff7da11",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14402,6 +14402,51 @@
   "server/services/institutionalTemplates/editalBridgeService.ts": {
     "mtime": 1791505198.415694,
     "ast_hash": "7f94f6732a98d5aa587f4b5510f56f51",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalPreflightCard.tsx": {
+    "mtime": 1791509689.4244,
+    "ast_hash": "054e01aa0c8070ee6d6f359c2bdf1299",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalPreparationPanel.tsx": {
+    "mtime": 1791509689.4219851,
+    "ast_hash": "a1727849cf3f684308d8fb9800ee56a7",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
+    "mtime": 1791509732.183248,
+    "ast_hash": "aeef3abf7974605792ce14361162dd4d",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/PrepFieldControl.tsx": {
+    "mtime": 1791509791.9946022,
+    "ast_hash": "04c5e71b5eb70802e9488e4d1a4cb6eb",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/editalPreparation.test.ts": {
+    "mtime": 1791509858.5984788,
+    "ast_hash": "4207e44ad2136ebdb03a2382e5702b7f",
+    "semantic_hash": ""
+  },
+  "client/src/lib/editalPreparation.ts": {
+    "mtime": 1791509646.3346322,
+    "ast_hash": "9f16b55689eaa8d001cfd48a380779d7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
+    "mtime": 1791509544.7532933,
+    "ast_hash": "637aa3fbac09d4dabc4a586611a6af00",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-structural-deviation-status.test.ts": {
+    "mtime": 1791509858.601218,
+    "ast_hash": "86fcc92a23162c5fda02dec454967aa2",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/editalPreparationService.ts": {
+    "mtime": 1791509150.5166383,
+    "ast_hash": "8c28cebc99087014066954b4d476fab5",
     "semantic_hash": ""
   }
 }

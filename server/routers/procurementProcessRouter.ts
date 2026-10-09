@@ -23,7 +23,8 @@ import {
 import { resolveProcurementContext, recordContextAssertions } from "../services/canonicalContextService";
 import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash } from "../services/documentPromotionService";
 import { templateIssuanceHook } from "../services/institutionalTemplates/integration";
-import { generateTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
+import { generateTemplatedDocument, inspectTemplateReview, preflightTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
+import { getEditalPreparationState } from "../services/institutionalTemplates/editalPreparationService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
 import { generateEditalRouted, listEditalTrCandidates, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
@@ -670,6 +671,60 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       return resolveEditalTemplate(bridgeDeps(), orgId, await editalBoundaryParams(orgId, input.processId, input));
+    }),
+
+  /**
+   * Preparação do Edital institucional (somente leitura): campos GOVERNADOS que o modelo EXATO vinculado exige, valores correntes e
+   * revisões (CAS) dos registros. Descritores vêm do catálogo da revisão no servidor; a escrita usa `institutionalTemplates.governed.*`.
+   */
+  editalTemplatePreparation: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getEditalPreparationState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+    }),
+
+  /**
+   * PREFLIGHT somente leitura da composição: mesma revisão exata, mesmas fontes e mesmo composer da geração, com o pin exato do TR.
+   * Não grava rascunho/M1, não reserva geração e não chama IA. `NOT_APPLICABLE` quando não há modelo institucional vinculado.
+   */
+  editalTemplatePreflight: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1),
+      modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      officialPins: z.object({ TR: TR_PIN.optional() }).strict().optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const deps = bridgeDeps();
+      const resolution = await resolveEditalTemplate(deps, orgId, await editalBoundaryParams(orgId, input.processId, input));
+      if (resolution.status !== "BOUND" || !deps.ports) return { status: "NOT_APPLICABLE" as const, resolution: resolution.status };
+      const result = await preflightTemplatedDocument({
+        organizationId: orgId, subjectId: input.processId, documentKind: "edital", documentType: "edital",
+        scope: resolution.normalizedScope, asOf: deps.now(), title: "Edital (preflight)", actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        officialPins: input.officialPins?.TR ? { TR: input.officialPins.TR } : {},
+      }, deps.ports);
+      if (result.status === "READY_FOR_COMPOSITION") return { ...result, resolution: resolution.status };
+      // Fontes governadas ainda pendentes ficam visíveis também no preflight (a composição para no primeiro erro de forma/tabela).
+      const prep = await getEditalPreparationState(deps, orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+      const pending = prep.status === "READY_FOR_PREPARATION"
+        ? prep.sections.filter((s) => s.pendingRequired > 0).map((s) => ({ code: "GOVERNED_SOURCE_PENDING", source: s.source, message: `${s.pendingRequired} campo(s) obrigatório(s) pendente(s) na fonte ${s.source}` }))
+        : [];
+      return { ...result, issues: [...pending, ...result.issues], resolution: resolution.status };
+    }),
+
+  /** Estado de revisão do rascunho composto por modelo (marcadores, desvios estruturais, narrativas de IA e revalidação canônica). */
+  editalTemplateReviewState: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      const deps = bridgeDeps();
+      const draft = await getGeneratedDocumentByKind(input.processId, orgId, "edital");
+      if (!draft || !deps.ports) return { composedByTemplate: false as const, unresolvedMarkers: { count: 0, slots: [], samples: [] }, structuralDeviations: [], aiNarratives: [], revalidation: { status: "BLOCKED" as const, issues: [] } };
+      return inspectTemplateReview(deps.ports, { organizationId: orgId, processId: input.processId, draftId: draft.id, content: draft.content });
     }),
 
   /** TRs OFICIAIS emitidos do processo (id, versão, hash calculado no servidor). A seleção é humana; só a versão vigente é aceita. */

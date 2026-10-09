@@ -145,6 +145,11 @@ const generateInput = z.object({
   officialPins: z.object({ TR: officialPin.optional(), ETP: officialPin.optional(), DFD: officialPin.optional() }).strict().optional(),
 }).strict();
 
+/** Processo inexistente OU de outra organização ⇒ NOT_FOUND indistinguível (a decisão governada nunca é gravada para um assunto alheio). */
+async function assertProcessInTenant(processId: string, organizationId: number): Promise<void> {
+  if (!(await getProcess(processId, organizationId))) throw new TemplateWorkflowError("NOT_FOUND", "processo não encontrado nesta organização");
+}
+
 function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
   switch (code) {
     case "HUMAN_ACTION_REQUIRED": return "FORBIDDEN";
@@ -321,11 +326,17 @@ export const institutionalTemplatesRouter = router({
    */
   governed: router({
     recordProcessFields: templatesProcedure("govern").input(processFieldsInput)
-      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordProcessFields(ctx.wctx, input))),
+      .mutation(({ ctx, input }) => guarded(async () => {
+        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordProcessFields(ctx.wctx, input);
+      })),
     recordOrganizationFields: templatesProcedure("govern").input(orgFieldsInput)
       .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationFields(ctx.wctx, input))),
     recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
-      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetDisclosure(ctx.wctx, input))),
+      .mutation(({ ctx, input }) => guarded(async () => {
+        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetDisclosure(ctx.wctx, input);
+      })),
   }),
 
   /** Geração governada por modelo: binding exato → composição determinística → rascunho + versão `gerado` + M1 (1 transação). */

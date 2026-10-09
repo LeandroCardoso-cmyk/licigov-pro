@@ -35,11 +35,13 @@ export type OfficialPromotionSectionProps = {
   reviewSnapshot: ReviewSnapshot | null;
   /** R9 / SEM-057 — há edição não salva no editor acima: emitir agora emitiria o conteúdo PERSISTIDO, não o visível. */
   hasUnsavedEdits?: boolean;
+  /** Pendências de revisão do modelo institucional (marcadores [REVISAR], desvios sem reconhecimento). Informativo: a revalidação final é do backend. */
+  templateReviewBlockers?: readonly string[];
 };
 
 const KIND_LABEL: Record<string, string> = { etp: "ETP", tr: "TR", edital: "Edital" };
 
-export default function OfficialPromotionSection({ processId = "", kind, reviewSnapshot, hasUnsavedEdits = false }: OfficialPromotionSectionProps) {
+export default function OfficialPromotionSection({ processId = "", kind, reviewSnapshot, hasUnsavedEdits = false, templateReviewBlockers = [] }: OfficialPromotionSectionProps) {
   const utils = trpc.useUtils();
   const enabled = processId.trim().length > 0;
   const { key: emitKey, rotate: rotateEmitKey } = useIdempotencyKey();
@@ -191,6 +193,15 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         {hasUnsavedEdits && (
           <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             Há <strong>edição não salva</strong> no editor acima. Salve (ou descarte) antes de emitir — a emissão usa o conteúdo salvo.
+          </div>
+        )}
+        {templateReviewBlockers.length > 0 && (
+          <div role="status" className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            <strong>Revisão do modelo institucional pendente:</strong>
+            <ul className="mt-1 list-disc pl-5">
+              {templateReviewBlockers.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+            <span className="mt-1 block text-xs">O servidor revalida estes itens na emissão e recusa se houver pendência.</span>
           </div>
         )}
         {blockers.length > 0 && (
