@@ -209,6 +209,21 @@ export interface GenerateTemplatedDocumentResult {
   readonly reviewNotice: string;
 }
 
+/**
+ * Resolução do binding EXATO (regra pura do T1 sobre os vínculos vigentes e suas revisões). Fonte ÚNICA usada pela geração e por
+ * qualquer leitura de "qual modelo se aplica" (ex.: o bridge do workspace do Edital): nenhum resolvedor paralelo.
+ */
+export async function resolveBindingForGeneration(
+  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf: string,
+) {
+  const bindings = await ports.repository.listBindings(organizationId, { documentKind, activeOnly: true });
+  const revisions: TemplateRevision[] = [];
+  for (const identityId of [...new Set(bindings.map((b) => b.identityId))].sort()) {
+    revisions.push(...(await ports.repository.listRevisions(organizationId, identityId)));
+  }
+  return resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
+}
+
 export async function generateTemplatedDocument(params: GenerateTemplatedDocumentParams, ports: TemplatePorts): Promise<GenerateTemplatedDocumentResult> {
   if (!Number.isSafeInteger(params.actorUserId) || params.actorUserId <= 0) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Geração por template exige o usuário que a solicita." });
@@ -220,15 +235,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
   }
 
   // 1. Binding determinístico (regra pura do T1): ambíguo/sem pin/não publicado ⇒ falha fechada.
-  const bindings = await ports.repository.listBindings(params.organizationId, { documentKind: params.documentKind, activeOnly: true });
-  const revisions: TemplateRevision[] = [];
-  for (const identityId of [...new Set(bindings.map((b) => b.identityId))].sort()) {
-    revisions.push(...(await ports.repository.listRevisions(params.organizationId, identityId)));
-  }
-  const resolution = resolveTemplateBinding(
-    { organizationId: params.organizationId, documentKind: params.documentKind, scope: params.scope, asOf: params.asOf },
-    bindings, revisions,
-  );
+  const resolution = await resolveBindingForGeneration(ports, params.organizationId, params.documentKind, params.scope, params.asOf);
   if (resolution.status === "NOT_BOUND") throw preconditionFailed(TEMPLATE_NOT_BOUND, "nenhum modelo vigente vinculado a este tipo/escopo");
   if (resolution.status === "AMBIGUOUS") {
     throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_AMBIGUOUS}: mais de um vínculo vigente (${resolution.bindingIds.join(", ")}) — nenhum é escolhido automaticamente` });

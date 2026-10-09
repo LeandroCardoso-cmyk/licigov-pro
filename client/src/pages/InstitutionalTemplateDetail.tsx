@@ -142,14 +142,16 @@ export default function InstitutionalTemplateDetail() {
 
   // ── vínculos ──
   const bindings = trpc.institutionalTemplates.bindings.list.useQuery({ documentKind: detail.data?.identity.documentKind, activeOnly: false }, { enabled: enabled && !!detail.data });
-  const setBinding = trpc.institutionalTemplates.bindings.set.useMutation({ onSuccess: () => { toast.success("Vínculo criado para a revisão exata."); invalidate(); bindings.refetch(); }, onError });
-  const deactivate = trpc.institutionalTemplates.bindings.deactivate.useMutation({ onSuccess: () => { toast.success("Vínculo desativado."); bindings.refetch(); invalidate(); }, onError });
+  const setBinding = trpc.institutionalTemplates.bindings.set.useMutation({ onSuccess: () => { toast.success("Vínculo criado para a revisão exata."); invalidate(); bindings.refetch(); void utils.institutionalTemplates.bindings.resolve.invalidate(); }, onError });
+  const deactivate = trpc.institutionalTemplates.bindings.deactivate.useMutation({ onSuccess: () => { toast.success("Vínculo desativado."); bindings.refetch(); invalidate(); void utils.institutionalTemplates.bindings.resolve.invalidate(); }, onError });
   const [bindRev, setBindRev] = useState("");
   const [bindScope, setBindScope] = useState<ScopeFormState>(emptyScopeForm());
   const [bindConfirm, setBindConfirm] = useState(false);
   const [bindShowErrors, setBindShowErrors] = useState(false);
   const scopeInput = scopeFromForm(bindScope);
-  const resolve = trpc.institutionalTemplates.bindings.resolve.useQuery({ documentKind: detail.data?.identity.documentKind ?? "tr", scope: scopeInput }, { enabled: enabled && !!detail.data });
+  // A resolução é do escopo INFORMADO no formulário: escopo incompleto não é "conclusão global" (não consulta nem anuncia NOT_BOUND).
+  const scopeComplete = Object.keys(scopeFormProblems(detail.data?.identity.documentKind ?? "tr", bindScope)).length === 0;
+  const resolve = trpc.institutionalTemplates.bindings.resolve.useQuery({ documentKind: detail.data?.identity.documentKind ?? "tr", scope: scopeInput }, { enabled: enabled && !!detail.data && scopeComplete });
   const catalogRows = trpc.institutionalTemplates.catalog.list.useQuery({ documentKind: detail.data?.identity.documentKind }, { enabled: enabled && !!detail.data });
   const catalogRow = (catalogRows.data ?? []).find((r) => r.identityId === identityId);
 
@@ -256,7 +258,9 @@ export default function InstitutionalTemplateDetail() {
 
         <TabsContent value="vinculos" className="space-y-4 pt-4">
           <p className="text-sm text-muted-foreground">Um vínculo fixa uma revisão PUBLICADA exata a um tipo de documento e escopo. Revisões publicadas depois não substituem o vínculo; ambiguidade bloqueia a geração.</p>
-          {resolve.data && <ResolutionNotice resolution={resolve.data as unknown as ResolutionView} />}
+          <p className="text-xs font-medium text-muted-foreground">Resolução para o escopo informado abaixo</p>
+          {!scopeComplete ? <p role="status" className="text-xs text-muted-foreground">Informe o escopo completo (modalidade e forma) no formulário "Novo vínculo" para ver qual revisão seria aplicada. Isto não indica que o modelo esteja sem vínculo: veja a lista abaixo.</p>
+            : resolve.data && <ResolutionNotice resolution={resolve.data as unknown as ResolutionView} />}
           <div className="rounded-md border">
             {(bindings.data ?? []).filter((b) => b.identityId === identity.id).length === 0 ? <p className="p-3 text-sm text-muted-foreground">Nenhum vínculo para este modelo.</p> : (
               <ul className="divide-y text-sm">

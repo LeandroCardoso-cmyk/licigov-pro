@@ -7,6 +7,8 @@ import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
+import { bridgeAllowsGeneration, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
   editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
@@ -144,15 +146,31 @@ export default function EditalWorkspace({
     },
     { enabled: !!processId && !!object.trim() },
   );
+  // Bridge Edital → modelo institucional: a resolução e o motor são do SERVIDOR; aqui só se exibe e se confirma o TR exato.
+  const coreComplete = !!modality && !!form && (form !== "eletronico" || !!platform);
+  const resolutionQuery = trpc.procurementProcess.editalTemplateResolution.useQuery(
+    { processId, modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined },
+    { enabled: !!processId && coreComplete },
+  );
+  const resolution = (coreComplete ? resolutionQuery.data : undefined) as TemplateResolutionView | undefined;
+  const bound = resolution?.status === "BOUND";
+  const trQuery = trpc.procurementProcess.editalTrCandidates.useQuery({ processId }, { enabled: !!processId && bound });
+  const trCandidates = (bound ? trQuery.data ?? [] : []) as TrCandidateView[];
+  const [selectedTrId, setSelectedTrId] = useState<string | null>(null);
+  const trPin = trPinOf(trCandidates.find((c) => c.documentId === selectedTrId));
+  const bridgeGate = bridgeAllowsGeneration(resolution, trPin);
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
     // Recusas governadas (conteúdo humano / troca de parâmetros sem confirmação) ⇒ diálogo; nada gravado.
     onError: (e) => {
       if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) setConfirmOpen(true);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setConfirmOpen(false);
-      setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
-      setProposedText({ judgmentCriterion: null, executionRegime: null });
+      // Rascunho institucional não persiste parâmetros legados: mantém a escolha atual na tela (nada a "voltar a exibir").
+      if (data.generationMode !== "INSTITUTIONAL_TEMPLATE") {
+        setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
+        setProposedText({ judgmentCriterion: null, executionRegime: null });
+      }
       rotateEditalKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
@@ -163,6 +181,16 @@ export default function EditalWorkspace({
 
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
+    if (bound) {
+      // Motor institucional (decidido pelo servidor): o TR oficial EXATO confirmado segue no payload; sem confirmação ⇒ nada é enviado.
+      if (!trPin || regenerationBlock) return;
+      generateNotice.mutate({
+        processId, object: object.trim(),
+        modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
+        officialPins: { TR: trPin }, idempotencyKey: editalKey,
+      });
+      return;
+    }
     // Decisão PURA antes de qualquer chamada (bloqueado ⇒ nada; confirmação ⇒ diálogo; cancelar = zero efeito).
     const plan = planRegeneration({
       confirmed, needsReplace: needsReplaceConfirmation(draft), parameterChange: paramsChanged, block: regenerationBlock,
@@ -328,13 +356,21 @@ export default function EditalWorkspace({
           </p>
         )}
 
+        {coreComplete && (
+          <EditalTemplateBridgeCard
+            resolution={resolution} candidates={trCandidates} selectedTrId={selectedTrId} onSelectTr={setSelectedTrId}
+            candidatesLoading={bound && trQuery.isLoading}
+          />
+        )}
+        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+
         <button
           type="button"
           onClick={() => handleGenerate()}
-          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !!regenerationBlock}
+          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !bridgeGate.allowed || !!regenerationBlock}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
-          {generateNotice.isPending ? "Gerando..." : "Gerar edital"}
+          {generateNotice.isPending ? "Gerando..." : bound ? "Gerar edital com modelo institucional" : "Gerar edital"}
         </button>
         {!processId && (
           <p className="text-xs text-amber-600 dark:text-amber-400">

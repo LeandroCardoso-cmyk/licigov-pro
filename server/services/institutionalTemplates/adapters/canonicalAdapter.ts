@@ -20,6 +20,8 @@ import { resolveSourcesV2 } from "./canonicalSources";
 const DOMAIN = "processo_licitatorio";
 const OFFICIAL_TYPE: Partial<Record<DocRefKind2, "dfd" | "etp" | "tr">> = { DFD: "dfd", ETP: "etp", TR: "tr" };
 const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
+/** Hash do conteúdo de um documento oficial, exatamente como o pin o verifica (fonte única para listar e validar pins). */
+export const officialContentHash = (content: string | null | undefined): string => sha256(content ?? "");
 const today = (): string => new Date().toISOString().slice(0, 10);
 
 function pinOf(organizationId: number, doc: { id: string; lineageId: string; version: number; content: string | null; title: string }): OfficialDocumentPin {

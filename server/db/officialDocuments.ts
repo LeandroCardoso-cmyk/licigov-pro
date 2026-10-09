@@ -151,6 +151,20 @@ export async function getLatestEmittedByOrigin(tenantId: number, businessDomain:
   return rows.length ? rowToDoc(rows[0]) : null;
 }
 
+/** Todas as versões EMITIDAS de um tipo para uma origem (tenant-scoped), da mais nova para a mais antiga. */
+export async function listEmittedByOrigin(tenantId: number, businessDomain: string, origin: string, documentType: string): Promise<OfficialDocument[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(officialDocumentsTable)
+    .where(and(
+      eq(officialDocumentsTable.tenantId, tenantId), eq(officialDocumentsTable.businessDomain, businessDomain),
+      eq(officialDocumentsTable.origin, origin), eq(officialDocumentsTable.documentType, documentType),
+      eq(officialDocumentsTable.status, "emitido"),
+    ))
+    .orderBy(desc(officialDocumentsTable.version));
+  return rows.map(rowToDoc);
+}
+
 export async function countVersions(lineageId: string, tenantId: number, executor?: OfficialDocsExecutor): Promise<number> {
   const db = executor ?? await getDb();
   if (!db) return 0;

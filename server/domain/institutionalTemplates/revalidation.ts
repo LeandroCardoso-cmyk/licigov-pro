@@ -213,7 +213,7 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
     for (const kind of found) {
       const ack = input.acknowledgments.find((a) => a.blockId === b.blockId && a.kind === kind && a.acknowledgmentRef);
       if (ack) deviations.push({ blockId: b.blockId, kind, acknowledgmentRef: ack.acknowledgmentRef });
-      else issues.push({ code: "STRUCTURAL_DEVIATION_UNACKNOWLEDGED", path: b.blockId, message: `${kind} sem reconhecimento humano registrado` });
+      else issues.push({ code: "STRUCTURAL_DEVIATION_UNACKNOWLEDGED", path: b.blockId, message: `${kind} em ${b.blockId} sem reconhecimento humano registrado` });
     }
   }
 
