@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791249269.2005389,
-    "ast_hash": "a330f0908eeb3ed67de6a04db6b777a3",
+    "mtime": 1791509737.3196683,
+    "ast_hash": "53ac7bfb226c3906a501a74a4135bf5d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1791249269.2005389,
-    "ast_hash": "8556271c3069f9afc3b38ee4bac312db",
+    "mtime": 1791509732.182323,
+    "ast_hash": "c4ddcfccbbf1dd0c702d8610178e0dfc",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
@@ -7030,8 +7030,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1791249270.106136,
-    "ast_hash": "7b6c115c1e3ea6dd2a4eea8f5df50ffe",
+    "mtime": 1791505198.4124427,
+    "ast_hash": "7ad686f5271ea9adfe43efe4f0b35d77",
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1791316231.7684882,
-    "ast_hash": "0831ca5137c6135961fcdd4f07a99667",
+    "mtime": 1791509487.3879838,
+    "ast_hash": "18a2f028ebff9891e46c29305da81c8a",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791382416.1667304,
-    "ast_hash": "90073fb47b58815948cf731af6263101",
+    "mtime": 1791509565.79658,
+    "ast_hash": "360eeb1f6c43248e5d607dd9ec48c475",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13680,8 +13680,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplateDetail.tsx": {
-    "mtime": 1791421022.2954936,
-    "ast_hash": "91e99423756b7b4d19d1024ffb7a7f99",
+    "mtime": 1791505399.7969189,
+    "ast_hash": "de4d5ba067c6b137cdd308da142faf90",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplates.tsx": {
@@ -13830,18 +13830,18 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revalidation.ts": {
-    "mtime": 1791380893.3968592,
-    "ast_hash": "6736c1cf5245b4ab9805a8c5e3d978d4",
+    "mtime": 1791508947.3799467,
+    "ast_hash": "7bb6ed1e9ecf5d7c2334b49bdb9aac4b",
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
-    "mtime": 1791420943.3303852,
-    "ast_hash": "d263c8ee14d5c06ccc265b5c26a4dab4",
+    "mtime": 1791509241.8369482,
+    "ast_hash": "018e5d332f2467a26d9f48b922624501",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalAdapter.ts": {
-    "mtime": 1791378063.7234507,
-    "ast_hash": "11f6e4afccb54f5911bb0bfcd38ffb0a",
+    "mtime": 1791505198.413083,
+    "ast_hash": "4de026e05128d7f982b2e2765eb5ec71",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
@@ -13925,8 +13925,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1791379894.4823647,
-    "ast_hash": "221ddd7ccd2b593f0ec5d9f994c28d97",
+    "mtime": 1791509037.0334275,
+    "ast_hash": "d731d5f2f18cfed66365357ddff7da11",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14050,8 +14050,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
-    "mtime": 1791383021.324144,
-    "ast_hash": "8ca1972c6c5c228f51c65f00be57cf36",
+    "mtime": 1791511708.2709177,
+    "ast_hash": "695325d852bdce628013d2aa384cd562",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts": {
@@ -14367,6 +14367,86 @@
   "client/src/lib/featureFlags/templatesFlagSurface.ts": {
     "mtime": 1791420966.0176644,
     "ast_hash": "f7be908e9ff83084aad89a33c0769085",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalTemplateBridgeCard.tsx": {
+    "mtime": 1791505360.2533689,
+    "ast_hash": "b046a483edd7f9204d6fdb8e078b5685",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/editalTemplateBridge.test.ts": {
+    "mtime": 1791505874.9972212,
+    "ast_hash": "47188b43e3907e6ed752a589f16bf3bf",
+    "semantic_hash": ""
+  },
+  "client/src/lib/editalTemplateBridge.ts": {
+    "mtime": 1791505360.2476962,
+    "ast_hash": "389c23a27e6e811db9f95cd6915386e3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts": {
+    "mtime": 1791505806.7987092,
+    "ast_hash": "e63756b11db223d8e5f1de6160474406",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-edital-bridge.test.ts": {
+    "mtime": 1791505907.820855,
+    "ast_hash": "8c97050ca130e92b55db231dcf1c21d2",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/editalBridgeScope.ts": {
+    "mtime": 1791505085.2836926,
+    "ast_hash": "ff215e6110ab26395eb099c18a5cd3f7",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/editalBridgeService.ts": {
+    "mtime": 1791505198.415694,
+    "ast_hash": "7f94f6732a98d5aa587f4b5510f56f51",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalPreflightCard.tsx": {
+    "mtime": 1791509689.4244,
+    "ast_hash": "054e01aa0c8070ee6d6f359c2bdf1299",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalPreparationPanel.tsx": {
+    "mtime": 1791509689.4219851,
+    "ast_hash": "a1727849cf3f684308d8fb9800ee56a7",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
+    "mtime": 1791509732.183248,
+    "ast_hash": "aeef3abf7974605792ce14361162dd4d",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/PrepFieldControl.tsx": {
+    "mtime": 1791509791.9946022,
+    "ast_hash": "04c5e71b5eb70802e9488e4d1a4cb6eb",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/editalPreparation.test.ts": {
+    "mtime": 1791509858.5984788,
+    "ast_hash": "4207e44ad2136ebdb03a2382e5702b7f",
+    "semantic_hash": ""
+  },
+  "client/src/lib/editalPreparation.ts": {
+    "mtime": 1791509646.3346322,
+    "ast_hash": "9f16b55689eaa8d001cfd48a380779d7",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
+    "mtime": 1791509544.7532933,
+    "ast_hash": "637aa3fbac09d4dabc4a586611a6af00",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-structural-deviation-status.test.ts": {
+    "mtime": 1791509858.601218,
+    "ast_hash": "86fcc92a23162c5fda02dec454967aa2",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/editalPreparationService.ts": {
+    "mtime": 1791509150.5166383,
+    "ast_hash": "8c28cebc99087014066954b4d476fab5",
     "semantic_hash": ""
   }
 }

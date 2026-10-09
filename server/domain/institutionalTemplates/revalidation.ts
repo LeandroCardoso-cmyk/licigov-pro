@@ -151,6 +151,36 @@ export function humanEditLineageIssues(composedOutputHash: Sha256, documentConte
   return out;
 }
 
+export interface StructuralDeviationStatus {
+  readonly blockId: string;
+  readonly kind: StructuralDeviationKind;
+  /** Referência do reconhecimento humano registrado; `null` = ainda sem reconhecimento. */
+  readonly acknowledgmentRef: string | null;
+}
+
+/**
+ * Desvios estruturais de blocos condicionais entre o texto COMPOSTO e o conteúdo a emitir, com o estado do reconhecimento humano.
+ * Fonte ÚNICA da regra: a emissão (`revalidateForIssuance`) e a inspeção de revisão da UI usam exatamente esta função.
+ * Âncoras podem se repetir em OUTROS trechos (ex.: título de tabela igual em ramos diferentes): a comparação é por OCORRÊNCIAS contra
+ * a própria composição — remoção = menos ocorrências que o composto; inserção = mais ocorrências que o composto.
+ */
+export function structuralDeviationStatus(
+  blocks: readonly { readonly blockId: string; readonly includedAnchor: string | null; readonly excludedAnchor: string | null }[],
+  composedText: string, issuedContent: string, acknowledgments: readonly StructuralDeviationAcknowledgment[],
+): StructuralDeviationStatus[] {
+  const out: StructuralDeviationStatus[] = [];
+  for (const b of blocks) {
+    const found: StructuralDeviationKind[] = [];
+    if (b.includedAnchor && countOccurrences(issuedContent, b.includedAnchor) < countOccurrences(composedText, b.includedAnchor)) found.push("INCLUDED_BLOCK_REMOVED");
+    if (b.excludedAnchor && b.excludedAnchor !== b.includedAnchor && countOccurrences(issuedContent, b.excludedAnchor) > countOccurrences(composedText, b.excludedAnchor)) found.push("EXCLUDED_BLOCK_INSERTED");
+    for (const kind of found) {
+      const ack = acknowledgments.find((a) => a.blockId === b.blockId && a.kind === kind && a.acknowledgmentRef);
+      out.push({ blockId: b.blockId, kind, acknowledgmentRef: ack ? ack.acknowledgmentRef : null });
+    }
+  }
+  return out;
+}
+
 /** Revalidação canônica completa. Nunca devolve "corrigido": ou passa, ou bloqueia com os motivos. */
 export function revalidateForIssuance(input: RevalidationInput): RevalidationOutcome {
   const m1 = input.generation;
@@ -202,19 +232,11 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
     issues.push({ code: "PROTECTED_NODE_MISSING", path: n.nodeId, message: "valor canônico/referência oficial do texto composto ausente no conteúdo a emitir" });
   });
 
-  // 6. Desvios estruturais de blocos condicionais (só com reconhecimento humano registrado).
+  // 6. Desvios estruturais de blocos condicionais (só com reconhecimento humano registrado). Fonte ÚNICA: `structuralDeviationStatus`.
   const deviations: { blockId: string; kind: StructuralDeviationKind; acknowledgmentRef: string }[] = [];
-  for (const b of re.structuralBlocks) {
-    const found: StructuralDeviationKind[] = [];
-    // Âncoras podem se repetir em OUTROS trechos do documento (ex.: título de tabela igual em ramos diferentes): a comparação é por
-    // OCORRÊNCIAS contra a própria composição — remoção = menos ocorrências que o composto; inserção = mais ocorrências que o composto.
-    if (b.includedAnchor && countOccurrences(input.issuedContent, b.includedAnchor) < countOccurrences(re.content.text, b.includedAnchor)) found.push("INCLUDED_BLOCK_REMOVED");
-    if (b.excludedAnchor && b.excludedAnchor !== b.includedAnchor && countOccurrences(input.issuedContent, b.excludedAnchor) > countOccurrences(re.content.text, b.excludedAnchor)) found.push("EXCLUDED_BLOCK_INSERTED");
-    for (const kind of found) {
-      const ack = input.acknowledgments.find((a) => a.blockId === b.blockId && a.kind === kind && a.acknowledgmentRef);
-      if (ack) deviations.push({ blockId: b.blockId, kind, acknowledgmentRef: ack.acknowledgmentRef });
-      else issues.push({ code: "STRUCTURAL_DEVIATION_UNACKNOWLEDGED", path: b.blockId, message: `${kind} sem reconhecimento humano registrado` });
-    }
+  for (const d of structuralDeviationStatus(re.structuralBlocks, re.content.text, input.issuedContent, input.acknowledgments)) {
+    if (d.acknowledgmentRef) deviations.push({ blockId: d.blockId, kind: d.kind, acknowledgmentRef: d.acknowledgmentRef });
+    else issues.push({ code: "STRUCTURAL_DEVIATION_UNACKNOWLEDGED", path: d.blockId, message: `${d.kind} em ${d.blockId} sem reconhecimento humano registrado` });
   }
 
   // 7. IA: todo trecho de IA do M1 exige aceite humano EXATO.

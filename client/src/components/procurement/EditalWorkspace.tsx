@@ -7,6 +7,12 @@ import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
+import EditalPreparationPanel from "./EditalPreparationPanel";
+import EditalPreflightCard from "./EditalPreflightCard";
+import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
+import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
+import { bridgeAllowsGeneration, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
   editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
@@ -144,25 +150,63 @@ export default function EditalWorkspace({
     },
     { enabled: !!processId && !!object.trim() },
   );
+  // Bridge Edital → modelo institucional: a resolução e o motor são do SERVIDOR; aqui só se exibe e se confirma o TR exato.
+  const coreComplete = !!modality && !!form && (form !== "eletronico" || !!platform);
+  const resolutionQuery = trpc.procurementProcess.editalTemplateResolution.useQuery(
+    { processId, modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined },
+    { enabled: !!processId && coreComplete },
+  );
+  const resolution = (coreComplete ? resolutionQuery.data : undefined) as TemplateResolutionView | undefined;
+  const bound = resolution?.status === "BOUND";
+  const trQuery = trpc.procurementProcess.editalTrCandidates.useQuery({ processId }, { enabled: !!processId && bound });
+  const trCandidates = (bound ? trQuery.data ?? [] : []) as TrCandidateView[];
+  const [selectedTrId, setSelectedTrId] = useState<string | null>(null);
+  const trPin = trPinOf(trCandidates.find((c) => c.documentId === selectedTrId));
+  const bridgeGate = bridgeAllowsGeneration(resolution, trPin);
+  const boundParams = { modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined };
+  // Preflight SOMENTE LEITURA (mesma revisão/fontes/composer da geração): o botão só é operacional com READY (o backend segue fail-closed).
+  const preflightQuery = trpc.procurementProcess.editalTemplatePreflight.useQuery(
+    { processId, ...boundParams, ...(trPin ? { officialPins: { TR: trPin } } : {}) },
+    { enabled: !!processId && bound && !!trPin },
+  );
+  const preflight = (bound && trPin ? preflightQuery.data : undefined) as PreflightView | undefined;
+  const genReady = generateReady(bound, !!trPin, preflight);
+  const reviewQuery = trpc.procurementProcess.editalTemplateReviewState.useQuery({ processId }, { enabled: !!processId });
+  const templateReviewBlockers = reviewReadiness(reviewQuery.data as ReviewStateView | undefined).blockers;
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
     // Recusas governadas (conteúdo humano / troca de parâmetros sem confirmação) ⇒ diálogo; nada gravado.
     onError: (e) => {
       if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) setConfirmOpen(true);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setConfirmOpen(false);
-      setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
-      setProposedText({ judgmentCriterion: null, executionRegime: null });
+      // Rascunho institucional não persiste parâmetros legados: mantém a escolha atual na tela (nada a "voltar a exibir").
+      if (data.generationMode !== "INSTITUTIONAL_TEMPLATE") {
+        setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
+        setProposedText({ judgmentCriterion: null, executionRegime: null });
+      }
       rotateEditalKey();
       if (processId) {
         utils.procurementProcess.reviewableDraft.invalidate({ processId, kind: "edital" });
         utils.procurementProcess.editalSourceState.invalidate();
+        utils.procurementProcess.editalTemplateReviewState.invalidate({ processId });
+        utils.procurementProcess.editalTemplatePreflight.invalidate();
       }
     },
   });
 
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
+    if (bound) {
+      // Motor institucional (decidido pelo servidor): o TR oficial EXATO confirmado segue no payload; sem confirmação ⇒ nada é enviado.
+      if (!trPin || regenerationBlock) return;
+      generateNotice.mutate({
+        processId, object: object.trim(),
+        modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
+        officialPins: { TR: trPin }, idempotencyKey: editalKey,
+      });
+      return;
+    }
     // Decisão PURA antes de qualquer chamada (bloqueado ⇒ nada; confirmação ⇒ diálogo; cancelar = zero efeito).
     const plan = planRegeneration({
       confirmed, needsReplace: needsReplaceConfirmation(draft), parameterChange: paramsChanged, block: regenerationBlock,
@@ -328,13 +372,25 @@ export default function EditalWorkspace({
           </p>
         )}
 
+        {coreComplete && (
+          <EditalTemplateBridgeCard
+            resolution={resolution} candidates={trCandidates} selectedTrId={selectedTrId} onSelectTr={setSelectedTrId}
+            candidatesLoading={bound && trQuery.isLoading}
+          />
+        )}
+        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {bound && (
+          <EditalPreflightCard preflight={preflight} loading={preflightQuery.isFetching} hasTrPin={!!trPin} onRecheck={() => { void preflightQuery.refetch(); }} />
+        )}
+        {bound && !genReady.ready && trPin && genReady.reason && <p className="text-xs text-amber-600 dark:text-amber-400">{genReady.reason}</p>}
+
         <button
           type="button"
           onClick={() => handleGenerate()}
-          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !!regenerationBlock}
+          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
-          {generateNotice.isPending ? "Gerando..." : "Gerar edital"}
+          {generateNotice.isPending ? "Gerando..." : bound ? "Gerar edital com modelo institucional" : "Gerar edital"}
         </button>
         {!processId && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -348,6 +404,12 @@ export default function EditalWorkspace({
           </p>
         )}
       </div>
+
+      {bound && (
+        <div className="mt-6">
+          <EditalPreparationPanel processId={processId} params={boundParams} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+        </div>
+      )}
 
       {draft && (
         <div className="mt-6">
@@ -394,6 +456,8 @@ export default function EditalWorkspace({
         </div>
       )}
 
+      {draft && <div className="mt-6"><EditalTemplateReviewPanel processId={processId} contentKey={draft.contentHash} /></div>}
+
       <RegenerationConfirmDialog
         open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="Edital"
         humanEdit={draft?.humanEdit ?? null} currentLength={draft?.content.length}
@@ -402,7 +466,7 @@ export default function EditalWorkspace({
       />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
-      <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} />
+      <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} templateReviewBlockers={templateReviewBlockers} />
     </div>
   );
 }

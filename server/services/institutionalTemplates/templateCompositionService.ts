@@ -31,7 +31,7 @@ import {
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
 } from "../../domain/institutionalTemplates/composer";
 import { manifestRevisionIssues, validateManifest, type GenerationManifest, type IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
-import { buildIssuanceManifest, revalidateForIssuance } from "../../domain/institutionalTemplates/revalidation";
+import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -209,26 +209,35 @@ export interface GenerateTemplatedDocumentResult {
   readonly reviewNotice: string;
 }
 
-export async function generateTemplatedDocument(params: GenerateTemplatedDocumentParams, ports: TemplatePorts): Promise<GenerateTemplatedDocumentResult> {
-  if (!Number.isSafeInteger(params.actorUserId) || params.actorUserId <= 0) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Geração por template exige o usuário que a solicita." });
-  }
-  await assertEnabled(ports, params.organizationId);
-  const target = KIND_TARGETS[params.documentKind];
-  if (!target || !target.documentTypes.includes(params.documentType)) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: `Tipo oficial ${params.documentType} incompatível com o modelo ${params.documentKind}.` });
-  }
-
-  // 1. Binding determinístico (regra pura do T1): ambíguo/sem pin/não publicado ⇒ falha fechada.
-  const bindings = await ports.repository.listBindings(params.organizationId, { documentKind: params.documentKind, activeOnly: true });
+/**
+ * Resolução do binding EXATO (regra pura do T1 sobre os vínculos vigentes e suas revisões). Fonte ÚNICA usada pela geração e por
+ * qualquer leitura de "qual modelo se aplica" (ex.: o bridge do workspace do Edital): nenhum resolvedor paralelo.
+ */
+export async function resolveBindingForGeneration(
+  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf: string,
+) {
+  const bindings = await ports.repository.listBindings(organizationId, { documentKind, activeOnly: true });
   const revisions: TemplateRevision[] = [];
   for (const identityId of [...new Set(bindings.map((b) => b.identityId))].sort()) {
-    revisions.push(...(await ports.repository.listRevisions(params.organizationId, identityId)));
+    revisions.push(...(await ports.repository.listRevisions(organizationId, identityId)));
   }
-  const resolution = resolveTemplateBinding(
-    { organizationId: params.organizationId, documentKind: params.documentKind, scope: params.scope, asOf: params.asOf },
-    bindings, revisions,
-  );
+  return resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
+}
+
+interface PreparedComposition {
+  readonly template: LoadedTemplate;
+  readonly generatedDocumentId: string;
+  readonly composed: ComposeResult<ComposedDocument>;
+}
+
+/**
+ * Passos 1–4 da geração, SEM nenhuma escrita: binding exato (ambíguo/sem pin/não publicado ⇒ erro), revisão exata, fontes
+ * canônicas + pins exatos e composição pura. Usado pela geração E pelo preflight — a mesma revisão, as mesmas fontes, o mesmo
+ * composer. Fonte indisponível propaga como `TemplateSourceUnavailableError`; falha da composição vem em `composed`.
+ */
+async function prepareComposition(params: GenerateTemplatedDocumentParams, ports: TemplatePorts): Promise<PreparedComposition> {
+  // 1. Binding determinístico (regra pura do T1): ambíguo/sem pin/não publicado ⇒ falha fechada.
+  const resolution = await resolveBindingForGeneration(ports, params.organizationId, params.documentKind, params.scope, params.asOf);
   if (resolution.status === "NOT_BOUND") throw preconditionFailed(TEMPLATE_NOT_BOUND, "nenhum modelo vigente vinculado a este tipo/escopo");
   if (resolution.status === "AMBIGUOUS") {
     throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_AMBIGUOUS}: mais de um vínculo vigente (${resolution.bindingIds.join(", ")}) — nenhum é escolhido automaticamente` });
@@ -239,9 +248,9 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
   const t = await loadExactTemplate(ports, params.organizationId, resolution.binding.identityId, resolution.binding.pinnedRevisionId!);
   if (t.revision.semanticHash !== resolution.revision.semanticHash) throw preconditionFailed(TEMPLATE_BINDING_INVALID, "revisão fixada divergente entre leituras");
 
-  // 3. Fontes canônicas + rascunho de destino (fora da transação).
+  // 3. Fontes canônicas + rascunho de destino (leituras, fora da transação).
   const [canonical, generatedDocumentId] = await Promise.all([
-    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}).catch(sourceUnavailableToPrecondition),
+    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}),
     ports.drafts.reserveDraftId(params.organizationId, params.subjectId, params.documentType),
   ]);
 
@@ -253,7 +262,64 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
     identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: ports.clock.now(), purpose: "GENERATION",
     ...rulesFor(t),
   };
-  const composed = composeTemplate(request);
+  return { template: t, generatedDocumentId, composed: composeTemplate(request) };
+}
+
+export interface PreflightIssue {
+  readonly code: string;
+  /** Fonte canônica envolvida (quando identificável). */
+  readonly source?: string;
+  /** Variável/caminho envolvido (quando identificável). */
+  readonly path?: string;
+  readonly message: string;
+}
+export type PreflightResult =
+  | { readonly status: "READY_FOR_COMPOSITION"; readonly templateRevisionId: string; readonly templateSemanticHash: string }
+  | { readonly status: "BLOCKED"; readonly issues: readonly PreflightIssue[] };
+
+function trpcIssue(err: TRPCError): PreflightIssue {
+  const m = /^([A-Z][A-Z0-9_]+):\s*(.*)$/s.exec(err.message);
+  return { code: m ? m[1] : err.code, message: m ? m[2] : err.message };
+}
+
+/**
+ * PREFLIGHT somente leitura: responde se o processo tem TODAS as autoridades para compor (mesma revisão exata, mesmas fontes, mesmo
+ * composer e mesmos pins que a geração). Não reserva geração, não grava rascunho/M1, não chama IA.
+ */
+export async function preflightTemplatedDocument(params: GenerateTemplatedDocumentParams, ports: TemplatePorts): Promise<PreflightResult> {
+  const blocked = (issues: PreflightIssue[]): PreflightResult => ({ status: "BLOCKED", issues });
+  try {
+    await assertEnabled(ports, params.organizationId);
+    const target = KIND_TARGETS[params.documentKind];
+    if (!target || !target.documentTypes.includes(params.documentType)) {
+      return blocked([{ code: "DOCUMENT_TYPE_INCOMPATIBLE", message: `Tipo oficial ${params.documentType} incompatível com o modelo ${params.documentKind}.` }]);
+    }
+    const prep = await prepareComposition(params, ports);
+    if (prep.composed.ok) return { status: "READY_FOR_COMPOSITION", templateRevisionId: prep.template.revision.id, templateSemanticHash: prep.template.revision.semanticHash };
+    return blocked(prep.composed.issues.map((i) => {
+      const def = findAnyVariable(prep.template.catalog, i.path);
+      return { code: i.code, ...(def ? { source: def.source } : {}), path: i.path, message: i.message };
+    }));
+  } catch (err) {
+    if (err instanceof TemplateSourceUnavailableError) return blocked([{ code: err.reason, source: err.source, message: err.detail }]);
+    if (err instanceof TRPCError) return blocked([trpcIssue(err)]);
+    throw err;
+  }
+}
+
+export async function generateTemplatedDocument(params: GenerateTemplatedDocumentParams, ports: TemplatePorts): Promise<GenerateTemplatedDocumentResult> {
+  if (!Number.isSafeInteger(params.actorUserId) || params.actorUserId <= 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Geração por template exige o usuário que a solicita." });
+  }
+  await assertEnabled(ports, params.organizationId);
+  const target = KIND_TARGETS[params.documentKind];
+  if (!target || !target.documentTypes.includes(params.documentType)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Tipo oficial ${params.documentType} incompatível com o modelo ${params.documentKind}.` });
+  }
+
+  // 1–4. Binding exato → revisão exata → fontes canônicas + pins → composição pura + M1 selado (passos COMPARTILHADOS com o preflight).
+  const prep = await prepareComposition(params, ports).catch(sourceUnavailableToPrecondition);
+  const { composed, generatedDocumentId } = prep;
   if (!composed.ok) throw preconditionFailed(TEMPLATE_COMPOSITION_FAILED, codesOf(composed.issues));
   const m1 = composed.value.manifest;
 
@@ -324,6 +390,76 @@ async function recompose(ports: TemplatePorts, organizationId: OrgId, subjectId:
     identityFingerprint: canonical.identityFingerprint, generatedDocumentId: m1.generatedDocumentId, createdAt: m1.createdAt,
     purpose: "REVALIDATION", ...rulesFor(t),
   });
+}
+
+
+// ─── Inspeção da revisão humana (somente leitura) ────────────────────────────────────────────────────────────────────
+
+export interface TemplateReviewState {
+  /** false ⇒ o rascunho não foi composto por modelo (nada a revisar por este caminho). */
+  readonly composedByTemplate: boolean;
+  readonly generationManifestId?: string;
+  readonly templateRevisionId?: string;
+  readonly unresolvedMarkers: { readonly count: number; readonly slots: readonly string[]; readonly samples: readonly string[] };
+  readonly structuralDeviations: readonly { readonly blockId: string; readonly kind: StructuralDeviationKind; readonly acknowledged: boolean }[];
+  readonly aiNarratives: readonly { readonly slotKey: string; readonly executionId: string; readonly humanAccepted: boolean }[];
+  /** Resultado da MESMA revalidação canônica da emissão (nenhum detector paralelo). */
+  readonly revalidation: { readonly status: "PASSED" | "BLOCKED"; readonly issues: readonly { readonly code: string; readonly path: string; readonly message: string }[] };
+}
+
+const SLOT_IN_MARKER_RE = /narrativa "([^"]+)"/;
+
+/**
+ * Estado de revisão do rascunho composto por modelo: marcadores pendentes, desvios estruturais (com reconhecimento), narrativas de IA e a
+ * revalidação canônica. Usa as MESMAS peças da emissão (`recompose`, `revalidateForIssuance`, `structuralDeviationStatus`); só lê.
+ */
+export async function inspectTemplateReview(
+  ports: TemplatePorts, input: { readonly organizationId: OrgId; readonly processId: string; readonly draftId: string; readonly content: string },
+): Promise<TemplateReviewState> {
+  const m1 = await ports.manifests.findGenerationManifestForDraft(input.organizationId, input.draftId);
+  const markers = unresolvedMarkers(input.content);
+  const markerView = {
+    count: markers.length,
+    slots: [...new Set(markers.map((m) => SLOT_IN_MARKER_RE.exec(m)?.[1]).filter((x): x is string => !!x))],
+    samples: markers.slice(0, 5),
+  };
+  if (!m1 || m1.organizationId !== input.organizationId) {
+    return { composedByTemplate: false, unresolvedMarkers: markerView, structuralDeviations: [], aiNarratives: [], revalidation: { status: "BLOCKED", issues: [] } };
+  }
+  await assertEnabled(ports, input.organizationId);
+  const t = await loadExactTemplate(ports, input.organizationId, m1.templateIdentityId, m1.templateRevisionId);
+  const outputs = m1.aiNarratives.length ? await ports.review.loadAiOutputs(input.organizationId, m1.aiNarratives.map((n) => n.executionId)) : [];
+  const [humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
+    ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
+    ports.review.listAiAcceptances(input.organizationId, m1.id),
+    ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),
+  ]);
+  const aiNarratives = m1.aiNarratives.map((n) => ({
+    slotKey: n.slotKey, executionId: n.executionId,
+    humanAccepted: aiAcceptances.some((a) => a.organizationId === input.organizationId && a.manifestId === m1.id && a.slotKey === n.slotKey && a.executionId === n.executionId && a.outputHash === n.outputHash),
+  }));
+  let recomposition: ComposeResult<ComposedDocument>;
+  try {
+    recomposition = await recompose(ports, input.organizationId, input.processId, m1, t, outputs);
+  } catch (err) {
+    if (err instanceof TemplateSourceUnavailableError) {
+      return { composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations: [], aiNarratives,
+        revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: err.source, message: `${err.source} — ${err.reason}` }] } };
+    }
+    throw err;
+  }
+  const outcome = revalidateForIssuance({
+    organizationId: input.organizationId, generation: m1, recomposition, issuedContent: input.content,
+    humanEdits, aiAcceptances, acknowledgments, checkedAt: ports.clock.now(),
+  });
+  const structuralDeviations = recomposition.ok
+    ? structuralDeviationStatus(recomposition.value.structuralBlocks, recomposition.value.content.text, input.content, acknowledgments)
+      .map((d) => ({ blockId: d.blockId, kind: d.kind, acknowledged: d.acknowledgmentRef !== null }))
+    : [];
+  return {
+    composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations, aiNarratives,
+    revalidation: outcome.ok ? { status: "PASSED", issues: [] } : { status: "BLOCKED", issues: outcome.issues.map((i) => ({ code: i.code, path: i.path, message: i.message })) },
+  };
 }
 
 export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTemplateIssuanceHook {
