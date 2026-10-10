@@ -165,13 +165,15 @@ async function loadCanonicalInputs(
   officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>,
 ) {
   const needs = templateRequirementsAny(t.revision.ast);
-  const [sources, officialDocuments, identityFingerprint] = await Promise.all([
-    ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog),
+  // UMA autoridade por documento oficial: primeiro o pin validado (geração) / a autoridade atual (revalidação); as fontes — inclusive
+  // projeções que vêm do TR — derivam EXATAMENTE desse documento (nunca uma segunda leitura "latest" em paralelo).
+  const [officialDocuments, identityFingerprint] = await Promise.all([
     officialPins !== undefined
       ? ports.canonical.pinOfficialDocuments(organizationId, subjectId, needs.docRefKinds, officialPins)
       : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
+  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments);
   return { sources, officialDocuments, identityFingerprint };
 }
 

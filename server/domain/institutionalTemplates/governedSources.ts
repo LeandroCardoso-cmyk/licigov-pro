@@ -15,6 +15,7 @@
  * O LiciGov NÃO cadastra o certame em nenhuma plataforma: a configuração é a DECISÃO do órgão registrada no sistema.
  * Puro, determinístico, sem I/O.
  */
+import { isCanonicalProjection } from "./canonicalProjectionPolicy";
 import { fail, issue, ok, type TemplateIssue, type TemplateResult } from "./types";
 import { templateCanonicalJson, templateHash } from "./semanticHash";
 import { normalizeValue2 } from "./valueTypes2";
@@ -65,7 +66,14 @@ export function allowedSources(scope: GovernedScope): readonly VariableSource2[]
 }
 
 /** Valida UMA seção contra o catálogo v2 (tipos e caminhos). Devolve os campos normalizados. */
-export function validateGovernedSection(catalog: VariableCatalog2, scope: GovernedScope, source: string, fields: unknown): TemplateResult<GovernedFields> {
+export const CANONICAL_AUTHORITY_OWNED = "CANONICAL_AUTHORITY_OWNED";
+
+/**
+ * `mode = "write"` (novo registro humano): recusa também as variáveis de projeção CANONICAL (`CANONICAL_AUTHORITY_OWNED`).
+ * `mode = "read"` (padrão; releitura/revalidação do registro corrente): TOLERA valores legados nesses caminhos — o histórico do ledger
+ * é preservado e eles são IGNORADOS pela composição e pela preparação (nunca promovidos a autoridade).
+ */
+export function validateGovernedSection(catalog: VariableCatalog2, scope: GovernedScope, source: string, fields: unknown, mode: "read" | "write" = "read"): TemplateResult<GovernedFields> {
   const allowed = allowedSources(scope) as readonly string[];
   if (!allowed.includes(source)) return fail([bad(source, `fonte ${source} não aceita campos governados neste escopo (${scope})`)]);
   if (!isObj(fields)) return fail([bad(source, "a seção deve ser um objeto { caminho → valor }")]);
@@ -79,6 +87,10 @@ export function validateGovernedSection(catalog: VariableCatalog2, scope: Govern
     const def = byPath.get(path);
     if (!def) { issues.push(bad(`${source}.${path}`, "caminho não declarado pelo catálogo para esta fonte")); continue; }
     if (owned.has(path)) { issues.push(bad(`${source}.${path}`, "caminho de autoridade canônica (processo/identidade/itens/estimativa/divulgação): não é decisão humana")); continue; }
+    if (mode === "write" && isCanonicalProjection(def.name)) {
+      issues.push(bad(`${source}.${path}`, `${CANONICAL_AUTHORITY_OWNED}: a autoridade é canônica (processo/cadastro do órgão); não é decisão humana nem pode ser gravada de novo`));
+      continue;
+    }
     const norm = normalizeValue2(def, raw);
     if (!norm.ok) { issues.push(bad(`${source}.${path}`, norm.reason)); continue; }
     out[path] = norm.value;

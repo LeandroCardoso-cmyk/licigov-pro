@@ -202,8 +202,15 @@ export interface RequestedOfficialPin {
  * Fonte sem backing ou fora do contrato ⇒ `TemplateSourceUnavailableError` (falha FECHADA; nunca omitida em silêncio).
  */
 export interface CanonicalReferencePort {
-  /** `catalog` = o catálogo da REVISÃO (v1 ⇒ comportamento histórico; v2 ⇒ fontes por caminhos do catálogo). */
-  resolveSources(organizationId: OrgId, subjectId: string, sources: readonly VariableSource2[], catalog: AnyVariableCatalog): Promise<Partial<Record<VariableSource2, CanonicalSourceSnapshot>>>;
+  /**
+   * `catalog` = o catálogo da REVISÃO (v1 ⇒ comportamento histórico; v2 ⇒ fontes por caminhos do catálogo).
+   * `official` = os documentos oficiais EXATOS já resolvidos para esta composição (pin validado na geração; autoridade atual na
+   * revalidação). Projeções que vêm de um documento oficial (ex.: objeto do TR) derivam DESSE documento — nunca de "o último".
+   */
+  resolveSources(
+    organizationId: OrgId, subjectId: string, sources: readonly VariableSource2[], catalog: AnyVariableCatalog,
+    official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>,
+  ): Promise<Partial<Record<VariableSource2, CanonicalSourceSnapshot>>>;
   /**
    * AUTORIDADE ATUAL: pin exato (documento + linhagem + versão + hash) da versão oficial EMITIDA mais recente de cada tipo.
    * Usado pela REVALIDAÇÃO para detectar que o documento oficial referenciado mudou (SOURCE_CHANGED).

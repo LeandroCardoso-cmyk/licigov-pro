@@ -394,7 +394,8 @@ jobs:
           server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts \
-          server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts
+          server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts \
+          server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts
 
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:

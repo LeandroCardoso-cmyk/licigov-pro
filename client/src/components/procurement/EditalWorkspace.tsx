@@ -379,6 +379,9 @@ export default function EditalWorkspace({
           />
         )}
         {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {bound && selectedTrId && trCandidates.some((c) => c.documentId === selectedTrId && !c.current) && (
+          <p role="alert" className="text-xs text-destructive">O TR oficial selecionado foi substituído por uma versão mais recente. Selecione o TR oficial exato novamente — nenhuma versão é escolhida automaticamente.</p>
+        )}
         {bound && (
           <EditalPreflightCard preflight={preflight} loading={preflightQuery.isFetching} hasTrPin={!!trPin} onRecheck={() => { void preflightQuery.refetch(); }} />
         )}
@@ -407,7 +410,7 @@ export default function EditalWorkspace({
 
       {bound && (
         <div className="mt-6">
-          <EditalPreparationPanel processId={processId} params={boundParams} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
         </div>
       )}
 

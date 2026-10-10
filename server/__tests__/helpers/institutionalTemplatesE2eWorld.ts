@@ -18,6 +18,8 @@ import { createVariableCatalogPort } from "../../services/institutionalTemplates
 import { MODEL_PACKAGES } from "../../services/institutionalTemplates/modelPackages";
 import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../../services/institutionalTemplates/portsRegistry";
 import { AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES } from "../../domain/institutionalTemplates/governedSources";
+import { isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
+import { recordContextAssertions } from "../../services/canonicalContextService";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import type { WorkflowContext } from "../../services/institutionalTemplates/ports";
 import { confirmCanonicalItemsFromResearch } from "./canonicalItems";
@@ -60,6 +62,7 @@ export function governedFieldsFor(source: VariableSource2, scenario: Scenario = 
   const out: Record<string, unknown> = {};
   for (const def of BLL_CATALOG.vars) {
     if (def.source !== source || owned.has(def.path) || def.type === "document_ref") continue;
+    if (isCanonicalProjection(def.name)) continue;       // autoridade canônica (projeção): nunca é decisão humana
     if (def.name.startsWith("pos.")) continue;          // pós-homologação: NUNCA preenchido no pré-certame ("a preencher")
     const value = Object.prototype.hasOwnProperty.call(scenario, def.name) ? scenario[def.name] : sampleValue(def);
     if (value !== undefined) out[def.path] = value;
@@ -81,9 +84,23 @@ export async function seedWorld(conn: mysql.Connection, org: number, label: stri
     website: "https://sintetico.exemplo.gov.br",
   });
   await setFlag(conn, org, opts.flagOn ?? true);
-  const ws = createProcurementWorkspace({ organizationId: org, processNumber: `2026/${String(org % 10000).padStart(4, "0")}`, object: "Aquisição sintética de material de expediente", modality: "pregao", startOption: "iniciar_pesquisa", responsibleUser: U_AUTHOR, correlationId: `e2e-${label}` });
+  return seedProcessWithItems(org, label, `2026/${String(org % 10000).padStart(4, "0")}`, opts.items);
+}
+
+/** Processo adicional do MESMO órgão (nº AAAA/NNNN próprio) com Itens da contratação canônicos e preço. */
+export async function seedExtraProcess(org: number, label: string, seq: number, opts: { items?: Array<{ description: string; unit: string; planned: number; price: string }> } = {}): Promise<World> {
+  return seedProcessWithItems(org, label, `2026/${String((org + seq * 7919) % 10000).padStart(4, "0")}`, opts.items);
+}
+
+async function seedProcessWithItems(org: number, label: string, processNumber: string, items?: Array<{ description: string; unit: string; planned: number; price: string }>): Promise<World> {
+  const ws = createProcurementWorkspace({ organizationId: org, processNumber, object: "Aquisição sintética de material de expediente", modality: "pregao", startOption: "iniciar_pesquisa", responsibleUser: U_AUTHOR, correlationId: `e2e-${label}` });
   await insertProcess(ws);
-  const rows = opts.items ?? [
+  // Unidade requisitante: fato canônico informado na ABERTURA do processo (fonte = Processo), como a rota de criação faz.
+  await recordContextAssertions({
+    organizationId: org, processId: ws.id, correlationId: `e2e-unit-${label}`,
+    facts: [{ path: "demand.requestingUnit", value: "Secretaria Municipal de Administração", sourceType: "process", sourceId: ws.id, sourceVersion: "create", status: "confirmed", actorUserId: U_AUTHOR, basisValueHash: null }],
+  });
+  const rows = items ?? [
     { description: "Papel sulfite A4 75g", unit: "resma", planned: 120, price: "25,50" },
     { description: "Caneta esferográfica azul", unit: "un", planned: 400, price: "1,75" },
   ];
@@ -93,11 +110,12 @@ export async function seedWorld(conn: mysql.Connection, org: number, label: stri
     await transitionItemStatusCAS({ id: it.id, orgId: org, fromStatuses: ["pendente", "em_analise"], toStatus: "aprovado", approvedBy: U_MANAGER, updatedAt: new Date().toISOString() });
   }
   await confirmCanonicalItemsFromResearch({
-    organizationId: org, processId: ws.id, actorUserId: U_AUTHOR, idempotencyKey: `e2e-items-${org}`,
+    organizationId: org, processId: ws.id, actorUserId: U_AUTHOR, idempotencyKey: `e2e-items-${org}-${processNumber}`,
     planned: Object.fromEntries(rows.map((r) => [r.description, r.planned])),
   });
   return { org, processId: ws.id, items: rows.map((r) => r.description) };
 }
+
 
 /** Registra TODOS os campos governados e a divulgação do orçamento (decisões humanas no ledger existente). */
 export async function seedGoverned(w: World, scenario: Scenario = E2E_SCENARIO, disclosure: "publico" | "sigiloso" = "publico", tag = "g"): Promise<void> {
@@ -124,12 +142,13 @@ export async function seedGoverned(w: World, scenario: Scenario = E2E_SCENARIO, 
 }
 
 /** TR oficial EMITIDO do processo (linha sintética em `official_documents`) — devolve o pin exato (id + versão + hash do conteúdo). */
-export async function seedOfficialTr(conn: mysql.Connection, w: World, version = 1, content = "TERMO DE REFERÊNCIA — conteúdo sintético v1"): Promise<{ documentId: string; version: number; contentHash: string }> {
+export async function seedOfficialTr(conn: mysql.Connection, w: World, version = 1, content = "TERMO DE REFERÊNCIA — conteúdo sintético v1", metadata?: Record<string, unknown>): Promise<{ documentId: string; version: number; contentHash: string }> {
   const id = createHash("sha256").update(`tr:${w.org}:${w.processId}:${version}`).digest("hex").slice(0, 20);
   await conn.execute(
     `INSERT INTO official_documents (id, tenant_id, business_domain, document_type, origin, title, version, status, content, lineage_id, replay_hash, storage_key, mime_type, size_bytes, content_hash)
      VALUES (?, ?, 'processo_licitatorio', 'tr', ?, 'Termo de Referência', ?, 'emitido', ?, ?, ?, '', '', 0, '')`,
     [id, w.org, w.processId, version, content, `ln${w.org}`.slice(0, 20), `rh-${id}`]);
+  if (metadata) await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify(metadata), id, w.org]);
   return { documentId: id, version, contentHash: createHash("sha256").update(content).digest("hex") };
 }
 

@@ -1,38 +1,78 @@
 /**
- * Preparação OPERACIONAL do Edital institucional (UI) — lógica pura, sem React/rede.
+ * Preparação OPERACIONAL do Edital institucional (UI) — ZERO_REENTRY, orientada por exceções. Lógica pura, sem React/rede.
  *
- * Os descritores dos campos vêm do SERVIDOR (catálogo da revisão exata vinculada); aqui só se converte o que a pessoa digita para o
- * valor CANÔNICO do catálogo (money = centavos inteiros, percent = pontos, datas ISO, duração {amount, unit}, lista de escalares,
- * tabela por colunas) e se monta a seção COMPLETA (o servidor substitui a seção declarada). Nenhum JSON técnico é exigido da pessoa.
- * Campos de autoridade canônica nunca chegam aqui como editáveis. A validação final é sempre do servidor.
+ * O SERVIDOR classifica cada variável do modelo (autoridade canônica, perfil do órgão, projeção do TR, decisão do certame,
+ * condicional, pós-homologação) e devolve só o que importa; aqui se converte o que a pessoa digita para o valor CANÔNICO do
+ * catálogo (money = centavos, percent = pontos, datas ISO, duração {amount, unit}, lista, tabela), monta a seção COMPLETA (o
+ * servidor substitui a seção declarada) e planeja o "Salvar preparação": uma confirmação de UX, várias escritas SEQUENCIAIS pelas
+ * autoridades existentes, cada uma com idempotência própria e CAS encadeado. A validação final é sempre do servidor.
  */
+/** Espelho da DSL de condições do servidor (`Cond2`). Só para mostrar/ocultar AO VIVO; a autoridade final é o composer. */
+export type Cond =
+  | { op: "eq" | "ne"; var: string; value: string | number | boolean }
+  | { op: "in"; var: string; values: (string | number)[] }
+  | { op: "gt" | "gte" | "lt" | "lte"; var: string; value: number }
+  | { op: "present" | "absent"; var: string }
+  | { op: "and" | "or"; of: Cond[] }
+  | { op: "not"; of: Cond };
+
+const isAbsent = (v: unknown): boolean => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
+export function evaluateCond(c: Cond, facts: Readonly<Record<string, unknown>>): boolean {
+  switch (c.op) {
+    case "and": return c.of.map((x) => evaluateCond(x, facts)).every(Boolean);
+    case "or": return c.of.map((x) => evaluateCond(x, facts)).some(Boolean);
+    case "not": return !evaluateCond(c.of, facts);
+    case "present": return !isAbsent(facts[c.var]);
+    case "absent": return isAbsent(facts[c.var]);
+    case "in": return !isAbsent(facts[c.var]) && c.values.some((v) => v === facts[c.var]);
+    case "gt": case "gte": case "lt": case "lte": {
+      const o = facts[c.var];
+      if (typeof o !== "number" || !Number.isFinite(o)) return false;
+      return c.op === "gt" ? o > c.value : c.op === "gte" ? o >= c.value : c.op === "lt" ? o < c.value : o <= c.value;
+    }
+    case "eq": return !isAbsent(facts[c.var]) && facts[c.var] === c.value;
+    case "ne": return !(!isAbsent(facts[c.var]) && facts[c.var] === c.value);
+  }
+}
+
 export interface PrepColumn { key: string; type: string; label: string; required: boolean }
+export type FieldStatus =
+  | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
+export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
+export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
   name: string; source: string; path: string; type: string; description: string; required: boolean; conditional: boolean;
-  requiredWhenVariables: readonly string[]; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
+  requiredWhenVariables: readonly string[]; requiredWhen?: Cond; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
   hasValue: boolean; currentValue?: unknown;
+  class: PreparationClass; rule: string; status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin;
+  /** Havia valor legado no ledger neste caminho, hoje coberto por autoridade canônica/TR exato: preservado como história e IGNORADO. */
+  shadowedLegacy?: boolean;
 }
+export type TrPinState = { state: "NOT_SELECTED" } | { state: "VALID"; ref: { documentId: string; version: number; contentHash: string } } | { state: "INVALID"; code: string };
 export interface PrepSection { source: string; scope: "ORG" | "PROCESS"; fields: readonly PrepField[]; pendingRequired: number }
-
-export type SectionStatus = "COMPLETO" | "PENDENTE" | "CONDICIONAL";
-export const STATUS_LABEL: Record<SectionStatus, string> = { COMPLETO: "Completo", PENDENTE: "Pendente", CONDICIONAL: "Condicional" };
+export interface CanonicalReadOnlyField { name: string; source: string; path: string; type: string; description: string; status: FieldStatus; displayValue?: unknown; origin: PrepOrigin }
+export interface SummaryGroup { id: string; title: string; total: number; resolved: number; reused: number; pending: number; blockedCanonical: number }
+export interface PreparationMetrics {
+  TOTAL_TEMPLATE_FIELDS: number; AUTO_RESOLVED: number; ORG_REUSED: number; TR_PROJECTED: number; DECIDED: number; CONDITIONAL_HIDDEN: number;
+  POST_AWARD_HIDDEN: number; OPTIONAL_HIDDEN: number; MANUAL_DECISIONS_VISIBLE: number; LEGACY_SHADOWED: number;
+}
+export interface PreparationStateView {
+  status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
+  revisions: { process: number; organization: number; budget: number };
+  budgetDisclosure: "publico" | "sigiloso" | null;
+  participation: { default?: string; byLot?: Record<string, string>; byItem?: Record<string, string> } | null;
+  participationPending: boolean;
+  trPin: TrPinState;
+  sections: PrepSection[]; facts: Record<string, unknown>; canonicalFields: CanonicalReadOnlyField[];
+  orgProfile: { revision: number; hash: string | null } | null;
+  summary: { groups: SummaryGroup[]; reusedAutomatically: number; pendingDecisions: number };
+  metrics: PreparationMetrics;
+}
 
 export const DURATION_UNIT_LABEL: Record<string, string> = {
   minute: "minuto(s)", hour: "hora(s)", day: "dia(s)", businessDay: "dia(s) útil(eis)", month: "mês(es)", year: "ano(s)",
 };
-
-export interface PrepGroup { id: string; title: string; sources: readonly string[] }
-/** Ordem operacional (1 órgão … 8 ciclo de vida). O orçamento inclui a divulgação público/sigiloso (tratada à parte). */
-export const PREP_GROUPS: readonly PrepGroup[] = [
-  { id: "orgao", title: "1. Órgão (identidade e política)", sources: ["IDENTITY", "POLICY"] },
-  { id: "processo", title: "2. Processo", sources: ["PROCESS"] },
-  { id: "tr", title: "3. Termo de Referência", sources: ["TR"] },
-  { id: "certame", title: "4. Configuração do certame", sources: ["CERTAME_CONFIG"] },
-  { id: "itens", title: "5. Itens e participação", sources: ["ITEMS"] },
-  { id: "orcamento", title: "6. Orçamento e divulgação", sources: ["BUDGET"] },
-  { id: "normativo", title: "7. Fundamentos normativos", sources: ["NORMATIVE"] },
-  { id: "ciclo", title: "8. Ciclo de vida", sources: ["LIFECYCLE"] },
-];
 
 export const SOURCE_TITLE: Record<string, string> = {
   IDENTITY: "Identidade do órgão", POLICY: "Política do órgão", PROCESS: "Dados do processo", TR: "Dados do TR", CERTAME_CONFIG: "Configuração do certame",
@@ -155,10 +195,12 @@ export function parseField(f: PrepField, form: FormValue | undefined): ParseResu
 
 export type SectionEdits = Readonly<Record<string, FormValue>>;
 
-/** Constrói a seção COMPLETA (path → valor canônico): campos tocados vêm da edição; os demais mantêm o valor corrente. */
+/** Constrói a seção COMPLETA (path → valor canônico): campos tocados vêm da edição; os demais mantêm o valor DECLARADO armazenado. */
 export function buildSectionFields(section: PrepSection, edits: SectionEdits): { fields: Record<string, unknown>; errors: Record<string, string> } {
   const fields: Record<string, unknown> = {}; const errors: Record<string, string> = {};
   for (const f of section.fields) {
+    // Autoridade CANONICAL nunca é reenviada (o servidor a recusa e preserva qualquer valor legado como história).
+    if (f.class === "CANONICAL") continue;
     if (Object.prototype.hasOwnProperty.call(edits, f.path)) {
       const r = parseField(f, edits[f.path]);
       if (!r.ok) errors[f.path] = r.error; else if (r.value !== undefined) fields[f.path] = r.value;
@@ -167,30 +209,198 @@ export function buildSectionFields(section: PrepSection, edits: SectionEdits): {
   return { fields, errors };
 }
 
-/** Campos obrigatórios ainda sem valor APÓS aplicar as edições (a obrigatoriedade condicional é decidida pelo servidor). */
-export function missingRequired(section: PrepSection, edits: SectionEdits): PrepField[] {
-  const { fields } = buildSectionFields(section, edits);
-  return section.fields.filter((f) => f.required && !f.conditional && fields[f.path] === undefined);
+// ─── visões orientadas por exceção ────────────────────────────────────────────────
+
+export interface PendingItem { section: PrepSection; field: PrepField }
+const bySectionOrder = (state: PreparationStateView, status: FieldStatus[], editableOnly: boolean): PendingItem[] =>
+  state.sections.flatMap((section) => section.fields.filter((f) => status.includes(f.status) && (!editableOnly || f.editable)).map((field) => ({ section, field })));
+
+/** O que a pessoa precisa decidir AGORA (obrigatório, aplicável e sem valor). */
+export const pendingItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["PENDING"], true);
+/** Perfil do órgão pendente (configurar UMA vez): pendências de escopo ORG, em bloco separado. */
+export const orgProfilePending = (state: PreparationStateView): PendingItem[] => pendingItems(state).filter((p) => p.section.scope === "ORG");
+/** Pendências do processo (certame/TR/processo). */
+export const processPending = (state: PreparationStateView): PendingItem[] => pendingItems(state).filter((p) => p.section.scope === "PROCESS");
+/** Decisões opcionais (inclui as que ATIVAM campos adicionais): recolhidas por padrão. */
+export const optionalItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["OPTIONAL"], true);
+/** "Ver dados reaproveitados": automático, perfil do órgão e decisões já registradas. */
+export const reusedItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["AUTO", "ORG_REUSED", "DECIDED"], false);
+
+export function sectionHasPending(state: PreparationStateView, source: string): boolean {
+  return pendingItems(state).some((p) => p.section.source === source);
 }
 
-export function sectionStatus(section: PrepSection): SectionStatus {
-  if (section.pendingRequired > 0) return "PENDENTE";
-  return section.fields.some((f) => f.conditional && !f.hasValue) ? "CONDICIONAL" : "COMPLETO";
+/** Texto legível de um valor canônico (explicabilidade e revisão antes de salvar). */
+export function formatDisplay(type: string, value: unknown): string {
+  if (value === undefined || value === null || value === "") return "—";
+  switch (type) {
+    case "money": return typeof value === "number" ? `R$ ${centsToText(value)}` : String(value);
+    case "percent": return typeof value === "number" ? `${numToText(value)}%` : String(value);
+    case "boolean": return value === true ? "Sim" : value === false ? "Não" : String(value);
+    case "duration": { const d = value as { amount?: number; unit?: string }; return d && typeof d.amount === "number" ? `${d.amount} ${DURATION_UNIT_LABEL[d.unit ?? ""] ?? d.unit}` : String(value); }
+    case "list": return Array.isArray(value) ? value.map(String).join("; ") : String(value);
+    case "table": return Array.isArray(value) ? `${value.length} linha(s)` : String(value);
+    case "date": { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value)); return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value); }
+    case "datetime": { const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})$/.exec(String(value)); return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : String(value); }
+    default: return String(value);
+  }
 }
 
-export function groupStatus(sections: readonly PrepSection[], disclosureRecorded = true): SectionStatus {
-  if (!disclosureRecorded || sections.some((s) => sectionStatus(s) === "PENDENTE")) return "PENDENTE";
-  return sections.some((s) => sectionStatus(s) === "CONDICIONAL") ? "CONDICIONAL" : "COMPLETO";
+
+// ─── status AO VIVO (condicionais ativam/ocultam conforme a pessoa decide) ───────────────────
+
+export interface LiveField { status: FieldStatus; /** valor digitado nesta sessão (já convertido) */ edited: boolean }
+
+/** Reavalia as condições com os valores digitados por cima dos fatos do servidor. Nada é gravado; o composer segue sendo a autoridade. */
+export function liveStatuses(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): Map<string, LiveField> {
+  const facts: Record<string, unknown> = { ...state.facts };
+  const editedNames = new Set<string>();
+  for (const sec of state.sections) {
+    for (const f of sec.fields) {
+      if (!f.editable || !Object.prototype.hasOwnProperty.call(edits[sec.source] ?? {}, f.path)) continue;
+      const r = parseField(f as PrepField, (edits[sec.source] ?? {})[f.path]);
+      if (!r.ok) continue;
+      if (r.value === undefined) delete facts[f.name]; else { facts[f.name] = r.value; editedNames.add(f.name); }
+    }
+  }
+  const inactive = new Set<string>();
+  const conditional = state.sections.flatMap((s) => s.fields).filter((f) => f.requiredWhen);
+  for (let round = 0; round < 12; round++) {
+    let changed = false;
+    for (const f of conditional) {
+      if (inactive.has(f.name)) continue;
+      const visible = Object.fromEntries(Object.entries(facts).filter(([k]) => !inactive.has(k)));
+      if (!evaluateCond(f.requiredWhen!, visible)) { inactive.add(f.name); delete facts[f.name]; changed = true; }
+    }
+    if (!changed) break;
+  }
+  const out = new Map<string, LiveField>();
+  for (const sec of state.sections) {
+    for (const f of sec.fields) {
+      const edited = editedNames.has(f.name);
+      let status: FieldStatus = f.status;
+      if (inactive.has(f.name)) status = "HIDDEN_CONDITIONAL";
+      else if (f.requiredWhen && f.status !== "AUTO") {
+        // Condição ativa: sem valor ⇒ pendência; com valor (registrado ou digitado) ⇒ resolvida.
+        status = isAbsent(facts[f.name]) ? "PENDING" : f.status === "PENDING" || f.status === "HIDDEN_CONDITIONAL" || f.status === "OPTIONAL" ? "DECIDED" : f.status;
+      }
+      out.set(f.name, { status, edited });
+    }
+  }
+  return out;
 }
 
-export interface GroupView { group: PrepGroup; sections: PrepSection[] }
-export function groupSections(sections: readonly PrepSection[]): GroupView[] {
-  return PREP_GROUPS.map((group) => ({ group, sections: group.sources.flatMap((s) => sections.filter((x) => x.source === s)) }))
-    .filter((g) => g.sections.length > 0);
+/** Pendências ao vivo: obrigatórias/ativas, editáveis e AINDA sem valor (digitado ou registrado). */
+export function livePendingItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => f.editable && live.get(f.name)?.status === "PENDING" && !live.get(f.name)?.edited)
+    .map((field) => ({ section, field })));
 }
 
-/** Pendências totais (campos obrigatórios sem valor) — o botão "Gerar" só fica operacional com preflight READY, não com isto. */
-export const totalPending = (sections: readonly PrepSection[]): number => sections.reduce((a, s) => a + s.pendingRequired, 0);
+/** Decisões opcionais ao vivo (as que ainda não têm valor e não estão ocultas). */
+export function liveOptionalItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => f.editable && f.status === "OPTIONAL" && live.get(f.name)?.status === "OPTIONAL")
+    .map((field) => ({ section, field })));
+}
+
+// ─── "Salvar preparação do Edital": UMA confirmação, várias escritas SEQUENCIAIS ─────────────
+
+export type WriteKind = "ORG" | "PROCESS" | "DISCLOSURE";
+export interface PlannedWrite {
+  /** Identidade estável da escrita (base da chave de idempotência por tentativa). */
+  id: string;
+  kind: WriteKind;
+  source?: string;
+  fields?: Record<string, unknown>;
+  participation?: { default?: string; byLot?: Record<string, string>; byItem?: Record<string, string> };
+  disclosure?: "publico" | "sigiloso";
+  /** Linhas do resumo "N decisões serão registradas". */
+  lines: string[];
+}
+export interface SavePlan { writes: PlannedWrite[]; errors: Record<string, Record<string, string>>; decisionCount: number }
+
+const ORG_ORDER = ["IDENTITY", "POLICY"] as const;
+const PROCESS_ORDER = ["PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "BUDGET", "NORMATIVE", "LIFECYCLE"] as const;
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+export function buildSavePlan(
+  state: PreparationStateView,
+  input: { edits: Readonly<Record<string, SectionEdits>>; disclosure: "" | "publico" | "sigiloso"; participationDefault: string | null },
+): SavePlan {
+  const writes: PlannedWrite[] = []; const errors: Record<string, Record<string, string>> = {}; let decisionCount = 0;
+  const section = (source: string) => state.sections.find((s) => s.source === source);
+  const sectionWrite = (source: string, kind: "ORG" | "PROCESS"): PlannedWrite | null => {
+    const sec = section(source);
+    if (!sec) return null;
+    const built = buildSectionFields(sec, input.edits[source] ?? {});
+    if (Object.keys(built.errors).length > 0) errors[source] = built.errors;
+    const lines: string[] = [];
+    for (const f of sec.fields) {
+      if (!Object.prototype.hasOwnProperty.call(input.edits[source] ?? {}, f.path)) continue;
+      const next = built.fields[f.path];
+      if (next !== undefined && !same(next, f.hasValue ? f.currentValue : undefined)) lines.push(`${f.description || f.name}: ${formatDisplay(f.type, next)}`);
+    }
+    let participation: PlannedWrite["participation"];
+    const pd = input.participationDefault?.trim();
+    if (kind === "PROCESS" && source === "ITEMS" && pd && pd !== (state.participation?.default ?? "")) {
+      participation = { ...(state.participation ?? {}), default: pd };
+      lines.push(`Regime de participação padrão dos itens: ${pd}`);
+    }
+    if (lines.length === 0) return null;
+    decisionCount += lines.length;
+    return { id: `${kind}-${source}`, kind, source, fields: built.fields, ...(participation ? { participation } : {}), lines };
+  };
+  for (const s of ORG_ORDER) { const w = sectionWrite(s, "ORG"); if (w) writes.push(w); }
+  if (input.disclosure && input.disclosure !== state.budgetDisclosure) {
+    writes.push({ id: "DISCLOSURE", kind: "DISCLOSURE", disclosure: input.disclosure, lines: [`Divulgação do orçamento: ${input.disclosure === "sigiloso" ? "sigiloso" : "público"}`] });
+    decisionCount++;
+  }
+  for (const s of PROCESS_ORDER) { const w = sectionWrite(s, "PROCESS"); if (w) writes.push(w); }
+  // Participação sem edição de campos da seção ITEMS (ITEMS sem descritores editados): a escrita ainda precisa existir.
+  const pd = input.participationDefault?.trim();
+  if (pd && pd !== (state.participation?.default ?? "") && !writes.some((w) => w.id === "PROCESS-ITEMS")) {
+    const sec = section("ITEMS");
+    const built = sec ? buildSectionFields(sec, {}) : { fields: {} as Record<string, unknown> };
+    writes.push({ id: "PROCESS-ITEMS", kind: "PROCESS", source: "ITEMS", fields: built.fields, participation: { ...(state.participation ?? {}), default: pd }, lines: [`Regime de participação padrão dos itens: ${pd}`] });
+    decisionCount++;
+  }
+  return { writes, errors, decisionCount };
+}
+
+export interface SaveWriter { write(w: PlannedWrite, expectedRevision: number): Promise<{ revision: number }> }
+export interface SaveOutcome {
+  registered: PlannedWrite[];
+  failed: { write: PlannedWrite; stale: boolean; message: string } | null;
+  notExecuted: PlannedWrite[];
+}
+
+/**
+ * Executa o plano em SEQUÊNCIA (nunca em paralelo). O CAS é encadeado por escopo: a revisão devolvida por uma escrita é o
+ * `expectedRevision` da próxima do mesmo escopo; se outra pessoa gravou no meio, a próxima falha como obsoleta e a execução PARA
+ * (sem sobrescrever). O que já foi registrado permanece e é informado.
+ */
+export async function executeSavePlan(
+  writes: readonly PlannedWrite[], start: { organization: number; process: number; budget: number }, writer: SaveWriter,
+  isStale: (e: unknown) => boolean,
+): Promise<SaveOutcome> {
+  const rev = { ...start };
+  const scopeKey = (k: WriteKind) => (k === "ORG" ? "organization" : k === "PROCESS" ? "process" : "budget") as keyof typeof rev;
+  const registered: PlannedWrite[] = [];
+  for (let i = 0; i < writes.length; i++) {
+    const w = writes[i];
+    try {
+      const r = await writer.write(w, rev[scopeKey(w.kind)]);
+      rev[scopeKey(w.kind)] = r.revision;
+      registered.push(w);
+    } catch (e) {
+      return { registered, failed: { write: w, stale: isStale(e), message: e instanceof Error ? e.message : String(e) }, notExecuted: writes.slice(i + 1) as PlannedWrite[] };
+    }
+  }
+  return { registered, failed: null, notExecuted: [] };
+}
 
 /** CAS obsoleto (outra pessoa registrou antes): recarregar, avisar e exigir NOVA confirmação. */
 export const isStaleSave = (code: string | undefined, message: string): boolean =>
@@ -204,7 +414,7 @@ export interface PreflightIssueView { code: string; source?: string; path?: stri
 export type PreflightView =
   | { status: "NOT_APPLICABLE" }
   | { status: "READY_FOR_COMPOSITION"; templateRevisionId: string; templateSemanticHash: string }
-  | { status: "BLOCKED"; issues: readonly PreflightIssueView[] };
+  | { status: "BLOCKED"; issues: readonly PreflightIssueView[]; pendingDecisions?: number };
 
 /** O botão "Gerar edital com modelo institucional" só é operacional com BOUND + TR exato + preflight READY (o backend segue fail-closed). */
 export function generateReady(bound: boolean, hasTrPin: boolean, preflight: PreflightView | undefined): { ready: boolean; reason?: string } {
@@ -245,3 +455,4 @@ export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolea
 
 export interface AckOutcome { blockId: string; ok: boolean; error?: string }
 export const summarizeAcks = (o: readonly AckOutcome[]): { done: number; failed: AckOutcome[] } => ({ done: o.filter((x) => x.ok).length, failed: o.filter((x) => !x.ok) });
+
