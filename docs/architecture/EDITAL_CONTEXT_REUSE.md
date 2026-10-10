@@ -21,18 +21,55 @@ linha falha o teste — nunca vira "manual por omissão").
 | `UPSTREAM_PROCESS` | Processo (número, ano, objeto) | — | 3 |
 | `UPSTREAM_DFD` | Contexto canônico (unidade requisitante: Processo e/ou DFD) | abertura do Processo / DFD | 1 |
 | `UPSTREAM_ETP` | *(nenhuma — ver §2)* | — | 0 |
-| `UPSTREAM_ITEMS` | Itens da contratação (quantidade = prevista) | Itens | 1 |
-| `UPSTREAM_PRICE_RESEARCH` | Estimativa da Pesquisa de Preços aprovada (só divulgação pública) | Pesquisa de Preços | 1 |
+| `UPSTREAM_ITEMS` | Itens da contratação (quantidade = prevista); **forma de julgamento (item × lote) e regime de participação, DERIVADOS** (PR #288) | Itens | 3 |
+| `UPSTREAM_PRICE_RESEARCH` | Estimativa e **data-base** da Pesquisa de Preços; divulgação do orçamento registrada UMA vez na Pesquisa de Preços (PR #288) | Pesquisa de Preços | 2 |
+| `PLATFORM_PROFILE` | **Perfil da plataforma** (endereço oficial, versão do regulamento, regras de cronograma): PR #288 | Configurações → Perfil | 2 |
 | `ORG_ROLE_PROFILE` | Papéis do Perfil de Licitações | Configurações → Perfil | 8 |
 | `ORG_POLICY_PROFILE` | Políticas do órgão (prazos, canais, foro, sanções…) | Configurações → Perfil | 26 |
 | `UPSTREAM_TR` | **Parâmetros estruturados do TR** (fatos no Contexto Canônico) | TR → "Parâmetros estruturados da contratação" | 37 |
-| `TRUE_PROCESS_DECISION` | decisão nova do certame | Preparação do Edital | 27 |
+| `CERTAME_CONFIG` | decisão do certame registrada UMA vez na **CertameConfig** (PR #288; substitui `TRUE_PROCESS_DECISION`) | Configuração do certame | 15 |
+| `CERTAME_SCHEDULE` | cronograma: datas/horas independentes; o resto só deriva por regra declarada da plataforma (PR #288) | Configuração do certame | 6 |
+| `LIFECYCLE_SYSTEM` | data de emissão atribuída pelo sistema (PR #288) | — | 1 |
 | `CONDITIONAL` | oculta até a condição ativar; a entrada segue a autoridade do pai (TR, Perfil ou Preparação) | idem | 53 |
 | `POST_AWARD` | pós-homologação | fora da preparação | 20 |
-| | | **Total** | **185** |
+| | | **Total** | **185** |  (ETP 0 · demais 8+3+1+3+2+2+8+26+37+15+6+1+53+20 = 185)
 
 Cada linha tem `entry` (onde se informa) e `defaultEligible` (pode virar padrão institucional). A classificação de preparação
 (`classifyVariable`) herda a matriz: papéis ⇒ `ORG_PROFILE` (regra `ORG_ROLE`), parâmetros do TR ⇒ `TR_PROJECTION` (regra `TR_PARAM`).
+
+## 1.1 PR #288 — CertameConfig como autoridade (fim da reentrada residual)
+
+O piloto real mostrou 21 "decisões deste certame". Várias **não eram decisões do Edital**. Cada uma foi auditada
+(`CERTAME_AUDIT` em `certameAuthority.ts`, coberta 1:1 por teste: VARIABLE / CURRENT_AUTHORITY / CORRECT_AUTHORITY / ENTRY_POINT /
+REUSABLE / DERIVABLE / PROCESS_SPECIFIC / REASON) e posta no domínio correto. Nada foi escondido: o que mudou foi a **autoridade**.
+
+| Variável | Autoridade correta | Como o Edital obtém |
+|---|---|---|
+| `processo.enderecoEletronicoBll`, `processo.regulamentoBllVersao` | `PLATFORM_PROFILE` | Perfil da plataforma (registro do ÓRGÃO no ledger existente, campo `platforms`, versionado por revisão; sem 2ª tabela, sem migration) |
+| `julgamento.dataOrcamentoEstimado` | `UPSTREAM_PRICE_RESEARCH` | data (Brasília) da Pesquisa de Preços que originou os Itens aprovados; ausente ⇒ pendência na Pesquisa de Preços |
+| divulgação do orçamento (`controle.orcamentoSigilosoSimNao`) | `EXISTING_CANONICAL` | decisão registrada UMA vez na Pesquisa de Preços (`BudgetDisclosureCard`); o Edital não tem o campo |
+| `decisao.formaJulgamento` | `UPSTREAM_ITEMS` | todos os itens em lote ⇒ `lote`; nenhum ⇒ `item`; misto ⇒ **ambíguo, fail closed**, decide-se em Itens |
+| `julgamento.regimeParticipacao` | `UPSTREAM_ITEMS` | agregado do regime por item > lote > padrão configurado em Itens (`ItemsParticipationCard`); regimes diferentes ⇒ literal de combinação do modelo; item sem regime ⇒ pendência em Itens; "padrão dos itens" do Edital foi removido |
+| `processo.dataEmissaoEdital` | `LIFECYCLE_SYSTEM` | atribuída pelo sistema = data (Brasília) do **evento de composição (M1)** — a mesma na geração, na revalidação e na emissão (M2), então emitir em outro dia não gera `SOURCE_CHANGED`. Escrita humana é recusada (`DERIVED_AUTHORITY_OWNED`) |
+| `processo.dataFimRecebimentoPropostas`, `…horarioFim…`, `…dataInicio…` | `CERTAME_SCHEDULE` | **somente** se o Perfil da plataforma DECLARAR a regra (limite = sessão; início = divulgação + horário declarado). Sem declaração são datas independentes. Nada é presumido da BLL |
+| `controle.dataDivulgacaoPrevista`, `processo.dataAbertura`, `processo.horarioAbertura` | `CERTAME_SCHEDULE` | independentes (horário aceita padrão institucional explícito) |
+| `processo.numeroPregao` | `CERTAME_CONFIG` | persistido UMA vez; outros documentos leem por `procurementProcess.certameConfig`; nunca copiado de outro processo; sem geração automática (não há regra governada) |
+| `utilizaSrp`, `inversaoFases`, `criterioJulgamento`, `modoDisputa`, `prazoValidadeProposta`, `parametroExequibilidade`, `intervaloMinimoLances`, `propostaSemIdentificacao`, `anexosAdicionais`, `tratamentoRegional`, `exclusivoMeEpp`, `cotaReservada`, `beneficioAfastado`, `regulamentoMunicipalVerificado` | `CERTAME_CONFIG` | decisões do processo; `modoDisputa`/`prazoValidadeProposta`/`parametroExequibilidade`/`intervaloMinimoLances`/`propostaSemIdentificacao` e o horário da sessão aceitam **padrão institucional explícito** (nunca "último processo"); os enquadramentos da LC 123 **não** são derivados de valor (regra legal não presumida) |
+
+**Escrita semântica.** `institutionalTemplates.governed.recordCertameConfig` (decisões do certame; recusa o que é de outra origem:
+`NOT_CERTAME_CONFIG`), `recordItemsParticipation` (regime, em Itens), `recordBudgetDisclosure` (Pesquisa de Preços) e
+`recordLicitacoesProfile({ platforms })` (órgão). Leitura: `certameConfig`, `itemsParticipation`, `budgetDisclosure`. A escrita humana de
+qualquer caminho derivado no Edital é recusada (`DERIVED_AUTHORITY_OWNED`); valor legado no ledger é preservado como história e **ignorado**.
+
+**Revisão do Perfil/plataforma** ⇒ nova revisão no ledger ⇒ fingerprint do Perfil (`perfilLicitacoes`) e o dado derivado mudam ⇒
+`SOURCE_CHANGED` em M1 pendente; documento emitido permanece imutável; processo novo usa a revisão vigente.
+
+**Campo legado do cabeçalho (critério/regime de execução).** Com modelo vinculado (BOUND) o critério vira resumo somente leitura da
+CertameConfig; o regime de execução não é variável do modelo institucional (histórico legado apenas). Sem modelo, o legado segue como antes.
+
+**Limite declarado.** A data de emissão é a do evento de composição (M1), não um carimbo posterior à edição humana: o catálogo do
+modelo publicado é imutável (`required`, sem `absentText`) e substituir a data no ato da promoção exigiria reescrever o conteúdo e a
+linhagem de hash. Fica como evolução governada se o jurídico exigir a data do ato de emissão.
 
 ## 2. Auditoria do que é realmente estruturado (provado por código/teste)
 

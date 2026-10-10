@@ -10,7 +10,7 @@ import { getTemplateCompositionPorts } from "../../services/institutionalTemplat
 import { renderTrStructuredBlock } from "../../services/institutionalTemplates/trStructuredParamsService";
 import { buildSavePlan, executeSavePlan, isStaleSave, toFormValue, type PlannedWrite, type PreparationStateView, type SectionEdits } from "../../../client/src/lib/editalPreparation";
 import type { RoleAssignments } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
-import { BLL_CATALOG, E2E_SCENARIO, decision } from "./institutionalTemplatesE2eWorld";
+import { BLL_CATALOG, E2E_SCENARIO, SYNTHETIC_PLATFORMS, decision } from "./institutionalTemplatesE2eWorld";
 import { sampleValue } from "./institutionalTemplatesBllHarness";
 
 export const SYNTHETIC_ROLES: RoleAssignments = {
@@ -55,7 +55,7 @@ export function profileAsPrepView(st: any): PreparationStateView {
 }
 
 /** Configura o Perfil de Licitações do órgão UMA vez: políticas pendentes (plano de salvar da tela) + todos os papéis sintéticos. */
-export async function completeProfile(h: ReuseHarness, opts: { roles?: RoleAssignments; defaults?: Record<string, unknown> } = {}): Promise<{ policiesTyped: number; rolesRegistered: number }> {
+export async function completeProfile(h: ReuseHarness, opts: { roles?: RoleAssignments; defaults?: Record<string, unknown>; platforms?: Record<string, unknown> | null } = {}): Promise<{ policiesTyped: number; rolesRegistered: number }> {
   let policiesTyped = 0;
   for (let round = 0; round < 4; round++) {
     const st = await h.proc().licitacoesProfile({ processId: h.processId, ...h.ws });
@@ -70,7 +70,7 @@ export async function completeProfile(h: ReuseHarness, opts: { roles?: RoleAssig
     }
     if (Object.keys(edits).length === 0) break;
     const view = profileAsPrepView(st);
-    const plan = buildSavePlan(view, { edits: edits as Record<string, SectionEdits>, disclosure: "", participationDefault: null });
+    const plan = buildSavePlan(view, { edits: edits as Record<string, SectionEdits> });
     expect(plan.errors).toEqual({});
     const out = await executeSavePlan(plan.writes, view.revisions, {
       async write(w: PlannedWrite, expectedRevision: number) {
@@ -88,6 +88,8 @@ export async function completeProfile(h: ReuseHarness, opts: { roles?: RoleAssig
   await h.tpl().governed.recordLicitacoesProfile({
     confirm: true, idempotencyKey: h.key("profile"), decision: decision(), expectedRevision: st.revision, catalogVersion: st.catalogVersion,
     roles, ...(defaults ? { defaults } : {}),
+    // PR #288: o Perfil da plataforma (endereço oficial, regulamento) é configurado UMA vez por órgão, junto do Perfil de Licitações.
+    ...(opts.platforms === null ? {} : { platforms: opts.platforms ?? SYNTHETIC_PLATFORMS }),
   });
   return { policiesTyped, rolesRegistered: Object.keys(roles).length };
 }
@@ -122,4 +124,20 @@ export async function stampTrLineage(conn: mysql.Connection, h: ReuseHarness, do
   const meta = current ? (typeof current === "string" ? JSON.parse(current) : current) : {};
   await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify({ ...meta, structuredParamsDigest: digest }), documentId, h.org]);
   return digest;
+}
+
+/** Regime de participação dos ITENS (origem da derivação do Edital): padrão único para todos os itens do processo. */
+export async function setItemsParticipation(h: ReuseHarness, regime = "Ampla participação, com os benefícios da LC nº 123/2006", extra: { byLot?: Record<string, string>; byItem?: Record<string, string> } = {}): Promise<void> {
+  const st = await h.proc().itemsParticipation({ processId: h.processId, ...h.ws });
+  expect(st.status).toBe("READY");
+  await h.tpl().governed.recordItemsParticipation({
+    confirm: true, idempotencyKey: h.key("participation"), decision: decision(), expectedRevision: st.revision, catalogVersion: st.catalogVersion, processId: h.processId,
+    participation: { default: regime, ...extra },
+  });
+}
+
+/** Divulgação do orçamento registrada UMA vez, na etapa do orçamento (Pesquisa de Preços). */
+export async function setBudgetDisclosure(h: ReuseHarness, disclosure: "publico" | "sigiloso" = "publico"): Promise<void> {
+  const st = await h.proc().budgetDisclosure({ processId: h.processId });
+  await h.tpl().governed.recordBudgetDisclosure({ confirm: true, idempotencyKey: h.key("disclosure"), decision: decision(), expectedRevision: st.revision, processId: h.processId, disclosure });
 }

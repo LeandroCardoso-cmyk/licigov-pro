@@ -6,18 +6,22 @@
  *  EXISTING_CANONICAL          autoridade canônica já existente (cadastro do órgão, divulgação do orçamento): somente leitura
  *  ORG_ROLE_PROFILE            papel institucional do Perfil de Licitações (nome/cargo/ato/vigência): informado UMA vez por órgão
  *  ORG_POLICY_PROFILE          política estável do órgão (prazos, canais, foro, sanções…): informada UMA vez por órgão
+ *  PLATFORM_PROFILE            master data estável da plataforma (endereço, regulamento, regras de cronograma): informada UMA vez por órgão
  *  UPSTREAM_PROCESS            Processo (número, ano, objeto)
  *  UPSTREAM_DFD                Contexto canônico afirmado na abertura do Processo e/ou no DFD (unidade requisitante)
  *  UPSTREAM_ETP                (nenhuma variável: o ETP é documento textual; não há dado estruturado do ETP — provado em teste)
- *  UPSTREAM_ITEMS              Itens da contratação canônicos
- *  UPSTREAM_PRICE_RESEARCH     estimativa derivada da Pesquisa de Preços aprovada
+ *  UPSTREAM_ITEMS              Itens da contratação canônicos (inclusive: item × lote e regime de participação, DERIVADOS da estrutura dos itens)
+ *  UPSTREAM_PRICE_RESEARCH     estimativa e data-base derivadas da Pesquisa de Preços; divulgação do orçamento registrada UMA vez no orçamento
  *  UPSTREAM_TR                 "Parâmetros estruturados do TR": fatos confirmados NO fluxo do TR, consumidos pelo TR e pelo Edital
- *  TRUE_PROCESS_DECISION       decisão genuína NOVA do certame (sem autoridade reutilizável)
+ *  CERTAME_CONFIG              decisão do certame registrada UMA vez por processo na CertameConfig (o Edital apenas a consome)
+ *  CERTAME_SCHEDULE            cronograma do certame: só as datas/horas independentes são informadas; o resto é derivado por regra governada
+ *  LIFECYCLE_SYSTEM            ciclo de vida documental: atribuído pelo sistema, nunca digitado
  *  CONDITIONAL                 oculto enquanto a condição `requiredWhen` estiver inativa (a entrada segue o campo `entry`)
  *  POST_AWARD                  pós-homologação (fora da preparação)
  *
  * `entry` diz ONDE a pessoa informa o dado quando ele ainda não existe: TR_SECTION (Parâmetros estruturados do TR), ORG_PROFILE
- * (Perfil institucional de Licitações), PREPARATION (preparação do Edital) ou NONE (o sistema já sabe / pós-homologação).
+ * (Perfil institucional de Licitações), PLATFORM_PROFILE (Perfil da plataforma), ITEMS (Itens da contratação), PRICE_RESEARCH
+ * (Pesquisa de Preços / orçamento), CERTAME_CONFIG (Configuração do certame) ou NONE (o sistema já sabe / pós-homologação).
  * `defaultEligible` = pode virar PADRÃO INSTITUCIONAL por ação humana explícita (nunca data do certame, objeto, quantidade, valor
  * nem decisão jurídica casuística). Puro, sem I/O.
  */
@@ -25,15 +29,15 @@ import { isRealCalendarDate } from "./valueTypes2";
 import type { VariableDef2 } from "./variableCatalog2";
 
 export type AuthorityClass =
-  | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP"
-  | "UPSTREAM_ITEMS" | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "TRUE_PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
+  | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP"
+  | "UPSTREAM_ITEMS" | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
 
 export const AUTHORITY_CLASSES: readonly AuthorityClass[] = [
-  "EXISTING_CANONICAL", "ORG_ROLE_PROFILE", "ORG_POLICY_PROFILE", "UPSTREAM_PROCESS", "UPSTREAM_DFD", "UPSTREAM_ETP",
-  "UPSTREAM_ITEMS", "UPSTREAM_PRICE_RESEARCH", "UPSTREAM_TR", "TRUE_PROCESS_DECISION", "CONDITIONAL", "POST_AWARD",
+  "EXISTING_CANONICAL", "ORG_ROLE_PROFILE", "ORG_POLICY_PROFILE", "PLATFORM_PROFILE", "UPSTREAM_PROCESS", "UPSTREAM_DFD", "UPSTREAM_ETP",
+  "UPSTREAM_ITEMS", "UPSTREAM_PRICE_RESEARCH", "UPSTREAM_TR", "CERTAME_CONFIG", "CERTAME_SCHEDULE", "LIFECYCLE_SYSTEM", "CONDITIONAL", "POST_AWARD",
 ];
 
-export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PREPARATION";
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 
 export interface AuthorityEntry {
   readonly cls: AuthorityClass;
@@ -56,12 +60,12 @@ const put = (names: string, entry: AuthorityEntry): void => {
 
 // ── existente / upstream determinístico ───────────────────────────────────────────────────────────────────────────
 put("instituicao.municipioCnpj instituicao.municipioEndereco instituicao.municipioNome instituicao.municipioSede instituicao.municipioSite instituicao.municipioTelefone instituicao.municipioUfExtenso",
-  E("EXISTING_CANONICAL", "NONE", "Cadastro do órgão (snapshot da identidade institucional)"));
-put("controle.orcamentoSigilosoSimNao", E("EXISTING_CANONICAL", "NONE", "Derivado da decisão governada de divulgação do orçamento"));
+  E("EXISTING_CANONICAL", "ORG_REGISTRY", "Cadastro do órgão (snapshot da identidade institucional); incompleto ⇒ corrigir o cadastro, nunca digitar no Edital"));
+put("controle.orcamentoSigilosoSimNao", E("EXISTING_CANONICAL", "PRICE_RESEARCH", "Derivado da decisão de divulgação do orçamento, registrada UMA vez na Pesquisa de Preços / orçamento"));
 put("processo.numeroProcesso processo.ano processo.objetoResumido", E("UPSTREAM_PROCESS", "NONE", "Processo licitatório (número, ano e objeto)"));
-put("processo.secretariaRequisitante", E("UPSTREAM_DFD", "NONE", "Contexto canônico: unidade requisitante afirmada na abertura do Processo e/ou no DFD"));
-put("processo.quadroItensContratacao", E("UPSTREAM_ITEMS", "NONE", "Itens da contratação canônicos (quantidade = plannedQuantity)"));
-put("julgamento.valorEstimado", E("UPSTREAM_PRICE_RESEARCH", "NONE", "Estimativa derivada da Pesquisa de Preços aprovada (somente com divulgação pública)"));
+put("processo.secretariaRequisitante", E("UPSTREAM_DFD", "REQUESTING_UNIT", "Contexto canônico: unidade requisitante afirmada na abertura do Processo e/ou no DFD"));
+put("processo.quadroItensContratacao", E("UPSTREAM_ITEMS", "ITEMS", "Itens da contratação canônicos (quantidade = plannedQuantity)"));
+put("julgamento.valorEstimado", E("UPSTREAM_PRICE_RESEARCH", "PRICE_RESEARCH", "Estimativa derivada da Pesquisa de Preços aprovada (somente com divulgação pública)"));
 
 // ── Perfil institucional de Licitações: PAPÉIS ─────────────────────────────────────────────────────────────────────
 put("instituicao.autoridadeCompetenteNome instituicao.autoridadeCompetenteCargo", E("ORG_ROLE_PROFILE", "ORG_PROFILE", "Papel AUTORIDADE_COMPETENTE do Perfil de Licitações"));
@@ -92,16 +96,34 @@ TR(`contratacao.formaFornecimento contratacao.localEntrega contratacao.prazoExec
   decisao.exigeBalanco decisao.exigeCapitalOuPlMinimo decisao.consorcio contratacao.fiscalContrato contratacao.gestorContrato`,
   "Parâmetro estruturado do TR; específico do objeto/decisão jurídica casuística ⇒ sem padrão institucional");
 
-// ── Decisões genuínas do certame (preparação do Edital) ────────────────────────────────────────────────────────────
-const DEC = (names: string, basis: string, eligible = false) => put(names, E("TRUE_PROCESS_DECISION", "PREPARATION", basis, eligible));
-DEC(`julgamento.modoDisputa decisao.intervaloMinimoLances decisao.propostaSemIdentificacao processo.enderecoEletronicoBll processo.regulamentoBllVersao
-  julgamento.prazoValidadeProposta julgamento.parametroExequibilidade processo.horarioAbertura processo.horarioFimRecebimentoPropostas`,
-  "Decisão do certame com padrão institucional permitido (configuração recorrente da plataforma/sessão)", true);
-DEC(`controle.dataDivulgacaoPrevista controle.utilizaSrp decisao.anexosAdicionais decisao.beneficioAfastado decisao.cotaReservada decisao.exclusivoMeEpp
-  decisao.formaJulgamento decisao.inversaoFases decisao.regulamentoMunicipalVerificado decisao.tratamentoRegional julgamento.criterioJulgamento
-  julgamento.dataOrcamentoEstimado julgamento.regimeParticipacao processo.dataAbertura processo.dataEmissaoEdital processo.dataFimRecebimentoPropostas
-  processo.dataInicioRecebimentoPropostas processo.numeroPregao`,
-  "Decisão nova do certame: data do certame ou decisão jurídica casuística, sem autoridade reutilizável");
+// ── Plataforma (BLL): master data ESTÁVEL, informada UMA vez por órgão no Perfil da plataforma ──────────────────────
+put("processo.enderecoEletronicoBll processo.regulamentoBllVersao",
+  E("PLATFORM_PROFILE", "PLATFORM_PROFILE", "Fato estável da plataforma (endereço oficial e versão/data do regulamento): configuração tenant-scoped versionada, não decisão do certame"));
+
+// ── Derivados da estrutura canônica dos Itens e da Pesquisa de Preços ─────────────────────────────────────────────
+put("decisao.formaJulgamento julgamento.regimeParticipacao",
+  E("UPSTREAM_ITEMS", "ITEMS", "Derivado da estrutura canônica dos Itens (item × lote; regime de participação por item/lote): o Edital não cria segunda decisão"));
+put("julgamento.dataOrcamentoEstimado",
+  E("UPSTREAM_PRICE_RESEARCH", "PRICE_RESEARCH", "Data-base derivada da Pesquisa de Preços que originou os Itens aprovados: nunca digitada no Edital"));
+
+// ── Ciclo de vida documental: atribuído pelo sistema ───────────────────────────────────────────────────────────────
+put("processo.dataEmissaoEdital",
+  E("LIFECYCLE_SYSTEM", "NONE", "Evento do ciclo de vida documental: atribuída pelo sistema (data da composição governada, a mesma na revalidação e na emissão); sem entrada humana"));
+
+// ── Cronograma do certame: só as decisões independentes são informadas; o equivalente técnico é derivado por regra governada ─
+const SCH = (names: string, basis: string, eligible = false) => put(names, E("CERTAME_SCHEDULE", "CERTAME_CONFIG", basis, eligible));
+SCH("controle.dataDivulgacaoPrevista processo.dataAbertura", "Cronograma: data independente do certame (decisão de calendário do processo; nunca padrão institucional)");
+SCH("processo.horarioAbertura", "Cronograma: horário da sessão; padrão institucional permitido (expediente recorrente)", true);
+SCH("processo.dataFimRecebimentoPropostas processo.horarioFimRecebimentoPropostas processo.dataInicioRecebimentoPropostas",
+  "Cronograma: derivado da sessão/publicação SOMENTE se o Perfil da plataforma declarar a regra; sem regra declarada é informado como data independente");
+
+// ── Configuração do certame: decisões tomadas UMA vez por processo (CertameConfig) ───────────────────────────────────
+const CFG = (names: string, basis: string, eligible = false) => put(names, E("CERTAME_CONFIG", "CERTAME_CONFIG", basis, eligible));
+CFG(`julgamento.modoDisputa decisao.intervaloMinimoLances decisao.propostaSemIdentificacao julgamento.prazoValidadeProposta julgamento.parametroExequibilidade`,
+  "Configuração do certame com padrão institucional permitido (parâmetro recorrente, alterável por processo)", true);
+CFG(`controle.utilizaSrp decisao.anexosAdicionais decisao.beneficioAfastado decisao.cotaReservada decisao.exclusivoMeEpp decisao.inversaoFases
+  decisao.regulamentoMunicipalVerificado decisao.tratamentoRegional julgamento.criterioJulgamento processo.numeroPregao`,
+  "Configuração do certame: decisão jurídica/casuística ou identificador do pregão, registrada UMA vez na CertameConfig; sem padrão institucional");
 
 // ── Condicionais: ocultas até a condição ficar ativa; a entrada segue a autoridade do dado ──────────────────────────
 const COND = (names: string, entry: EntryPoint, basis: string) => put(names, E("CONDITIONAL", entry, basis));
@@ -120,7 +142,7 @@ COND(`decisao.modalidadeTratamentoRegional instituicao.decretoMunicipalRegulamen
   participacao.abrangenciaExclusividadeRegional participacao.baseLegalTratamentoRegional participacao.criterioDelimitacaoRegiao
   julgamento.baseIncidenciaDesconto srp.regraQuantidadeMinimaCotacaoSrp participacao.percentualCotaReservada participacao.percentualPrioridadeRegional processo.listaAnexosAdicionais
   srp.condicoesAlteracaoPrecosRegistrados srp.limiteAdesaoAta srp.orgaoGerenciadorSrp srp.orgaosParticipantesSrp srp.prazoVigenciaAta`,
-  "PREPARATION", "Condicional de decisão do certame: informado na preparação quando ativo");
+  "CERTAME_CONFIG", "Condicional de decisão do certame: registrado na CertameConfig quando ativo");
 
 // ── Pós-homologação ──────────────────────────────────────────────────────────────────────────────────────────────────
 put(`pos.anoAta pos.anoContrato pos.contratadoCnpj pos.contratadoEndereco pos.contratadoRazaoSocial pos.contratadoRepresentanteNome

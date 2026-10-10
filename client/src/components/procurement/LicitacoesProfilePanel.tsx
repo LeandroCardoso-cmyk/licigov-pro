@@ -4,8 +4,8 @@ import PrepFieldControl from "./PrepFieldControl";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildRoles, changedRoles, emptyRoleForm, profileAsPrepView, roleToForm, withoutDefault,
-  type ProfileStateView, type RoleAssignmentView, type RoleForm,
+  buildPlatform, buildRoles, changedPlatforms, changedRoles, emptyRoleForm, platformToForm, profileAsPrepView, roleToForm, withoutDefault,
+  type PlatformForm, type ProfileStateView, type RoleAssignmentView, type RoleForm,
 } from "@/lib/contextReuse";
 import {
   STALE_NOTICE, buildSavePlan, executeSavePlan, formatDisplay, isStaleSave, toFormValue, type FormValue, type PlannedWrite, type PrepField, type SectionEdits,
@@ -31,6 +31,7 @@ export default function LicitacoesProfilePanel() {
   const state = data?.status === "READY" ? data : undefined;
 
   const [roleForms, setRoleForms] = useState<Record<string, RoleForm>>({});
+  const [platformForms, setPlatformForms] = useState<Record<string, PlatformForm>>({});
   const [edits, setEdits] = useState<Record<string, SectionEdits>>({});
   const [decision, setDecision] = useState<DecisionFormState>(() => emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);
@@ -47,13 +48,22 @@ export default function LicitacoesProfilePanel() {
     const current = Object.fromEntries(state.roles.map((r) => [r.role, r.assignment]));
     return { ...built, changed: changedRoles(current, built.roles) };
   }, [state, roleForms]);
-  const plan = useMemo(() => (state ? buildSavePlan(profileAsPrepView(state), { edits, disclosure: "", participationDefault: null }) : { writes: [], errors: {}, decisionCount: 0 }), [state, edits]);
+  const platformBuild = useMemo(() => {
+    if (!state) return { profiles: {} as Record<string, ReturnType<typeof buildPlatform>["profile"]>, errors: {} as Record<string, string>, changed: [] as string[] };
+    const profiles: Record<string, ReturnType<typeof buildPlatform>["profile"]> = {}; const errors: Record<string, string> = {};
+    for (const p of state.platforms) {
+      const b = buildPlatform(platformForms[p.slug] ?? platformToForm(p));
+      profiles[p.slug] = b.profile; if (b.error) errors[p.slug] = b.error;
+    }
+    return { profiles, errors, changed: changedPlatforms(state.platforms, profiles) };
+  }, [state, platformForms]);
+  const plan = useMemo(() => (state ? buildSavePlan(profileAsPrepView(state), { edits }) : { writes: [], errors: {}, decisionCount: 0 }), [state, edits]);
 
   if (!data) return query.isLoading ? <p className="text-sm text-muted-foreground">Carregando o Perfil de Licitações…</p> : null;
   if (!state) return <p className="text-sm text-muted-foreground">{(data as { reason: string }).reason}</p>;
 
-  const total = plan.decisionCount + roleBuild.changed.length;
-  const canSave = total > 0 && Object.keys(plan.errors).length === 0 && Object.keys(roleBuild.errors).length === 0 && !busy;
+  const total = plan.decisionCount + roleBuild.changed.length + platformBuild.changed.length;
+  const canSave = total > 0 && Object.keys(plan.errors).length === 0 && Object.keys(roleBuild.errors).length === 0 && Object.keys(platformBuild.errors).length === 0 && !busy;
   const needed = state.roles.filter((r) => r.usedBy.length > 0);
   const others = state.roles.filter((r) => r.usedBy.length === 0);
 
@@ -84,11 +94,15 @@ export default function LicitacoesProfilePanel() {
           return;
         }
       }
-      if (roleBuild.changed.length > 0) {
-        const r = await recordProfile.mutateAsync({ confirm: true, idempotencyKey: key("roles"), decision: act, expectedRevision: revision, catalogVersion: state.catalogVersion, roles: roleBuild.roles } as never);
+      if (roleBuild.changed.length > 0 || platformBuild.changed.length > 0) {
+        const r = await recordProfile.mutateAsync({
+          confirm: true, idempotencyKey: key("roles"), decision: act, expectedRevision: revision, catalogVersion: state.catalogVersion,
+          ...(roleBuild.changed.length > 0 ? { roles: roleBuild.roles } : {}),
+          ...(platformBuild.changed.length > 0 ? { platforms: Object.fromEntries(platformBuild.changed.map((slug) => [slug, platformBuild.profiles[slug]])) } : {}),
+        } as never);
         revision = r.decision.revision;
       }
-      keys.current = {}; setEdits({}); setRoleForms({}); setReviewing(false); setDecision((d) => ({ ...d, confirmed: false }));
+      keys.current = {}; setEdits({}); setRoleForms({}); setPlatformForms({}); setReviewing(false); setDecision((d) => ({ ...d, confirmed: false }));
       setNotice({ kind: "ok", text: `Perfil registrado (revisão ${revision}). Os próximos Editais reutilizam estes dados; Editais já gerados mantêm a revisão que usaram.` });
     } catch (e) {
       if (isStale(e)) { keys.current = {}; setNotice({ kind: "stale", text: STALE_NOTICE }); }
@@ -116,10 +130,10 @@ export default function LicitacoesProfilePanel() {
 
   const defaultsSet = state.defaults.filter((d) => d.hasValue);
   return (
-    <section id="perfil-licitacoes" aria-label="Perfil institucional de Licitações" className="space-y-5">
+    <section id="perfil-licitacoes" aria-label="Configuração única do órgão" className="space-y-5">
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">
-          Configuração única do órgão, reutilizada em todo Edital. {state.summary.pendingCount > 0
+          Configuração única do órgão (papéis, políticas, plataforma e padrões): informada UMA vez e reutilizada em todo Edital; nunca digitada de novo por processo. {state.summary.pendingCount > 0
             ? <strong className="text-amber-700 dark:text-amber-300">{state.summary.pendingCount} {state.summary.pendingCount === 1 ? "campo pendente" : "campos pendentes"}</strong>
             : <strong className="text-emerald-700 dark:text-emerald-300">Perfil completo (revisão {state.revision})</strong>}
         </p>
@@ -152,6 +166,40 @@ export default function LicitacoesProfilePanel() {
           );
         })}
       </div>
+
+      {state.platforms.map((pl) => {
+        const f = platformForms[pl.slug] ?? platformToForm(pl);
+        const set = (patch: Partial<PlatformForm>) => setPlatformForms((p) => ({ ...p, [pl.slug]: { ...(p[pl.slug] ?? platformToForm(pl)), ...patch } }));
+        return (
+          <fieldset key={pl.slug} className="space-y-2 rounded-lg border border-border p-3" data-platform={pl.slug} aria-label={`Perfil da plataforma ${pl.label}`}>
+            <legend className="px-1 text-sm font-medium">Perfil da plataforma {pl.label} <span className={`ml-1 text-xs font-normal ${pl.missing ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"}`}>{pl.missing ? `${pl.missing} pendente(s)` : "configurado"}</span></legend>
+            <p className="text-xs text-muted-foreground">Dados estáveis da plataforma, informados UMA vez. Nenhum Edital pede o endereço nem a versão do regulamento de novo; mudar cria nova revisão (Editais já gerados mantêm a que usaram).</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex flex-col text-xs"><span className="mb-1 font-medium">Endereço eletrônico oficial</span>
+                <input type="url" aria-label={`${pl.label} — endereço eletrônico`} value={f.enderecoEletronico} className={INPUT} disabled={busy} onChange={(e) => set({ enderecoEletronico: e.target.value })} /></label>
+              <label className="flex flex-col text-xs"><span className="mb-1 font-medium">Versão / data do regulamento</span>
+                <input type="text" aria-label={`${pl.label} — regulamento`} value={f.regulamentoVersao} className={INPUT} disabled={busy} onChange={(e) => set({ regulamentoVersao: e.target.value })} /></label>
+            </div>
+            <details className="text-xs">
+              <summary className="cursor-pointer font-medium">Regras de cronograma da plataforma (opcional)</summary>
+              <p className="my-1 text-muted-foreground">Declare SOMENTE o que a plataforma determina. Sem declaração, as datas são informadas no Edital como datas independentes — nada é presumido.</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="flex flex-col"><span className="mb-1">Limite das propostas</span>
+                  <select className={INPUT} value={f.limitePropostas} disabled={busy} onChange={(e) => set({ limitePropostas: e.target.value as PlatformForm["limitePropostas"] })}>
+                    <option value="">Informar como data independente</option><option value="ABERTURA_DA_SESSAO">Coincide com a data/horário da sessão</option></select></label>
+                <label className="flex flex-col"><span className="mb-1">Início do recebimento</span>
+                  <select className={INPUT} value={f.inicioPropostas} disabled={busy} onChange={(e) => set({ inicioPropostas: e.target.value as PlatformForm["inicioPropostas"] })}>
+                    <option value="">Informar como data independente</option><option value="PUBLICACAO">Na data prevista de divulgação</option></select></label>
+                {f.inicioPropostas === "PUBLICACAO" && (
+                  <label className="flex flex-col"><span className="mb-1">Horário de início (HH:MM)</span>
+                    <input type="time" className={INPUT} value={f.horarioInicioPropostas} disabled={busy} onChange={(e) => set({ horarioInicioPropostas: e.target.value })} /></label>
+                )}
+              </div>
+            </details>
+            {platformBuild.errors[pl.slug] && <p role="alert" className="text-xs text-destructive">{platformBuild.errors[pl.slug]}</p>}
+          </fieldset>
+        );
+      })}
 
       {state.sections.map((sec) => (
         <div key={sec.source} className="space-y-3" aria-label={SOURCE_TITLE[sec.source] ?? sec.source}>
@@ -193,6 +241,7 @@ export default function LicitacoesProfilePanel() {
               <ul className="list-disc space-y-0.5 pl-5 text-sm">
                 {plan.writes.flatMap((w) => w.lines.map((l) => <li key={`${w.id}-${l}`}>{l}</li>))}
                 {roleBuild.changed.map((r) => <li key={r}>Papel {state.roles.find((x) => x.role === r)?.label ?? r}: {roleBuild.roles[r]?.name ?? "removido"}</li>)}
+                {platformBuild.changed.map((slug) => <li key={slug}>Perfil da plataforma {slug.toUpperCase()}</li>)}
               </ul>
             </>
           )}

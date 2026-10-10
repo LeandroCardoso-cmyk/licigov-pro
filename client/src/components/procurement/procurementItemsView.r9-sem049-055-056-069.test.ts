@@ -19,6 +19,7 @@ import {
 import { hydrateFormState } from "../../lib/formHydration";
 
 const state = vi.hoisted(() => ({ ws: null as unknown, cands: null as unknown }));
+vi.mock("./ItemsParticipationCard", () => ({ default: () => null }));
 vi.mock("../../lib/trpc", () => {
   const mutation = () => ({ mutate: () => {}, isPending: false, isError: false, isSuccess: false, error: null, data: undefined });
   const utils = new Proxy({}, { get: () => new Proxy({}, { get: () => ({ invalidate: () => {} }) }) });

@@ -283,9 +283,9 @@ export default function Settings() {
           </div>
           <Card id="perfil-licitacoes">
             <CardHeader>
-              <CardTitle>Perfil institucional de Licitações</CardTitle>
+              <CardTitle>Configuração única do órgão — Perfil de Licitações</CardTitle>
               <CardDescription>
-                Configure uma única vez: papéis (autoridade competente, pregoeiro, assinante do Edital…), políticas e padrões do órgão. Cada novo Edital reutiliza estes dados.
+                Configure uma única vez: papéis (autoridade competente, pregoeiro, assinante do Edital…), políticas, Perfil da plataforma (endereço e regulamento) e padrões do órgão. Cada novo Edital reutiliza estes dados — nenhum processo os pede de novo.
               </CardDescription>
             </CardHeader>
             <CardContent>

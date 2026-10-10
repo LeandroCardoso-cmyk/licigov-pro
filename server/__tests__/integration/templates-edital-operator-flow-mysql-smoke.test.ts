@@ -38,7 +38,7 @@ import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from 
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import {
-  BLL, U_AUTHOR, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedOfficialTr, seedWorld, type World,
+  SYNTHETIC_PLATFORMS, BLL, U_AUTHOR, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const DB = process.env.DATABASE_URL;
@@ -111,10 +111,19 @@ async function saveOrg(p: Bare, source: "IDENTITY" | "POLICY", fields = governed
 }
 async function saveProcess(p: Bare, source: any, fields = governedFieldsFor(source)) {
   const st = await prep(p);
+  // Registro genérico (inclui parâmetros que no fluxo moderno vêm do TR estruturado); a CertameConfig é coberta no smoke do PR #288.
   return tpl(p.org).governed.recordProcessFields({
     ...act(`p-${source}`), catalogVersion: st.catalogVersion, processId: p.w.processId, source, fields, expectedRevision: st.revisions.process,
-    ...(source === "ITEMS" ? { participation: { default: "Ampla participação, com os benefícios da LC nº 123/2006" } } : {}),
   });
+}
+/** PR #288: Perfil da plataforma (órgão, UMA vez) e regime de participação (origem: Itens) — nunca digitados no Edital. */
+async function savePlatform(p: Bare) {
+  const st = await prep(p);
+  return tpl(p.org).governed.recordLicitacoesProfile({ ...act("plat"), catalogVersion: st.catalogVersion, expectedRevision: st.revisions.organization, platforms: SYNTHETIC_PLATFORMS });
+}
+async function saveParticipation(p: Bare) {
+  const st = await prep(p);
+  return tpl(p.org).governed.recordItemsParticipation({ ...act("part"), catalogVersion: st.catalogVersion, processId: p.w.processId, expectedRevision: st.revisions.process, participation: { default: "Ampla participação, com os benefícios da LC nº 123/2006" } });
 }
 async function saveDisclosure(p: Bare, disclosure: "publico" | "sigiloso" = "publico") {
   const st = await prep(p);
@@ -122,9 +131,11 @@ async function saveDisclosure(p: Bare, disclosure: "publico" | "sigiloso" = "pub
 }
 async function prepareAll(p: Bare) {
   for (const s of ["IDENTITY", "POLICY"] as const) await saveOrg(p, s);
+  await savePlatform(p);
   await saveDisclosure(p);
   const st = await prep(p);
   for (const s of st.sections.filter((x: any) => x.scope === "PROCESS").map((x: any) => x.source)) await saveProcess(p, s);
+  await saveParticipation(p);
 }
 
 describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rotas da UI, SEM seedGoverned)", () => {
@@ -182,15 +193,17 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     // 3. preparar: órgão (IDENTITY, POLICY), divulgação, e cada seção do processo — CAS lido do estado recarregado
     await saveOrg(p, "IDENTITY");
     await saveOrg(p, "POLICY");
-    expect((await prep(p)).revisions.organization).toBe(2);
+    await savePlatform(p);
+    expect((await prep(p)).revisions.organization).toBe(3);
     await saveDisclosure(p, "publico");
     const st1 = await prep(p);
     expect(st1.budgetDisclosure).toBe("publico");
     const processSources = st1.sections.filter((s: any) => s.scope === "PROCESS").map((s: any) => s.source);
-    expect(processSources).toEqual(expect.arrayContaining(["PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "NORMATIVE", "LIFECYCLE"]));
+    expect(processSources).toEqual(expect.arrayContaining(["PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "NORMATIVE"]));
     for (const s of processSources) await saveProcess(p, s);
+    await saveParticipation(p);
     const st2 = await prep(p);
-    expect(st2.revisions.process).toBe(processSources.length);
+    expect(st2.revisions.process).toBe(processSources.length + 1);
     expect(st2.sections.reduce((a: number, s: any) => a + s.pendingRequired, 0)).toBe(0);
     expect(st2.participation).toBeTruthy();
 
@@ -272,7 +285,7 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [b.org])).toBe(before);
     // o estado de A não vaza para B; o registro ORG de A não aparece em B
     const stA = await prep(a);
-    expect(stA.revisions.organization).toBe(2);
+    expect(stA.revisions.organization).toBe(3);
     expect(stB.revisions.organization).toBe(0);
     expect(JSON.stringify(stB)).not.toContain(a.w.processId);
     // TR e manifesto de outro tenant
