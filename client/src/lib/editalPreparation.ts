@@ -38,14 +38,19 @@ export function evaluateCond(c: Cond, facts: Readonly<Record<string, unknown>>):
 
 export interface PrepColumn { key: string; type: string; label: string; required: boolean }
 export type FieldStatus =
-  | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
+  | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
+  | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
+export type AuthorityClass =
+  | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
+  | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "TRUE_PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
   name: string; source: string; path: string; type: string; description: string; required: boolean; conditional: boolean;
   requiredWhenVariables: readonly string[]; requiredWhen?: Cond; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
   hasValue: boolean; currentValue?: unknown;
-  class: PreparationClass; rule: string; status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin;
+  class: PreparationClass; rule: string; authority?: AuthorityClass; entry?: "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PREPARATION";
+  status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin; reason?: string; canOverrideDefault?: boolean; defaultEligible?: boolean;
   /** Havia valor legado no ledger neste caminho, hoje coberto por autoridade canônica/TR exato: preservado como história e IGNORADO. */
   shadowedLegacy?: boolean;
 }
@@ -56,6 +61,13 @@ export interface SummaryGroup { id: string; title: string; total: number; resolv
 export interface PreparationMetrics {
   TOTAL_TEMPLATE_FIELDS: number; AUTO_RESOLVED: number; ORG_REUSED: number; TR_PROJECTED: number; DECIDED: number; CONDITIONAL_HIDDEN: number;
   POST_AWARD_HIDDEN: number; OPTIONAL_HIDDEN: number; MANUAL_DECISIONS_VISIBLE: number; LEGACY_SHADOWED: number;
+  UPSTREAM_TR_REUSED?: number; TR_PENDING?: number; PROFILE_INCOMPLETE?: number; ORG_ROLES_REUSED?: number; ORG_POLICIES_REUSED?: number;
+  ORG_DEFAULTS_APPLIED?: number; BY_AUTHORITY?: Partial<Record<AuthorityClass, number>>;
+}
+export interface UpstreamView {
+  trDigest: string;
+  trPending: { name: string; description: string; reason?: string }[];
+  profilePending: { name: string; description: string; reason: string; role?: string }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -66,6 +78,7 @@ export interface PreparationStateView {
   trPin: TrPinState;
   sections: PrepSection[]; facts: Record<string, unknown>; canonicalFields: CanonicalReadOnlyField[];
   orgProfile: { revision: number; hash: string | null } | null;
+  upstream?: UpstreamView;
   summary: { groups: SummaryGroup[]; reusedAutomatically: number; pendingDecisions: number };
   metrics: PreparationMetrics;
 }
@@ -218,13 +231,15 @@ const bySectionOrder = (state: PreparationStateView, status: FieldStatus[], edit
 /** O que a pessoa precisa decidir AGORA (obrigatório, aplicável e sem valor). */
 export const pendingItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["PENDING"], true);
 /** Perfil do órgão pendente (configurar UMA vez): pendências de escopo ORG, em bloco separado. */
-export const orgProfilePending = (state: PreparationStateView): PendingItem[] => pendingItems(state).filter((p) => p.section.scope === "ORG");
+export const orgProfilePending = (state: PreparationStateView): UpstreamView["profilePending"] => state.upstream?.profilePending ?? [];
+/** Parâmetros estruturados do TR ainda não confirmados (informar no TR, não na preparação do Edital). */
+export const trParamsPending = (state: PreparationStateView): UpstreamView["trPending"] => state.upstream?.trPending ?? [];
 /** Pendências do processo (certame/TR/processo). */
 export const processPending = (state: PreparationStateView): PendingItem[] => pendingItems(state).filter((p) => p.section.scope === "PROCESS");
 /** Decisões opcionais (inclui as que ATIVAM campos adicionais): recolhidas por padrão. */
 export const optionalItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["OPTIONAL"], true);
 /** "Ver dados reaproveitados": automático, perfil do órgão e decisões já registradas. */
-export const reusedItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["AUTO", "ORG_REUSED", "DECIDED"], false);
+export const reusedItems = (state: PreparationStateView): PendingItem[] => bySectionOrder(state, ["AUTO", "ORG_REUSED", "DECIDED", "UPSTREAM", "ORG_DEFAULT"], false);
 
 export function sectionHasPending(state: PreparationStateView, source: string): boolean {
   return pendingItems(state).some((p) => p.section.source === source);
@@ -280,7 +295,7 @@ export function liveStatuses(state: PreparationStateView, edits: Readonly<Record
       const edited = editedNames.has(f.name);
       let status: FieldStatus = f.status;
       if (inactive.has(f.name)) status = "HIDDEN_CONDITIONAL";
-      else if (f.requiredWhen && f.status !== "AUTO") {
+      else if (f.requiredWhen && f.editable && f.status !== "AUTO") {
         // Condição ativa: sem valor ⇒ pendência; com valor (registrado ou digitado) ⇒ resolvida.
         status = isAbsent(facts[f.name]) ? "PENDING" : f.status === "PENDING" || f.status === "HIDDEN_CONDITIONAL" || f.status === "OPTIONAL" ? "DECIDED" : f.status;
       }

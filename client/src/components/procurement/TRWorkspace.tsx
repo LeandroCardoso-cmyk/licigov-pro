@@ -3,6 +3,7 @@ import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import TrStructuredParamsSection from "./TrStructuredParamsSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
@@ -114,6 +115,9 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
           <p className="mt-2 text-sm text-destructive">{domainErrorMessage(generateTR.error?.message, "Falha ao gerar o TR.")}</p>
         )}
       </div>
+
+      {/* CONTEXT_REUSE 2.0 — camada estruturada do MESMO fluxo do TR: o Edital e o texto do TR consomem estes fatos. */}
+      {processId && <TrStructuredParamsSection processId={processId} onChanged={() => utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "tr" })} />}
 
       {processId && (
         <div className="mt-5">

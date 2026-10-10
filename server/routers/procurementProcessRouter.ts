@@ -25,6 +25,8 @@ import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash 
 import { templateIssuanceHook } from "../services/institutionalTemplates/integration";
 import { generateTemplatedDocument, inspectTemplateReview, preflightTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { getEditalPreparationState } from "../services/institutionalTemplates/editalPreparationService";
+import { getLicitacoesProfileState } from "../services/institutionalTemplates/licitacoesProfileService";
+import { getTrStructuredState, recordTrStructuredParams, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
 import { generateEditalRouted, listEditalTrCandidates, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
@@ -603,10 +605,13 @@ export const procurementProcessRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
+      // CONTEXT_REUSE 2.0: o TEXTO do TR consome os MESMOS parâmetros estruturados que o Edital (bloco do sistema; sem IA).
+      const structured = await renderTrStructuredBlock(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {})).catch(() => null);
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
         confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
+        structuredParams: structured ? { block: structured.block, digest: structured.digest } : null,
       });
       return { document };
     }),
@@ -690,6 +695,45 @@ export const procurementProcessRouter = router({
     }),
 
   /**
+   * PARÂMETROS ESTRUTURADOS DO TR (somente leitura): campos tipados que o MESMO fluxo do TR confirma e que o Edital consome (sem
+   * reentrada). Descritores vêm do catálogo do modelo do Edital (servidor); fatos no Contexto Canônico; padrões institucionais
+   * aparecem só como PROPOSTA (nunca aplicados sem confirmação humana).
+   */
+  trStructuredParams: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getTrStructuredState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+    }),
+
+  /** Perfil institucional de Licitações (órgão): papéis, políticas e padrões. Somente leitura; a escrita usa `institutionalTemplates.governed.*`. */
+  licitacoesProfile: tenantProcedure
+    .input(z.object({ processId: z.string().min(1).optional(), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }).default({}))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const params = input.processId ? (await requireProcess(input.processId, orgId), await editalBoundaryParams(orgId, input.processId, input)) : { modality: input.modality ?? null, form: input.form ?? null, platform: input.platform ?? null };
+      return getLicitacoesProfileState(bridgeDeps(), orgId, params);
+    }),
+
+  /** Confirma (humano) parâmetros estruturados do TR no Contexto Canônico: append-only, tenant-scoped, sem IA. */
+  recordTrStructuredParams: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      values: z.record(z.string().min(1).max(120), z.unknown()).default({}),
+      fromDefaults: z.array(z.string().min(1).max(120)).max(100).optional(),
+      clear: z.array(z.string().min(1).max(120)).max(100).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return recordTrStructuredParams(bridgeDeps(), {
+        organizationId: orgId, processId: input.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        params: await editalBoundaryParams(orgId, input.processId, input), values: input.values, fromDefaults: input.fromDefaults, clear: input.clear,
+      });
+    }),
+
+  /**
    * PREFLIGHT somente leitura da composição: mesma revisão exata, mesmas fontes e mesmo composer da geração, com o pin exato do TR.
    * Não grava rascunho/M1, não reserva geração e não chama IA. `NOT_APPLICABLE` quando não há modelo institucional vinculado.
    */
@@ -718,7 +762,13 @@ export const procurementProcessRouter = router({
         ? prep.sections.filter((s) => s.pendingRequired > 0).map((s) => ({ code: "GOVERNED_SOURCE_PENDING", source: s.source, message: `${s.pendingRequired} campo(s) obrigatório(s) pendente(s) na fonte ${s.source}` }))
         : [];
       const pendingDecisions = prep.status === "READY_FOR_PREPARATION" ? prep.summary.pendingDecisions : 0;
-      return { ...result, pendingDecisions, issues: [...pendingBySource, ...result.issues], resolution: resolution.status };
+      const upstreamIssues = prep.status === "READY_FOR_PREPARATION"
+        ? [
+          ...(prep.upstream.trPending.length ? [{ code: "TR_PARAMS_PENDING", source: "TR", message: `${prep.upstream.trPending.length} parâmetro(s) estruturado(s) do TR pendente(s): informe-os no TR (Parâmetros estruturados da contratação)` }] : []),
+          ...(prep.upstream.profilePending.length ? [{ code: "LICITACOES_PROFILE_INCOMPLETE", source: "POLICY", message: `Perfil institucional de Licitações incompleto (${prep.upstream.profilePending.length} campo(s)): configure uma única vez em Configurações` }] : []),
+        ]
+        : [];
+      return { ...result, pendingDecisions, issues: [...upstreamIssues, ...pendingBySource, ...result.issues], resolution: resolution.status };
     }),
 
   /** Estado de revisão do rascunho composto por modelo (marcadores, desvios estruturais, narrativas de IA e revalidação canônica). */

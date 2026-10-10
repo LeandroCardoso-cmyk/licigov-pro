@@ -34,6 +34,7 @@ import { snapshotInstitutionalIdentity } from "../../institutionalIdentityServic
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "../governedFieldsStore";
 import { TemplateSourceUnavailableError } from "../ports";
 import { resolveEditalProjections, type ProjectedValue } from "../editalProjections";
+import { loadContextReuse, profileFingerprint, setNestedIfAbsent, type ContextReuse } from "../editalContextReuse";
 import type { DocRefKind2 } from "../../../domain/institutionalTemplates/ast2";
 import type { OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
 import { PROJECTION_BY_VARIABLE, canonicalProjectedPaths } from "../../../domain/institutionalTemplates/canonicalProjectionPolicy";
@@ -64,6 +65,7 @@ interface Memo {
   processRecord?: GovernedRecord | null;
   orgRecord?: GovernedRecord | null;
   projections?: Map<string, ProjectedValue>;
+  reuse?: ContextReuse;
 }
 
 /** Projeções determinísticas (ZERO_REENTRY) das variáveis da fonte: base sobre a qual a decisão humana registrada prevalece. */
@@ -104,6 +106,36 @@ function withGoverned(source: VariableSource2, data: Record<string, unknown>, re
     const effective = Object.fromEntries(Object.entries(section).filter(([path]) => !skip.has(path)));
     try { applyFieldsToData(data, effective); } catch (e) { throw unavailable(source, "GOVERNED_FIELD_CONFLICT", e instanceof Error ? e.message : "conflito de campos governados"); }
   }
+  return data;
+}
+
+/** Reuso de contexto (TR estruturado, papéis, padrões institucionais) — lido UMA vez por composição, tenant-scoped. */
+async function reuseOf(rc: SourceReadContext, m: Memo): Promise<ContextReuse> {
+  if (!m.reuse) m.reuse = await loadContextReuse({ organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10) });
+  return m.reuse;
+}
+
+/**
+ * Aplica o reuso da fonte sobre os dados e devolve os dados governados. Precedência por variável:
+ *  - papel institucional e parâmetro estruturado do TR (autoridade): VENCEM o valor governado (legado/humano) do mesmo caminho;
+ *  - padrão institucional explícito: só PREENCHE o que nenhuma decisão do processo nem projeção já definiu.
+ */
+async function govern(
+  rc: SourceReadContext, m: Memo, source: VariableSource2, data: Record<string, unknown>, record: GovernedRecord | null, skip: ReadonlySet<string> = new Set(),
+): Promise<Record<string, unknown>> {
+  const reuse = await reuseOf(rc, m);
+  const shadow = new Set(skip);
+  const defaults: Array<[string, unknown]> = [];
+  for (const v of rc.catalog.vars) {
+    if (v.source !== source) continue;
+    const r = reuse.values.get(v.name);
+    if (!r) continue;
+    if (r.kind === "ORG_DEFAULT") { defaults.push([v.path, r.value]); continue; }
+    setNestedIfAbsent(data, v.path, r.value); // projeção canônica já presente (ex.: objeto do TR exato) prevalece
+    shadow.add(v.path);
+  }
+  withGoverned(source, data, record, shadow);
+  for (const [path, value] of defaults) setNestedIfAbsent(data, path, value);
   return data;
 }
 
@@ -178,7 +210,7 @@ export async function resolveSourcesV2(
           // O sigilo do orçamento é DERIVADO da decisão de divulgação (nunca digitado): fonte única da verdade.
           ...(declares(rc.catalog, "PROCESS", "orcamentoSigilosoSimNao") && disclosure ? { orcamentoSigilosoSimNao: disclosure === "sigiloso" } : {}),
         });
-        put(source, withGoverned(source, data, await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "PROCESS")));
+        put(source, await govern(rc, memo, source, data, await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "PROCESS")));
         break;
       }
       case "IDENTITY": {
@@ -192,16 +224,24 @@ export async function resolveSourcesV2(
           ...(declares(rc.catalog, "IDENTITY", "municipioTelefone") ? { municipioTelefone: snapshot.phone } : {}),
           ...(declares(rc.catalog, "IDENTITY", "municipioSite") ? { municipioSite: snapshot.website } : {}),
         });
-        put(source, withGoverned(source, data, await orgRecordOf(rc, memo), await shadowedPaths(rc, memo, "IDENTITY")));
+        put(source, await govern(rc, memo, source, data, await orgRecordOf(rc, memo), await shadowedPaths(rc, memo, "IDENTITY")));
         break;
       }
-      case "POLICY": put(source, withGoverned(source, {}, await orgRecordOf(rc, memo))); break;
-      case "TR": put(source, withGoverned(source, await projectedFor(rc, memo, "TR"), await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "TR"))); break;
-      case "CERTAME_CONFIG": put(source, withGoverned(source, {}, await processRecordOf(rc, memo))); break;
+      case "POLICY": {
+        const org = await orgRecordOf(rc, memo);
+        const data = await govern(rc, memo, source, {}, org);
+        // Impressão digital do Perfil (papéis/padrões): troca de ocupante/padrão entre M1 e emissão ⇒ SOURCE_CHANGED.
+        const fp = profileFingerprint(org);
+        if (fp) data["perfilLicitacoes"] = fp;
+        put(source, data);
+        break;
+      }
+      case "TR": put(source, await govern(rc, memo, source, await projectedFor(rc, memo, "TR"), await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "TR"))); break;
+      case "CERTAME_CONFIG": put(source, await govern(rc, memo, source, {}, await processRecordOf(rc, memo))); break;
       case "ITEMS": {
         const record = await processRecordOf(rc, memo);
         const rows = await itemRows(rc, await disclosureOf(rc, memo), record?.payload.participation);
-        const data = withGoverned(source, declares(rc.catalog, "ITEMS", "quadroItensContratacao") ? { quadroItensContratacao: rows } : {}, record);
+        const data = await govern(rc, memo, source, declares(rc.catalog, "ITEMS", "quadroItensContratacao") ? { quadroItensContratacao: rows } : {}, record);
         put(source, data);
         break;
       }
@@ -216,7 +256,7 @@ export async function resolveSourcesV2(
           const { priceContext } = ctx;
           if (priceContext.complete && priceContext.estimatedTotalCents !== null) data.valorEstimado = priceContext.estimatedTotalCents;
         }
-        put(source, withGoverned(source, data, await processRecordOf(rc, memo)));
+        put(source, await govern(rc, memo, source, data, await processRecordOf(rc, memo)));
         break;
       }
       case "NORMATIVE": {
@@ -225,7 +265,7 @@ export async function resolveSourcesV2(
         try { set = (await resolveActiveReferenceSet(rc.asOfDate)).set; } catch (err) {
           throw unavailable("NORMATIVE", (err as { code?: string }).code ?? "REFERENCE_SET_UNAVAILABLE", "não há reference set normativo ativo, aprovado e íntegro para a data");
         }
-        const data = withGoverned(source, {
+        const data = await govern(rc, memo, source, {
           referenceSet: { version: set.version, contentHash: set.contentHash, approvedReferenceHash: set.approvedReferenceHash, effectiveFrom: set.effectiveFrom, ...(set.effectiveTo ? { effectiveTo: set.effectiveTo } : {}) },
         }, await processRecordOf(rc, memo));
         put(source, data);
@@ -239,7 +279,7 @@ export async function resolveSourcesV2(
         }).from(procurementProcessesTable).where(and(eq(procurementProcessesTable.id, rc.processId), eq(procurementProcessesTable.organizationId, rc.organizationId))).limit(1);
         if (rows.length !== 1) throw unavailable("LIFECYCLE", "PROCESS_NOT_FOUND", "processo inexistente nesta organização");
         const r = rows[0];
-        put(source, withGoverned(source, { ciclo: { estado: r.lifecycleState, geracao: r.generationNo, revisao: r.lifecycleRevision } }, await processRecordOf(rc, memo)));
+        put(source, await govern(rc, memo, source, { ciclo: { estado: r.lifecycleState, geracao: r.generationNo, revisao: r.lifecycleRevision } }, await processRecordOf(rc, memo)));
         break;
       }
       case "RESULT": break; // sem autoridade: omitida (nunca inventada)

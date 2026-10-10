@@ -81,9 +81,9 @@ describe("seção completa e visões orientadas por exceção", () => {
   });
   it("só as pendências aparecem; reaproveitados/opcionais ficam recolhidos; perfil do órgão separado do processo", () => {
     const proc = mkSection("PROCESS", "PROCESS", [mkField({ name: "p1", path: "p1" }), mkField({ name: "p2", path: "p2", status: "DECIDED", hasValue: true, currentValue: "v", displayValue: "v" }), mkField({ name: "p3", path: "p3", status: "HIDDEN_CONDITIONAL" })]);
-    const st = mkState([sec, proc]);
+    const st = mkState([sec, proc], { upstream: { trDigest: "x", trPending: [], profilePending: [{ name: "b", description: "B", reason: "política do órgão ainda não registrada" }] } });
     expect(pendingItems(st).map((i) => i.field.name)).toEqual(["b", "p1"]);
-    expect(orgProfilePending(st).map((i) => i.field.name)).toEqual(["b"]);
+    expect(orgProfilePending(st).map((i) => i.name)).toEqual(["b"]);   // CONTEXT_REUSE 2.0: o perfil incompleto vem do servidor (card único)
     expect(processPending(st).map((i) => i.field.name)).toEqual(["p1"]);
     expect(optionalItems(st).map((i) => i.field.name)).toEqual(["c"]);
     expect(reusedItems(st).map((i) => i.field.name)).toEqual(["a", "p2"]);
@@ -276,6 +276,7 @@ describe("SSR da preparação orientada por exceções", () => {
   const tr = mkSection("TR", "PROCESS", [mkField({ name: "t1", path: "t1", source: "TR", description: "Local de entrega", class: "TR_PROJECTION", rule: "TR_SOURCE" })]);
   const st = mkState([org, reusedOrg, tr], {
     budgetDisclosure: null, participationPending: true, orgProfile: { revision: 2, hash: "abc" },
+    upstream: { trDigest: "x", trPending: [], profilePending: [{ name: "o1", description: "Canal de esclarecimentos", reason: "política do órgão ainda não registrada" }] },
     canonicalFields: [{ name: "processo.numeroProcesso", source: "PROCESS", path: "numeroProcesso", type: "string", description: "Número do processo", status: "AUTO", displayValue: "2026/0001", origin: { label: "Processo", ref: { processId: "p1" } } }],
     summary: { reusedAutomatically: 12, pendingDecisions: 4, groups: [{ id: "institucional", title: "Dados institucionais", total: 18, resolved: 18, reused: 18, pending: 0, blockedCanonical: 0 }, { id: "certame", title: "Configuração do certame", total: 9, resolved: 5, reused: 0, pending: 4, blockedCanonical: 0 }] },
   });
@@ -283,10 +284,17 @@ describe("SSR da preparação orientada por exceções", () => {
     const out = html(base(st));
     expect(out).toContain("12</strong> informações reaproveitadas automaticamente");
     expect(out).toContain("de você");
-    expect(out).toContain("✓ 18/18");
-    expect(out).toContain("⚠ 4 pendências");
-    expect(out).toContain("Configuração institucional pendente");
-    expect(out).toContain("Canal de esclarecimentos");
+    // UX final: UM card de perfil incompleto (não despeja campos) + cartões por autoridade
+    expect(out).toContain("Complete o Perfil Institucional de Licitações");
+    expect(out).toContain("Configurar agora");
+    expect(out).toContain('href="/configuracoes#perfil-licitacoes"');
+    expect(out).toContain("Canal de esclarecimentos");            // listado só em "O que falta"
+    expect(out).not.toContain('id="prep-POLICY-o1"');             // sem input do perfil na preparação
+    expect(out).toContain('data-card="perfil"');
+    expect(out).toContain('data-card="processo"');
+    expect(out).toContain('data-card="tr"');
+    expect(out).toContain('data-card="itens"');
+    expect(out).toContain("⚠ 4 decisões pendentes");
     expect(out).toContain("Decisões deste processo");
     expect(out).toContain("Local de entrega");
     expect(out).toContain("Divulgação do orçamento");
@@ -296,7 +304,6 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).toContain("Ver detalhes técnicos");
     expect(out).not.toMatch(/<details[^>]*\sopen/);
     expect(out).toContain("Reutilizado do perfil institucional");
-    expect(out).toContain("Perfil institucional para Editais — revisão 2");
     // o dado reaproveitado NÃO é input na tela principal; o canônico dono não tem controle
     expect(out).not.toMatch(/JSON|\{"/);
   });

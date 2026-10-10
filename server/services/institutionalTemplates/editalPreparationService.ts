@@ -29,6 +29,8 @@ import { snapshotInstitutionalIdentity } from "../institutionalIdentityService";
 import { PROJECTION_BY_VARIABLE, isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
 import { resolveEditalTemplate, type BridgeDeps, type EditalTemplateResolution } from "./editalBridgeService";
 import { resolveEditalProjections, type ProjectedValue } from "./editalProjections";
+import { loadContextReuse, type ContextReuse } from "./editalContextReuse";
+import { ROLE_LABEL, isDefaultEligible, type AuthorityClass } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
 import type { OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
@@ -40,6 +42,10 @@ export type FieldStatus =
   | "PENDING"              // precisa de você (obrigatório e aplicável, ainda sem valor)
   | "OPTIONAL"             // opcional, sem valor (decisões que ativam campos adicionais ficam aqui)
   | "AWAITING"             // depende de outra decisão ainda não registrada (ex.: divulgação do orçamento)
+  | "UPSTREAM"             // valor vindo dos Parâmetros estruturados do TR (informado uma vez, no TR)
+  | "ORG_DEFAULT"          // padrão institucional EXPLÍCITO aplicado (pode ser alterado neste processo)
+  | "PENDING_TR"           // depende de parâmetro estruturado do TR ainda não confirmado (informe no TR)
+  | "PROFILE_INCOMPLETE"   // depende do Perfil institucional de Licitações (papel/política ausente ou vencido)
   | "CANONICAL_UNRESOLVED" // a autoridade canônica existe mas está incompleta (resolva na própria autoridade)
   | "HIDDEN_CONDITIONAL"   // condição inativa
   | "HIDDEN_POST_AWARD";   // pós-homologação
@@ -70,7 +76,16 @@ export interface PreparationField {
   readonly currentValue?: unknown;
   readonly class: PreparationClass;
   readonly rule: VariableClassification["rule"];
+  /** Classe operacional da Authority Matrix e ponto de entrada quando o dado ainda não existe. */
+  readonly authority: AuthorityClass;
+  readonly entry: VariableClassification["entry"];
   readonly status: FieldStatus;
+  /** Motivo explícito (papel vencido/ausente, padrão incompatível, parâmetro do TR inválido). */
+  readonly reason?: string;
+  /** Fonte da decisão/valor (cargo, valor reaproveitado) para explicabilidade expansível. */
+  readonly canOverrideDefault?: boolean;
+  /** Pode virar PADRÃO institucional por ação humana explícita (Authority Matrix). */
+  readonly defaultEligible?: boolean;
   /** A pessoa pode digitar este valor (falso para AUTO/ORG_REUSED somente leitura na tela principal). */
   readonly editable: boolean;
   /** Valor a exibir (explicabilidade): canônico/projetado/reutilizado/decidido. Ausente em pendências. */
@@ -132,6 +147,14 @@ export interface PreparationMetrics {
   readonly MANUAL_DECISIONS_VISIBLE: number;
   /** Valores legados do ledger ignorados por haver autoridade canônica/projeção (preservados como história). */
   readonly LEGACY_SHADOWED: number;
+  /** CONTEXT_REUSE 2.0 */
+  readonly UPSTREAM_TR_REUSED: number;
+  readonly TR_PENDING: number;
+  readonly PROFILE_INCOMPLETE: number;
+  readonly ORG_ROLES_REUSED: number;
+  readonly ORG_POLICIES_REUSED: number;
+  readonly ORG_DEFAULTS_APPLIED: number;
+  readonly BY_AUTHORITY: Readonly<Record<AuthorityClass, number>>;
   readonly BY_CLASS: Readonly<Record<PreparationClass, number>>;
 }
 
@@ -155,9 +178,26 @@ export type EditalPreparationState =
     readonly canonicalFields: readonly CanonicalReadOnlyField[];
     /** Perfil institucional do órgão: revisão/hash vigentes (lineage do que é reutilizado). */
     readonly orgProfile: { readonly revision: number; readonly hash: string | null } | null;
+    /** CONTEXT_REUSE 2.0 — o que falta FORA desta tela (TR estruturado / Perfil de Licitações), com o motivo. */
+    readonly upstream: {
+      readonly trDigest: string;
+      readonly trPending: readonly { readonly name: string; readonly description: string; readonly reason?: string }[];
+      readonly profilePending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly role?: string }[];
+    };
     readonly summary: { readonly groups: readonly SummaryGroup[]; readonly reusedAutomatically: number; readonly pendingDecisions: number };
     readonly metrics: PreparationMetrics;
   };
+
+/** Descritor serializável da variável (a tela não tem segunda cópia do catálogo). */
+export function describeVariable(v: VariableDef2) {
+  const requiredWhenVariables = v.requiredWhen ? [...new Set(conditionVariables(v.requiredWhen))].sort() : [];
+  return {
+    name: v.name, source: v.source, path: v.path, type: v.type, description: (v.description ?? "").replace(/\s*\[[^\]]*\]\s*$/, ""),
+    required: v.required, conditional: !!v.requiredWhen, requiredWhenVariables, ...(v.requiredWhen ? { requiredWhen: v.requiredWhen } : {}),
+    ...(v.enumValues ? { enumValues: v.enumValues } : {}), ...(v.itemType ? { itemType: v.itemType } : {}),
+    ...(v.columns ? { columns: v.columns.map((col) => ({ key: col.key, type: col.type, label: col.label, required: col.required !== false })) } : {}),
+  };
+}
 
 const SOURCE_ORDER: readonly VariableSource2[] = ["IDENTITY", "POLICY", "PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "BUDGET", "NORMATIVE", "LIFECYCLE"];
 const GOVERNABLE = new Set<string>([...PROCESS_SCOPE_SOURCES, ...ORG_SCOPE_SOURCES]);
@@ -227,6 +267,8 @@ export async function getEditalPreparationState(
     resolveProcurementContext({ organizationId, processId }).catch(() => null),
   ]);
   const disclosure: "publico" | "sigiloso" | null = budget?.outcome === "publico" || budget?.outcome === "sigiloso" ? budget.outcome : null;
+  // Reuso de contexto (parâmetros do TR, papéis e padrões do Perfil de Licitações): MESMA resolução da composição.
+  const reuse: ContextReuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10) });
 
   // ── valores conhecidos por NOME (base da avaliação das condições): decisão registrada + canônico + projeção ──────────
   const known = new Map<string, unknown>();
@@ -236,10 +278,13 @@ export async function getEditalPreparationState(
     if (!isOwned(v)) {
       const stored = storedValue(v.source, v.path, processRec, orgRec);
       const proj = projections.get(v.name);
-      // Autoridade ÚNICA por variável: projeção CANONICAL ignora o ledger; projeção do TR exato vence a decisão humana; sem projeção,
-      // só a variável do TR (nunca a CANONICAL) aceita o valor humano.
+      const ru = reuse.values.get(v.name);
+      // Autoridade ÚNICA por variável: projeção CANONICAL ignora o ledger; projeção do TR exato vence a decisão humana; papel do
+      // Perfil e parâmetro estruturado do TR vencem o valor governado legado; padrão institucional só preenche o que falta.
       if (proj) known.set(v.name, proj.value);
+      else if (ru && ru.kind !== "ORG_DEFAULT") known.set(v.name, ru.value);
       else if (!isCanonicalProjection(v.name) && !isEmpty(stored)) known.set(v.name, stored);
+      else if (ru?.kind === "ORG_DEFAULT") known.set(v.name, ru.value);
     }
   }
   if (disclosure && catalog.vars.some((v) => v.name === "controle.orcamentoSigilosoSimNao")) known.set("controle.orcamentoSigilosoSimNao", disclosure === "sigiloso");
@@ -295,22 +340,20 @@ export async function getEditalPreparationState(
     a[k]++;
     groupAcc.set(g, a);
   };
-  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0 };
+  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0 };
+  const byAuthority = Object.fromEntries(["EXISTING_CANONICAL", "ORG_ROLE_PROFILE", "ORG_POLICY_PROFILE", "UPSTREAM_PROCESS", "UPSTREAM_DFD", "UPSTREAM_ETP", "UPSTREAM_ITEMS", "UPSTREAM_PRICE_RESEARCH", "UPSTREAM_TR", "TRUE_PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"].map((k) => [k, 0])) as Record<AuthorityClass, number>;
+  const trPending: Array<{ name: string; description: string; reason?: string }> = [];
+  const profilePending: Array<{ name: string; description: string; reason: string; role?: string }> = [];
   const byClass = Object.fromEntries((["CANONICAL", "ORG_PROFILE", "TR_PROJECTION", "PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"] as const).map((k) => [k, 0])) as Record<PreparationClass, number>;
 
   for (const v of catalog.vars) {
     const c = classes.get(v.name)!;
     byClass[c.class]++;
+    byAuthority[c.authority]++;
     const group = GROUP_OF[v.source];
     if (c.class === "POST_AWARD") { m.PH++; continue; }
 
-    const requiredWhenVariables = v.requiredWhen ? [...new Set(conditionVariables(v.requiredWhen))].sort() : [];
-    const descriptor = {
-      name: v.name, source: v.source, path: v.path, type: v.type, description: (v.description ?? "").replace(/\s*\[[^\]]*\]\s*$/, ""),
-      required: v.required, conditional: !!v.requiredWhen, requiredWhenVariables, ...(v.requiredWhen ? { requiredWhen: v.requiredWhen } : {}),
-      ...(v.enumValues ? { enumValues: v.enumValues } : {}), ...(v.itemType ? { itemType: v.itemType } : {}),
-      ...(v.columns ? { columns: v.columns.map((col) => ({ key: col.key, type: col.type, label: col.label, required: col.required !== false })) } : {}),
-    };
+    const descriptor = describeVariable(v);
 
     // Autoridade canônica "dona" (nunca digitada): lista à parte, somente leitura.
     if (c.rule === "AUTHORITY_OWNED" || c.rule === "DOCUMENT_PIN") {
@@ -329,6 +372,8 @@ export async function getEditalPreparationState(
     const trProj = projPolicy?.key === "TR_OBJECT";
     let status: FieldStatus; let displayValue: unknown; let origin: PreparationOrigin | undefined; let editable = true;
     let shadowedLegacy = false;
+    let fieldReason: string | undefined;
+    let canOverrideDefault = false;
 
     if (inactive.has(v.name)) { status = "HIDDEN_CONDITIONAL"; m.CH++; }
     else if (canonProj) {
@@ -342,13 +387,61 @@ export async function getEditalPreparationState(
       if (projected) {
         status = "AUTO"; displayValue = projected.value; origin = { label: projected.origin, ref: projected.ref }; editable = false; m.TRP++;
         shadowedLegacy = hasValue && !isEmpty(stored);
+      } else if (reuse.values.get(v.name)) {
+        const ru = reuse.values.get(v.name)!;
+        status = "UPSTREAM"; displayValue = ru.value; origin = { label: ru.origin.label, ref: ru.origin.ref }; editable = false; m.UTR++;
       } else if (trPinState.state !== "VALID") {
         status = "AWAITING"; editable = false;
         origin = { label: trPinState.state === "INVALID" ? `TR selecionado inválido ou desatualizado (${trPinState.code}) — selecione o TR oficial exato novamente` : "Selecione o TR oficial exato" };
       } else if (hasValue && !isEmpty(stored)) {
         status = "DECIDED"; displayValue = stored; m.DEC++;
         origin = { label: "Decisão registrada (o TR exato não traz este dado estruturado)", ref: { revision: processRec?.revision ?? 0 } };
-      } else { status = "PENDING"; m.MAN++; }
+      } else {
+        // Sem o dado estruturado no TR exato nem parâmetro confirmado: a entrada é o TR (não a preparação do Edital).
+        status = "PENDING_TR"; editable = false; origin = { label: "Informe em Parâmetros estruturados do TR" }; m.TRP_PEND++;
+        trPending.push({ name: v.name, description: descriptor.description });
+      }
+    } else if (c.rule === "ORG_ROLE") {
+      // Papel institucional: projeção do Perfil de Licitações (nunca input aqui). Ausente/vencido ⇒ perfil incompleto, com o motivo.
+      editable = false;
+      const ru = reuse.values.get(v.name); const pb = reuse.problems.get(v.name);
+      if (ru) { status = "ORG_REUSED"; displayValue = ru.value; origin = { label: ru.origin.label, ref: ru.origin.ref }; m.ORG++; m.ROLES++; }
+      else if (hasValue && !isEmpty(stored) && !pb) {
+        // Campo institucional LEGADO (registrado antes dos papéis): continua válido enquanto o papel não for designado no Perfil.
+        status = "ORG_REUSED"; displayValue = stored; m.ORG++; m.POLS++;
+        origin = { label: "Perfil institucional do órgão (campo registrado)", ref: { revision: orgLineage?.revision ?? 0, hash: (orgLineage?.hash ?? "").slice(0, 12) } };
+      } else { status = "PROFILE_INCOMPLETE"; origin = { label: "Perfil institucional de Licitações" }; profilePending.push({ name: v.name, description: descriptor.description, reason: pb?.reason ?? "papel não designado", ...(pb?.role ? { role: ROLE_LABEL[pb.role] } : {}) }); m.PROF_PEND++; }
+      if (pb?.reason) fieldReason = pb.reason;
+    } else if (c.rule === "TR_PARAM" || (c.authority === "CONDITIONAL" && c.entry === "TR_SECTION")) {
+      // Parâmetro estruturado do TR: informado UMA vez no fluxo do TR; o Edital apenas consome. Valor governado legado (se houver) é
+      // preservado como "Decisão registrada" até o TR confirmar o parâmetro.
+      editable = false;
+      const ru = reuse.values.get(v.name); const pb = reuse.problems.get(v.name);
+      if (ru) {
+        status = "UPSTREAM"; displayValue = ru.value; origin = { label: ru.origin.label, ref: ru.origin.ref }; m.UTR++;
+        shadowedLegacy = hasValue && !isEmpty(stored);
+      } else if (hasValue && !isEmpty(stored)) {
+        status = "DECIDED"; displayValue = stored; m.DEC++;
+        origin = { label: "Decisão registrada anteriormente (confirme em Parâmetros estruturados do TR)", ref: { revision: processRec?.revision ?? 0 } };
+      } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
+        status = "PENDING_TR"; origin = { label: "Informe em Parâmetros estruturados do TR" }; m.TRP_PEND++;
+        trPending.push({ name: v.name, description: descriptor.description, ...(pb?.reason ? { reason: pb.reason } : {}) });
+        if (pb?.reason) fieldReason = pb.reason;
+      } else { status = "OPTIONAL"; m.OH++; origin = { label: "Opcional — informe nos Parâmetros estruturados do TR, se aplicável" }; }
+    } else if (c.class === "ORG_PROFILE" || (c.class === "CONDITIONAL" && c.scope === "ORG")) {
+      // Política do órgão: registrada UMA vez no Perfil de Licitações. Sem valor ⇒ perfil incompleto (não é digitada aqui).
+      editable = false;
+      if (hasValue && !isEmpty(stored)) {
+        status = "ORG_REUSED"; displayValue = stored; m.ORG++; m.POLS++;
+        origin = { label: "Perfil institucional do órgão", ref: { revision: orgLineage?.revision ?? 0, hash: (orgLineage?.hash ?? "").slice(0, 12) } };
+      } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
+        status = "PROFILE_INCOMPLETE"; origin = { label: "Perfil institucional de Licitações" };
+        profilePending.push({ name: v.name, description: descriptor.description, reason: "política do órgão ainda não registrada" }); m.PROF_PEND++;
+      } else { status = "OPTIONAL"; m.OH++; }
+    } else if (!hasValue && reuse.values.get(v.name)?.kind === "ORG_DEFAULT") {
+      // Padrão institucional EXPLÍCITO (criado por ação humana): aplicado, com origem e revisão; alterável neste processo.
+      const ru = reuse.values.get(v.name)!;
+      status = "ORG_DEFAULT"; displayValue = ru.value; origin = { label: "Padrão institucional do órgão", ref: ru.origin.ref }; canOverrideDefault = true; m.DEFS++;
     } else if (hasValue && !isEmpty(stored)) {
       displayValue = stored;
       if (c.scope === "ORG") {
@@ -362,18 +455,21 @@ export async function getEditalPreparationState(
       status = "PENDING"; m.MAN++;
     } else { status = "OPTIONAL"; m.OH++; }
     if (shadowedLegacy) m.LS++;
+    // Padrão institucional incompatível com o catálogo atual NÃO é aplicado; o motivo fica visível (a decisão segue pendente).
+    if (!fieldReason) { const pbAny = reuse.problems.get(v.name); if (pbAny && pbAny.code === "DEFAULT_INCOMPATIBLE") fieldReason = `Padrão institucional não aplicado: ${pbAny.reason}`; }
 
     // Denominador do resumo: aplicáveis (não ocultos) que são obrigatórios/condicionais ativos ou já têm valor.
-    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "AWAITING", "CANONICAL_UNRESOLVED"] as FieldStatus[]).includes(status);
-    if (status === "CANONICAL_UNRESOLVED") { bump(group, "total"); bump(group, "blocked"); }
+    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "AWAITING", "CANONICAL_UNRESOLVED", "PENDING_TR", "PROFILE_INCOMPLETE"] as FieldStatus[]).includes(status);
+    if (status === "CANONICAL_UNRESOLVED" || status === "PENDING_TR" || status === "PROFILE_INCOMPLETE") { bump(group, "total"); bump(group, "blocked"); }
     if (applicable) {
       bump(group, "total");
       if (status === "PENDING") bump(group, "pending");
-      else { bump(group, "resolved"); if (status === "AUTO" || status === "ORG_REUSED") bump(group, "reused"); }
+      else { bump(group, "resolved"); if (status === "AUTO" || status === "ORG_REUSED" || status === "UPSTREAM" || status === "ORG_DEFAULT") bump(group, "reused"); }
     }
 
     const field: PreparationField = {
-      ...descriptor, hasValue, ...(hasValue ? { currentValue: stored } : {}), class: c.class, rule: c.rule, status, editable,
+      ...descriptor, hasValue, ...(hasValue ? { currentValue: stored } : {}), class: c.class, rule: c.rule, authority: c.authority, entry: c.entry, status, editable,
+      ...(fieldReason ? { reason: fieldReason } : {}), ...(canOverrideDefault ? { canOverrideDefault: true } : {}), ...(isDefaultEligible(v.name) ? { defaultEligible: true } : {}),
       ...(displayValue !== undefined ? { displayValue } : {}), ...(origin ? { origin } : {}), ...(shadowedLegacy ? { shadowedLegacy: true } : {}),
     };
     if (!GOVERNABLE.has(v.source) || v.type === "document_ref") continue;
@@ -402,17 +498,19 @@ export async function getEditalPreparationState(
     return { id, title: GROUP_TITLE[id], total: a.total, resolved: a.resolved, reused: a.reused, pending: a.pending, blockedCanonical: a.blocked };
   });
   const pendingDecisions = groups.reduce((n, g) => n + g.pending, 0);
-  const reusedAutomatically = m.AUTO + m.ORG + m.TRP;
+  const reusedAutomatically = m.AUTO + m.ORG + m.TRP + m.UTR + m.DEFS;
 
   return {
     status: "READY_FOR_PREPARATION", revisionId: revision.id, catalogVersion: catalog.version,
     revisions: { process: processRec?.revision ?? 0, organization: orgRec?.revision ?? 0, budget: budget?.revision ?? 0 },
     budgetDisclosure: disclosure, participation: part, participationPending, trPin: trPinState,
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
+    upstream: { trDigest: reuse.trDigest, trPending, profilePending },
     summary: { groups, reusedAutomatically, pendingDecisions },
     metrics: {
       TOTAL_TEMPLATE_FIELDS: catalog.vars.length, AUTO_RESOLVED: m.AUTO, ORG_REUSED: m.ORG, TR_PROJECTED: m.TRP, DECIDED: m.DEC,
       CONDITIONAL_HIDDEN: m.CH, POST_AWARD_HIDDEN: m.PH, OPTIONAL_HIDDEN: m.OH, MANUAL_DECISIONS_VISIBLE: m.MAN, LEGACY_SHADOWED: m.LS, BY_CLASS: byClass,
+      UPSTREAM_TR_REUSED: m.UTR, TR_PENDING: m.TRP_PEND, PROFILE_INCOMPLETE: m.PROF_PEND, ORG_ROLES_REUSED: m.ROLES, ORG_POLICIES_REUSED: m.POLS, ORG_DEFAULTS_APPLIED: m.DEFS, BY_AUTHORITY: byAuthority,
     },
   };
 }

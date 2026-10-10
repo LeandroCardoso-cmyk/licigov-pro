@@ -41,7 +41,12 @@ export type ScalarPath =
 
 export type ItemFieldName = "description" | "unit" | "plannedQuantity";
 export type ItemPath = `items.${string}.${ItemFieldName}`;
-export type ContextPath = ScalarPath | ItemPath;
+/**
+ * CONTEXT_REUSE 2.0 — PARÂMETROS ESTRUTURADOS DO TR: `tr.param.<nome da variável do catálogo>`. O valor é o JSON canônico do valor
+ * TIPADO (duração, booleano, texto…) normalizado pelo catálogo; ver `trStructuredParams.ts`. Mesmo ledger, mesma proveniência.
+ */
+export type TrParamPath = `tr.param.${string}`;
+export type ContextPath = ScalarPath | ItemPath | TrParamPath;
 
 /**
  * POLÍTICA DE AUTORIDADE — quais fontes podem AFIRMAR cada fato. Explícita, testável e documentada.
@@ -56,6 +61,9 @@ export type ContextPath = ScalarPath | ItemPath;
  *    permitida — não existe escritor governado dele para esses caminhos (autoridade morta/ambígua); o Item Inteligente é
  *    evidência/candidato (vínculo de fonte do Item da contratação), nunca afirmação de fato no ledger.
  */
+/** Parâmetro estruturado do TR: SOMENTE o fluxo do TR (fonte `tr`, ator humano) afirma; IA/outras fontes nunca. */
+const TR_PARAM_SOURCES: readonly ContextSourceType[] = ["tr"];
+
 const NEED_SOURCES: readonly ContextSourceType[] = ["process", "user", "dfd", "etp", "tr", "approved_document"];
 const HUMAN_NEED_SOURCES: readonly ContextSourceType[] = ["user", "dfd", "etp", "tr", "approved_document"];
 export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceType[]>> = {
@@ -71,9 +79,15 @@ export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceTyp
   "items.*.description":     ["user", "dfd", "etp", "tr", "approved_document"],
   "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document"],
   "items.*.plannedQuantity": ["user", "dfd", "etp", "tr", "approved_document"],
+  "tr.param.*":              TR_PARAM_SOURCES,
 };
 
+export function isTrParamPath(path: string): path is TrParamPath {
+  return path.startsWith("tr.param.") && path.length > "tr.param.".length;
+}
+
 function policyKey(path: string): string {
+  if (isTrParamPath(path)) return "tr.param.*";
   const m = /^items\.[^.]+\.(description|unit|plannedQuantity)$/.exec(path);
   return m ? `items.*.${m[1]}` : path;
 }
@@ -470,7 +484,8 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
     unknownFields: fields.filter((x) => x.value === null && x.status !== "conflict").length,
     conflictCount: fields.filter((x) => x.status === "conflict").length,
   };
-  const version = input.assertions.reduce((m, a) => Math.max(m, a.id), 0);
+  // Parâmetros do TR não fazem parte do digest/versão do contexto de DFD (têm digest próprio em trStructuredParams).
+  const version = input.assertions.reduce((m, a) => (isTrParamPath(a.path) ? m : Math.max(m, a.id)), 0);
   const digest = canonicalDigest(digestSnapshot(ctx, priceContext));
   return { ...ctx, priceContext, stats, version, digest };
 }

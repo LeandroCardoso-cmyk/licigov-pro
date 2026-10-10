@@ -88,10 +88,13 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 export type EditalWorkspaceProps = {
   processId?: string;
+  /** Abre o TR do processo (onde os Parâmetros estruturados são confirmados). */
+  onOpenTr?: () => void;
 };
 
 export default function EditalWorkspace({
   processId = "",
+  onOpenTr,
 }: EditalWorkspaceProps) {
   const [object, setObject] = useState("");
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
@@ -410,7 +413,7 @@ export default function EditalWorkspace({
 
       {bound && (
         <div className="mt-6">
-          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
         </div>
       )}
 
