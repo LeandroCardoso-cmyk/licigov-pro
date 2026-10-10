@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "be7b4aef790927bd77de43d6f3cc5b30",
+    "mtime": 1791654856.9261506,
+    "ast_hash": "878230a47e9cff273e8ca43992638f18",
     "semantic_hash": ""
   },
   "server/services/documentRenderService.ts": {
@@ -10170,8 +10170,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1791602711.8722234,
-    "ast_hash": "ba9e2b9d610199e66ed649941d42cff4",
+    "mtime": 1791654839.821014,
+    "ast_hash": "5855b2c27a6fb3d07d4c7b4bfcf1a45d",
     "semantic_hash": ""
   },
   "server/services/productionMonitoringService.ts": {
@@ -14515,18 +14515,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/contextReuseHelpers.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "cc7499105f8854616105b253e451de68",
+    "mtime": 1791654856.926655,
+    "ast_hash": "4f18f92c97d1b2aa7a2916cfe11b8ce6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "3384668f0d63c045ee459fae8ce50052",
+    "mtime": 1791654856.9292362,
+    "ast_hash": "c756dc94ff0d0f2d86349888ea68a609",
     "semantic_hash": ""
   },
   "server/__tests__/unit/context-reuse-authority-matrix.test.ts": {
-    "mtime": 1791603005.092741,
-    "ast_hash": "4ef2ca8ca8927b3b01706dd4085705c3",
+    "mtime": 1791654856.929899,
+    "ast_hash": "1f3a7794520d5a44ac9859d5ff0fb463",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalAuthorityMatrix.ts": {
@@ -14535,8 +14535,8 @@
     "semantic_hash": ""
   },
   "server/domain/trStructuredParams.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "f868ed818982084d2aee51bbda0b21fd",
+    "mtime": 1791654839.8163552,
+    "ast_hash": "c1d90138f872686fa34f88d1de9b9882",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalCatalogLoader.ts": {
@@ -14545,8 +14545,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalContextReuse.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "14b1f32edb82fe69fc67270bc5e10139",
+    "mtime": 1791654839.8218927,
+    "ast_hash": "a2e6b8196faf66a76fa4abd453d2c758",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/licitacoesProfileService.ts": {
@@ -14560,8 +14560,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "810f4e8727b22395f3573707a47f2cab",
+    "mtime": 1791654911.4463644,
+    "ast_hash": "16142695fe3dc1cd407c5e4bdb496bd5",
     "semantic_hash": ""
   }
 }

@@ -666,7 +666,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const p1 = await addProcess(base, "r6a", 2);
     await fillTrParams(harnessOf(p1), {}, TR_SKIP);
     const digestA = await stampTrLineage(conn, harnessOf(p1), p1.tr.documentId);
-    expect(digestA).toMatch(/^[a-f0-9]{16}$/);
+    expect(digestA).toMatch(/^[a-f0-9]{64}$/);
     const s1 = await getState(p1);
     expect(s1.trPin.state).toBe("VALID");
     expect(s1.metrics.UPSTREAM_TR_REUSED).toBeGreaterThan(15);
@@ -692,7 +692,8 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
 
     // ── T3: TR v2 correspondente a B ⇒ READY; o Edital usa B; M1 liga TR v2 e o digest B ─────────────────────────────────────────
     const p1v2 = await emit(p1, 2);
-    const digestB = (await trState(p1)).digest.slice(0, 16);
+    const digestB = (await trState(p1)).digest;
+    expect(digestB).toMatch(/^[a-f0-9]{64}$/);
     expect(digestB).not.toBe(digestA);
     const s3 = await getState(p1v2);
     expect(s3.trPin.state).toBe("VALID");
@@ -728,6 +729,21 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     expect(rv.status).toBe("BLOCKED");
     expect(JSON.stringify(rv.issues)).toContain("SOURCE_CHANGED");
 
+    // ── digest16 NUNCA é autoridade: metadata com prefixo de 16 hex (ou malformado) falha fechado ─────────────────────────────────
+    const short = await addProcess(base, "r6short", 3);
+    await fillTrParams(harnessOf(short), {}, TR_SKIP);
+    const full = (await trState(short)).digest as string;
+    await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify({ ...TR_META, structuredParamsDigest: full.slice(0, 16) }), short.tr.documentId, short.org]);
+    expect((await getState(short)).trPin).toEqual({ state: "INVALID", code: "TR_STRUCTURED_LINEAGE_UNAVAILABLE" });
+    const pfShort: any = await preflight(short);
+    expect(pfShort.status).toBe("BLOCKED");
+    expect(JSON.stringify(pfShort.issues)).toContain("TR_STRUCTURED_LINEAGE_UNAVAILABLE");
+    await expect(gen(short)).rejects.toThrow(/TR_STRUCTURED_LINEAGE_UNAVAILABLE/);
+    await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify({ ...TR_META, structuredParamsDigest: full.toUpperCase() }), short.tr.documentId, short.org]);
+    expect((await getState(short)).trPin).toMatchObject({ state: "INVALID", code: "TR_STRUCTURED_LINEAGE_UNAVAILABLE" });
+    await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify({ ...TR_META, structuredParamsDigest: full }), short.tr.documentId, short.org]);
+    expect((await getState(short)).trPin.state).toBe("VALID");                // o digest COMPLETO correspondente é aceito
+
     // ── T6: cross-tenant / cross-process continuam fail closed ──────────────────────────────────────────────────────────────────
     const other = await prepareOrg("r6x");
     const crossTenant: any = await proc(other.org).editalTemplatePreparation({ processId: other.w.processId, ...WS, officialPins: pin(p1v2.tr) });
@@ -750,7 +766,8 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
       organizationId: a.org, processId: a.w.processId, kind: "tr", object: TR_META.object, correlationId: "r7-gen", idempotencyKey: key("r7g"), actorUserId: 101,
       invoke: async () => buildMockProviderAuthoring("tr"), structuredParams: { block: structured.block, digest: structured.digest },
     });
-    expect(g.document.sources).toContain(`trparams:${structured.digest.slice(0, 16)}`);
+    expect(structured.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(g.document.sources).toContain(`trparams:${structured.digest}`);   // marcador com o SHA-256 COMPLETO
     // antes da emissão: o TR v1 seed (sem lineage) NÃO serve de base para os parâmetros atuais
     expect((await getState(a)).trPin).toEqual({ state: "INVALID", code: "TR_STRUCTURED_LINEAGE_UNAVAILABLE" });
     const promoted: any = await proc(a.org, "manager", U_MANAGER).promoteOfficial({ processId: a.w.processId, kind: "tr", idempotencyKey: key("r7p"), expectedContentHash: draftContentHash(g.document.content), reason: "TR revisado e conferido." } as any);
@@ -759,7 +776,8 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const emitted = candidates.reduce((m, c) => (c.version > m.version ? c : m));
     expect(emitted.version).toBeGreaterThan(1);
     const meta = JSON.parse((await rows("SELECT metadata m FROM official_documents WHERE id = ? AND tenant_id = ?", [emitted.documentId, a.org]))[0].m);
-    expect(meta.structuredParamsDigest).toBe(structured.digest.slice(0, 16));
+    expect(meta.structuredParamsDigest).toBe(structured.digest);
+    expect(meta.structuredParamsDigest).toHaveLength(64);
     const pinned: P = { ...a, tr: { documentId: emitted.documentId, version: emitted.version, contentHash: emitted.contentHash } };
     const st = await getState(pinned);
     expect(st.trPin.state).toBe("VALID");

@@ -15,7 +15,7 @@ import { conditionVariables } from "../../domain/institutionalTemplates/conditio
 import {
   AUTHORITY_POLICY, factValueHash, isSourceAllowed, resolveCanonicalContext, type FactAssertion,
 } from "../../domain/canonicalProcurementContext";
-import { decodeTrParamValue, encodeTrParamValue, resolveTrParams, trParamPath, trParamsDigest, variableOfTrParamPath } from "../../domain/trStructuredParams";
+import { TR_PARAMS_DIGEST_RE, shortDigest, decodeTrParamValue, encodeTrParamValue, resolveTrParams, trParamPath, trParamsDigest, variableOfTrParamPath } from "../../domain/trStructuredParams";
 import { buildContextReuse, profileFingerprint, trParamDefs, trParamProposals } from "../../services/institutionalTemplates/editalContextReuse";
 import type { GovernedRecord } from "../../services/institutionalTemplates/governedFieldsStore";
 
@@ -202,6 +202,12 @@ describe("Parâmetros estruturados do TR (procurement_context_facts, sem migrati
     // mesmas entradas ⇒ mesmo digest, independente da ordem de leitura; valor diferente ⇒ digest diferente
     expect(trParamsDigest(resolveTrParams(defs, [a, b]))).toBe(trParamsDigest(resolveTrParams([...defs].reverse(), [a, b])));
     expect(trParamsDigest(r1)).not.toBe(trParamsDigest(r2));
+    // autoridade = SHA-256 COMPLETO (64 hex); o curto existe só para exibição
+    expect(trParamsDigest(r1)).toMatch(TR_PARAMS_DIGEST_RE);
+    expect(trParamsDigest(r1)).toHaveLength(64);
+    expect(shortDigest(trParamsDigest(r1))).toHaveLength(16);
+    expect(TR_PARAMS_DIGEST_RE.test(shortDigest(trParamsDigest(r1)))).toBe(false);
+    expect(TR_PARAMS_DIGEST_RE.test(trParamsDigest(r1).toUpperCase())).toBe(false);
     // fonte não autorizada é ignorada na resolução (defesa em profundidade)
     expect(resolveTrParams(defs, [fact(1, prazo.name, enc(prazo, { amount: 1, unit: "day" }), { sourceType: "ai_draft" })]).get(prazo.name)!.status).toBe("UNSET");
   });

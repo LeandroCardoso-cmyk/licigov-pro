@@ -65,8 +65,10 @@ export function resolveTrParams(defs: readonly VariableDef2[], assertions: reado
   return out;
 }
 
-/** Tamanho do marcador `trparams:<digest>` gravado no TR (prefixo do digest completo). */
-export const TR_PARAMS_MARKER_LENGTH = 16;
+/** O vínculo AUTORITATIVO usa o SHA-256 COMPLETO (64 hex): `trparams:<64 hex>` no rascunho e `metadata.structuredParamsDigest` no TR emitido. */
+export const TR_PARAMS_DIGEST_RE = /^[a-f0-9]{64}$/;
+/** Forma curta SOMENTE para exibição/log; nunca para comparação, persistência autoritativa, replay, preflight ou emissão. */
+export const shortDigest = (digest: string): string => digest.slice(0, 16);
 
 /**
  * Digest do SNAPSHOT LÓGICO dos parâmetros VIGENTES (nome + estado + hash do VALOR). Independe de quem/quando confirmou e de ordem de

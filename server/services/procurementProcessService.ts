@@ -1007,7 +1007,7 @@ export async function generateDocument(params: {
           `grounding:${authoring.groundingState}`,
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
-          ...(params.kind === "tr" && params.structuredParams ? [`trparams:${params.structuredParams.digest.slice(0, 16)}`] : []),
+          ...(params.kind === "tr" && params.structuredParams ? [`trparams:${params.structuredParams.digest}`] : []),
         ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,

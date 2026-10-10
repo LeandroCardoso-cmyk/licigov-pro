@@ -116,7 +116,7 @@ export async function stampTrLineage(conn: mysql.Connection, h: ReuseHarness, do
   const deps = { ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() };
   const block = await renderTrStructuredBlock(deps, h.org, h.processId, h.ws as never);
   if (!block) return null;
-  const digest = block.digest.slice(0, 16);
+  const digest = block.digest;   // SHA-256 COMPLETO (64 hex)
   const [rows] = await conn.execute("SELECT metadata FROM official_documents WHERE id = ? AND tenant_id = ?", [documentId, h.org]);
   const current = (rows as Array<{ metadata: string | null }>)[0]?.metadata;
   const meta = current ? (typeof current === "string" ? JSON.parse(current) : current) : {};

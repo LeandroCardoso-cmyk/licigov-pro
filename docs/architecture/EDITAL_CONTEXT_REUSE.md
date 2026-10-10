@@ -66,9 +66,10 @@ Camada estruturada **do mesmo fluxo do TR**. Persistência: `procurement_context
 compor "TR v1 + parâmetros posteriores à v1".
 
 - **Digest do snapshot** (`trParamsDigest`): nome + estado + hash do **valor** de cada parâmetro vigente (independe de quem/quando
-  confirmou: voltar ao mesmo valor volta ao mesmo digest). Mesmo digest do marcador `trparams:<16 hex>` que o rascunho do TR já carrega.
+  confirmou: voltar ao mesmo valor volta ao mesmo digest). Mesmo digest do marcador `trparams:<64 hex>` que o rascunho do TR carrega: o vínculo autoritativo usa o **SHA-256 completo**, nunca um prefixo.
 - **Emissão:** a promoção oficial grava `metadata.structuredParamsDigest` no documento emitido, copiado do marcador do rascunho
-  (sem marcador ⇒ sem digest; **nunca inventado**). Sem tabela nova: o lineage existente do documento basta (`MIGRATION = NONE`).
+  (sem marcador ⇒ sem digest; **nunca inventado**; marcador curto/malformado nunca é copiado). Sem tabela nova: o lineage existente do documento basta (`MIGRATION = NONE`).
+- **Hash curto só para exibição/log** (`shortDigest`, 16 hex). Comparação de autoridade, persistência, replay, preflight e emissão usam os 64 hex; um `structuredParamsDigest` de 16 hex **não** é aceito (fail closed, `TR_STRUCTURED_LINEAGE_UNAVAILABLE`), sem fallback.
 - **Geração / preflight / preparação** (`checkTrStructuredLineage`): compara o digest do TR pinado com o do estado **atual**:
   - TR sem lineage + parâmetros confirmados ⇒ `TR_STRUCTURED_LINEAGE_UNAVAILABLE` (TR anterior à feature, importado ou gerado antes dos parâmetros);
   - digest diferente (parâmetros alterados ou limpos depois da versão) ⇒ `TR_STRUCTURED_SOURCE_CHANGED`;

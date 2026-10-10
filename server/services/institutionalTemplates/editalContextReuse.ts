@@ -16,7 +16,7 @@ import {
   ROLE_LABEL, authorityEntryOf, isDefaultEligible, resolveRoleVariable, type RoleKey,
 } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { GovernedRecord } from "./governedFieldsStore";
-import { TR_PARAMS_MARKER_LENGTH, resolveTrParams, trParamsDigest, type ResolvedTrParam } from "../../domain/trStructuredParams";
+import { TR_PARAMS_DIGEST_RE, resolveTrParams, trParamsDigest, type ResolvedTrParam } from "../../domain/trStructuredParams";
 import { validateDefaults } from "../../domain/institutionalTemplates/governedSources";
 import { templateHash } from "../../domain/institutionalTemplates/semanticHash";
 import type { VariableDef2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -158,8 +158,8 @@ export const TR_STRUCTURED_LINEAGE_UNAVAILABLE = "TR_STRUCTURED_LINEAGE_UNAVAILA
 export const TR_STRUCTURED_SOURCE_CHANGED = "TR_STRUCTURED_SOURCE_CHANGED";
 export const TR_STRUCTURED_LINEAGE_MESSAGE = "O Termo de Referência oficial selecionado não corresponde aos parâmetros estruturados atuais. Revise/emita a versão correspondente do TR antes de prosseguir.";
 
-/** Prefixo do digest do snapshot lógico ATUAL (o mesmo formato do marcador `trparams:` do TR). */
-export const currentTrDigest = (reuse: Pick<ContextReuse, "trDigest">): string => reuse.trDigest.slice(0, TR_PARAMS_MARKER_LENGTH);
+/** Digest COMPLETO (SHA-256, 64 hex) do snapshot lógico ATUAL — o mesmo do marcador `trparams:` do TR. */
+export const currentTrDigest = (reuse: Pick<ContextReuse, "trDigest">): string => reuse.trDigest;
 export const hasStructuredTrParams = (reuse: Pick<ContextReuse, "trParams">): boolean => [...reuse.trParams.values()].some((p) => p.status === "SET");
 
 /**
@@ -173,7 +173,7 @@ export const hasStructuredTrParams = (reuse: Pick<ContextReuse, "trParams">): bo
 export async function checkTrStructuredLineage(organizationId: number, trPin: { documentId: string }, reuse: Pick<ContextReuse, "trDigest" | "trParams">): Promise<typeof TR_STRUCTURED_LINEAGE_UNAVAILABLE | typeof TR_STRUCTURED_SOURCE_CHANGED | null> {
   const doc = await getOfficialDocument(trPin.documentId, organizationId);
   const raw = doc?.metadata?.["structuredParamsDigest"];
-  const expected = typeof raw === "string" && /^[a-f0-9]{16}$/.test(raw) ? raw : null;
+  const expected = typeof raw === "string" && TR_PARAMS_DIGEST_RE.test(raw) ? raw : null;
   const has = hasStructuredTrParams(reuse);
   if (!expected && !has) return null;
   if (!expected) return TR_STRUCTURED_LINEAGE_UNAVAILABLE;
