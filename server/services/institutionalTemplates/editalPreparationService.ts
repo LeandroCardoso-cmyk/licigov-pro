@@ -29,7 +29,7 @@ import { snapshotInstitutionalIdentity } from "../institutionalIdentityService";
 import { PROJECTION_BY_VARIABLE, isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
 import { resolveEditalTemplate, type BridgeDeps, type EditalTemplateResolution } from "./editalBridgeService";
 import { resolveEditalProjections, type ProjectedValue } from "./editalProjections";
-import { loadContextReuse, type ContextReuse } from "./editalContextReuse";
+import { TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, loadContextReuse, type ContextReuse } from "./editalContextReuse";
 import { ROLE_LABEL, isDefaultEligible, type AuthorityClass } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
@@ -268,7 +268,18 @@ export async function getEditalPreparationState(
   ]);
   const disclosure: "publico" | "sigiloso" | null = budget?.outcome === "publico" || budget?.outcome === "sigiloso" ? budget.outcome : null;
   // Reuso de contexto (parâmetros do TR, papéis e padrões do Perfil de Licitações): MESMA resolução da composição.
-  const reuse: ContextReuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10) });
+  let reuse: ContextReuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10) });
+  // INVARIANTE: TR oficial exato + parâmetros estruturados do MESMO snapshot. Divergente ⇒ os parâmetros atuais NÃO são reaproveitados
+  // (o Edital não mistura TR v1 com parâmetros posteriores) e o preflight bloqueia; a pessoa revisa/emite a versão correspondente do TR.
+  let trLineageBad = false;
+  if (trPinState.state === "VALID" && official?.TR) {
+    const bad = await checkTrStructuredLineage(organizationId, official.TR, reuse);
+    if (bad) {
+      trLineageBad = true;
+      trPinState = { state: "INVALID", code: bad };
+      reuse = { ...reuse, values: new Map([...reuse.values].filter(([, v]) => v.kind !== "TR_PARAM")) };
+    }
+  }
 
   // ── valores conhecidos por NOME (base da avaliação das condições): decisão registrada + canônico + projeção ──────────
   const known = new Map<string, unknown>();
@@ -424,8 +435,8 @@ export async function getEditalPreparationState(
         status = "DECIDED"; displayValue = stored; m.DEC++;
         origin = { label: "Decisão registrada anteriormente (confirme em Parâmetros estruturados do TR)", ref: { revision: processRec?.revision ?? 0 } };
       } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
-        status = "PENDING_TR"; origin = { label: "Informe em Parâmetros estruturados do TR" }; m.TRP_PEND++;
-        trPending.push({ name: v.name, description: descriptor.description, ...(pb?.reason ? { reason: pb.reason } : {}) });
+        status = "PENDING_TR"; origin = { label: trLineageBad ? TR_STRUCTURED_LINEAGE_MESSAGE : "Informe em Parâmetros estruturados do TR" }; m.TRP_PEND++;
+        trPending.push({ name: v.name, description: descriptor.description, ...(trLineageBad ? { reason: TR_STRUCTURED_LINEAGE_MESSAGE } : pb?.reason ? { reason: pb.reason } : {}) });
         if (pb?.reason) fieldReason = pb.reason;
       } else { status = "OPTIONAL"; m.OH++; origin = { label: "Opcional — informe nos Parâmetros estruturados do TR, se aplicável" }; }
     } else if (c.class === "ORG_PROFILE" || (c.class === "CONDITIONAL" && c.scope === "ORG")) {

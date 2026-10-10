@@ -65,10 +65,16 @@ export function resolveTrParams(defs: readonly VariableDef2[], assertions: reado
   return out;
 }
 
-/** Digest dos parâmetros VIGENTES (valor + origem): muda ⇔ algum parâmetro estruturado do TR muda. */
+/** Tamanho do marcador `trparams:<digest>` gravado no TR (prefixo do digest completo). */
+export const TR_PARAMS_MARKER_LENGTH = 16;
+
+/**
+ * Digest do SNAPSHOT LÓGICO dos parâmetros VIGENTES (nome + estado + hash do VALOR). Independe de quem/quando confirmou e de ordem de
+ * leitura: voltar ao mesmo valor volta ao mesmo digest. É o MESMO que o marcador `trparams:` do TR carrega.
+ */
 export function trParamsDigest(params: ReadonlyMap<string, ResolvedTrParam>): string {
   const rows = [...params.values()].filter((p) => p.status !== "UNSET")
-    .map((p) => `${p.name}=${p.status}:${p.field.valueHash ?? ""}:${p.field.source ? `${p.field.source.type}:${p.field.source.id}:${p.field.source.version}` : ""}`)
+    .map((p) => `${p.name}=${p.status}:${p.field.valueHash ?? ""}`)
     .sort();
   return createHash("sha256").update(`${TR_PARAMS_VERSION}\n${rows.join("\n")}`).digest("hex");
 }

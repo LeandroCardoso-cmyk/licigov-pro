@@ -53,7 +53,7 @@ import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/inst
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { SYNTHETIC_ROLES, completeProfile, fillTrParams, scenarioValueByName, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { SYNTHETIC_ROLES, completeProfile, fillTrParams, scenarioValueByName, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { recordContextAssertions } from "../../services/canonicalContextService";
 import { generateDocument } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
@@ -156,6 +156,13 @@ const stale = (e: unknown) => isStaleSave((e as any)?.data?.code, e instanceof E
 
 
 const harnessOf = (p: P): ReuseHarness => ({ org: p.org, proc: () => proc(p.org), tpl: () => tpl(p.org), ws: WS, processId: p.w.processId, key });
+const TR_SKIP = ["processo.objetoCompleto"];
+/** Confirma os parâmetros do TR e "emite" o TR com ESTE snapshot (a promoção real grava o digest do marcador `trparams:`). */
+async function fillTrStamped(p: P): Promise<{ typed: string[] }> {
+  const r = await fillTrParams(harnessOf(p), {}, TR_SKIP);
+  await stampTrLineage(conn, harnessOf(p), p.tr.documentId);
+  return r;
+}
 const profileState = async (p: P): Promise<any> => proc(p.org).licitacoesProfile({ processId: p.w.processId, ...WS });
 const trState = async (p: P): Promise<any> => proc(p.org).trStructuredParams({ processId: p.w.processId, ...WS });
 const visibleDecisions = async (p: P) => livePendingItems(await getState(p), {});
@@ -279,7 +286,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const trBefore = await trState(a);
     expect(trBefore.status).toBe("READY");
     expect(trBefore.summary.pending).toBeGreaterThan(20);
-    const trFill = await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);   // o TR oficial emitido traz o objeto estruturado
+    const trFill = await fillTrStamped(a);   // o TR oficial emitido traz o objeto estruturado
     const trAfter = await trState(a);
     expect(trAfter.summary.pending).toBe(1);   // só o objeto completo (vem do TR oficial exato)
     const prepNoTr = await getState(a);
@@ -337,7 +344,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const factB = (await rows("SELECT source_type st, source_id sid, source_version sv, status, actor_user_id a FROM procurement_context_facts WHERE organization_id = ? AND process_id = ? AND path = 'tr.param.contratacao.formaPagamento'", [b.org, b.w.processId]))[0];
     expect(factB).toMatchObject({ st: "tr", sid: "tr-params", status: "confirmed" });
     expect(factB.sv).toMatch(/;def:\d+$/);       // proveniência: veio de PADRÃO institucional (revisão), confirmado por pessoa
-    const trFillB = await fillTrParams(harnessOf(b), {}, ["processo.objetoCompleto"]);
+    const trFillB = await fillTrStamped(b);
     expect(trFillB.typed.length).toBeLessThan(trFill.typed.length);
     const typedB = await fillTrueDecisions(b);
     expect(typedB.length).toBeLessThan(typedA.length);
@@ -380,7 +387,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const trPending0 = (await trState(a)).summary.pending;
     const decisionsVisible0 = (await visibleDecisions(a)).length;
     const prof = await completeProfile(harnessOf(a));
-    const trFill = await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);
+    const trFill = await fillTrStamped(a);
     const decisions = await fillTrueDecisions(a);
     expect((await preflight(a)).status).toBe("READY_FOR_COMPOSITION");
     const eligible = decisions.filter((n) => isDefaultEligible(n));
@@ -394,7 +401,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const trB0 = await trState(b);
     const visibleB = await visibleDecisions(b);
     const confirmed = await confirmTrProposals(b);
-    const trFillB = await fillTrParams(harnessOf(b), {}, ["processo.objetoCompleto"]);
+    const trFillB = await fillTrStamped(b);
     const decisionsB = await fillTrueDecisions(b);
     expect((await preflight(b)).status).toBe("READY_FOR_COMPOSITION");
 
@@ -434,7 +441,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const a = await prepareOrg("r3a");
     const d = await prepareOrg("r3d");           // outro tenant
     await completeProfile(harnessOf(a));
-    await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);
+    await fillTrStamped(a);
     await fillTrueDecisions(a);
     // tenant D não enxerga o perfil de A
     const profD = await profileState(d);
@@ -474,7 +481,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
   it("R3b — papel VENCIDO não é usado em silêncio; padrão incompatível/inelegível não é aplicado; IA e outras fontes não afirmam parâmetros do TR", async () => {
     const a = await prepareOrg("r3e");
     await completeProfile(harnessOf(a));
-    await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);
+    await fillTrStamped(a);
     await fillTrueDecisions(a);
     expect((await preflight(a)).status).toBe("READY_FOR_COMPOSITION");
 
@@ -545,7 +552,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
   it("R4 — mudança do TR estruturado / do contexto (DFD) / dos itens após o M1 ⇒ SOURCE_CHANGED; replay convergente; emitido imutável", async () => {
     const a = await prepareOrg("r4");
     await completeProfile(harnessOf(a));
-    await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);
+    await fillTrStamped(a);
     await fillTrueDecisions(a);
     const first = await gen(a);
     expect(first.replayed).toBe(false);
@@ -598,7 +605,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     const plain = await generateDocument({ organizationId: a.org, processId: a.w.processId, kind: "tr", object: TR_META.object, correlationId: "r5-plain", idempotencyKey: key("r5p"), actorUserId: 101, invoke: async () => buildMockProviderAuthoring("tr") });
     expect(plain.document.content).not.toContain("PARÂMETROS ESTRUTURADOS DA CONTRATAÇÃO");
 
-    await fillTrParams(harnessOf(a), {}, ["processo.objetoCompleto"]);
+    await fillTrStamped(a);
     const structured = await renderTrStructuredBlock(deps, a.org, a.w.processId, WS);
     expect(structured).not.toBeNull();
     expect(structured!.count).toBeGreaterThan(15);
@@ -628,6 +635,143 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     expect(gen2.document.content).toContain("Almoxarifado Central — Rua Sintética, 10");
     expect(gen2.document.content).not.toContain(String(scenarioValueByName("contratacao.localEntrega")));
   }, 600_000);
+
+  it("R6 — os parâmetros estruturados pertencem ao snapshot do TR oficial EXATO: v1+A READY; v1+B BLOCKED (zero escrita); v2+B READY; v1 com v2 nunca usa B; TR legado sem lineage falha fechado", async () => {
+    const base = await prepareOrg("r6");
+    await completeProfile(harnessOf(base));
+    const localA = String(scenarioValueByName("contratacao.localEntrega"));
+    const localB = "Almoxarifado B — Avenida Sintética, 200";
+    const setLocal = (p: P, v: string) => proc(p.org).recordTrStructuredParams({ processId: p.w.processId, ...WS, values: { "contratacao.localEntrega": v } });
+    const emit = async (p: P, version: number): Promise<P> => {
+      const tr = await seedOfficialTr(conn, p.w, version, `TERMO DE REFERÊNCIA — v${version}`, TR_META);
+      await stampTrLineage(conn, harnessOf(p), tr.documentId);
+      return { ...p, tr };
+    };
+    const issuesOf = (pf: any) => JSON.stringify(pf.issues ?? []);
+
+    // ── T5: TR legado SEM lineage (nenhum marcador) + parâmetros estruturados atuais ⇒ fail closed; nunca associa o estado corrente ──
+    const legacyP = await addProcess(base, "r6legacy", 1);
+    await fillTrParams(harnessOf(legacyP), {}, TR_SKIP);              // NÃO "emitido" com snapshot
+    const sl = await getState(legacyP);
+    expect(sl.trPin).toEqual({ state: "INVALID", code: "TR_STRUCTURED_LINEAGE_UNAVAILABLE" });
+    expect(sl.metrics.UPSTREAM_TR_REUSED).toBe(0);                     // os parâmetros atuais NÃO são atribuídos ao TR antigo
+    const pfl: any = await preflight(legacyP);
+    expect(pfl.status).toBe("BLOCKED");
+    expect(issuesOf(pfl)).toContain("TR_STRUCTURED_LINEAGE_UNAVAILABLE");
+    const zeroL = await writes(legacyP);
+    await expect(gen(legacyP)).rejects.toThrow(/TR_STRUCTURED_LINEAGE_UNAVAILABLE/);
+    expect(await writes(legacyP)).toEqual(zeroL);
+
+    // ── T1: TR v1 + digest A, parâmetros atuais = A ⇒ READY; o Edital usa A ──────────────────────────────────────────────────────
+    const p1 = await addProcess(base, "r6a", 2);
+    await fillTrParams(harnessOf(p1), {}, TR_SKIP);
+    const digestA = await stampTrLineage(conn, harnessOf(p1), p1.tr.documentId);
+    expect(digestA).toMatch(/^[a-f0-9]{16}$/);
+    const s1 = await getState(p1);
+    expect(s1.trPin.state).toBe("VALID");
+    expect(s1.metrics.UPSTREAM_TR_REUSED).toBeGreaterThan(15);
+    await fillTrueDecisions(p1);
+    expect((await preflight(p1)).status).toBe("READY_FOR_COMPOSITION");
+    const srcA = await getTemplateCompositionPorts().canonical.resolveSources(p1.org, p1.w.processId, ["TR"], BLL.catalog, { TR: (await getTemplateCompositionPorts().canonical.pinOfficialDocuments(p1.org, p1.w.processId, ["TR"], pin(p1.tr))).TR! }, { pinned: true });
+    expect((srcA.TR!.data as any).localEntrega).toBe(localA);
+    expect((srcA.TR!.data as any).parametrosEstruturadosDigest).toBe(digestA);
+
+    // ── T2 + pré-M1: parâmetros mudam A → B ANTES do M1 e o usuário continua pinando o TR v1 ⇒ BLOCKED, zero draft, zero M1 ──────────
+    await setLocal(p1, localB);
+    const s2 = await getState(p1);
+    expect(s2.trPin).toEqual({ state: "INVALID", code: "TR_STRUCTURED_SOURCE_CHANGED" });
+    expect(s2.metrics.UPSTREAM_TR_REUSED).toBe(0);
+    expect(JSON.stringify(s2)).not.toContain(localB);                  // o estado novo não é usado em silêncio
+    const pf2: any = await preflight(p1);
+    expect(pf2.status).toBe("BLOCKED");
+    expect(issuesOf(pf2)).toContain("TR_STRUCTURED_SOURCE_CHANGED");
+    const zero2 = await writes(p1);
+    expect(zero2).toEqual({ drafts: 0, m1: 0, official: 0 });
+    await expect(gen(p1)).rejects.toThrow(/TR_STRUCTURED_SOURCE_CHANGED/);
+    expect(await writes(p1)).toEqual(zero2);
+
+    // ── T3: TR v2 correspondente a B ⇒ READY; o Edital usa B; M1 liga TR v2 e o digest B ─────────────────────────────────────────
+    const p1v2 = await emit(p1, 2);
+    const digestB = (await trState(p1)).digest.slice(0, 16);
+    expect(digestB).not.toBe(digestA);
+    const s3 = await getState(p1v2);
+    expect(s3.trPin.state).toBe("VALID");
+    expect((await preflight(p1v2)).status).toBe("READY_FOR_COMPOSITION");
+    const g = await gen(p1v2);
+    expect(g.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    expect((await draftText(p1v2))!).toContain(localB);
+    expect((await draftText(p1v2))!).not.toContain(localA);
+    // lineage do M1 sem "rerodar raciocínio": TR (id, versão, hash) no manifest → metadata do TR → digest dos parâmetros
+    const ref = (await rows("SELECT document_id documentId, version, content_hash contentHash FROM document_composition_references WHERE manifest_id = ? AND document_id = ?", [g.generationManifestId, p1v2.tr.documentId]))[0];
+    expect(ref).toMatchObject({ documentId: p1v2.tr.documentId, version: 2, contentHash: p1v2.tr.contentHash });
+    const m1sources = JSON.parse((await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [p1.org, g.generationManifestId]))[0].b).sources;
+    expect(m1sources.some((x: any) => x.key === "tr")).toBe(true);     // o digest da fonte TR (inclui o snapshot dos parâmetros) está no M1
+    const meta = JSON.parse((await rows("SELECT metadata m FROM official_documents WHERE id = ? AND tenant_id = ?", [ref.documentId, p1.org]))[0].m);
+    expect(meta.structuredParamsDigest).toBe(digestB);
+    // replay: mesmo input ⇒ mesmo M1
+    const again = await proc(p1.org).generateNotice({ processId: p1.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p1v2.tr), idempotencyKey: key("r6g2") } as any) as any;
+    expect(again.replayed).toBe(true);
+    expect(again.generationManifestId).toBe(g.generationManifestId);
+
+    // ── T4: pin v1 mesmo existindo v2 ⇒ política de stale existente; NUNCA B com v1 ──────────────────────────────────────────────
+    const s4 = await getState(p1);                                     // p1.tr = v1
+    expect(s4.trPin.state).toBe("INVALID");
+    expect((s4.trPin as any).code).toBe("OFFICIAL_PIN_STALE");
+    const before4 = await writes(p1);
+    expect((await preflight(p1) as any).status).toBe("BLOCKED");
+    await expect(gen(p1)).rejects.toThrow();
+    expect(await writes(p1)).toEqual(before4);
+
+    // ── pós-M1: depois do M1 (v2 + B), os parâmetros mudam para C ⇒ SOURCE_CHANGED ──────────────────────────────────────────────
+    await setLocal(p1, "Almoxarifado C");
+    const rv: any = (await proc(p1.org).editalTemplateReviewState({ processId: p1.w.processId }) as any).revalidation;
+    expect(rv.status).toBe("BLOCKED");
+    expect(JSON.stringify(rv.issues)).toContain("SOURCE_CHANGED");
+
+    // ── T6: cross-tenant / cross-process continuam fail closed ──────────────────────────────────────────────────────────────────
+    const other = await prepareOrg("r6x");
+    const crossTenant: any = await proc(other.org).editalTemplatePreparation({ processId: other.w.processId, ...WS, officialPins: pin(p1v2.tr) });
+    expect(crossTenant.trPin.state).toBe("INVALID");
+    expect(JSON.stringify(crossTenant)).not.toContain(localB);
+    const pfx: any = await proc(other.org).editalTemplatePreflight({ processId: other.w.processId, ...WS, officialPins: pin(p1v2.tr) });
+    expect(pfx.status).toBe("BLOCKED");
+    const crossProcess: any = await proc(base.org).editalTemplatePreparation({ processId: legacyP.w.processId, ...WS, officialPins: pin(p1v2.tr) });
+    expect(crossProcess.trPin.state).toBe("INVALID");
+    expect(["OFFICIAL_PIN_MISMATCH", "OFFICIAL_PIN_NOT_FOUND"]).toContain((crossProcess.trPin as any).code);
+  }, 900_000);
+
+  it("R7 — cadeia REAL: TR gerado com o bloco estruturado → emissão oficial grava o digest no metadata → o pin dessa versão é READY para o Edital", async () => {
+    const a = await prepareOrg("r7");
+    await completeProfile(harnessOf(a));
+    await fillTrParams(harnessOf(a), {}, TR_SKIP);                      // parâmetros confirmados; o TR seed v1 NÃO os conhece
+    const deps = { ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() };
+    const structured = (await renderTrStructuredBlock(deps, a.org, a.w.processId, WS))!;
+    const g = await generateDocument({
+      organizationId: a.org, processId: a.w.processId, kind: "tr", object: TR_META.object, correlationId: "r7-gen", idempotencyKey: key("r7g"), actorUserId: 101,
+      invoke: async () => buildMockProviderAuthoring("tr"), structuredParams: { block: structured.block, digest: structured.digest },
+    });
+    expect(g.document.sources).toContain(`trparams:${structured.digest.slice(0, 16)}`);
+    // antes da emissão: o TR v1 seed (sem lineage) NÃO serve de base para os parâmetros atuais
+    expect((await getState(a)).trPin).toEqual({ state: "INVALID", code: "TR_STRUCTURED_LINEAGE_UNAVAILABLE" });
+    const promoted: any = await proc(a.org, "manager", U_MANAGER).promoteOfficial({ processId: a.w.processId, kind: "tr", idempotencyKey: key("r7p"), expectedContentHash: draftContentHash(g.document.content), reason: "TR revisado e conferido." } as any);
+    expect(promoted.promoted).toBe(true);
+    const candidates: any[] = (await proc(a.org).editalTrCandidates({ processId: a.w.processId })) as any;
+    const emitted = candidates.reduce((m, c) => (c.version > m.version ? c : m));
+    expect(emitted.version).toBeGreaterThan(1);
+    const meta = JSON.parse((await rows("SELECT metadata m FROM official_documents WHERE id = ? AND tenant_id = ?", [emitted.documentId, a.org]))[0].m);
+    expect(meta.structuredParamsDigest).toBe(structured.digest.slice(0, 16));
+    const pinned: P = { ...a, tr: { documentId: emitted.documentId, version: emitted.version, contentHash: emitted.contentHash } };
+    const st = await getState(pinned);
+    expect(st.trPin.state).toBe("VALID");
+    expect(st.metrics.UPSTREAM_TR_REUSED).toBeGreaterThan(15);
+    await fillTrueDecisions(pinned);
+    expect((await preflight(pinned)).status).toBe("READY_FOR_COMPOSITION");
+    // TR legado/importado (sem marcador) promovido: o digest NÃO é inventado
+    const legacy2 = await addProcess(a, "r7legacy", 1);
+    const trLegacy: any = (await proc(a.org).editalTrCandidates({ processId: legacy2.w.processId })) as any;
+    const m2 = JSON.parse((await rows("SELECT metadata m FROM official_documents WHERE id = ? AND tenant_id = ?", [trLegacy[0].documentId, a.org]))[0].m ?? "{}");
+    expect(m2.structuredParamsDigest).toBeUndefined();
+  }, 900_000);
 
 });
 

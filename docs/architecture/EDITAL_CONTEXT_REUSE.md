@@ -60,6 +60,28 @@ Camada estruturada **do mesmo fluxo do TR**. Persistência: `procurement_context
   `payloadHash` (mudou o parâmetro ⇒ não há replay com contexto velho); o Edital lê os mesmos fatos por `editalContextReuse`.
 - Tenant: processo de outra organização ⇒ `NOT_FOUND` (anti-enumeração); `viewer` não confirma.
 
+## 3.1 Lineage exata: parâmetros estruturados × TR oficial pinado
+
+**Invariante:** o Edital com `officialPins.TR` consome `UPSTREAM_TR` do **mesmo snapshot lógico** do TR oficial pinado. É impossível
+compor "TR v1 + parâmetros posteriores à v1".
+
+- **Digest do snapshot** (`trParamsDigest`): nome + estado + hash do **valor** de cada parâmetro vigente (independe de quem/quando
+  confirmou: voltar ao mesmo valor volta ao mesmo digest). Mesmo digest do marcador `trparams:<16 hex>` que o rascunho do TR já carrega.
+- **Emissão:** a promoção oficial grava `metadata.structuredParamsDigest` no documento emitido, copiado do marcador do rascunho
+  (sem marcador ⇒ sem digest; **nunca inventado**). Sem tabela nova: o lineage existente do documento basta (`MIGRATION = NONE`).
+- **Geração / preflight / preparação** (`checkTrStructuredLineage`): compara o digest do TR pinado com o do estado **atual**:
+  - TR sem lineage + parâmetros confirmados ⇒ `TR_STRUCTURED_LINEAGE_UNAVAILABLE` (TR anterior à feature, importado ou gerado antes dos parâmetros);
+  - digest diferente (parâmetros alterados ou limpos depois da versão) ⇒ `TR_STRUCTURED_SOURCE_CHANGED`;
+  - nada confirmado e TR sem lineage ⇒ compatível (histórico preservado).
+  Falha fechada: preflight `BLOCKED`, **zero draft, zero M1**; a preparação não reaproveita os parâmetros atuais e mostra: *"O Termo de
+  Referência oficial selecionado não corresponde aos parâmetros estruturados atuais. Revise/emita a versão correspondente do TR antes de prosseguir."*
+- **Menor mudança:** alterar parâmetros depois do TR oficial continua permitido (é preparação de uma futura revisão); o Edital só os usa
+  depois que uma **nova versão oficial do TR** (regerada com o bloco e emitida) carregar o digest correspondente. O pin nunca é relaxado;
+  pin v1 com v2 existente segue a política de stale (`OFFICIAL_PIN_STALE`).
+- **M1:** referencia o TR (id, versão, hash) e a fonte `tr` inclui `parametrosEstruturadosDigest` no snapshot (entra no digest do M1);
+  o metadata do TR responde "qual digest" sem reprocessar. Mesmo input ⇒ replay; digest diferente ⇒ outro M1.
+- **Revalidação** (sem pin) não aplica a checagem: a mudança aparece como `SOURCE_CHANGED` da fonte `tr`.
+
 ## 4. Perfil institucional de Licitações
 
 Configurações → "Perfil institucional de Licitações" (e card único na preparação: *"Complete o Perfil Institucional de Licitações —

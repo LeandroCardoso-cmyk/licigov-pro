@@ -91,7 +91,9 @@ export default function EditalPreparationView(p: PreparationViewProps) {
       {state.trPin.state !== "VALID" && (
         <p role={state.trPin.state === "INVALID" ? "alert" : "status"} className={`text-sm ${state.trPin.state === "INVALID" ? "text-destructive" : "text-amber-700 dark:text-amber-300"}`}>
           {state.trPin.state === "INVALID"
-            ? "O TR oficial selecionado não é mais válido (existe versão mais recente ou ele divergiu). Selecione o TR oficial exato novamente."
+            ? (state.trPin.code.startsWith("TR_STRUCTURED_")
+              ? "O Termo de Referência oficial selecionado não corresponde aos parâmetros estruturados atuais. Revise/emita a versão correspondente do TR antes de prosseguir."
+              : "O TR oficial selecionado não é mais válido (existe versão mais recente ou ele divergiu). Selecione o TR oficial exato novamente.")
             : "Selecione o TR oficial exato: as informações estruturadas do TR são reaproveitadas a partir dele."}
         </p>
       )}

@@ -10,12 +10,13 @@
  * Multi-tenant: tudo é lido por (organizationId[, processId]); nunca "último processo".
  */
 import { listContextFacts } from "../../db/procurementContext";
+import { getOfficialDocument } from "../../db/officialDocuments";
 import type { VariableCatalog2 } from "../../domain/institutionalTemplates";
 import {
   ROLE_LABEL, authorityEntryOf, isDefaultEligible, resolveRoleVariable, type RoleKey,
 } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { GovernedRecord } from "./governedFieldsStore";
-import { resolveTrParams, trParamsDigest, type ResolvedTrParam } from "../../domain/trStructuredParams";
+import { TR_PARAMS_MARKER_LENGTH, resolveTrParams, trParamsDigest, type ResolvedTrParam } from "../../domain/trStructuredParams";
 import { validateDefaults } from "../../domain/institutionalTemplates/governedSources";
 import { templateHash } from "../../domain/institutionalTemplates/semanticHash";
 import type { VariableDef2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -149,4 +150,32 @@ export function profileFingerprint(record: GovernedRecord | null): string | null
   const roles = record?.raw.roles, defaults = record?.raw.defaults;
   if (!roles && !defaults) return null;
   return templateHash({ roles: roles ?? null, defaults: defaults ?? null });
+}
+
+// ─── Lineage dos parâmetros estruturados × TR oficial EXATO ─────────────────────────────────────────────────────────
+
+export const TR_STRUCTURED_LINEAGE_UNAVAILABLE = "TR_STRUCTURED_LINEAGE_UNAVAILABLE";
+export const TR_STRUCTURED_SOURCE_CHANGED = "TR_STRUCTURED_SOURCE_CHANGED";
+export const TR_STRUCTURED_LINEAGE_MESSAGE = "O Termo de Referência oficial selecionado não corresponde aos parâmetros estruturados atuais. Revise/emita a versão correspondente do TR antes de prosseguir.";
+
+/** Prefixo do digest do snapshot lógico ATUAL (o mesmo formato do marcador `trparams:` do TR). */
+export const currentTrDigest = (reuse: Pick<ContextReuse, "trDigest">): string => reuse.trDigest.slice(0, TR_PARAMS_MARKER_LENGTH);
+export const hasStructuredTrParams = (reuse: Pick<ContextReuse, "trParams">): boolean => [...reuse.trParams.values()].some((p) => p.status === "SET");
+
+/**
+ * INVARIANTE: o TR oficial pinado e os parâmetros estruturados que o Edital consome pertencem ao MESMO snapshot lógico. O TR emitido
+ * carrega o digest dos parâmetros que participaram da versão (`metadata.structuredParamsDigest`, vindo do marcador `trparams:` do
+ * rascunho). Compara com o snapshot ATUAL; nunca atribui o estado corrente a um TR sem lineage.
+ *  - null  ⇒ compatível (ou não aplicável: TR legado e nenhum parâmetro estruturado confirmado);
+ *  - LINEAGE_UNAVAILABLE ⇒ há parâmetros confirmados, mas o TR não registra o snapshot (TR anterior à feature / importado / gerado antes);
+ *  - SOURCE_CHANGED ⇒ o snapshot do TR difere do estado atual (parâmetros alterados depois daquela versão, ou limpos).
+ */
+export async function checkTrStructuredLineage(organizationId: number, trPin: { documentId: string }, reuse: Pick<ContextReuse, "trDigest" | "trParams">): Promise<typeof TR_STRUCTURED_LINEAGE_UNAVAILABLE | typeof TR_STRUCTURED_SOURCE_CHANGED | null> {
+  const doc = await getOfficialDocument(trPin.documentId, organizationId);
+  const raw = doc?.metadata?.["structuredParamsDigest"];
+  const expected = typeof raw === "string" && /^[a-f0-9]{16}$/.test(raw) ? raw : null;
+  const has = hasStructuredTrParams(reuse);
+  if (!expected && !has) return null;
+  if (!expected) return TR_STRUCTURED_LINEAGE_UNAVAILABLE;
+  return expected === currentTrDigest(reuse) ? null : TR_STRUCTURED_SOURCE_CHANGED;
 }

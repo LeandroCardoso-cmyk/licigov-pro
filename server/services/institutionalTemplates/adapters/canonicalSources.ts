@@ -34,7 +34,9 @@ import { snapshotInstitutionalIdentity } from "../../institutionalIdentityServic
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "../governedFieldsStore";
 import { TemplateSourceUnavailableError } from "../ports";
 import { resolveEditalProjections, type ProjectedValue } from "../editalProjections";
-import { loadContextReuse, profileFingerprint, setNestedIfAbsent, type ContextReuse } from "../editalContextReuse";
+import {
+  TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, currentTrDigest, hasStructuredTrParams, loadContextReuse, profileFingerprint, setNestedIfAbsent, type ContextReuse,
+} from "../editalContextReuse";
 import type { DocRefKind2 } from "../../../domain/institutionalTemplates/ast2";
 import type { OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
 import { PROJECTION_BY_VARIABLE, canonicalProjectedPaths } from "../../../domain/institutionalTemplates/canonicalProjectionPolicy";
@@ -58,6 +60,8 @@ export interface SourceReadContext {
   readonly asOfDate: string;
   /** Documentos oficiais EXATOS já validados pelo pin (geração) ou a autoridade atual (revalidação): base das projeções do TR. */
   readonly official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>;
+  /** GERAÇÃO/preflight (pin exato escolhido por pessoa): exige que os parâmetros estruturados do TR pertençam ao snapshot do TR pinado. */
+  readonly pinned?: boolean;
 }
 
 interface Memo {
@@ -111,7 +115,15 @@ function withGoverned(source: VariableSource2, data: Record<string, unknown>, re
 
 /** Reuso de contexto (TR estruturado, papéis, padrões institucionais) — lido UMA vez por composição, tenant-scoped. */
 async function reuseOf(rc: SourceReadContext, m: Memo): Promise<ContextReuse> {
-  if (!m.reuse) m.reuse = await loadContextReuse({ organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10) });
+  if (!m.reuse) {
+    const reuse = await loadContextReuse({ organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10) });
+    // INVARIANTE: TR oficial pinado + parâmetros estruturados do MESMO snapshot. Falha fechada; nunca usa o estado novo em silêncio.
+    if (rc.pinned && rc.official?.TR) {
+      const bad = await checkTrStructuredLineage(rc.organizationId, rc.official.TR, reuse);
+      if (bad) throw unavailable("TR", bad, `${bad}: ${TR_STRUCTURED_LINEAGE_MESSAGE}`);
+    }
+    m.reuse = reuse;
+  }
   return m.reuse;
 }
 
@@ -136,6 +148,8 @@ async function govern(
   }
   withGoverned(source, data, record, shadow);
   for (const [path, value] of defaults) setNestedIfAbsent(data, path, value);
+  // Snapshot lógico dos parâmetros do TR no próprio snapshot da fonte TR (entra no digest do M1). Só quando há parâmetros confirmados.
+  if (source === "TR" && hasStructuredTrParams(reuse)) data["parametrosEstruturadosDigest"] = currentTrDigest(reuse);
   return data;
 }
 

@@ -93,6 +93,12 @@ export interface PromoteOfficialResult {
  * integridade + replay-safety + commit atômico. `expectedContentHash` (opcional) garante que o
  * emissor promove exatamente a versão que revisou (concorrência otimista).
  */
+/** Marcador `trparams:<digest16>` gravado na geração do TR (único; ausente em TR legado/importado). */
+function trParamsMarker(sources: readonly string[] | undefined): string | null {
+  const m = (sources ?? []).filter((x) => x.startsWith("trparams:")).pop();
+  return m ? m.slice("trparams:".length) : null;
+}
+
 export async function promoteOfficialDocument(params: {
   organizationId: number;
   processId: string;
@@ -233,6 +239,8 @@ export async function promoteOfficialDocument(params: {
           institutionalIdentityFingerprint: identity.fingerprint,
           processNumber: process?.processNumber ?? null,
           object: process?.object ?? null,
+          // CONTEXT_REUSE 2.0 — snapshot lógico dos Parâmetros estruturados do TR que participaram DESTA versão (marcador do rascunho).
+          ...(params.kind === "tr" && trParamsMarker(draft.sources) ? { structuredParamsDigest: trParamsMarker(draft.sources) } : {}),
           ...(templated ? {
             templateGenerationManifestId: templated.issuanceManifest.derivedFromManifestId,
             templateIssuanceManifestId: templated.issuanceManifest.id,

@@ -5,6 +5,9 @@
  * Dados SINTÉTICOS (nenhum dado real).
  */
 import { expect } from "vitest";
+import type mysql from "mysql2/promise";
+import { getTemplateCompositionPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { renderTrStructuredBlock } from "../../services/institutionalTemplates/trStructuredParamsService";
 import { buildSavePlan, executeSavePlan, isStaleSave, toFormValue, type PlannedWrite, type PreparationStateView, type SectionEdits } from "../../../client/src/lib/editalPreparation";
 import type { RoleAssignments } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { BLL_CATALOG, E2E_SCENARIO, decision } from "./institutionalTemplatesE2eWorld";
@@ -102,4 +105,21 @@ export async function fillTrParams(h: ReuseHarness, override: Record<string, unk
     await h.proc().recordTrStructuredParams({ processId: h.processId, ...h.ws, values });
   }
   throw new Error("parâmetros do TR não convergiram");
+}
+
+/**
+ * Simula a EMISSÃO do TR com o snapshot atual dos parâmetros estruturados: grava no metadata do documento oficial o digest que o
+ * marcador `trparams:` do rascunho carregaria (a promoção real faz o mesmo). Metadata não entra no hash do conteúdo (o pin não muda).
+ * Sem parâmetros confirmados não há snapshot (TR legado/sem estrutura).
+ */
+export async function stampTrLineage(conn: mysql.Connection, h: ReuseHarness, documentId: string): Promise<string | null> {
+  const deps = { ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() };
+  const block = await renderTrStructuredBlock(deps, h.org, h.processId, h.ws as never);
+  if (!block) return null;
+  const digest = block.digest.slice(0, 16);
+  const [rows] = await conn.execute("SELECT metadata FROM official_documents WHERE id = ? AND tenant_id = ?", [documentId, h.org]);
+  const current = (rows as Array<{ metadata: string | null }>)[0]?.metadata;
+  const meta = current ? (typeof current === "string" ? JSON.parse(current) : current) : {};
+  await conn.execute("UPDATE official_documents SET metadata = ? WHERE id = ? AND tenant_id = ?", [JSON.stringify({ ...meta, structuredParamsDigest: digest }), documentId, h.org]);
+  return digest;
 }

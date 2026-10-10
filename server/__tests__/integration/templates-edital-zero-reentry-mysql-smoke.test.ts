@@ -42,7 +42,7 @@ import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/inst
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { completeProfile, fillTrParams, profileAsPrepView, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { completeProfile, fillTrParams, profileAsPrepView, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, orgProfilePending, toFormValue,
   type PlannedWrite, type PreparationStateView, type SectionEdits,
@@ -152,7 +152,7 @@ async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL"; skip
   const typed: string[] = [];
   // CONTEXT_REUSE 2.0: o Perfil de Licitações (órgão) e os Parâmetros estruturados do TR têm entrada PRÓPRIA (não a preparação do Edital).
   if (scope === "ORG" || scope === "ALL") { const r = await completeProfile(harnessOf(p)); for (let i = 0; i < r.policiesTyped + r.rolesRegistered; i++) typed.push("perfil"); }
-  if (scope === "PROCESS" || scope === "ALL") await fillTrParams(harnessOf(p), {}, opts.skipTr);
+  if (scope === "PROCESS" || scope === "ALL") { await fillTrParams(harnessOf(p), {}, opts.skipTr); await stampTrLineage(conn, harnessOf(p), p.tr.documentId); }   // TR emitido com este snapshot
   if (scope === "ORG") return { rounds: 0, typed };
   for (let round = 1; round <= 8; round++) {
     const st = await getState(p);
@@ -481,6 +481,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
 
     // T1: nasce v2 com outro objeto; quem enviou v1 NÃO recebe a projeção de v2 — fica BLOQUEADO (OFFICIAL_PIN_STALE)
     const v2 = await trDoc(p, 2, "Objeto v2");
+    await stampTrLineage(conn, harnessOf(p), v2.documentId);   // v2 emitido com o mesmo snapshot dos parâmetros
     const stale = await getState(p);
     expect(stale.trPin).toMatchObject({ state: "INVALID", code: "OFFICIAL_PIN_STALE" });
     expect(stale.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "AWAITING", editable: false });
@@ -502,7 +503,8 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect((await preflight(p2)).status).toBe("READY_FOR_COMPOSITION");
 
     // T3: entre a preparação (pin v2 válido) e a geração nasce v3 ⇒ pin v2 obsoleto, ZERO M1/draft, exige reseleção
-    await trDoc(p2, 3, "Objeto v3");
+    const v3 = await trDoc(p2, 3, "Objeto v3");
+    await stampTrLineage(conn, harnessOf(p2), v3.documentId);
     const before = await writes(p2);
     const refused = await gen(p2).then(() => null, (e: any) => e);
     expect(refused?.message).toContain("OFFICIAL_PIN_STALE");
@@ -602,6 +604,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
 
     // o TR passa a trazer o dado estruturado (nova versão emitida, novo pin): a projeção VENCE a decisão humana anterior
     const v2 = await trDoc(p, 2, "Objeto estruturado pelo TR v2");
+    await stampTrLineage(conn, harnessOf(p), v2.documentId);
     const p2: P = { ...p, tr: v2 };
     const s2 = await getState(p2);
     const obj2 = s2.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;

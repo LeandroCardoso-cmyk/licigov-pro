@@ -150,7 +150,7 @@ describe("guardas estruturais — nenhuma autoridade 'latest' paralela na proje�
   });
   it("a composição resolve o pin ANTES das fontes e entrega o documento exato a elas (não em paralelo)", () => {
     const comp = read("server/services/institutionalTemplates/templateCompositionService.ts");
-    expect(comp).toContain("t.catalog, officialDocuments)");
+    expect(comp).toContain("t.catalog, officialDocuments, { pinned: officialPins !== undefined })");   // o pin exato (e só ele) ativa a checagem de lineage dos parâmetros do TR
     const adapter = read("server/services/institutionalTemplates/adapters/canonicalSources.ts");
     expect(adapter).toContain("shadowedPaths");
     expect(adapter).toContain("canonicalProjectedPaths");
