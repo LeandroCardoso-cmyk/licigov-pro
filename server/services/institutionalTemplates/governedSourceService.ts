@@ -8,9 +8,10 @@
  */
 import type { TemplateIssue } from "../../domain/institutionalTemplates";
 import {
-  BUDGET_DISCLOSURES, GOVERNED_FIELDS_SCHEMA, allowedSources, declaredPaths, encodeGovernedPayload, validateGovernedPayload, validateGovernedSection, validateParticipation,
+  BUDGET_DISCLOSURES, GOVERNED_FIELDS_SCHEMA, allowedSources, declaredPaths, encodeGovernedPayload, validateDefaults, validateGovernedPayload, validateGovernedSection, validateParticipation,
   type BudgetDisclosure, type GovernedPayload, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
+import { validateRoleAssignments } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { canonicalProjectedPaths } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
 import { isCatalogV2 } from "../../domain/institutionalTemplates/astVersions";
@@ -77,6 +78,9 @@ export class GovernedSourceService {
     const merged: GovernedPayload = {
       sections: { ...((current?.raw.sections ?? {}) as GovernedPayload["sections"]), [input.source]: { ...foreign, ...(section.ok ? section.value : {}) } },
       ...(input.participation !== undefined ? { participation: input.participation as GovernedPayload["participation"] } : current?.payload.participation ? { participation: current.payload.participation } : {}),
+      // Papéis e padrões do Perfil de Licitações são preservados INTEGRALMENTE (inclusive nomes de outros modelos) ao gravar campos.
+      ...(current?.raw.roles ? { roles: current.raw.roles as GovernedPayload["roles"] } : {}),
+      ...(current?.raw.defaults ? { defaults: current.raw.defaults as GovernedPayload["defaults"] } : {}),
     };
     const whole = validateGovernedPayload(catalog, scope, merged);
     if (!whole.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "o registro resultante é inválido", toIssues(whole.issues));
@@ -97,6 +101,53 @@ export class GovernedSourceService {
   /** Campos governados do ÓRGÃO: POLICY (política institucional) e IDENTITY (extensão da identidade). */
   recordOrganizationFields(ctx: WorkflowContext, input: RecordFieldsInput): Promise<RecordedDecision> {
     return this.record(ctx, "ORG", GOVERNED_ORG_SUBJECT, input, "registrar os campos governados do órgão");
+  }
+
+  /**
+   * PERFIL INSTITUCIONAL DE LICITAÇÕES (escopo ÓRGÃO): papéis (nome/cargo/ato/vigência) e PADRÕES institucionais explícitos.
+   * Mesmo ledger e mesma revisão do registro do órgão (CAS por registro inteiro); cada gravação cria uma NOVA revisão — a anterior
+   * continua no histórico e os manifests antigos mantêm seu fingerprint. `roles` e `defaults`, quando informados, SUBSTITUEM por
+   * inteiro o respectivo bloco (para os nomes deste catálogo); o que não for informado é preservado.
+   * Padrão só para variável elegível (Authority Matrix) e valor válido pelo tipo; nada é copiado de "último processo".
+   */
+  async recordOrganizationProfile(ctx: WorkflowContext, input: DecisionActInput & { catalogVersion: string; expectedRevision: number; roles?: unknown; defaults?: unknown }): Promise<RecordedDecision> {
+    assertHumanActor(ctx.actor);
+    requireConfirmed(input, "registrar o Perfil institucional de Licitações");
+    if (input.roles === undefined && input.defaults === undefined) throw new TemplateWorkflowError("VALIDATION_FAILED", "informe papéis e/ou padrões institucionais");
+    const catalog = this.catalog(input.catalogVersion);
+    if (input.roles !== undefined) {
+      const r = validateRoleAssignments(input.roles);
+      if (!r.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "papéis institucionais inválidos", r.issues.map((m) => ({ code: "SOURCE_PAYLOAD_INVALID", path: "roles", message: m })));
+    }
+    let nextDefaults: Record<string, unknown> | undefined;
+    const current = await readGovernedRecord(ctx.organizationId, "ORG", GOVERNED_ORG_SUBJECT, catalog).catch((e: unknown) => {
+      throw new TemplateWorkflowError("VALIDATION_FAILED", e instanceof Error ? e.message : "registro corrente ilegível");
+    });
+    if (input.defaults !== undefined) {
+      const d = validateDefaults(catalog, input.defaults, "write");
+      if (!d.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "padrões institucionais inválidos", toIssues(d.issues));
+      // Substitui só os nomes DESTE catálogo; padrões de outros modelos permanecem.
+      const declaredNames = new Set(catalog.vars.map((v) => v.name));
+      const foreign = Object.fromEntries(Object.entries((current?.raw.defaults ?? {}) as Record<string, unknown>).filter(([n]) => !declaredNames.has(n)));
+      nextDefaults = { ...foreign, ...d.value };
+    }
+    const merged: GovernedPayload = {
+      sections: { ...((current?.raw.sections ?? {}) as GovernedPayload["sections"]) },
+      ...(input.roles !== undefined ? { roles: input.roles as GovernedPayload["roles"] } : current?.raw.roles ? { roles: current.raw.roles as GovernedPayload["roles"] } : {}),
+      ...(nextDefaults !== undefined ? { defaults: nextDefaults } : current?.raw.defaults ? { defaults: current.raw.defaults as GovernedPayload["defaults"] } : {}),
+    };
+    const whole = validateGovernedPayload(catalog, "ORG", merged);
+    if (!whole.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "o registro resultante é inválido", toIssues(whole.issues));
+    const { evidence } = encodeGovernedPayload(GOVERNED_FIELDS_SCHEMA, merged);
+    const out = await recordHumanDecision(ctx, {
+      subjectType: GOVERNED_SUBJECT_TYPE.ORG, decisionType: GOVERNED_DECISION_TYPE.ORG, outcome: GOVERNED_OUTCOME.ORG, mode: "revision",
+      subjectId: GOVERNED_ORG_SUBJECT, evidence, act: input, expectedRevision: input.expectedRevision,
+    });
+    log.info("licitacoes_profile_recorded", {
+      organizationId: ctx.organizationId, decisionId: out.decision.id, revision: out.decision.revision, replayed: out.replayed, actorUserId: ctx.actor.userId,
+      roles: input.roles !== undefined ? Object.keys(input.roles as object).length : undefined, defaults: nextDefaults ? Object.keys(nextDefaults).length : undefined, correlationId: ctx.correlationId,
+    });
+    return out;
   }
 
   /** Divulgação do orçamento do processo: o resultado (público | sigiloso) é a decisão — sem padrão. */

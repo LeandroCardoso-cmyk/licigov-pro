@@ -3,6 +3,8 @@
 Princípio: **se uma informação já tem autoridade canônica no sistema, a pessoa não a digita de novo.** A tela deixa de ser um
 formulário técnico e passa a mostrar só as exceções (decisões que ainda dependem de pessoa).
 
+> **Evolução:** o reuso de contexto institucional e upstream (Perfil de Licitações, papéis, padrões, Parâmetros estruturados do TR e Authority Matrix) está em [`EDITAL_CONTEXT_REUSE.md`](EDITAL_CONTEXT_REUSE.md).
+
 Nada muda na governança: mesmas autoridades (`institutional_decisions` / `GovernedSourceService`), mesmo CAS, mesma
 idempotência, mesmo M1/M2, mesma revalidação (`SOURCE_CHANGED`). **Sem migration, sem segundo ledger.**
 

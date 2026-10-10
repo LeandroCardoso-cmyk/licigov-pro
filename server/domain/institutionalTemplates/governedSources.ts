@@ -16,6 +16,7 @@
  * Puro, determinístico, sem I/O.
  */
 import { isCanonicalProjection } from "./canonicalProjectionPolicy";
+import { isDefaultEligible, validateRoleAssignments, type RoleAssignments } from "./editalAuthorityMatrix";
 import { fail, issue, ok, type TemplateIssue, type TemplateResult } from "./types";
 import { templateCanonicalJson, templateHash } from "./semanticHash";
 import { normalizeValue2 } from "./valueTypes2";
@@ -55,10 +56,19 @@ export interface GovernedParticipation {
   readonly byLot?: Readonly<Record<string, string>>;
   readonly byItem?: Readonly<Record<string, string>>;
 }
+/** Padrões institucionais EXPLÍCITOS (nome da variável → valor tipado). Só variáveis elegíveis (Authority Matrix); só escopo ÓRGÃO. */
+export type GovernedDefaults = Readonly<Record<string, unknown>>;
+export interface RejectedDefault { readonly name: string; readonly reason: string }
 export interface GovernedPayload {
   readonly sections: Readonly<Partial<Record<VariableSource2, GovernedFields>>>;
   /** Regime de participação por item/lote declarado pela pessoa (item > lote > padrão); só afeta a coluna do quadro de itens. */
   readonly participation?: GovernedParticipation;
+  /** Perfil de Licitações — papéis institucionais (nome/cargo/ato/vigência). Só escopo ÓRGÃO. */
+  readonly roles?: RoleAssignments;
+  /** Perfil de Licitações — padrões institucionais explícitos. Só escopo ÓRGÃO. Na leitura, padrão incompatível é descartado (`defaultsRejected`). */
+  readonly defaults?: GovernedDefaults;
+  /** Derivado na leitura (nunca persistido): padrões que o catálogo ATUAL não aceita (incompatível/inelegível) e que NÃO são aplicados. */
+  readonly defaultsRejected?: readonly RejectedDefault[];
 }
 
 export function allowedSources(scope: GovernedScope): readonly VariableSource2[] {
@@ -96,6 +106,32 @@ export function validateGovernedSection(catalog: VariableCatalog2, scope: Govern
     out[path] = norm.value;
   }
   return issues.length ? fail(issues) : ok(out);
+}
+
+/**
+ * Valida os PADRÕES institucionais contra o catálogo. `write` (registro novo) é estrito: nome desconhecido, inelegível ou valor
+ * inválido é RECUSADO. `read` (releitura do ledger) é tolerante: padrão incompatível com o catálogo atual é descartado e reportado
+ * (`rejected`) — nunca aplicado; nomes de OUTROS modelos (não declarados no catálogo) são preservados fora do payload.
+ */
+export function validateDefaults(catalog: VariableCatalog2, raw: unknown, mode: "read" | "write"): { ok: true; value: GovernedDefaults; rejected: RejectedDefault[] } | { ok: false; issues: TemplateIssue[] } {
+  if (!isObj(raw)) return { ok: false, issues: [bad("defaults", "padrões devem ser um objeto { variável → valor }")] };
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_FIELDS_PER_SECTION) return { ok: false, issues: [bad("defaults", `padrões excedem ${MAX_FIELDS_PER_SECTION} entradas`)] };
+  const byName = new Map(catalog.vars.map((v) => [v.name, v] as const));
+  const out: Record<string, unknown> = {};
+  const rejected: RejectedDefault[] = [];
+  const issues: TemplateIssue[] = [];
+  for (const [name, value] of entries) {
+    const def = byName.get(name);
+    if (!def) { if (mode === "write") issues.push(bad(`defaults.${name}`, "variável não declarada pelo catálogo")); continue; } // outro modelo: preservada fora do payload
+    const fail1 = (reason: string) => { if (mode === "write") issues.push(bad(`defaults.${name}`, reason)); else rejected.push({ name, reason }); };
+    if (!isDefaultEligible(name)) { fail1("variável não elegível a padrão institucional (data do certame, objeto, quantidade, valor ou decisão jurídica casuística)"); continue; }
+    if (def.type === "document_ref" || def.type === "table") { fail1("tipo de variável não aceita padrão institucional"); continue; }
+    const norm = normalizeValue2(def, value);
+    if (!norm.ok) { fail1(norm.reason); continue; }
+    out[name] = norm.value;
+  }
+  return issues.length ? { ok: false, issues } : { ok: true, value: out, rejected };
 }
 
 export function validateParticipation(raw: unknown): TemplateResult<GovernedParticipation> {
@@ -167,7 +203,7 @@ export function declaredPaths(catalog: VariableCatalog2, source: string): Readon
  * modelo e são IGNORADOS na leitura (não entram nos dados nem no digest); os que ele declara são validados por tipo.
  */
 export function validateGovernedPayload(catalog: VariableCatalog2, scope: GovernedScope, raw: unknown): TemplateResult<GovernedPayload> {
-  if (!isObj(raw) || !isObj(raw.sections) || Object.keys(raw).some((k) => k !== "sections" && k !== "participation")) return fail([bad("", "payload deve ter { sections, participation? }")]);
+  if (!isObj(raw) || !isObj(raw.sections) || Object.keys(raw).some((k) => !["sections", "participation", "roles", "defaults"].includes(k))) return fail([bad("", "payload deve ter { sections, participation?, roles?, defaults? }")]);
   const issues: TemplateIssue[] = [];
   const sections: Partial<Record<VariableSource2, GovernedFields>> = {};
   for (const [source, fields] of Object.entries(raw.sections)) {
@@ -180,5 +216,18 @@ export function validateGovernedPayload(catalog: VariableCatalog2, scope: Govern
     if (scope !== "PROCESS") issues.push(bad("participation", "participação só existe no escopo do processo"));
     else { const p = validateParticipation(raw.participation); if (!p.ok) issues.push(...p.issues); else participation = p.value; }
   }
-  return issues.length ? fail(issues) : ok({ sections, ...(participation ? { participation } : {}) });
+  let roles: RoleAssignments | undefined;
+  if (raw.roles !== undefined) {
+    if (scope !== "ORG") issues.push(bad("roles", "papéis institucionais só existem no escopo do órgão"));
+    else { const r = validateRoleAssignments(raw.roles); if (!r.ok) issues.push(...r.issues.map((m) => bad("roles", m))); else roles = r.value; }
+  }
+  let defaults: GovernedDefaults | undefined;
+  let defaultsRejected: RejectedDefault[] | undefined;
+  if (raw.defaults !== undefined) {
+    if (scope !== "ORG") issues.push(bad("defaults", "padrões institucionais só existem no escopo do órgão"));
+    else { const d = validateDefaults(catalog, raw.defaults, "read"); if (!d.ok) issues.push(...d.issues); else { defaults = d.value; if (d.rejected.length) defaultsRejected = d.rejected; } }
+  }
+  return issues.length ? fail(issues) : ok({
+    sections, ...(participation ? { participation } : {}), ...(roles ? { roles } : {}), ...(defaults ? { defaults } : {}), ...(defaultsRejected ? { defaultsRejected } : {}),
+  });
 }

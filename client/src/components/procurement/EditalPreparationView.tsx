@@ -1,8 +1,10 @@
 import PrepFieldControl from "./PrepFieldControl";
-import { validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import DecisionFieldset from "./DecisionFieldset";
+import UseAsDefaultButton from "./UseAsDefaultButton";
+import type { DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
-  SOURCE_TITLE, formatDisplay, reusedItems, toFormValue,
-  type FormValue, type PendingItem, type PrepField, type PreparationStateView, type SaveOutcome, type SavePlan, type SectionEdits, type SummaryGroup,
+  SOURCE_TITLE, formatDisplay, orgProfilePending, reusedItems, toFormValue, trParamsPending,
+  type FormValue, type PendingItem, type PrepField, type PreparationStateView, type SaveOutcome, type SavePlan, type SectionEdits,
 } from "@/lib/editalPreparation";
 
 export interface PreparationViewProps {
@@ -28,24 +30,12 @@ export interface PreparationViewProps {
   outcome: SaveOutcome | null;
   notice: { kind: "ok" | "error" | "stale"; text: string } | null;
   onConfirm: () => void;
+  /** Abre o TR do processo (onde os Parâmetros estruturados são informados). */
+  onOpenTr?: () => void;
+  processId?: string;
 }
 
 const INPUT = "rounded-lg border border-input bg-background px-3 py-2 text-sm";
-
-function GroupCard({ g, profileRevision }: { g: SummaryGroup; profileRevision: number | null }) {
-  const org = g.id === "institucional" || g.id === "politicas";
-  const done = g.pending === 0 && g.blockedCanonical === 0;
-  return (
-    <li className={`rounded-lg border px-3 py-2 text-sm ${g.pending > 0 ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-group={g.id}>
-      <p className="font-medium text-foreground">{g.title}</p>
-      {g.pending > 0
-        ? <p className="text-amber-700 dark:text-amber-300">⚠ {g.pending} {g.pending === 1 ? "pendência" : "pendências"}</p>
-        : g.blockedCanonical > 0
-          ? <p className="text-destructive">⚠ {g.blockedCanonical} dado(s) do sistema incompleto(s)</p>
-          : <p className="text-emerald-700 dark:text-emerald-300">✓ {g.resolved}/{g.total}{org && done && profileRevision !== null ? " · perfil institucional vigente" : ""}</p>}
-    </li>
-  );
-}
 
 function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly PendingItem[]; edits: PreparationViewProps["edits"]; errors: PreparationViewProps["fieldErrors"]; busy: boolean; onEdit: PreparationViewProps["onEdit"] }) {
   const sources = [...new Set(items.map((i) => i.section.source))];
@@ -71,18 +61,21 @@ function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly Pe
  */
 export default function EditalPreparationView(p: PreparationViewProps) {
   const { state } = p;
-  const orgBlock = p.pending.filter((i) => i.section.scope === "ORG");
   const procBlock = p.pending.filter((i) => i.section.scope === "PROCESS");
-  const dErr = validateDecisionForm(p.decision).errors;
   const pendingCount = p.pending.length + (state.budgetDisclosure || p.disclosure ? 0 : 1) + (state.participationPending && !p.participationDefault?.trim() ? 1 : 0);
   const reused = reusedItems(state);
   const blockedCanonical = [
     ...state.canonicalFields.filter((c) => c.status === "CANONICAL_UNRESOLVED").map((c) => ({ key: c.name, label: c.description || c.name, origin: c.origin.label })),
     ...state.sections.flatMap((s) => s.fields).filter((f) => f.status === "CANONICAL_UNRESOLVED").map((f) => ({ key: f.name, label: f.description || f.name, origin: f.origin?.label ?? "autoridade de origem" })),
   ];
-  // Perfil institucional (ORG): editável em um só lugar; mudar cria nova revisão do órgão e vale para os NOVOS processos.
-  const profileItems: PendingItem[] = state.sections.filter((s) => s.scope === "ORG").flatMap((section) =>
-    section.fields.filter((f) => f.editable && ["ORG_REUSED", "OPTIONAL"].includes(f.status)).map((field) => ({ section, field })));
+  const profilePending = orgProfilePending(state);
+  const trPending = trParamsPending(state);
+  const m = state.metrics;
+  const reusedProfile = (m.ORG_ROLES_REUSED ?? 0) + (m.ORG_POLICIES_REUSED ?? 0) + (m.ORG_REUSED - (m.ORG_ROLES_REUSED ?? 0) - (m.ORG_POLICIES_REUSED ?? 0) > 0 ? m.ORG_REUSED - (m.ORG_ROLES_REUSED ?? 0) - (m.ORG_POLICIES_REUSED ?? 0) : 0);
+  const by = m.BY_AUTHORITY ?? {};
+  const upstreamCount = (by.UPSTREAM_PROCESS ?? 0) + (by.UPSTREAM_DFD ?? 0) + (by.UPSTREAM_ETP ?? 0) + (by.EXISTING_CANONICAL ?? 0);
+  const defaultsApplied = state.sections.flatMap((s2) => s2.fields).filter((f) => f.status === "ORG_DEFAULT");
+  const eligibleDecided = state.sections.flatMap((s2) => s2.fields).filter((f) => f.status === "DECIDED" && f.defaultEligible && f.hasValue);
   const canSave = p.plan.writes.length > 0 && Object.keys(p.plan.errors).length === 0 && !p.busy;
 
   return (
@@ -98,14 +91,68 @@ export default function EditalPreparationView(p: PreparationViewProps) {
       {state.trPin.state !== "VALID" && (
         <p role={state.trPin.state === "INVALID" ? "alert" : "status"} className={`text-sm ${state.trPin.state === "INVALID" ? "text-destructive" : "text-amber-700 dark:text-amber-300"}`}>
           {state.trPin.state === "INVALID"
-            ? "O TR oficial selecionado não é mais válido (existe versão mais recente ou ele divergiu). Selecione o TR oficial exato novamente."
+            ? (state.trPin.code.startsWith("TR_STRUCTURED_")
+              ? "O Termo de Referência oficial selecionado não corresponde aos parâmetros estruturados atuais. Revise/emita a versão correspondente do TR antes de prosseguir."
+              : "O TR oficial selecionado não é mais válido (existe versão mais recente ou ele divergiu). Selecione o TR oficial exato novamente.")
             : "Selecione o TR oficial exato: as informações estruturadas do TR são reaproveitadas a partir dele."}
         </p>
       )}
 
       <ul className="grid gap-2 sm:grid-cols-2" aria-label="Resumo da preparação">
-        {state.summary.groups.map((g) => <GroupCard key={g.id} g={g} profileRevision={state.orgProfile?.revision ?? null} />)}
+        <li className={`rounded-lg border px-3 py-2 text-sm ${profilePending.length ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-card="perfil">
+          <p className="font-medium text-foreground">Perfil institucional</p>
+          {profilePending.length ? <p className="text-amber-700 dark:text-amber-300">⚠ incompleto</p>
+            : <p className="text-emerald-700 dark:text-emerald-300">✓ {reusedProfile} reutilizados{state.orgProfile ? ` · revisão ${state.orgProfile.revision}` : ""}</p>}
+        </li>
+        <li className="rounded-lg border border-border px-3 py-2 text-sm" data-card="processo">
+          <p className="font-medium text-foreground">Processo / DFD / ETP</p>
+          <p className="text-emerald-700 dark:text-emerald-300">✓ {upstreamCount} dados do processo e do cadastro</p>
+        </li>
+        <li className={`rounded-lg border px-3 py-2 text-sm ${trPending.length || state.trPin.state !== "VALID" ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-card="tr">
+          <p className="font-medium text-foreground">TR oficial e parâmetros</p>
+          {state.trPin.state !== "VALID" ? <p className="text-amber-700 dark:text-amber-300">⚠ selecione o TR oficial</p>
+            : trPending.length ? <p className="text-amber-700 dark:text-amber-300">⚠ {trPending.length} parâmetro(s) a confirmar no TR</p>
+              : <p className="text-emerald-700 dark:text-emerald-300">✓ {(m.UPSTREAM_TR_REUSED ?? 0) + m.TR_PROJECTED} reutilizados do TR</p>}
+        </li>
+        <li className="rounded-lg border border-border px-3 py-2 text-sm" data-card="itens">
+          <p className="font-medium text-foreground">Itens e orçamento</p>
+          {state.summary.groups.find((g) => g.id === "itens")?.blockedCanonical ? <p className="text-destructive">⚠ dado(s) do sistema incompleto(s)</p> : <p className="text-emerald-700 dark:text-emerald-300">✓ itens e pesquisa de preços</p>}
+        </li>
+        <li className={`rounded-lg border px-3 py-2 text-sm ${pendingCount > 0 ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-card="decisoes">
+          <p className="font-medium text-foreground">Decisões deste certame</p>
+          {pendingCount > 0 ? <p className="text-amber-700 dark:text-amber-300">⚠ {pendingCount} {pendingCount === 1 ? "decisão pendente" : "decisões pendentes"}</p> : <p className="text-emerald-700 dark:text-emerald-300">✓ nenhuma pendente</p>}
+        </li>
+        {defaultsApplied.length > 0 && (
+          <li className="rounded-lg border border-border px-3 py-2 text-sm" data-card="padroes">
+            <p className="font-medium text-foreground">Padrões institucionais</p>
+            <p className="text-emerald-700 dark:text-emerald-300">✓ {defaultsApplied.length} aplicado(s) — alteráveis neste processo</p>
+          </li>
+        )}
       </ul>
+
+      {profilePending.length > 0 && (
+        <div role="status" className="space-y-1 rounded-lg border border-amber-500/40 p-3" aria-label="Perfil institucional de Licitações incompleto">
+          <h3 className="text-sm font-semibold text-foreground">Complete o Perfil Institucional de Licitações</h3>
+          <p className="text-xs text-muted-foreground">Configuração única do órgão — {profilePending.length} {profilePending.length === 1 ? "campo pendente" : "campos pendentes"}. Depois disso, nenhum Edital pede estes dados de novo.</p>
+          <a href="/configuracoes#perfil-licitacoes" className="inline-block rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Configurar agora</a>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">O que falta</summary>
+            <ul className="mt-1 list-disc pl-5">{profilePending.map((i) => <li key={i.name}>{i.description || i.name} — {i.reason}</li>)}</ul>
+          </details>
+        </div>
+      )}
+
+      {trPending.length > 0 && state.trPin.state === "VALID" && (
+        <div role="status" className="space-y-1 rounded-lg border border-amber-500/40 p-3" aria-label="Parâmetros estruturados do TR pendentes">
+          <h3 className="text-sm font-semibold text-foreground">Parâmetros estruturados do TR pendentes</h3>
+          <p className="text-xs text-muted-foreground">{trPending.length} {trPending.length === 1 ? "parâmetro depende" : "parâmetros dependem"} do TR (prazos, local de entrega, pagamento, garantias, qualificação…). Informe uma vez no TR; o Edital reaproveita.</p>
+          {p.onOpenTr && <button type="button" onClick={p.onOpenTr} className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Abrir o TR</button>}
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">O que falta</summary>
+            <ul className="mt-1 list-disc pl-5">{trPending.map((i) => <li key={i.name}>{i.description || i.name}{i.reason ? ` — ${i.reason}` : ""}</li>)}</ul>
+          </details>
+        </div>
+      )}
 
       {p.notice && (
         <p role={p.notice.kind === "ok" ? "status" : "alert"} className={`text-sm ${p.notice.kind === "ok" ? "text-emerald-700 dark:text-emerald-300" : p.notice.kind === "stale" ? "text-amber-700 dark:text-amber-300" : "text-destructive"}`}>{p.notice.text}</p>
@@ -122,14 +169,6 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           <h3 className="font-semibold text-destructive">Dados do sistema incompletos</h3>
           <p className="text-xs text-muted-foreground">Estas informações têm autoridade própria e não são digitadas aqui. Complete-as na origem (abertura do processo, DFD ou cadastro do órgão).</p>
           <ul className="list-disc pl-5 text-xs">{blockedCanonical.map((b) => <li key={b.key}>{b.label} — {b.origin}</li>)}</ul>
-        </div>
-      )}
-
-      {orgBlock.length > 0 && (
-        <div className="space-y-3 rounded-lg border border-amber-500/40 p-3" aria-label="Configuração institucional pendente">
-          <h3 className="text-sm font-semibold text-foreground">Configuração institucional pendente</h3>
-          <p className="text-xs text-muted-foreground">Registre UMA vez para o órgão: os próximos Editais reutilizam estes dados e não pedem de novo.</p>
-          <FieldBlock items={orgBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
         </div>
       )}
 
@@ -164,13 +203,27 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         </details>
       )}
 
-      {profileItems.length > 0 && (
-        <details className="rounded-lg border border-border" aria-label="Perfil institucional para Editais">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Perfil institucional para Editais{state.orgProfile ? ` — revisão ${state.orgProfile.revision}` : ""}</summary>
+      {defaultsApplied.length > 0 && (
+        <details className="rounded-lg border border-border" aria-label="Padrões institucionais aplicados">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Padrões institucionais aplicados — {defaultsApplied.length}</summary>
           <div className="space-y-2 px-3 pb-3">
-            <p className="text-xs text-muted-foreground">Dados estáveis do órgão, registrados uma vez e reutilizados em todo novo Edital. Alterar cria uma nova revisão do perfil; Editais já gerados mantêm a revisão que usaram.</p>
-            <FieldBlock items={profileItems} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
+            <p className="text-xs text-muted-foreground">Definidos por você no Perfil de Licitações. Para mudar apenas neste processo, edite o campo e salve a preparação (vira decisão deste processo).</p>
+            <FieldBlock items={state.sections.flatMap((section) => section.fields.filter((f) => f.status === "ORG_DEFAULT").map((field) => ({ section, field })))} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
           </div>
+        </details>
+      )}
+
+      {eligibleDecided.length > 0 && (
+        <details className="rounded-lg border border-border" aria-label="Decisões que podem virar padrão institucional">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Usar como padrão institucional nos próximos processos — {eligibleDecided.length}</summary>
+          <ul className="space-y-2 px-3 pb-3 text-sm">
+            {eligibleDecided.map((f) => (
+              <li key={f.name} className="space-y-1">
+                <p>{f.description || f.name}: <strong>{formatDisplay(f.type, f.displayValue ?? f.currentValue)}</strong></p>
+                <UseAsDefaultButton name={f.name} description={f.description || f.name} type={f.type} value={f.currentValue} processId={p.processId} />
+              </li>
+            ))}
+          </ul>
         </details>
       )}
 
@@ -188,8 +241,8 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           {reused.map(({ field }) => (
             <li key={field.name}>
               <details>
-                <summary className="cursor-pointer">{field.description || field.name}: <span className="text-muted-foreground">{formatDisplay(field.type, field.displayValue)}</span>{field.status === "ORG_REUSED" && <em className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">Reutilizado do perfil institucional</em>}</summary>
-                <dl className="ml-4 text-xs text-muted-foreground"><dt>Valor</dt><dd>{formatDisplay(field.type, field.displayValue)}</dd><dt>Origem</dt><dd>{field.origin?.label}</dd>{field.shadowedLegacy && <><dt>Aviso técnico</dt><dd>Havia um valor legado registrado neste campo; ele foi preservado no histórico e é ignorado porque a autoridade canônica prevalece.</dd></>}{field.origin?.ref && <><dt>Referência</dt><dd>{Object.entries(field.origin.ref).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}</dl>
+                <summary className="cursor-pointer">{field.description || field.name}: <span className="text-muted-foreground">{formatDisplay(field.type, field.displayValue)}</span>{field.status === "ORG_REUSED" && <em className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">Reutilizado do perfil institucional</em>}{field.status === "UPSTREAM" && <em className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">Reutilizado do TR</em>}{field.status === "ORG_DEFAULT" && <em className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">Padrão institucional</em>}</summary>
+                <dl className="ml-4 text-xs text-muted-foreground"><dt>Valor</dt><dd>{formatDisplay(field.type, field.displayValue)}</dd><dt>Origem</dt><dd>{field.origin?.label}</dd><dt>Autoridade</dt><dd>{field.authority}</dd>{field.shadowedLegacy && <><dt>Aviso técnico</dt><dd>Havia um valor legado registrado neste campo; ele foi preservado no histórico e é ignorado porque a autoridade canônica prevalece.</dd></>}{field.origin?.ref && <><dt>Referência</dt><dd>{Object.entries(field.origin.ref).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}</dl>
               </details>
             </li>
           ))}
@@ -217,24 +270,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         <div className="space-y-3 rounded-lg border border-primary/40 p-3" role="dialog" aria-label="Revisar e registrar decisões">
           <p className="text-sm font-semibold">{p.plan.decisionCount} {p.plan.decisionCount === 1 ? "decisão será registrada" : "decisões serão registradas"}:</p>
           <ul className="list-disc space-y-0.5 pl-5 text-sm">{p.plan.writes.flatMap((w) => w.lines.map((l) => <li key={`${w.id}-${l}`}>{l}</li>))}</ul>
-          <fieldset className="space-y-2 text-xs">
-            <legend className="px-1 font-medium">Autoridade humana</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {([["decidedByName", "Autoridade que decidiu (nome)", "text"], ["decidedByRole", "Cargo / função", "text"], ["decidedAt", "Data do ato", "date"], ["basisReference", "Referência do ato (portaria, ata, processo)", "text"]] as const).map(([k, label, type]) => (
-                <label key={k} className="flex flex-col"><span className="mb-1 font-medium">{label}</span>
-                  <input type={type} value={p.decision[k]} className={INPUT} onChange={(e) => p.onDecision({ ...p.decision, [k]: e.target.value })} />
-                  {p.showErrors && dErr[k] && <span role="alert" className="text-destructive">{dErr[k]}</span>}
-                </label>
-              ))}
-            </div>
-            <label className="flex flex-col"><span className="mb-1 font-medium">Justificativa (mín. 10 caracteres)</span>
-              <textarea rows={2} value={p.decision.reason} className={INPUT} onChange={(e) => p.onDecision({ ...p.decision, reason: e.target.value })} />
-              {p.showErrors && dErr.reason && <span role="alert" className="text-destructive">{dErr.reason}</span>}
-            </label>
-            <label className="flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={p.decision.confirmed} onChange={(e) => p.onDecision({ ...p.decision, confirmed: e.target.checked })} />
-              <span>Confirmo, como pessoa responsável, o REGISTRO destas decisões (não é preenchimento automático).</span></label>
-            {p.showErrors && dErr.confirmed && <p role="alert" className="text-destructive">{dErr.confirmed}</p>}
-          </fieldset>
+          <DecisionFieldset decision={p.decision} onDecision={p.onDecision} showErrors={p.showErrors} consent="Confirmo, como pessoa responsável, o REGISTRO destas decisões (não é preenchimento automático)." />
           <div className="flex gap-2">
             <button type="button" disabled={p.busy} onClick={p.onConfirm} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground">{p.busy ? "Registrando…" : "Confirmar e registrar"}</button>
             <button type="button" disabled={p.busy} onClick={p.onCancelReview} className="rounded-lg border border-input px-4 py-2 text-sm">Voltar</button>

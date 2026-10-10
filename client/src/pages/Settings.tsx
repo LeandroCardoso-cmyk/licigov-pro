@@ -11,6 +11,7 @@ import { Loader2, Moon, Save, ShieldAlert, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import LicitacoesProfilePanel from "@/components/procurement/LicitacoesProfilePanel";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -280,6 +281,17 @@ export default function Settings() {
               )}
             </Button>
           </div>
+          <Card id="perfil-licitacoes">
+            <CardHeader>
+              <CardTitle>Perfil institucional de Licitações</CardTitle>
+              <CardDescription>
+                Configure uma única vez: papéis (autoridade competente, pregoeiro, assinante do Edital…), políticas e padrões do órgão. Cada novo Edital reutiliza estes dados.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LicitacoesProfilePanel />
+            </CardContent>
+          </Card>
           </div>
         )}
       </div>

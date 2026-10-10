@@ -15,6 +15,7 @@
  * só `emitido` é. Editar o rascunho depois NÃO altera a versão emitida (imutável): nova promoção cria
  * nova versão. A cognição/carregamento roda FORA da transação.
  */
+import { TR_PARAMS_DIGEST_RE } from "../domain/trStructuredParams";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
@@ -93,6 +94,13 @@ export interface PromoteOfficialResult {
  * integridade + replay-safety + commit atômico. `expectedContentHash` (opcional) garante que o
  * emissor promove exatamente a versão que revisou (concorrência otimista).
  */
+/** Marcador `trparams:<sha256 completo, 64 hex>` gravado na geração do TR. Ausente em TR legado/importado; marcador curto/malformado NUNCA é copiado como autoridade. */
+function trParamsMarker(sources: readonly string[] | undefined): string | null {
+  const m = (sources ?? []).filter((x) => x.startsWith("trparams:")).pop();
+  const digest = m ? m.slice("trparams:".length) : null;
+  return digest && TR_PARAMS_DIGEST_RE.test(digest) ? digest : null;
+}
+
 export async function promoteOfficialDocument(params: {
   organizationId: number;
   processId: string;
@@ -233,6 +241,8 @@ export async function promoteOfficialDocument(params: {
           institutionalIdentityFingerprint: identity.fingerprint,
           processNumber: process?.processNumber ?? null,
           object: process?.object ?? null,
+          // CONTEXT_REUSE 2.0 — snapshot lógico dos Parâmetros estruturados do TR que participaram DESTA versão (marcador do rascunho).
+          ...(params.kind === "tr" && trParamsMarker(draft.sources) ? { structuredParamsDigest: trParamsMarker(draft.sources) } : {}),
           ...(templated ? {
             templateGenerationManifestId: templated.issuanceManifest.derivedFromManifestId,
             templateIssuanceManifestId: templated.issuanceManifest.id,

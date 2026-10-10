@@ -16,6 +16,8 @@ export interface EditalPreparationPanelProps {
   trPin?: { documentId: string; version: number; contentHash: string } | null;
   /** Chamado após QUALQUER registro bem-sucedido (a workspace revalida o preflight). */
   onChanged?: () => void;
+  /** Abre o TR do processo (Parâmetros estruturados). */
+  onOpenTr?: () => void;
 }
 
 type State = PreparationStateView | { status: "UNAVAILABLE"; resolution: string; reason: string };
@@ -26,7 +28,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * todas as decisões digitadas. As escritas são SEQUENCIAIS, pelos endpoints governados existentes, cada uma com idempotência
  * própria e CAS encadeado; conflito ⇒ para, recarrega e informa o que já foi registrado (nunca sobrescreve).
  */
-export default function EditalPreparationPanel({ processId, params, trPin = null, onChanged }: EditalPreparationPanelProps) {
+export default function EditalPreparationPanel({ processId, params, trPin = null, onChanged, onOpenTr }: EditalPreparationPanelProps) {
   const utils = trpc.useUtils();
   const input = { processId, ...params, ...(trPin ? { officialPins: { TR: trPin } } : {}) } as never;
   const query = trpc.procurementProcess.editalTemplatePreparation.useQuery(input, { enabled: !!processId });
@@ -104,6 +106,7 @@ export default function EditalPreparationPanel({ processId, params, trPin = null
       disclosure={disclosure} onDisclosure={setDisclosure} participationDefault={participationDefault} onParticipationDefault={setParticipationDefault}
       plan={plan} reviewing={reviewing} onStartReview={() => { setOutcome(null); setNotice(null); setReviewing(true); }} onCancelReview={() => setReviewing(false)}
       decision={decision} onDecision={setDecision} showErrors={showErrors} busy={busy} outcome={outcome} notice={notice} onConfirm={confirm}
+      onOpenTr={onOpenTr} processId={processId}
     />
   );
 }

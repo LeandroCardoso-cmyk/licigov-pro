@@ -42,6 +42,7 @@ import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/inst
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
+import { completeProfile, fillTrParams, profileAsPrepView, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, orgProfilePending, toFormValue,
   type PlannedWrite, type PreparationStateView, type SectionEdits,
@@ -143,10 +144,16 @@ const scenarioValue = (source: string, path: string): unknown => {
   return valueCache.get(source)![path];
 };
 
+const harnessOf = (p: P): ReuseHarness => ({ org: p.org, proc: () => proc(p.org), tpl: () => tpl(p.org), ws: WS, processId: p.w.processId, key });
+
 /** Repete o ciclo da tela até não haver pendência: pega SÓ as pendências (ao vivo), digita o valor e salva com UMA confirmação. */
-async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL" } = {}): Promise<{ rounds: number; typed: string[] }> {
+async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL"; skipTr?: string[] } = {}): Promise<{ rounds: number; typed: string[] }> {
   const scope = opts.scope ?? "PROCESS";
   const typed: string[] = [];
+  // CONTEXT_REUSE 2.0: o Perfil de Licitações (órgão) e os Parâmetros estruturados do TR têm entrada PRÓPRIA (não a preparação do Edital).
+  if (scope === "ORG" || scope === "ALL") { const r = await completeProfile(harnessOf(p)); for (let i = 0; i < r.policiesTyped + r.rolesRegistered; i++) typed.push("perfil"); }
+  if (scope === "PROCESS" || scope === "ALL") { await fillTrParams(harnessOf(p), {}, opts.skipTr); await stampTrLineage(conn, harnessOf(p), p.tr.documentId); }   // TR emitido com este snapshot
+  if (scope === "ORG") return { rounds: 0, typed };
   for (let round = 1; round <= 8; round++) {
     const st = await getState(p);
     const pend = livePendingItems(st, {}).filter((i) => scope === "ALL" || i.section.scope === scope);
@@ -254,7 +261,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(sb.orgProfile?.revision).toBe(orgRevision);
     expect(sb.metrics.ORG_REUSED).toBe(s1.metrics.ORG_REUSED);
     expect(sb.sections.filter((s) => s.scope === "ORG").every((s) => s.fields.every((f) => f.status !== "PENDING"))).toBe(true);
-    const reusedField = sb.sections.flatMap((s) => s.fields).find((f) => f.status === "ORG_REUSED")!;
+    const reusedField = sb.sections.find((s) => s.source === "POLICY")!.fields.find((f) => f.status === "ORG_REUSED")!;
     expect(reusedField.origin?.label).toBe("Perfil institucional do órgão");
     expect(reusedField.origin?.ref?.revision).toBe(orgRevision);
     await fillPending(b, { scope: "PROCESS" });
@@ -264,12 +271,12 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(rbm1.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
 
     // 5. mudar o perfil institucional (nova revisão): processo NOVO vê a nova revisão; A (emitido) não é reescrito
-    const sBefore = await getState(b);
+    const sBefore = profileAsPrepView(await proc(b.org).licitacoesProfile({ processId: b.w.processId, ...WS }));
     const policy = sBefore.sections.find((s) => s.source === "POLICY")!;
     const field = policy.fields.find((f) => f.name === "sancoes.multaMoraPercentual")!;
     const planChange = buildSavePlan(sBefore, { edits: { POLICY: { [field.path]: "0,7" } }, disclosure: "", participationDefault: null });
     expect(planChange.writes.map((w) => w.id)).toEqual(["ORG-POLICY"]);
-    const changed = await executeSavePlan(planChange.writes, sBefore.revisions, writerFor(b, sBefore), stale);
+    const changed = await executeSavePlan(planChange.writes, sBefore.revisions, writerFor(b, await getState(b)), stale);
     expect(changed.failed).toBeNull();
     const c = await addProcess(a, "z1c", 2);
     const sc = await getState(c);
@@ -310,7 +317,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     // TR sem dado estruturado (emitido sem objeto no metadata) ⇒ pendência humana EXPLÍCITA, nunca texto livre parseado
     const q = await addProcess(p, "z2q", 1, null);
     const sq = await getState(q);
-    expect(sq.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ class: "TR_PROJECTION", status: "PENDING", editable: true });
+    expect(sq.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ class: "TR_PROJECTION", status: "PENDING_TR", editable: false });
     expect(sq.metrics.TR_PROJECTED).toBe(0);
     // pós-homologação nunca aparece
     expect(st.sections.flatMap((s) => s.fields).some((f) => f.name.startsWith("pos."))).toBe(false);
@@ -366,17 +373,17 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const st = await getState(p);
     const pend = livePendingItems(st, {}).filter((i) => i.section.scope === "PROCESS");
     const bySource = (s: string) => pend.filter((i) => i.section.source === s);
-    expect(bySource("TR").length).toBeGreaterThan(0);
+    expect(bySource("PROCESS").length).toBeGreaterThan(0);
     expect(bySource("CERTAME_CONFIG").length).toBeGreaterThan(0);
     const edits: Record<string, Record<string, any>> = {};
-    for (const { section, field } of [...bySource("TR"), ...bySource("CERTAME_CONFIG")]) (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValue(field.source, field.path));
+    for (const { section, field } of [...bySource("PROCESS"), ...bySource("CERTAME_CONFIG")]) (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValue(field.source, field.path));
     const plan = buildSavePlan(st, { edits: edits as any, disclosure: "publico", participationDefault: null });
-    expect(plan.writes.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-TR", "PROCESS-CERTAME_CONFIG"]);
+    expect(plan.writes.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-PROCESS", "PROCESS-CERTAME_CONFIG"]);
     // outra pessoa grava no PROCESSO depois da escrita do TR (antes de CERTAME_CONFIG): o CAS do registro inteiro muda
     const sharedKeys = new Map<string, string>();
     let intruded = false;
     const out = await executeSavePlan(plan.writes, st.revisions, writerFor(p, st, sharedKeys, async (w) => {
-      if (w.id === "PROCESS-TR" && !intruded) {
+      if (w.id === "PROCESS-PROCESS" && !intruded) {
         intruded = true;
         const fresh = await getState(p);
         await tpl(p.org, "manager", 404).governed.recordProcessFields({
@@ -385,7 +392,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
         });
       }
     }), stale);
-    expect(out.registered.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-TR"]);
+    expect(out.registered.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-PROCESS"]);
     expect(out.failed?.write.id).toBe("PROCESS-CERTAME_CONFIG");
     expect(out.failed?.stale).toBe(true);
     expect(out.notExecuted).toEqual([]);
@@ -393,7 +400,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const after = await getState(p);
     expect(after.budgetDisclosure).toBe("publico");
     expect(after.sections.find((s) => s.source === "CERTAME_CONFIG")!.fields.some((f) => f.hasValue)).toBe(false);
-    expect(after.sections.find((s) => s.source === "TR")!.fields.some((f) => f.hasValue)).toBe(true);
+    expect(after.sections.find((s) => s.source === "PROCESS")!.fields.some((f) => f.hasValue)).toBe(true);
     expect(after.sections.find((s) => s.source === "NORMATIVE")!.fields.some((f) => f.hasValue)).toBe(true);
     // recarregado: nova tentativa com a revisão fresca converge (a pessoa revisa e confirma de novo)
     const retry = buildSavePlan(after, { edits: { CERTAME_CONFIG: edits.CERTAME_CONFIG } as any, disclosure: "", participationDefault: null });
@@ -454,7 +461,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const w = await seedWorld(conn, org, "z6", { flagOn: true });
     const v1 = await trDoc({ org, w, tr: null as any, model: null }, 1, "Objeto v1");
     const p: P = { org, w, tr: v1, model: await publishBll(org) };
-    await fillPending(p, { scope: "ALL" });
+    await fillPending(p, { scope: "ALL", skipTr: ["processo.objetoCompleto"] });
 
     // T0: sem seleção do TR ⇒ "Selecione o TR oficial exato"; nada é projetado "do último"
     const s0 = await getState(p, false);
@@ -474,6 +481,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
 
     // T1: nasce v2 com outro objeto; quem enviou v1 NÃO recebe a projeção de v2 — fica BLOQUEADO (OFFICIAL_PIN_STALE)
     const v2 = await trDoc(p, 2, "Objeto v2");
+    await stampTrLineage(conn, harnessOf(p), v2.documentId);   // v2 emitido com o mesmo snapshot dos parâmetros
     const stale = await getState(p);
     expect(stale.trPin).toMatchObject({ state: "INVALID", code: "OFFICIAL_PIN_STALE" });
     expect(stale.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "AWAITING", editable: false });
@@ -495,7 +503,8 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect((await preflight(p2)).status).toBe("READY_FOR_COMPOSITION");
 
     // T3: entre a preparação (pin v2 válido) e a geração nasce v3 ⇒ pin v2 obsoleto, ZERO M1/draft, exige reseleção
-    await trDoc(p2, 3, "Objeto v3");
+    const v3 = await trDoc(p2, 3, "Objeto v3");
+    await stampTrLineage(conn, harnessOf(p2), v3.documentId);
     const before = await writes(p2);
     const refused = await gen(p2).then(() => null, (e: any) => e);
     expect(refused?.message).toContain("OFFICIAL_PIN_STALE");
@@ -510,7 +519,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     await trDoc({ org, w, tr: null as any, model: null }, 1, "Objeto v1 (antigo)");
     const v2 = await trDoc({ org, w, tr: null as any, model: null }, 2, "Objeto v2 (vigente, estruturado)");
     const p: P = { org, w, tr: v2, model: await publishBll(org) };
-    await fillPending(p, { scope: "ALL" });
+    await fillPending(p, { scope: "ALL", skipTr: ["processo.objetoCompleto"] });
     await gen(p);
     const text = (await draftText(p))!;
     expect(text).toContain("Objeto v2 (vigente, estruturado)");
@@ -584,28 +593,29 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     await fillPending(p, { scope: "ORG" });
     const s0 = await getState(p);
     const obj0 = s0.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
-    expect(obj0).toMatchObject({ class: "TR_PROJECTION", status: "PENDING", editable: true });
-    // a pessoa supre a ausência (pendência explícita) — o fluxo normal da tela
+    expect(obj0).toMatchObject({ class: "TR_PROJECTION", status: "PENDING_TR", editable: false });
+    // a pessoa supre a ausência no fluxo do TR (Parâmetros estruturados) — NÃO na preparação do Edital
     const typed = (await fillPending(p, { scope: "PROCESS" })).typed;
-    expect(typed).toContain("processo.objetoCompleto");
+    expect(typed.length).toBeGreaterThan(0);
     const s1 = await getState(p);
-    expect(s1.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "DECIDED", editable: true });
-    const supplied = (await readGovernedRecord(org, "PROCESS", w.processId, BLL.catalog))!.payload.sections.TR!["objetoCompleto"] as string;
+    expect(s1.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "UPSTREAM", editable: false });
+    const supplied = String(s1.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!.displayValue);
     expect(supplied).toBeTruthy();
 
     // o TR passa a trazer o dado estruturado (nova versão emitida, novo pin): a projeção VENCE a decisão humana anterior
     const v2 = await trDoc(p, 2, "Objeto estruturado pelo TR v2");
+    await stampTrLineage(conn, harnessOf(p), v2.documentId);
     const p2: P = { ...p, tr: v2 };
     const s2 = await getState(p2);
     const obj2 = s2.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
-    expect(obj2).toMatchObject({ status: "AUTO", editable: false, displayValue: "Objeto estruturado pelo TR v2", shadowedLegacy: true });
+    expect(obj2).toMatchObject({ status: "AUTO", editable: false, displayValue: "Objeto estruturado pelo TR v2" });
     const ports = getTemplateCompositionPorts();
     const official = await ports.canonical.pinOfficialDocuments(org, w.processId, ["TR"], { TR: v2 });
     const src = await ports.canonical.resolveSources(org, w.processId, ["TR"], BLL.catalog, official);
     expect((src.TR?.data as any).objetoCompleto).toBe("Objeto estruturado pelo TR v2");     // a decisão humana anterior não é usada
     expect(JSON.stringify(src.TR?.data)).not.toContain(supplied);
-    // preservada no ledger como história (não apagada)
-    expect(((await readGovernedRecord(org, "PROCESS", w.processId, BLL.catalog))!.payload.sections.TR as any).objetoCompleto).toBe(supplied);
+    // o fato confirmado no TR permanece no ledger como história (append-only)
+    expect(await count("SELECT COUNT(*) n FROM procurement_context_facts WHERE organization_id = ? AND process_id = ? AND path = 'tr.param.processo.objetoCompleto'", [org, w.processId])).toBe(1);
     expect((await preflight(p2)).status).toBe("READY_FOR_COMPOSITION");
   }, 600_000);
 });

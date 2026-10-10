@@ -119,6 +119,8 @@ export function generatePayloadHash(p: {
   /** P0 Edital — digest das FONTES reaproveitadas (DFD/ETP/TR/itens/parâmetros): mudança de fonte muda o
    *  payload (retry técnico com as MESMAS fontes replaya; fonte alterada sob a mesma chave → CONFLICT). */
   sourcesDigest?: string;
+  /** CONTEXT_REUSE 2.0 — digest dos Parâmetros estruturados do TR (só entra no hash quando existe; sem eles o hash é o anterior). */
+  trParams?: string;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -132,6 +134,7 @@ export function generatePayloadHash(p: {
       f: p.form ?? null,
       pl: p.platform ?? null,
       src: p.sourcesDigest ?? null,
+      ...(p.trParams ? { trp: p.trParams } : {}),
     }))
     .digest("hex");
 }
@@ -919,6 +922,8 @@ export async function generateDocument(params: {
   /** PR-09 — hash do rascunho que o humano viu (opcional; divergente ⇒ CONFLICT). */
   expectedContentHash?: string;
   invoke?: (prompt: string) => Promise<string>;
+  /** CONTEXT_REUSE 2.0 — bloco determinístico dos Parâmetros estruturados do TR (os MESMOS fatos que o Edital consome). Só TR. */
+  structuredParams?: { block: string; digest: string } | null;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -955,6 +960,8 @@ export async function generateDocument(params: {
   const payloadHash = generatePayloadHash({
     organizationId: params.organizationId, processId: params.processId, kind: params.kind,
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
+    // Só entra no hash quando EXISTE parâmetro estruturado (processos sem eles mantêm exatamente o hash anterior).
+    ...(params.kind === "tr" && params.structuredParams ? { trParams: params.structuredParams.digest } : {}),
   });
 
   // C.4B.3A + PR-09 — estado de PARTIDA capturado ANTES da idempotência e da cognição (sentinel de ausência
@@ -985,7 +992,9 @@ export async function generateDocument(params: {
         invoke: params.invoke,
         sourceContext,
       });
-      const content = authoring.content;
+      const content = params.kind === "tr" && params.structuredParams
+        ? `${authoring.content.replace(/\s+$/, "")}\n\n${params.structuredParams.block}\n`
+        : authoring.content;
 
       const doc = createGeneratedDocument({
         organizationId: params.organizationId,
@@ -998,6 +1007,7 @@ export async function generateDocument(params: {
           `grounding:${authoring.groundingState}`,
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
+          ...(params.kind === "tr" && params.structuredParams ? [`trparams:${params.structuredParams.digest}`] : []),
         ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,

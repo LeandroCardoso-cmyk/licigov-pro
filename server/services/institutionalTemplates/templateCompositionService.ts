@@ -173,7 +173,7 @@ async function loadCanonicalInputs(
       : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
-  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments);
+  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments, { pinned: officialPins !== undefined });
   return { sources, officialDocuments, identityFingerprint };
 }
 

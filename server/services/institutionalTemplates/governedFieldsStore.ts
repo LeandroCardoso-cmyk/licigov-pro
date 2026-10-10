@@ -18,7 +18,7 @@ export const GOVERNED_SUBJECT_TYPE = { PROCESS: "procurement.source_fields", ORG
 export const GOVERNED_DECISION_TYPE = { PROCESS: "source_fields_declared", ORG: "institutional_policy" } as const;
 export const GOVERNED_OUTCOME = { PROCESS: "declarado", ORG: "estabelecida" } as const;
 
-export interface GovernedRecord { readonly payload: GovernedPayload; /** Payload decodificado COMPLETO (inclui campos de outros modelos; só para preservá-los ao regravar). */ readonly raw: { sections?: Record<string, Record<string, unknown>> }; readonly hash: string; readonly revision: number; readonly decision: InstitutionalDecision }
+export interface GovernedRecord { readonly payload: GovernedPayload; /** Payload decodificado COMPLETO (inclui campos de outros modelos; só para preservá-los ao regravar). */ readonly raw: { sections?: Record<string, Record<string, unknown>>; roles?: Record<string, unknown>; defaults?: Record<string, unknown> }; readonly hash: string; readonly revision: number; readonly decision: InstitutionalDecision }
 
 /** Registro corrente decodificado e REVALIDADO contra o catálogo informado; `null` = nenhuma decisão registrada. */
 export async function readGovernedRecord(

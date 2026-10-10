@@ -41,6 +41,8 @@ describe("classificação do catálogo BLL", () => {
       else if ((AUTHORITY_OWNED_PATHS[v.source] ?? []).includes(v.path)) expect(c.class, v.name).toBe("CANONICAL");
       else if (PROJECTION_BY_VARIABLE[v.name]) expect(["CANONICAL", "TR_PROJECTION"], v.name).toContain(c.class);
       else if (v.requiredWhen) expect(c.class, v.name).toBe("CONDITIONAL");
+      else if (c.rule === "ORG_ROLE") expect(c.class, v.name).toBe("ORG_PROFILE");
+      else if (c.rule === "TR_PARAM") expect(c.class, v.name).toBe("TR_PROJECTION");
       else if (v.source === "IDENTITY" || v.source === "POLICY") expect(c.class, v.name).toBe("ORG_PROFILE");
       else if (v.source === "TR") expect(c.class, v.name).toBe("TR_PROJECTION");
       else expect(c.class, v.name).toBe("PROCESS_DECISION");
@@ -148,7 +150,7 @@ describe("guardas estruturais — nenhuma autoridade 'latest' paralela na proje�
   });
   it("a composição resolve o pin ANTES das fontes e entrega o documento exato a elas (não em paralelo)", () => {
     const comp = read("server/services/institutionalTemplates/templateCompositionService.ts");
-    expect(comp).toContain("t.catalog, officialDocuments)");
+    expect(comp).toContain("t.catalog, officialDocuments, { pinned: officialPins !== undefined })");   // o pin exato (e só ele) ativa a checagem de lineage dos parâmetros do TR
     const adapter = read("server/services/institutionalTemplates/adapters/canonicalSources.ts");
     expect(adapter).toContain("shadowedPaths");
     expect(adapter).toContain("canonicalProjectedPaths");
