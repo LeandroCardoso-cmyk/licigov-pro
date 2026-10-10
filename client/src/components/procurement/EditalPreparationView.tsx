@@ -76,6 +76,10 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const dErr = validateDecisionForm(p.decision).errors;
   const pendingCount = p.pending.length + (state.budgetDisclosure || p.disclosure ? 0 : 1) + (state.participationPending && !p.participationDefault?.trim() ? 1 : 0);
   const reused = reusedItems(state);
+  const blockedCanonical = [
+    ...state.canonicalFields.filter((c) => c.status === "CANONICAL_UNRESOLVED").map((c) => ({ key: c.name, label: c.description || c.name, origin: c.origin.label })),
+    ...state.sections.flatMap((s) => s.fields).filter((f) => f.status === "CANONICAL_UNRESOLVED").map((f) => ({ key: f.name, label: f.description || f.name, origin: f.origin?.label ?? "autoridade de origem" })),
+  ];
   // Perfil institucional (ORG): editável em um só lugar; mudar cria nova revisão do órgão e vale para os NOVOS processos.
   const profileItems: PendingItem[] = state.sections.filter((s) => s.scope === "ORG").flatMap((section) =>
     section.fields.filter((f) => f.editable && ["ORG_REUSED", "OPTIONAL"].includes(f.status)).map((field) => ({ section, field })));
@@ -91,6 +95,14 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         </p>
       </header>
 
+      {state.trPin.state !== "VALID" && (
+        <p role={state.trPin.state === "INVALID" ? "alert" : "status"} className={`text-sm ${state.trPin.state === "INVALID" ? "text-destructive" : "text-amber-700 dark:text-amber-300"}`}>
+          {state.trPin.state === "INVALID"
+            ? "O TR oficial selecionado não é mais válido (existe versão mais recente ou ele divergiu). Selecione o TR oficial exato novamente."
+            : "Selecione o TR oficial exato: as informações estruturadas do TR são reaproveitadas a partir dele."}
+        </p>
+      )}
+
       <ul className="grid gap-2 sm:grid-cols-2" aria-label="Resumo da preparação">
         {state.summary.groups.map((g) => <GroupCard key={g.id} g={g} profileRevision={state.orgProfile?.revision ?? null} />)}
       </ul>
@@ -102,6 +114,14 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         <div role={p.outcome.failed ? "alert" : "status"} className="rounded-lg border border-border px-3 py-2 text-sm">
           {p.outcome.registered.length > 0 && <p>Já registrado: {p.outcome.registered.map((w) => (w.source ? SOURCE_TITLE[w.source] ?? w.source : "Divulgação do orçamento")).join(", ")}.</p>}
           {p.outcome.failed && <p className="text-destructive">Parou em {p.outcome.failed.write.source ? SOURCE_TITLE[p.outcome.failed.write.source] ?? p.outcome.failed.write.source : "Divulgação do orçamento"}: nada foi sobrescrito. {p.outcome.notExecuted.length > 0 ? `${p.outcome.notExecuted.length} registro(s) não executado(s) — revise e confirme novamente.` : ""}</p>}
+        </div>
+      )}
+
+      {blockedCanonical.length > 0 && (
+        <div role="alert" className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" aria-label="Dados do sistema incompletos">
+          <h3 className="font-semibold text-destructive">Dados do sistema incompletos</h3>
+          <p className="text-xs text-muted-foreground">Estas informações têm autoridade própria e não são digitadas aqui. Complete-as na origem (abertura do processo, DFD ou cadastro do órgão).</p>
+          <ul className="list-disc pl-5 text-xs">{blockedCanonical.map((b) => <li key={b.key}>{b.label} — {b.origin}</li>)}</ul>
         </div>
       )}
 
@@ -169,7 +189,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             <li key={field.name}>
               <details>
                 <summary className="cursor-pointer">{field.description || field.name}: <span className="text-muted-foreground">{formatDisplay(field.type, field.displayValue)}</span>{field.status === "ORG_REUSED" && <em className="ml-2 text-xs text-emerald-700 dark:text-emerald-300">Reutilizado do perfil institucional</em>}</summary>
-                <dl className="ml-4 text-xs text-muted-foreground"><dt>Valor</dt><dd>{formatDisplay(field.type, field.displayValue)}</dd><dt>Origem</dt><dd>{field.origin?.label}</dd>{field.origin?.ref && <><dt>Referência</dt><dd>{Object.entries(field.origin.ref).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}</dl>
+                <dl className="ml-4 text-xs text-muted-foreground"><dt>Valor</dt><dd>{formatDisplay(field.type, field.displayValue)}</dd><dt>Origem</dt><dd>{field.origin?.label}</dd>{field.shadowedLegacy && <><dt>Aviso técnico</dt><dd>Havia um valor legado registrado neste campo; ele foi preservado no histórico e é ignorado porque a autoridade canônica prevalece.</dd></>}{field.origin?.ref && <><dt>Referência</dt><dd>{Object.entries(field.origin.ref).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}</dl>
               </details>
             </li>
           ))}

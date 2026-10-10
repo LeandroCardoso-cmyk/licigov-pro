@@ -35,7 +35,10 @@ import { InstitutionalTemplatesWorkflow } from "../../services/institutionalTemp
 import { ModelRegistrationService } from "../../services/institutionalTemplates/modelRegistrationService";
 import { TemplateGovernanceService } from "../../services/institutionalTemplates/governanceService";
 import { createTemplateCompositionPorts, createTemplateWorkflowPorts } from "../../services/institutionalTemplates/integration";
-import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getTemplateCompositionPorts, getTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { recordHumanDecision } from "../../services/institutionalTemplates/decisionRecorder";
+import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "../../services/institutionalTemplates/governedFieldsStore";
+import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/institutionalTemplates/governedSources";
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
@@ -106,7 +109,9 @@ async function addProcess(base: P, label: string, seq: number, trMeta: Record<st
   return { ...base, w, tr };
 }
 
-const getState = async (p: P): Promise<PreparationStateView> => (await proc(p.org).editalTemplatePreparation({ processId: p.w.processId, ...WS })) as any;
+/** Estado de preparação; por padrão com o TR EXATO selecionado (como a tela faz); `pinned=false` ⇒ ainda sem seleção do TR. */
+const getState = async (p: P, pinned = true): Promise<PreparationStateView> =>
+  (await proc(p.org).editalTemplatePreparation({ processId: p.w.processId, ...WS, ...(pinned ? { officialPins: pin(p.tr) } : {}) })) as any;
 const preflight = (p: P): Promise<any> => proc(p.org).editalTemplatePreflight({ processId: p.w.processId, ...WS, officialPins: pin(p.tr) });
 const writes = async (p: P) => ({
   drafts: await count("SELECT COUNT(*) n FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]),
@@ -428,5 +433,179 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(pf.issues.some((i: any) => i.code === "GOVERNED_SOURCE_PENDING")).toBe(true);
     expect(await writes(a)).toEqual(zero);
     expect(legacy.calls).toBe(0);
+  }, 600_000);
+
+  /** Registra um valor LEGADO direto na camada de decisão (como existiria num ledger anterior à política canônica). */
+  async function seedLegacy(p: P, scope: "PROCESS" | "ORG", sections: Record<string, Record<string, unknown>>) {
+    const evidence = encodeGovernedPayload(GOVERNED_FIELDS_SCHEMA, { sections }).evidence;
+    const cur = await readGovernedRecord(p.org, scope, scope === "ORG" ? GOVERNED_ORG_SUBJECT : p.w.processId, BLL.catalog);
+    await recordHumanDecision(ctxOf(p.org), {
+      subjectType: scope === "ORG" ? "institutional.policy" : "procurement.source_fields", decisionType: scope === "ORG" ? "institutional_policy" : "source_fields_declared",
+      outcome: scope === "ORG" ? "estabelecida" : "declarado", mode: "revision", subjectId: scope === "ORG" ? GOVERNED_ORG_SUBJECT : p.w.processId, evidence,
+      act: { confirm: true, idempotencyKey: key("legacy"), decision: decision() }, expectedRevision: cur?.revision ?? 0,
+    });
+  }
+  const trDoc = async (p: P, version: number, object: string | null) =>
+    seedOfficialTr(conn, p.w, version, `TERMO DE REFERÊNCIA — v${version}`, object ? { object } : undefined);
+  const draftText = async (p: P) => (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0]?.content as string | undefined;
+
+  it("Z6 — TR EXATO: a projeção vem do documento do pin (nunca 'latest'); pin obsoleto ⇒ BLOCKED sem projetar a versão nova; nova versão entre preparação e geração ⇒ zero M1/draft", async () => {
+    const org = newOrg();
+    const w = await seedWorld(conn, org, "z6", { flagOn: true });
+    const v1 = await trDoc({ org, w, tr: null as any, model: null }, 1, "Objeto v1");
+    const p: P = { org, w, tr: v1, model: await publishBll(org) };
+    await fillPending(p, { scope: "ALL" });
+
+    // T0: sem seleção do TR ⇒ "Selecione o TR oficial exato"; nada é projetado "do último"
+    const s0 = await getState(p, false);
+    expect(s0.trPin).toEqual({ state: "NOT_SELECTED" });
+    const f0 = s0.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
+    expect(f0).toMatchObject({ status: "AWAITING", editable: false });
+    expect(f0.origin?.label).toContain("Selecione o TR oficial exato");
+    expect(JSON.stringify(s0)).not.toContain("Objeto v1");
+
+    // pin v1 vigente ⇒ projeção de v1, com a lineage do documento exato
+    const s1 = await getState(p);
+    expect(s1.trPin.state).toBe("VALID");
+    const f1 = s1.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
+    expect(f1).toMatchObject({ status: "AUTO", displayValue: "Objeto v1" });
+    expect(f1.origin?.ref).toMatchObject({ documentId: v1.documentId, version: 1, contentHash: v1.contentHash });
+    expect((await preflight(p)).status).toBe("READY_FOR_COMPOSITION");
+
+    // T1: nasce v2 com outro objeto; quem enviou v1 NÃO recebe a projeção de v2 — fica BLOQUEADO (OFFICIAL_PIN_STALE)
+    const v2 = await trDoc(p, 2, "Objeto v2");
+    const stale = await getState(p);
+    expect(stale.trPin).toMatchObject({ state: "INVALID", code: "OFFICIAL_PIN_STALE" });
+    expect(stale.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "AWAITING", editable: false });
+    expect(JSON.stringify(stale)).not.toContain("Objeto v2");
+    const zero = await writes(p);
+    const pfStale = await preflight(p);
+    expect(pfStale.status).toBe("BLOCKED");
+    expect(JSON.stringify(pfStale)).toContain("OFFICIAL_PIN_STALE");
+    expect(JSON.stringify(pfStale)).not.toContain("Objeto v2");
+    expect(await writes(p)).toEqual(zero);
+
+    // T2: reseleção do pin vigente (v2) ⇒ projeção = Objeto v2, lineage de v2
+    const p2: P = { ...p, tr: v2 };
+    const s2 = await getState(p2);
+    const f2 = s2.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
+    expect(f2).toMatchObject({ status: "AUTO", displayValue: "Objeto v2" });
+    expect(f2.origin?.ref).toMatchObject({ documentId: v2.documentId, version: 2, contentHash: v2.contentHash });
+    expect(f2.origin?.ref?.documentId).not.toBe(v1.documentId);
+    expect((await preflight(p2)).status).toBe("READY_FOR_COMPOSITION");
+
+    // T3: entre a preparação (pin v2 válido) e a geração nasce v3 ⇒ pin v2 obsoleto, ZERO M1/draft, exige reseleção
+    await trDoc(p2, 3, "Objeto v3");
+    const before = await writes(p2);
+    const refused = await gen(p2).then(() => null, (e: any) => e);
+    expect(refused?.message).toContain("OFFICIAL_PIN_STALE");
+    expect(await writes(p2)).toEqual(before);
+    expect(before).toMatchObject({ drafts: 0, m1: 0 });
+    expect(legacy.calls).toBe(0);
+  }, 600_000);
+
+  it("Z7 — projeção do TR exato na composição: o documento do M1 usa o objeto do MESMO documento do pin (pin e projeção = mesma lineage)", async () => {
+    const org = newOrg();
+    const w = await seedWorld(conn, org, "z7", { flagOn: true });
+    await trDoc({ org, w, tr: null as any, model: null }, 1, "Objeto v1 (antigo)");
+    const v2 = await trDoc({ org, w, tr: null as any, model: null }, 2, "Objeto v2 (vigente, estruturado)");
+    const p: P = { org, w, tr: v2, model: await publishBll(org) };
+    await fillPending(p, { scope: "ALL" });
+    await gen(p);
+    const text = (await draftText(p))!;
+    expect(text).toContain("Objeto v2 (vigente, estruturado)");
+    expect(text).not.toContain("Objeto v1 (antigo)");
+    // as fontes do composer, resolvidas com o pin exato, entregam o objeto do MESMO documento
+    const ports = getTemplateCompositionPorts();
+    const official = await ports.canonical.pinOfficialDocuments(org, w.processId, ["TR"], { TR: v2 });
+    expect(official.TR).toMatchObject({ documentId: v2.documentId, version: 2, contentHash: v2.contentHash });
+    const src = await ports.canonical.resolveSources(org, w.processId, ["TR"], BLL.catalog, official);
+    expect((src.TR?.data as any).objetoCompleto).toBe("Objeto v2 (vigente, estruturado)");
+    // pin divergente do documento lido ⇒ falha fechada (nunca lê outro)
+    await expect(ports.canonical.resolveSources(org, w.processId, ["TR"], BLL.catalog, { TR: { ...official.TR!, version: 1 } })).rejects.toThrow(/OFFICIAL_PIN_MISMATCH/);
+    // sem pin ⇒ nenhuma projeção do TR (pendência humana explícita), nunca "o último"
+    const none = await ports.canonical.resolveSources(org, w.processId, ["TR"], BLL.catalog);
+    expect((none.TR?.data as any)?.objetoCompleto).toBeUndefined();
+  }, 600_000);
+
+  it("Z8 — CANONICAL é uma autoridade: valor LEGADO no ledger é ignorado (preparação e composição), preservado como história; novas gravações são recusadas", async () => {
+    const p = await prepareOrg("z8");
+    // ledger legado (anterior à política): objeto, unidade requisitante, localidade e UF "antigos"
+    await seedLegacy(p, "PROCESS", { PROCESS: { objetoResumido: "OBJETO LEGADO", secretariaRequisitante: "SECRETARIA LEGADA" } });
+    await seedLegacy(p, "ORG", { IDENTITY: { municipioSede: "CIDADE LEGADA", municipioUfExtenso: "ESTADO LEGADO" } });
+    const legacyProcessRevision = (await getState(p)).revisions.process;
+    const decisionsBefore = await decisionsOf(p.org, "procurement.source_fields");
+
+    // C1/C3: a preparação mostra a autoridade canônica; o legado aparece só como aviso técnico
+    const st = await getState(p);
+    const fld = (n: string) => st.sections.flatMap((s) => s.fields).find((f) => f.name === n)!;
+    expect(fld("processo.objetoResumido")).toMatchObject({ status: "AUTO", editable: false, displayValue: "Aquisição sintética de material de expediente", shadowedLegacy: true });
+    expect(fld("processo.secretariaRequisitante")).toMatchObject({ status: "AUTO", editable: false, displayValue: "Secretaria Municipal de Administração", shadowedLegacy: true });
+    expect(fld("instituicao.municipioSede")).toMatchObject({ status: "AUTO", displayValue: "Moreira Sales", shadowedLegacy: true });
+    expect(fld("instituicao.municipioUfExtenso")).toMatchObject({ status: "AUTO", displayValue: "Paraná", shadowedLegacy: true });
+    expect(st.metrics.LEGACY_SHADOWED).toBe(4);
+    expect(JSON.stringify(st.facts)).not.toMatch(/LEGAD/);
+    expect(livePendingItems(st, {}).some((i) => i.field.class === "CANONICAL")).toBe(false);
+
+    // C2: tentativa NOVA de gravar caminho canônico ⇒ recusada, zero alteração (inclusive misturada com campo legítimo)
+    const catalogVersion = st.catalogVersion;
+    const base = { confirm: true as const, decision: decision(), catalogVersion, expectedRevision: st.revisions.process };
+    const e1 = await tpl(p.org).governed.recordProcessFields({ ...base, idempotencyKey: key("c2a"), processId: p.w.processId, source: "PROCESS", fields: { objetoResumido: "NOVO" } }).then(() => null, (e: any) => e);
+    expect(e1?.message).toContain("CANONICAL_AUTHORITY_OWNED");
+    const e2 = await tpl(p.org).governed.recordProcessFields({ ...base, idempotencyKey: key("c2b"), processId: p.w.processId, source: "PROCESS", fields: { secretariaRequisitante: "NOVA", fiscalContrato: "Fiscal X" } }).then(() => null, (e: any) => e);
+    expect(e2?.message).toContain("CANONICAL_AUTHORITY_OWNED");
+    const e3 = await tpl(p.org).governed.recordOrganizationFields({ ...base, expectedRevision: st.revisions.organization, idempotencyKey: key("c2c"), source: "IDENTITY", fields: { municipioSede: "NOVA", municipioUfExtenso: "NOVO" } }).then(() => null, (e: any) => e);
+    expect(e3?.message).toContain("CANONICAL_AUTHORITY_OWNED");
+    expect(await decisionsOf(p.org, "procurement.source_fields")).toBe(decisionsBefore);
+    expect((await getState(p)).revisions.process).toBe(legacyProcessRevision);
+
+    // a tela segue o fluxo normal (a UI nunca reenvia o canônico); o legado é PRESERVADO no registro corrente
+    await fillPending(p, { scope: "ALL" });
+    const rec = await readGovernedRecord(p.org, "PROCESS", p.w.processId, BLL.catalog);
+    expect((rec!.raw.sections as any).PROCESS.objetoResumido).toBe("OBJETO LEGADO");
+    const orec = await readGovernedRecord(p.org, "ORG", GOVERNED_ORG_SUBJECT, BLL.catalog);
+    expect((orec!.raw.sections as any).IDENTITY.municipioSede).toBe("CIDADE LEGADA");
+    expect(await decisionsOf(p.org, "procurement.source_fields")).toBeGreaterThan(decisionsBefore);   // histórico só cresce
+
+    // composição: valor canônico; o legado NÃO aparece no documento
+    await gen(p);
+    const text = (await draftText(p))!;
+    expect(text).toContain("Moreira Sales");
+    expect(text).toContain("Paraná");
+    expect(text).toContain("Secretaria Municipal de Administração");
+    expect(text).not.toMatch(/OBJETO LEGADO|SECRETARIA LEGADA|CIDADE LEGADA|ESTADO LEGADO/);
+  }, 600_000);
+
+  it("Z9 — TR_PROJECTION: sem dado estruturado no TR exato a pessoa supre; quando o TR exato PASSA a trazer o dado, a projeção vence a decisão humana anterior", async () => {
+    const org = newOrg();
+    const w = await seedWorld(conn, org, "z9", { flagOn: true });
+    const v1 = await trDoc({ org, w, tr: null as any, model: null }, 1, null);
+    const p: P = { org, w, tr: v1, model: await publishBll(org) };
+    await fillPending(p, { scope: "ORG" });
+    const s0 = await getState(p);
+    const obj0 = s0.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
+    expect(obj0).toMatchObject({ class: "TR_PROJECTION", status: "PENDING", editable: true });
+    // a pessoa supre a ausência (pendência explícita) — o fluxo normal da tela
+    const typed = (await fillPending(p, { scope: "PROCESS" })).typed;
+    expect(typed).toContain("processo.objetoCompleto");
+    const s1 = await getState(p);
+    expect(s1.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "DECIDED", editable: true });
+    const supplied = (await readGovernedRecord(org, "PROCESS", w.processId, BLL.catalog))!.payload.sections.TR!["objetoCompleto"] as string;
+    expect(supplied).toBeTruthy();
+
+    // o TR passa a trazer o dado estruturado (nova versão emitida, novo pin): a projeção VENCE a decisão humana anterior
+    const v2 = await trDoc(p, 2, "Objeto estruturado pelo TR v2");
+    const p2: P = { ...p, tr: v2 };
+    const s2 = await getState(p2);
+    const obj2 = s2.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
+    expect(obj2).toMatchObject({ status: "AUTO", editable: false, displayValue: "Objeto estruturado pelo TR v2", shadowedLegacy: true });
+    const ports = getTemplateCompositionPorts();
+    const official = await ports.canonical.pinOfficialDocuments(org, w.processId, ["TR"], { TR: v2 });
+    const src = await ports.canonical.resolveSources(org, w.processId, ["TR"], BLL.catalog, official);
+    expect((src.TR?.data as any).objetoCompleto).toBe("Objeto estruturado pelo TR v2");     // a decisão humana anterior não é usada
+    expect(JSON.stringify(src.TR?.data)).not.toContain(supplied);
+    // preservada no ledger como história (não apagada)
+    expect(((await readGovernedRecord(org, "PROCESS", w.processId, BLL.catalog))!.payload.sections.TR as any).objetoCompleto).toBe(supplied);
+    expect((await preflight(p2)).status).toBe("READY_FOR_COMPOSITION");
   }, 600_000);
 });

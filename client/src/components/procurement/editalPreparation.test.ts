@@ -61,9 +61,9 @@ const mkField = (over: Partial<PrepField>): PrepField => ({
 const mkSection = (source: string, scope: "ORG" | "PROCESS", fields: PrepField[]): PrepSection => ({ source, scope, fields, pendingRequired: fields.filter((x) => x.status === "PENDING").length });
 const mkState = (sections: PrepSection[], over: Partial<PreparationStateView> = {}): PreparationStateView => ({
   status: "READY_FOR_PREPARATION", revisionId: "r1", catalogVersion: "cat/1", revisions: { process: 0, organization: 0, budget: 0 },
-  budgetDisclosure: "publico", participation: { default: "Ampla participação" }, participationPending: false, sections, facts: {}, canonicalFields: [], orgProfile: null,
+  budgetDisclosure: "publico", participation: { default: "Ampla participação" }, participationPending: false, trPin: { state: "VALID", ref: { documentId: "d", version: 1, contentHash: "h" } }, sections, facts: {}, canonicalFields: [], orgProfile: null,
   summary: { groups: [], reusedAutomatically: 0, pendingDecisions: 0 },
-  metrics: { TOTAL_TEMPLATE_FIELDS: 0, AUTO_RESOLVED: 0, ORG_REUSED: 0, TR_PROJECTED: 0, DECIDED: 0, CONDITIONAL_HIDDEN: 0, POST_AWARD_HIDDEN: 0, OPTIONAL_HIDDEN: 0, MANUAL_DECISIONS_VISIBLE: 0 },
+  metrics: { TOTAL_TEMPLATE_FIELDS: 0, AUTO_RESOLVED: 0, ORG_REUSED: 0, TR_PROJECTED: 0, DECIDED: 0, CONDITIONAL_HIDDEN: 0, POST_AWARD_HIDDEN: 0, OPTIONAL_HIDDEN: 0, MANUAL_DECISIONS_VISIBLE: 0, LEGACY_SHADOWED: 0 },
   ...over,
 });
 
@@ -88,6 +88,12 @@ describe("seção completa e visões orientadas por exceção", () => {
     expect(optionalItems(st).map((i) => i.field.name)).toEqual(["c"]);
     expect(reusedItems(st).map((i) => i.field.name)).toEqual(["a", "p2"]);
     expect(pendingItems(st).some((i) => i.field.status === "HIDDEN_CONDITIONAL")).toBe(false);
+  });
+  it("o plano NUNCA reenvia autoridade CANONICAL (nem legado), mas preserva o valor humano do TR_PROJECTION", () => {
+    const canon = mkField({ name: "c", path: "c", class: "CANONICAL", rule: "PROJECTION", status: "AUTO", editable: false, hasValue: true, currentValue: "legado" });
+    const trp = mkField({ name: "t", path: "t", class: "TR_PROJECTION", rule: "PROJECTION", status: "AUTO", editable: false, hasValue: true, currentValue: "supriu" });
+    const s2 = mkSection("PROCESS", "PROCESS", [canon, trp, mkField({ name: "o", path: "o" })]);
+    expect(buildSectionFields(s2, { o: "x" }).fields).toEqual({ t: "supriu", o: "x" });
   });
   it("CAS obsoleto é reconhecido", () => {
     expect(isStaleSave("CONFLICT", "x")).toBe(true);
@@ -293,6 +299,25 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).toContain("Perfil institucional para Editais — revisão 2");
     // o dado reaproveitado NÃO é input na tela principal; o canônico dono não tem controle
     expect(out).not.toMatch(/JSON|\{"/);
+  });
+  it("TR exato: sem pin pede a seleção; pin obsoleto pede reseleção; dado do sistema incompleto fica fora do formulário", () => {
+    const sel = html(base({ ...st, trPin: { state: "NOT_SELECTED" } }));
+    expect(sel).toContain("Selecione o TR oficial exato");
+    const stale = html(base({ ...st, trPin: { state: "INVALID", code: "OFFICIAL_PIN_STALE" } }));
+    expect(stale).toContain("não é mais válido");
+    expect(stale).toContain("Selecione o TR oficial exato novamente");
+    const blocked = mkState([mkSection("PROCESS", "PROCESS", [mkField({ name: "processo.secretariaRequisitante", path: "secretariaRequisitante", class: "CANONICAL", rule: "PROJECTION", status: "CANONICAL_UNRESOLVED", editable: false, description: "Unidade requisitante", origin: { label: "Contexto canônico" } })])]);
+    const out = html(base(blocked));
+    expect(out).toContain("Dados do sistema incompletos");
+    expect(out).toContain("Unidade requisitante");
+    expect(out).not.toContain('id="prep-PROCESS-secretariaRequisitante"');     // sem input: a autoridade é outra
+  });
+  it("valor legado ignorado aparece só como aviso técnico no campo reaproveitado", () => {
+    const auto = mkSection("PROCESS", "PROCESS", [mkField({ name: "processo.objetoResumido", path: "objetoResumido", class: "CANONICAL", rule: "PROJECTION", status: "AUTO", editable: false, hasValue: true, currentValue: "legado", displayValue: "Objeto canônico", shadowedLegacy: true, origin: { label: "Processo" }, description: "Objeto resumido" })]);
+    const out = html(base(mkState([auto])));
+    expect(out).toContain("Objeto canônico");
+    expect(out).toContain("valor legado");
+    expect(out).toContain("autoridade canônica prevalece");
   });
   it("sem pendências e sem alterações: mensagem de conclusão e nenhum botão de salvar", () => {
     const clean = mkState([reusedOrg], { summary: { reusedAutomatically: 1, pendingDecisions: 0, groups: [] } });

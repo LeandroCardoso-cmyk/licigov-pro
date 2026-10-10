@@ -18,6 +18,8 @@ import { createVariableCatalogPort } from "../../services/institutionalTemplates
 import { MODEL_PACKAGES } from "../../services/institutionalTemplates/modelPackages";
 import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../../services/institutionalTemplates/portsRegistry";
 import { AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES } from "../../domain/institutionalTemplates/governedSources";
+import { isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
+import { recordContextAssertions } from "../../services/canonicalContextService";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import type { WorkflowContext } from "../../services/institutionalTemplates/ports";
 import { confirmCanonicalItemsFromResearch } from "./canonicalItems";
@@ -60,6 +62,7 @@ export function governedFieldsFor(source: VariableSource2, scenario: Scenario = 
   const out: Record<string, unknown> = {};
   for (const def of BLL_CATALOG.vars) {
     if (def.source !== source || owned.has(def.path) || def.type === "document_ref") continue;
+    if (isCanonicalProjection(def.name)) continue;       // autoridade canônica (projeção): nunca é decisão humana
     if (def.name.startsWith("pos.")) continue;          // pós-homologação: NUNCA preenchido no pré-certame ("a preencher")
     const value = Object.prototype.hasOwnProperty.call(scenario, def.name) ? scenario[def.name] : sampleValue(def);
     if (value !== undefined) out[def.path] = value;
@@ -92,6 +95,11 @@ export async function seedExtraProcess(org: number, label: string, seq: number, 
 async function seedProcessWithItems(org: number, label: string, processNumber: string, items?: Array<{ description: string; unit: string; planned: number; price: string }>): Promise<World> {
   const ws = createProcurementWorkspace({ organizationId: org, processNumber, object: "Aquisição sintética de material de expediente", modality: "pregao", startOption: "iniciar_pesquisa", responsibleUser: U_AUTHOR, correlationId: `e2e-${label}` });
   await insertProcess(ws);
+  // Unidade requisitante: fato canônico informado na ABERTURA do processo (fonte = Processo), como a rota de criação faz.
+  await recordContextAssertions({
+    organizationId: org, processId: ws.id, correlationId: `e2e-unit-${label}`,
+    facts: [{ path: "demand.requestingUnit", value: "Secretaria Municipal de Administração", sourceType: "process", sourceId: ws.id, sourceVersion: "create", status: "confirmed", actorUserId: U_AUTHOR, basisValueHash: null }],
+  });
   const rows = items ?? [
     { description: "Papel sulfite A4 75g", unit: "resma", planned: 120, price: "25,50" },
     { description: "Caneta esferográfica azul", unit: "un", planned: 400, price: "1,75" },

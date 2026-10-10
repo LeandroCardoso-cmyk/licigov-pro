@@ -12,6 +12,8 @@ export interface EditalPreparationParams { modality?: string; form?: string; pla
 export interface EditalPreparationPanelProps {
   processId: string;
   params: EditalPreparationParams;
+  /** TR oficial EXATO escolhido (id + versão + hash): as projeções do TR só existem para um pin válido. */
+  trPin?: { documentId: string; version: number; contentHash: string } | null;
   /** Chamado após QUALQUER registro bem-sucedido (a workspace revalida o preflight). */
   onChanged?: () => void;
 }
@@ -24,9 +26,9 @@ const today = () => new Date().toISOString().slice(0, 10);
  * todas as decisões digitadas. As escritas são SEQUENCIAIS, pelos endpoints governados existentes, cada uma com idempotência
  * própria e CAS encadeado; conflito ⇒ para, recarrega e informa o que já foi registrado (nunca sobrescreve).
  */
-export default function EditalPreparationPanel({ processId, params, onChanged }: EditalPreparationPanelProps) {
+export default function EditalPreparationPanel({ processId, params, trPin = null, onChanged }: EditalPreparationPanelProps) {
   const utils = trpc.useUtils();
-  const input = { processId, ...params } as never;
+  const input = { processId, ...params, ...(trPin ? { officialPins: { TR: trPin } } : {}) } as never;
   const query = trpc.procurementProcess.editalTemplatePreparation.useQuery(input, { enabled: !!processId });
   const data = query.data as State | undefined;
   const state = data?.status === "READY_FOR_PREPARATION" ? data : undefined;

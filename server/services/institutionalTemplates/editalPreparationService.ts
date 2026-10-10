@@ -16,7 +16,7 @@ import { getProcess } from "../../db/procurement";
 import { isCatalogV2 } from "../../domain/institutionalTemplates/astVersions";
 import { conditionVariables, evaluateCondition2, type Cond2 } from "../../domain/institutionalTemplates/conditionalDsl2";
 import {
-  classifyVariable, RULE_LABEL, type PreparationClass, type VariableClassification,
+  PreparationClassificationUnsupportedError, classifyVariable, RULE_LABEL, type PreparationClass, type VariableClassification,
 } from "../../domain/institutionalTemplates/editalPreparationModel";
 import type { EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import {
@@ -26,9 +26,12 @@ import type { OrgId } from "../../domain/institutionalTemplates/types";
 import type { VariableDef2, VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { resolveProcurementContext } from "../canonicalContextService";
 import { snapshotInstitutionalIdentity } from "../institutionalIdentityService";
+import { PROJECTION_BY_VARIABLE, isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
 import { resolveEditalTemplate, type BridgeDeps, type EditalTemplateResolution } from "./editalBridgeService";
 import { resolveEditalProjections, type ProjectedValue } from "./editalProjections";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
+import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
+import type { OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
 
 export type FieldStatus =
   | "AUTO"                 // resolvido pelo sistema (autoridade canônica ou projeção determinística)
@@ -73,7 +76,17 @@ export interface PreparationField {
   /** Valor a exibir (explicabilidade): canônico/projetado/reutilizado/decidido. Ausente em pendências. */
   readonly displayValue?: unknown;
   readonly origin?: PreparationOrigin;
+  /**
+   * Havia um valor governado LEGADO neste caminho, hoje coberto por autoridade canônica/projeção: ele é preservado no ledger como
+   * história, mas IGNORADO (nunca promovido a autoridade). Explicabilidade técnica; não é editável nem entra na composição.
+   */
+  readonly shadowedLegacy?: boolean;
 }
+
+export type TrPinState =
+  | { readonly state: "NOT_SELECTED" }
+  | { readonly state: "VALID"; readonly ref: { readonly documentId: string; readonly version: number; readonly contentHash: string } }
+  | { readonly state: "INVALID"; readonly code: string };
 
 export interface PreparationSection {
   readonly source: VariableSource2;
@@ -117,6 +130,8 @@ export interface PreparationMetrics {
   readonly POST_AWARD_HIDDEN: number;
   readonly OPTIONAL_HIDDEN: number;
   readonly MANUAL_DECISIONS_VISIBLE: number;
+  /** Valores legados do ledger ignorados por haver autoridade canônica/projeção (preservados como história). */
+  readonly LEGACY_SHADOWED: number;
   readonly BY_CLASS: Readonly<Record<PreparationClass, number>>;
 }
 
@@ -131,6 +146,8 @@ export type EditalPreparationState =
     readonly participation: GovernedParticipation | null;
     /** Regime de participação dos itens é exigido pelo quadro de itens do modelo e ainda sem valor. */
     readonly participationPending: boolean;
+    /** TR oficial EXATO usado nas projeções do TR: sem pin válido não há projeção do TR (nunca "o último"). */
+    readonly trPin: TrPinState;
     readonly sections: readonly PreparationSection[];
     /** Valores conhecidos por NOME de variável (decisões registradas + projeções + divulgação): base da avaliação ao vivo das condições. */
     readonly facts: Readonly<Record<string, unknown>>;
@@ -165,7 +182,9 @@ function storedValue(source: VariableSource2, path: string, process: GovernedRec
 
 const isEmpty = (v: unknown): boolean => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
 
-export async function getEditalPreparationState(deps: BridgeDeps, organizationId: OrgId, processId: string, params: EditalBoundaryParams): Promise<EditalPreparationState> {
+export async function getEditalPreparationState(
+  deps: BridgeDeps, organizationId: OrgId, processId: string, params: EditalBoundaryParams, trPin?: RequestedOfficialPin,
+): Promise<EditalPreparationState> {
   const resolution = await resolveEditalTemplate(deps, organizationId, params);
   if (resolution.status !== "BOUND" || !deps.ports) {
     return { status: "UNAVAILABLE", resolution: resolution.status, reason: "a preparação existe apenas quando um modelo institucional publicado está vinculado ao escopo do Edital" };
@@ -175,13 +194,34 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
   if (!revision || revision.organizationId !== organizationId || !catalog || !isCatalogV2(catalog)) {
     return { status: "UNAVAILABLE", resolution: "INVALID", reason: "revisão vinculada ou catálogo tpl-catalog/2 indisponível" };
   }
+  // Classificação EXAUSTIVA: variável/fonte sem política explícita falha fechado (nunca vira decisão humana por omissão).
+  let classes: Map<string, VariableClassification>;
+  try { classes = new Map(catalog.vars.map((v) => [v.name, classifyVariable(v)])); } catch (e) {
+    if (e instanceof PreparationClassificationUnsupportedError) return { status: "UNAVAILABLE", resolution: "INVALID", reason: e.message };
+    throw e;
+  }
+  // TR EXATO: a projeção do TR só existe para um pin válido (a MESMA validação da geração); stale/divergente ⇒ sem projeção.
+  let trPinState: TrPinState = { state: "NOT_SELECTED" };
+  let official: Partial<Record<"TR", OfficialDocumentPin>> | undefined;
+  if (trPin) {
+    try {
+      const pinned = await deps.ports.canonical.pinOfficialDocuments(organizationId, processId, ["TR"], { TR: trPin });
+      if (pinned.TR) { official = { TR: pinned.TR }; trPinState = { state: "VALID", ref: { documentId: trPin.documentId, version: trPin.version, contentHash: trPin.contentHash } }; }
+    } catch (e) {
+      if (!(e instanceof TemplateSourceUnavailableError)) throw e;
+      trPinState = { state: "INVALID", code: e.reason };
+    }
+  }
   // Registro corrompido/fora do contrato do catálogo propaga como erro (fail-closed): nunca é "consertado" aqui.
   const readRecord = (scope: GovernedScope, subject: string) => readGovernedRecord(organizationId, scope, subject, catalog);
   const [processRec, orgRec, budget, projections, process, identity, ctx] = await Promise.all([
     readRecord("PROCESS", processId),
     readRecord("ORG", GOVERNED_ORG_SUBJECT),
     getCurrentDecision(null, organizationId, "procurement.budget_disclosure", processId),
-    resolveEditalProjections(organizationId, processId, catalog),
+    resolveEditalProjections(organizationId, processId, catalog, official).catch((e: unknown) => {
+      if (e instanceof TemplateSourceUnavailableError) { trPinState = { state: "INVALID", code: e.reason }; return new Map<string, ProjectedValue>(); }
+      throw e;
+    }),
     getProcess(processId, organizationId).catch(() => null),
     snapshotInstitutionalIdentity(organizationId).catch(() => null),
     resolveProcurementContext({ organizationId, processId }).catch(() => null),
@@ -189,15 +229,17 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
   const disclosure: "publico" | "sigiloso" | null = budget?.outcome === "publico" || budget?.outcome === "sigiloso" ? budget.outcome : null;
 
   // ── valores conhecidos por NOME (base da avaliação das condições): decisão registrada + canônico + projeção ──────────
-  const classes = new Map<string, VariableClassification>(catalog.vars.map((v) => [v.name, classifyVariable(v)]));
   const known = new Map<string, unknown>();
   for (const v of catalog.vars) {
     const c = classes.get(v.name)!;
     if (c.class === "POST_AWARD") continue;
     if (!isOwned(v)) {
       const stored = storedValue(v.source, v.path, processRec, orgRec);
-      if (!isEmpty(stored)) known.set(v.name, stored);
-      else if (projections.has(v.name)) known.set(v.name, projections.get(v.name)!.value);
+      const proj = projections.get(v.name);
+      // Autoridade ÚNICA por variável: projeção CANONICAL ignora o ledger; projeção do TR exato vence a decisão humana; sem projeção,
+      // só a variável do TR (nunca a CANONICAL) aceita o valor humano.
+      if (proj) known.set(v.name, proj.value);
+      else if (!isCanonicalProjection(v.name) && !isEmpty(stored)) known.set(v.name, stored);
     }
   }
   if (disclosure && catalog.vars.some((v) => v.name === "controle.orcamentoSigilosoSimNao")) known.set("controle.orcamentoSigilosoSimNao", disclosure === "sigiloso");
@@ -253,7 +295,7 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
     a[k]++;
     groupAcc.set(g, a);
   };
-  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0 };
+  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0 };
   const byClass = Object.fromEntries((["CANONICAL", "ORG_PROFILE", "TR_PROJECTION", "PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"] as const).map((k) => [k, 0])) as Record<PreparationClass, number>;
 
   for (const v of catalog.vars) {
@@ -282,10 +324,32 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
     const stored = storedValue(v.source, v.path, processRec, orgRec);
     const hasValue = stored !== undefined;
     const projected: ProjectedValue | undefined = projections.get(v.name);
+    const projPolicy = PROJECTION_BY_VARIABLE[v.name];
+    const canonProj = isCanonicalProjection(v.name);
+    const trProj = projPolicy?.key === "TR_OBJECT";
     let status: FieldStatus; let displayValue: unknown; let origin: PreparationOrigin | undefined; let editable = true;
+    let shadowedLegacy = false;
 
     if (inactive.has(v.name)) { status = "HIDDEN_CONDITIONAL"; m.CH++; }
-    else if (hasValue && !isEmpty(stored)) {
+    else if (canonProj) {
+      // CANONICAL: nunca input, nunca decisão humana; o ledger legado é ignorado. Sem dado na autoridade de origem ⇒ aguarda LÁ.
+      editable = false;
+      shadowedLegacy = hasValue && !isEmpty(stored);
+      if (projected) { status = "AUTO"; displayValue = projected.value; origin = { label: projected.origin, ref: projected.ref }; m.AUTO++; }
+      else { status = "CANONICAL_UNRESOLVED"; origin = { label: projPolicy!.origin }; }
+    } else if (trProj) {
+      // TR_PROJECTION: o TR EXATO vence quando traz o dado; sem pin válido aguarda a seleção; sem dado no TR a pessoa supre (pendência explícita).
+      if (projected) {
+        status = "AUTO"; displayValue = projected.value; origin = { label: projected.origin, ref: projected.ref }; editable = false; m.TRP++;
+        shadowedLegacy = hasValue && !isEmpty(stored);
+      } else if (trPinState.state !== "VALID") {
+        status = "AWAITING"; editable = false;
+        origin = { label: trPinState.state === "INVALID" ? `TR selecionado inválido ou desatualizado (${trPinState.code}) — selecione o TR oficial exato novamente` : "Selecione o TR oficial exato" };
+      } else if (hasValue && !isEmpty(stored)) {
+        status = "DECIDED"; displayValue = stored; m.DEC++;
+        origin = { label: "Decisão registrada (o TR exato não traz este dado estruturado)", ref: { revision: processRec?.revision ?? 0 } };
+      } else { status = "PENDING"; m.MAN++; }
+    } else if (hasValue && !isEmpty(stored)) {
       displayValue = stored;
       if (c.scope === "ORG") {
         status = "ORG_REUSED"; m.ORG++;
@@ -294,15 +358,14 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
         status = "DECIDED"; m.DEC++;
         origin = { label: "Decisão registrada para este processo", ref: { revision: processRec?.revision ?? 0 } };
       }
-    } else if (projected) {
-      status = "AUTO"; displayValue = projected.value; origin = { label: projected.origin, ref: projected.ref }; editable = false;
-      if (c.class === "TR_PROJECTION") m.TRP++; else m.AUTO++;
     } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
       status = "PENDING"; m.MAN++;
     } else { status = "OPTIONAL"; m.OH++; }
+    if (shadowedLegacy) m.LS++;
 
     // Denominador do resumo: aplicáveis (não ocultos) que são obrigatórios/condicionais ativos ou já têm valor.
-    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "AWAITING"] as FieldStatus[]).includes(status);
+    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "AWAITING", "CANONICAL_UNRESOLVED"] as FieldStatus[]).includes(status);
+    if (status === "CANONICAL_UNRESOLVED") { bump(group, "total"); bump(group, "blocked"); }
     if (applicable) {
       bump(group, "total");
       if (status === "PENDING") bump(group, "pending");
@@ -311,7 +374,7 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
 
     const field: PreparationField = {
       ...descriptor, hasValue, ...(hasValue ? { currentValue: stored } : {}), class: c.class, rule: c.rule, status, editable,
-      ...(displayValue !== undefined ? { displayValue } : {}), ...(origin ? { origin } : {}),
+      ...(displayValue !== undefined ? { displayValue } : {}), ...(origin ? { origin } : {}), ...(shadowedLegacy ? { shadowedLegacy: true } : {}),
     };
     if (!GOVERNABLE.has(v.source) || v.type === "document_ref") continue;
     (bySource.get(v.source) ?? bySource.set(v.source, []).get(v.source)!).push(field);
@@ -344,12 +407,12 @@ export async function getEditalPreparationState(deps: BridgeDeps, organizationId
   return {
     status: "READY_FOR_PREPARATION", revisionId: revision.id, catalogVersion: catalog.version,
     revisions: { process: processRec?.revision ?? 0, organization: orgRec?.revision ?? 0, budget: budget?.revision ?? 0 },
-    budgetDisclosure: disclosure, participation: part, participationPending,
+    budgetDisclosure: disclosure, participation: part, participationPending, trPin: trPinState,
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
     summary: { groups, reusedAutomatically, pendingDecisions },
     metrics: {
       TOTAL_TEMPLATE_FIELDS: catalog.vars.length, AUTO_RESOLVED: m.AUTO, ORG_REUSED: m.ORG, TR_PROJECTED: m.TRP, DECIDED: m.DEC,
-      CONDITIONAL_HIDDEN: m.CH, POST_AWARD_HIDDEN: m.PH, OPTIONAL_HIDDEN: m.OH, MANUAL_DECISIONS_VISIBLE: m.MAN, BY_CLASS: byClass,
+      CONDITIONAL_HIDDEN: m.CH, POST_AWARD_HIDDEN: m.PH, OPTIONAL_HIDDEN: m.OH, MANUAL_DECISIONS_VISIBLE: m.MAN, LEGACY_SHADOWED: m.LS, BY_CLASS: byClass,
     },
   };
 }

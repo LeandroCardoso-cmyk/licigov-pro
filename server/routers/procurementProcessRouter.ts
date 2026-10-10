@@ -678,11 +678,15 @@ export const procurementProcessRouter = router({
    * revisões (CAS) dos registros. Descritores vêm do catálogo da revisão no servidor; a escrita usa `institutionalTemplates.governed.*`.
    */
   editalTemplatePreparation: tenantProcedure
-    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
+    .input(z.object({
+      processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      /** TR oficial EXATO escolhido: as projeções do TR só existem para um pin válido (nunca "o último"). */
+      officialPins: z.object({ TR: TR_PIN.optional() }).strict().optional(),
+    }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      return getEditalPreparationState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+      return getEditalPreparationState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input), input.officialPins?.TR);
     }),
 
   /**
@@ -709,7 +713,7 @@ export const procurementProcessRouter = router({
       if (result.status === "READY_FOR_COMPOSITION") return { ...result, pendingDecisions: 0, resolution: resolution.status };
       // Resumo para a pessoa (decisões humanas pendentes) + detalhes técnicos em `issues` (expansão na UI). A composição para no
       // primeiro erro de forma/tabela; as pendências governadas por fonte vêm do estado de preparação (mesma fonte da tela).
-      const prep = await getEditalPreparationState(deps, orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+      const prep = await getEditalPreparationState(deps, orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input), input.officialPins?.TR);
       const pendingBySource = prep.status === "READY_FOR_PREPARATION"
         ? prep.sections.filter((s) => s.pendingRequired > 0).map((s) => ({ code: "GOVERNED_SOURCE_PENDING", source: s.source, message: `${s.pendingRequired} campo(s) obrigatório(s) pendente(s) na fonte ${s.source}` }))
         : [];

@@ -30,8 +30,8 @@ function pinOf(organizationId: number, doc: { id: string; lineageId: string; ver
 
 export function createCanonicalReferenceAdapter(): CanonicalReferencePort {
   return {
-    async resolveSources(organizationId, subjectId, sources, catalog) {
-      if (isCatalogV2(catalog)) return resolveSourcesV2({ organizationId, processId: subjectId, catalog, asOfDate: today() }, sources);
+    async resolveSources(organizationId, subjectId, sources, catalog, official) {
+      if (isCatalogV2(catalog)) return resolveSourcesV2({ organizationId, processId: subjectId, catalog, asOfDate: today(), ...(official ? { official } : {}) }, sources);
       const out: Partial<Record<VariableSource2, CanonicalSourceSnapshot>> = {};
       for (const source of sources) {
         switch (source) {

@@ -12,6 +12,7 @@ import {
   type BudgetDisclosure, type GovernedPayload, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import { canonicalProjectedPaths } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
 import { isCatalogV2 } from "../../domain/institutionalTemplates/astVersions";
 import { serviceLogger } from "../observabilityService";
 import { assertHumanActor } from "./authority";
@@ -56,7 +57,7 @@ export class GovernedSourceService {
     if (!(allowedSources(scope) as readonly string[]).includes(input.source)) {
       throw new TemplateWorkflowError("VALIDATION_FAILED", `a fonte ${input.source} não aceita campos governados neste escopo`);
     }
-    const section = validateGovernedSection(catalog, scope, input.source, input.fields);
+    const section = validateGovernedSection(catalog, scope, input.source, input.fields, "write");
     if (!section.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "campos governados inválidos", toIssues(section.issues));
     if (input.participation !== undefined) {
       if (scope !== "PROCESS" || input.source !== "ITEMS") throw new TemplateWorkflowError("VALIDATION_FAILED", "a participação por item/lote só é registrada na seção ITEMS do processo");
@@ -68,7 +69,10 @@ export class GovernedSourceService {
       throw new TemplateWorkflowError("VALIDATION_FAILED", e instanceof Error ? e.message : "registro corrente ilegível");
     });
     // Substitui APENAS os campos que este catálogo declara para a fonte; campos de outros modelos permanecem intactos.
-    const declared = declaredPaths(catalog, input.source);
+    // Caminhos de projeção CANONICAL ficam FORA da substituição: um valor legado no ledger é preservado como história (não é apagado
+    // nem migrado), mas nunca entra na composição/preparação.
+    const canonicalPaths = canonicalProjectedPaths(catalog.vars, input.source);
+    const declared = new Set([...declaredPaths(catalog, input.source)].filter((p) => !canonicalPaths.has(p)));
     const foreign = Object.fromEntries(Object.entries(current?.raw.sections?.[input.source] ?? {}).filter(([p]) => !declared.has(p)));
     const merged: GovernedPayload = {
       sections: { ...((current?.raw.sections ?? {}) as GovernedPayload["sections"]), [input.source]: { ...foreign, ...(section.ok ? section.value : {}) } },

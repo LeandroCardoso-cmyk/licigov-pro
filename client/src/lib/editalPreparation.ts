@@ -46,13 +46,16 @@ export interface PrepField {
   requiredWhenVariables: readonly string[]; requiredWhen?: Cond; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
   hasValue: boolean; currentValue?: unknown;
   class: PreparationClass; rule: string; status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin;
+  /** Havia valor legado no ledger neste caminho, hoje coberto por autoridade canônica/TR exato: preservado como história e IGNORADO. */
+  shadowedLegacy?: boolean;
 }
+export type TrPinState = { state: "NOT_SELECTED" } | { state: "VALID"; ref: { documentId: string; version: number; contentHash: string } } | { state: "INVALID"; code: string };
 export interface PrepSection { source: string; scope: "ORG" | "PROCESS"; fields: readonly PrepField[]; pendingRequired: number }
 export interface CanonicalReadOnlyField { name: string; source: string; path: string; type: string; description: string; status: FieldStatus; displayValue?: unknown; origin: PrepOrigin }
 export interface SummaryGroup { id: string; title: string; total: number; resolved: number; reused: number; pending: number; blockedCanonical: number }
 export interface PreparationMetrics {
   TOTAL_TEMPLATE_FIELDS: number; AUTO_RESOLVED: number; ORG_REUSED: number; TR_PROJECTED: number; DECIDED: number; CONDITIONAL_HIDDEN: number;
-  POST_AWARD_HIDDEN: number; OPTIONAL_HIDDEN: number; MANUAL_DECISIONS_VISIBLE: number;
+  POST_AWARD_HIDDEN: number; OPTIONAL_HIDDEN: number; MANUAL_DECISIONS_VISIBLE: number; LEGACY_SHADOWED: number;
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -60,6 +63,7 @@ export interface PreparationStateView {
   budgetDisclosure: "publico" | "sigiloso" | null;
   participation: { default?: string; byLot?: Record<string, string>; byItem?: Record<string, string> } | null;
   participationPending: boolean;
+  trPin: TrPinState;
   sections: PrepSection[]; facts: Record<string, unknown>; canonicalFields: CanonicalReadOnlyField[];
   orgProfile: { revision: number; hash: string | null } | null;
   summary: { groups: SummaryGroup[]; reusedAutomatically: number; pendingDecisions: number };
@@ -195,6 +199,8 @@ export type SectionEdits = Readonly<Record<string, FormValue>>;
 export function buildSectionFields(section: PrepSection, edits: SectionEdits): { fields: Record<string, unknown>; errors: Record<string, string> } {
   const fields: Record<string, unknown> = {}; const errors: Record<string, string> = {};
   for (const f of section.fields) {
+    // Autoridade CANONICAL nunca é reenviada (o servidor a recusa e preserva qualquer valor legado como história).
+    if (f.class === "CANONICAL") continue;
     if (Object.prototype.hasOwnProperty.call(edits, f.path)) {
       const r = parseField(f, edits[f.path]);
       if (!r.ok) errors[f.path] = r.error; else if (r.value !== undefined) fields[f.path] = r.value;

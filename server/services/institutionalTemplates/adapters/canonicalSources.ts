@@ -34,6 +34,9 @@ import { snapshotInstitutionalIdentity } from "../../institutionalIdentityServic
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "../governedFieldsStore";
 import { TemplateSourceUnavailableError } from "../ports";
 import { resolveEditalProjections, type ProjectedValue } from "../editalProjections";
+import type { DocRefKind2 } from "../../../domain/institutionalTemplates/ast2";
+import type { OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
+import { PROJECTION_BY_VARIABLE, canonicalProjectedPaths } from "../../../domain/institutionalTemplates/canonicalProjectionPolicy";
 
 const unavailable = (source: string, reason: string, message: string) => new TemplateSourceUnavailableError(source, reason, message);
 export const sha256Of = (s: string): string => createHash("sha256").update(s).digest("hex");
@@ -52,6 +55,8 @@ export interface SourceReadContext {
   readonly processId: string;
   readonly catalog: VariableCatalog2;
   readonly asOfDate: string;
+  /** Documentos oficiais EXATOS já validados pelo pin (geração) ou a autoridade atual (revalidação): base das projeções do TR. */
+  readonly official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>;
 }
 
 interface Memo {
@@ -63,7 +68,7 @@ interface Memo {
 
 /** Projeções determinísticas (ZERO_REENTRY) das variáveis da fonte: base sobre a qual a decisão humana registrada prevalece. */
 async function projectedFor(rc: SourceReadContext, m: Memo, source: VariableSource2): Promise<Record<string, unknown>> {
-  if (!m.projections) m.projections = await resolveEditalProjections(rc.organizationId, rc.processId, rc.catalog);
+  if (!m.projections) m.projections = await resolveEditalProjections(rc.organizationId, rc.processId, rc.catalog, rc.official);
   const out: Record<string, unknown> = {};
   for (const v of rc.catalog.vars) {
     const p = v.source === source ? m.projections.get(v.name) : undefined;
@@ -88,21 +93,30 @@ async function orgRecordOf(rc: SourceReadContext, m: Memo): Promise<GovernedReco
   return m.orgRecord;
 }
 
-/** Aplica a seção governada da fonte sobre os dados (os caminhos de autoridade já foram recusados no registro). */
-function withGoverned(source: VariableSource2, data: Record<string, unknown>, record: GovernedRecord | null, projected: ReadonlySet<string> = new Set()): Record<string, unknown> {
+/**
+ * Aplica a seção governada da fonte sobre os dados (os caminhos de autoridade já foram recusados no registro).
+ * `skip` = caminhos cuja autoridade é CANONICAL/projetada: o valor do ledger (legado) é IGNORADO — preservado como história, nunca
+ * promovido a autoridade. A decisão humana só vale onde NÃO há autoridade canônica nem projeção disponível.
+ */
+function withGoverned(source: VariableSource2, data: Record<string, unknown>, record: GovernedRecord | null, skip: ReadonlySet<string> = new Set()): Record<string, unknown> {
   const section = record?.payload.sections[source];
   if (section) {
-    // Decisão humana REGISTRADA prevalece sobre a projeção determinística (nunca sobre autoridade canônica "dona": essas são recusadas no registro).
-    for (const path of Object.keys(section)) if (projected.has(path)) delete data[path];
-    try { applyFieldsToData(data, section); } catch (e) { throw unavailable(source, "GOVERNED_FIELD_CONFLICT", e instanceof Error ? e.message : "conflito de campos governados"); }
+    const effective = Object.fromEntries(Object.entries(section).filter(([path]) => !skip.has(path)));
+    try { applyFieldsToData(data, effective); } catch (e) { throw unavailable(source, "GOVERNED_FIELD_CONFLICT", e instanceof Error ? e.message : "conflito de campos governados"); }
   }
   return data;
 }
 
 const present = (data: Record<string, unknown>): CanonicalSourceSnapshot["data"] | null => (Object.keys(data).length ? data : null);
 
-async function projectedKeys(rc: SourceReadContext, m: Memo, source: VariableSource2): Promise<ReadonlySet<string>> {
-  return new Set(Object.keys(await projectedFor(rc, m, source)));
+/** Caminhos da fonte cujo valor governado NÃO vale: projeção CANONICAL (sempre) e projeção do TR exato (quando o TR traz o dado). */
+async function shadowedPaths(rc: SourceReadContext, m: Memo, source: VariableSource2): Promise<ReadonlySet<string>> {
+  if (!m.projections) m.projections = await resolveEditalProjections(rc.organizationId, rc.processId, rc.catalog, rc.official);
+  const skip = new Set(canonicalProjectedPaths(rc.catalog.vars, source));
+  for (const v of rc.catalog.vars) {
+    if (v.source === source && PROJECTION_BY_VARIABLE[v.name]?.key === "TR_OBJECT" && m.projections.has(v.name)) skip.add(v.path);
+  }
+  return skip;
 }
 
 // ─── ITEMS ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -164,7 +178,7 @@ export async function resolveSourcesV2(
           // O sigilo do orçamento é DERIVADO da decisão de divulgação (nunca digitado): fonte única da verdade.
           ...(declares(rc.catalog, "PROCESS", "orcamentoSigilosoSimNao") && disclosure ? { orcamentoSigilosoSimNao: disclosure === "sigiloso" } : {}),
         });
-        put(source, withGoverned(source, data, await processRecordOf(rc, memo), await projectedKeys(rc, memo, "PROCESS")));
+        put(source, withGoverned(source, data, await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "PROCESS")));
         break;
       }
       case "IDENTITY": {
@@ -178,11 +192,11 @@ export async function resolveSourcesV2(
           ...(declares(rc.catalog, "IDENTITY", "municipioTelefone") ? { municipioTelefone: snapshot.phone } : {}),
           ...(declares(rc.catalog, "IDENTITY", "municipioSite") ? { municipioSite: snapshot.website } : {}),
         });
-        put(source, withGoverned(source, data, await orgRecordOf(rc, memo), await projectedKeys(rc, memo, "IDENTITY")));
+        put(source, withGoverned(source, data, await orgRecordOf(rc, memo), await shadowedPaths(rc, memo, "IDENTITY")));
         break;
       }
       case "POLICY": put(source, withGoverned(source, {}, await orgRecordOf(rc, memo))); break;
-      case "TR": put(source, withGoverned(source, await projectedFor(rc, memo, "TR"), await processRecordOf(rc, memo), await projectedKeys(rc, memo, "TR"))); break;
+      case "TR": put(source, withGoverned(source, await projectedFor(rc, memo, "TR"), await processRecordOf(rc, memo), await shadowedPaths(rc, memo, "TR"))); break;
       case "CERTAME_CONFIG": put(source, withGoverned(source, {}, await processRecordOf(rc, memo))); break;
       case "ITEMS": {
         const record = await processRecordOf(rc, memo);

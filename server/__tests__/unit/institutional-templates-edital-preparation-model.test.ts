@@ -2,10 +2,16 @@
  * Preparação ZERO_REENTRY — classificação determinística do catálogo BLL (100% das variáveis), projeções e paridade das condições.
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { BLL } from "../helpers/institutionalTemplatesE2eWorld";
 import {
-  PREPARATION_CLASSES, PROJECTION_BY_VARIABLE, UF_EXTENSO, classifyCatalog, classifyVariable, type PreparationClass,
+  PREPARATION_CLASSES, PROJECTION_BY_VARIABLE, PREPARATION_CLASSIFICATION_UNSUPPORTED, PreparationClassificationUnsupportedError, UF_EXTENSO, classifyCatalog, classifyVariable,
+  type PreparationClass,
 } from "../../domain/institutionalTemplates/editalPreparationModel";
+import { canonicalProjectedPaths, isCanonicalProjection, trProjectedPaths } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
+import { CANONICAL_AUTHORITY_OWNED, validateGovernedPayload, validateGovernedSection } from "../../domain/institutionalTemplates/governedSources";
+import type { VariableDef2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { AUTHORITY_OWNED_PATHS } from "../../domain/institutionalTemplates/governedSources";
 import { conditionVariables, evaluateCondition2 } from "../../domain/institutionalTemplates/conditionalDsl2";
 import { evaluateCond } from "../../../client/src/lib/editalPreparation";
@@ -86,5 +92,69 @@ describe("paridade: avaliador de condições do cliente × composer (servidor)",
       }
     }
     expect(checked).toBeGreaterThan(50);
+  });
+});
+
+describe("classificação EXAUSTIVA (sem catch-all manual) — segurança evolutiva", () => {
+  const base: VariableDef2 = { name: "x.nova", type: "string", source: "PROCESS", path: "nova", required: true, renderable: true };
+  it("fontes com política explícita classificam; DFD/ETP/PARAMS ou fonte futura SEM política falham fechado (nunca PROCESS_DECISION implícito)", () => {
+    for (const source of ["PROCESS", "TR", "ITEMS", "CERTAME_CONFIG", "NORMATIVE", "BUDGET", "LIFECYCLE", "POLICY", "IDENTITY"] as const) {
+      expect(() => classifyVariable({ ...base, source })).not.toThrow();
+    }
+    for (const source of ["DFD", "ETP", "PARAMS", "FUTURA_SEM_POLITICA"] as const) {
+      const run = () => classifyVariable({ ...base, source: source as never });
+      expect(run).toThrow(PreparationClassificationUnsupportedError);
+      expect(run).toThrow(PREPARATION_CLASSIFICATION_UNSUPPORTED);
+    }
+    // pós-homologação e pin de documento continuam classificados mesmo em fonte sem política de decisão
+    expect(classifyVariable({ ...base, source: "RESULT", name: "pos.x" }).class).toBe("POST_AWARD");
+    expect(classifyVariable({ ...base, source: "DFD", type: "document_ref", documentKind: "DFD" }).class).toBe("CANONICAL");
+  });
+  it("um catálogo com variável de fonte sem política NÃO classifica (o modelo inteiro falha fechado)", () => {
+    expect(() => classifyCatalog({ ...catalog, vars: [...catalog.vars, { ...base, source: "PARAMS" }] })).toThrow(PreparationClassificationUnsupportedError);
+  });
+});
+
+describe("política única das projeções canônicas", () => {
+  it("CANONICAL: objeto resumido, unidade requisitante, localidade e UF; TR_OBJECT é a única admitida a suprimento humano", () => {
+    for (const n of ["processo.objetoResumido", "processo.secretariaRequisitante", "instituicao.municipioSede", "instituicao.municipioUfExtenso"]) expect(isCanonicalProjection(n), n).toBe(true);
+    expect(isCanonicalProjection("processo.objetoCompleto")).toBe(false);
+    expect(isCanonicalProjection("contratacao.prazoExecucao")).toBe(false);
+    expect([...canonicalProjectedPaths(catalog.vars, "PROCESS")].sort()).toEqual(["objetoResumido", "secretariaRequisitante"]);
+    expect([...canonicalProjectedPaths(catalog.vars, "IDENTITY")].sort()).toEqual(["municipioSede", "municipioUfExtenso"]);
+    expect([...trProjectedPaths(catalog.vars, "TR")]).toEqual(["objetoCompleto"]);
+  });
+  it("guard de escrita derivado da MESMA política: grava recusa CANONICAL_AUTHORITY_OWNED; a releitura do registro tolera o legado", () => {
+    const w = validateGovernedSection(catalog, "PROCESS", "PROCESS", { objetoResumido: "novo" }, "write");
+    expect(w.ok).toBe(false);
+    expect(JSON.stringify(w)).toContain(CANONICAL_AUTHORITY_OWNED);
+    // TR_OBJECT admite suprimento humano; um campo legítimo continua aceito
+    expect(validateGovernedSection(catalog, "PROCESS", "TR", { objetoCompleto: "suprido" }, "write").ok).toBe(true);
+    expect(validateGovernedSection(catalog, "PROCESS", "PROCESS", { fiscalContrato: "Fiscal" }, "write").ok).toBe(true);
+    // leitura/revalidação do ledger legado NÃO quebra (o valor é preservado e ignorado por quem compõe)
+    expect(validateGovernedSection(catalog, "PROCESS", "PROCESS", { objetoResumido: "legado" }).ok).toBe(true);
+    expect(validateGovernedPayload(catalog, "PROCESS", { sections: { PROCESS: { objetoResumido: "legado", fiscalContrato: "F" } } }).ok).toBe(true);
+    expect(validateGovernedSection(catalog, "ORG", "IDENTITY", { municipioSede: "x" }, "write").ok).toBe(false);
+  });
+});
+
+describe("guardas estruturais — nenhuma autoridade 'latest' paralela na projeção do TR", () => {
+  const read = (rel: string) => readFileSync(path.resolve(rel), "utf8");
+  it("a projeção lê o documento do PIN (getOfficialDocument por id), nunca getLatestEmittedByOrigin", () => {
+    const proj = read("server/services/institutionalTemplates/editalProjections.ts");
+    expect(proj).toContain("getOfficialDocument");
+    expect(proj).not.toContain("getLatestEmittedByOrigin");
+    expect(proj).toContain("OFFICIAL_PIN_MISMATCH");
+  });
+  it("a composição resolve o pin ANTES das fontes e entrega o documento exato a elas (não em paralelo)", () => {
+    const comp = read("server/services/institutionalTemplates/templateCompositionService.ts");
+    expect(comp).toContain("t.catalog, officialDocuments)");
+    const adapter = read("server/services/institutionalTemplates/adapters/canonicalSources.ts");
+    expect(adapter).toContain("shadowedPaths");
+    expect(adapter).toContain("canonicalProjectedPaths");
+  });
+  it("a tela envia o TR exato escolhido à preparação (sem pin não há projeção do TR)", () => {
+    expect(read("client/src/components/procurement/EditalWorkspace.tsx")).toContain("trPin={trPin}");
+    expect(read("client/src/components/procurement/EditalPreparationPanel.tsx")).toContain("officialPins: { TR: trPin }");
   });
 });

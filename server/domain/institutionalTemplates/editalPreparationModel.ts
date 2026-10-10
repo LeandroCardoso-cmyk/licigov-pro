@@ -14,23 +14,14 @@
  * Nada aqui decide pela pessoa: projeção só existe onde há valor persistido numa autoridade; decisão jurídica/normativa nunca é
  * inferida por conveniência.
  */
+import { PROJECTION_BY_VARIABLE, type ProjectionKey } from "./canonicalProjectionPolicy";
 import { AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, type GovernedScope } from "./governedSources";
 import type { VariableCatalog2, VariableDef2 } from "./variableCatalog2";
 
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export const PREPARATION_CLASSES: readonly PreparationClass[] = ["CANONICAL", "ORG_PROFILE", "TR_PROJECTION", "PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"];
 
-/** Projeções determinísticas de dado ESTRUTURADO já persistido (nunca texto livre, nunca IA). */
-export type ProjectionKey = "PROCESS_OBJECT" | "REQUESTING_UNIT" | "ORG_LOCATION" | "ORG_UF_EXTENSO" | "TR_OBJECT";
-export type ProjectionOrigin = "Processo" | "Contexto canônico" | "Cadastro do órgão" | "TR oficial";
-
-export const PROJECTION_BY_VARIABLE: Readonly<Record<string, { readonly key: ProjectionKey; readonly origin: ProjectionOrigin }>> = {
-  "processo.objetoResumido": { key: "PROCESS_OBJECT", origin: "Processo" },
-  "processo.secretariaRequisitante": { key: "REQUESTING_UNIT", origin: "Contexto canônico" },
-  "instituicao.municipioSede": { key: "ORG_LOCATION", origin: "Cadastro do órgão" },
-  "instituicao.municipioUfExtenso": { key: "ORG_UF_EXTENSO", origin: "Cadastro do órgão" },
-  "processo.objetoCompleto": { key: "TR_OBJECT", origin: "TR oficial" },
-};
+export { PROJECTION_BY_VARIABLE, type ProjectionKey, type ProjectionOrigin } from "./canonicalProjectionPolicy";
 
 export interface VariableClassification {
   readonly name: string;
@@ -51,11 +42,28 @@ const isOrgSource = (s: VariableDef2["source"]): boolean => (ORG_SCOPE_SOURCES a
 /** Escopo do registro humano de uma variável (por FONTE: o mesmo critério do `GovernedSourceService`). */
 export const scopeOfSource = (source: VariableDef2["source"]): GovernedScope => (isOrgSource(source) ? "ORG" : "PROCESS");
 
+export const PREPARATION_CLASSIFICATION_UNSUPPORTED = "PREPARATION_CLASSIFICATION_UNSUPPORTED";
+
+/** Fonte/variável SEM política explícita de preparação: nunca vira decisão humana "por omissão". */
+export class PreparationClassificationUnsupportedError extends Error {
+  readonly code = PREPARATION_CLASSIFICATION_UNSUPPORTED;
+  constructor(readonly variable: string, readonly source: string) {
+    super(`${PREPARATION_CLASSIFICATION_UNSUPPORTED}: a variável ${variable} (fonte ${source}) não tem política explícita de preparação; defina-a em editalPreparationModel antes de usá-la`);
+    this.name = "PreparationClassificationUnsupportedError";
+  }
+}
+
+/** Fontes com política EXPLÍCITA. Qualquer outra (DFD/ETP/PARAMS ou uma fonte futura) falha fechado. */
+const PROCESS_DECISION_SOURCES: readonly string[] = ["PROCESS", "ITEMS", "CERTAME_CONFIG", "NORMATIVE", "BUDGET", "LIFECYCLE"];
+
 export function classifyVariable(v: VariableDef2): VariableClassification {
   const base = { name: v.name, source: v.source, path: v.path } as const;
   const projection = PROJECTION_BY_VARIABLE[v.name];
   if (v.name.startsWith("pos.") || v.source === "RESULT") return { ...base, class: "POST_AWARD", scope: "NONE", rule: "POST_AWARD" };
   if (v.type === "document_ref") return { ...base, class: "CANONICAL", scope: "NONE", rule: "DOCUMENT_PIN" };
+  // EXAUSTIVO por fonte: nenhuma variável cai em PROCESS_DECISION por catch-all.
+  const known = isOrgSource(v.source) || v.source === "TR" || PROCESS_DECISION_SOURCES.includes(v.source);
+  if (!known) throw new PreparationClassificationUnsupportedError(v.name, String(v.source));
   if (isOwned(v)) return { ...base, class: "CANONICAL", scope: "NONE", rule: "AUTHORITY_OWNED" };
   if (projection && projection.key !== "TR_OBJECT") return { ...base, class: "CANONICAL", scope: scopeOfSource(v.source), projection: projection.key, rule: "PROJECTION" };
   if (projection) return { ...base, class: "TR_PROJECTION", scope: scopeOfSource(v.source), projection: projection.key, rule: "PROJECTION" };

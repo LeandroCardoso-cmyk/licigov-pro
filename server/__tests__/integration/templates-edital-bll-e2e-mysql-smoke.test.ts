@@ -333,7 +333,7 @@ describe.skipIf(!DB)("Piloto Edital — E2E integrado A+B+C (MySQL real, dados s
     const q = await prepare("e6b");
     const g2 = await generate(q);
     const content2 = await humanReview(q, g2);
-    const fields = governedFieldsFor("PROCESS", { ...E2E_SCENARIO, "processo.objetoResumido": "Objeto resumido ALTERADO depois do M1" } as any);
+    const fields = governedFieldsFor("PROCESS", { ...E2E_SCENARIO, "processo.numeroPregao": "999/2026-ALTERADO-DEPOIS-DO-M1" } as any);
     const cur = (await rows("SELECT MAX(revision) r FROM institutional_decisions WHERE organization_id = ? AND subject_type = 'procurement.source_fields'", [q.w.org]))[0].r;
     await new GovernedSourceService(createVariableCatalogPort()).recordProcessFields(ctxOf(q.w.org), {
       confirm: true, idempotencyKey: key("chg"), decision: decision(), catalogVersion: BLL_CATALOG.version, expectedRevision: Number(cur), processId: q.w.processId, source: "PROCESS", fields,
