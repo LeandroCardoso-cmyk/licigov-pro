@@ -39,35 +39,41 @@ export function evaluateCond(c: Cond, facts: Readonly<Record<string, unknown>>):
 export interface PrepColumn { key: string; type: string; label: string; required: boolean }
 export type FieldStatus =
   | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
-  | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
+  | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
 export type AuthorityClass =
-  | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
-  | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "TRUE_PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
+  | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
+  | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
+/** Onde a pessoa resolve um dado que falta (a ORIGEM da autoridade — nunca o Edital). */
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
   name: string; source: string; path: string; type: string; description: string; required: boolean; conditional: boolean;
   requiredWhenVariables: readonly string[]; requiredWhen?: Cond; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
   hasValue: boolean; currentValue?: unknown;
-  class: PreparationClass; rule: string; authority?: AuthorityClass; entry?: "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PREPARATION";
+  class: PreparationClass; rule: string; authority?: AuthorityClass; entry?: EntryPoint;
   status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin; reason?: string; canOverrideDefault?: boolean; defaultEligible?: boolean;
   /** Havia valor legado no ledger neste caminho, hoje coberto por autoridade canônica/TR exato: preservado como história e IGNORADO. */
   shadowedLegacy?: boolean;
 }
 export type TrPinState = { state: "NOT_SELECTED" } | { state: "VALID"; ref: { documentId: string; version: number; contentHash: string } } | { state: "INVALID"; code: string };
 export interface PrepSection { source: string; scope: "ORG" | "PROCESS"; fields: readonly PrepField[]; pendingRequired: number }
-export interface CanonicalReadOnlyField { name: string; source: string; path: string; type: string; description: string; status: FieldStatus; displayValue?: unknown; origin: PrepOrigin }
+export interface CanonicalReadOnlyField { name: string; source: string; path: string; type: string; description: string; status: FieldStatus; displayValue?: unknown; origin: PrepOrigin; authority?: AuthorityClass; entry?: EntryPoint; reason?: string }
 export interface SummaryGroup { id: string; title: string; total: number; resolved: number; reused: number; pending: number; blockedCanonical: number }
 export interface PreparationMetrics {
   TOTAL_TEMPLATE_FIELDS: number; AUTO_RESOLVED: number; ORG_REUSED: number; TR_PROJECTED: number; DECIDED: number; CONDITIONAL_HIDDEN: number;
   POST_AWARD_HIDDEN: number; OPTIONAL_HIDDEN: number; MANUAL_DECISIONS_VISIBLE: number; LEGACY_SHADOWED: number;
   UPSTREAM_TR_REUSED?: number; TR_PENDING?: number; PROFILE_INCOMPLETE?: number; ORG_ROLES_REUSED?: number; ORG_POLICIES_REUSED?: number;
   ORG_DEFAULTS_APPLIED?: number; BY_AUTHORITY?: Partial<Record<AuthorityClass, number>>;
+  AUTO_FROM_PLATFORM?: number; AUTO_FROM_PRICE_RESEARCH?: number; AUTO_FROM_ITEMS?: number; AUTO_FROM_CERTAME_CONFIG?: number; AUTO_FROM_SCHEDULE?: number;
+  AUTO_FROM_LIFECYCLE?: number; TRUE_NEW_DECISIONS_VISIBLE?: number; PENDING_IN_SOURCE?: number;
 }
 export interface UpstreamView {
   trDigest: string;
   trPending: { name: string; description: string; reason?: string }[];
   profilePending: { name: string; description: string; reason: string; role?: string }[];
+  /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços, cadastro): cada uma com o `fix` (onde resolver). */
+  sourcePending: { name: string; description: string; reason: string; fix: EntryPoint }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -234,6 +240,34 @@ export const pendingItems = (state: PreparationStateView): PendingItem[] => bySe
 export const orgProfilePending = (state: PreparationStateView): UpstreamView["profilePending"] => state.upstream?.profilePending ?? [];
 /** Parâmetros estruturados do TR ainda não confirmados (informar no TR, não na preparação do Edital). */
 export const trParamsPending = (state: PreparationStateView): UpstreamView["trPending"] => state.upstream?.trPending ?? [];
+export type StageTarget = "dfd" | "price" | "contract_items" | "tr";
+export interface FixAction { label: string; href?: string; stage?: StageTarget }
+/** Ação (deep-link) para resolver um dado NA ORIGEM da autoridade — o Edital nunca recebe a digitação. */
+export function fixAction(entry: EntryPoint | undefined): FixAction | null {
+  switch (entry) {
+    case "PLATFORM_PROFILE": return { label: "Configurar o Perfil da plataforma", href: "/configuracoes#perfil-licitacoes" };
+    case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: "/configuracoes#perfil-licitacoes" };
+    case "ORG_REGISTRY": return { label: "Corrigir cadastro do órgão", href: "/configuracoes" };
+    case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
+    case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };
+    case "PRICE_RESEARCH": return { label: "Abrir a Pesquisa de Preços", stage: "price" };
+    case "TR_SECTION": return { label: "Abrir o TR", stage: "tr" };
+    default: return null;
+  }
+}
+
+/** Todos os dados a resolver NA ORIGEM: derivados sem dado + autoridades canônicas incompletas (cadastro, unidade requisitante…). */
+export function sourceIssues(state: PreparationStateView): { key: string; label: string; reason: string; entry: EntryPoint }[] {
+  const out = new Map<string, { key: string; label: string; reason: string; entry: EntryPoint }>();
+  for (const i of sourcePending(state)) out.set(i.name, { key: i.name, label: i.description || i.name, reason: i.reason, entry: i.fix });
+  for (const f of state.sections.flatMap((s) => s.fields)) {
+    if (f.status === "CANONICAL_UNRESOLVED" && !out.has(f.name)) out.set(f.name, { key: f.name, label: f.description || f.name, reason: f.origin?.label ?? "autoridade de origem", entry: f.entry ?? "NONE" });
+  }
+  return [...out.values()];
+}
+
+/** Pendências cuja resolução é NA ORIGEM (nunca no Edital). */
+export const sourcePending = (state: PreparationStateView): UpstreamView["sourcePending"] => state.upstream?.sourcePending ?? [];
 /** Pendências do processo (certame/TR/processo). */
 export const processPending = (state: PreparationStateView): PendingItem[] => pendingItems(state).filter((p) => p.section.scope === "PROCESS");
 /** Decisões opcionais (inclui as que ATIVAM campos adicionais): recolhidas por padrão. */
@@ -323,15 +357,13 @@ export function liveOptionalItems(state: PreparationStateView, edits: Readonly<R
 
 // ─── "Salvar preparação do Edital": UMA confirmação, várias escritas SEQUENCIAIS ─────────────
 
-export type WriteKind = "ORG" | "PROCESS" | "DISCLOSURE";
+export type WriteKind = "ORG" | "PROCESS";
 export interface PlannedWrite {
   /** Identidade estável da escrita (base da chave de idempotência por tentativa). */
   id: string;
   kind: WriteKind;
   source?: string;
   fields?: Record<string, unknown>;
-  participation?: { default?: string; byLot?: Record<string, string>; byItem?: Record<string, string> };
-  disclosure?: "publico" | "sigiloso";
   /** Linhas do resumo "N decisões serão registradas". */
   lines: string[];
 }
@@ -341,9 +373,13 @@ const ORG_ORDER = ["IDENTITY", "POLICY"] as const;
 const PROCESS_ORDER = ["PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "BUDGET", "NORMATIVE", "LIFECYCLE"] as const;
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * Plano de salvar: SOMENTE o que o Edital pode registrar — políticas do órgão (ORG, via Perfil) e decisões da CertameConfig (PROCESS).
+ * Divulgação do orçamento e regime de participação NÃO são escritas do Edital (PR #288): são registradas na origem (Pesquisa de Preços / Itens).
+ */
 export function buildSavePlan(
   state: PreparationStateView,
-  input: { edits: Readonly<Record<string, SectionEdits>>; disclosure: "" | "publico" | "sigiloso"; participationDefault: string | null },
+  input: { edits: Readonly<Record<string, SectionEdits>> },
 ): SavePlan {
   const writes: PlannedWrite[] = []; const errors: Record<string, Record<string, string>> = {}; let decisionCount = 0;
   const section = (source: string) => state.sections.find((s) => s.source === source);
@@ -358,30 +394,12 @@ export function buildSavePlan(
       const next = built.fields[f.path];
       if (next !== undefined && !same(next, f.hasValue ? f.currentValue : undefined)) lines.push(`${f.description || f.name}: ${formatDisplay(f.type, next)}`);
     }
-    let participation: PlannedWrite["participation"];
-    const pd = input.participationDefault?.trim();
-    if (kind === "PROCESS" && source === "ITEMS" && pd && pd !== (state.participation?.default ?? "")) {
-      participation = { ...(state.participation ?? {}), default: pd };
-      lines.push(`Regime de participação padrão dos itens: ${pd}`);
-    }
     if (lines.length === 0) return null;
     decisionCount += lines.length;
-    return { id: `${kind}-${source}`, kind, source, fields: built.fields, ...(participation ? { participation } : {}), lines };
+    return { id: `${kind}-${source}`, kind, source, fields: built.fields, lines };
   };
   for (const s of ORG_ORDER) { const w = sectionWrite(s, "ORG"); if (w) writes.push(w); }
-  if (input.disclosure && input.disclosure !== state.budgetDisclosure) {
-    writes.push({ id: "DISCLOSURE", kind: "DISCLOSURE", disclosure: input.disclosure, lines: [`Divulgação do orçamento: ${input.disclosure === "sigiloso" ? "sigiloso" : "público"}`] });
-    decisionCount++;
-  }
   for (const s of PROCESS_ORDER) { const w = sectionWrite(s, "PROCESS"); if (w) writes.push(w); }
-  // Participação sem edição de campos da seção ITEMS (ITEMS sem descritores editados): a escrita ainda precisa existir.
-  const pd = input.participationDefault?.trim();
-  if (pd && pd !== (state.participation?.default ?? "") && !writes.some((w) => w.id === "PROCESS-ITEMS")) {
-    const sec = section("ITEMS");
-    const built = sec ? buildSectionFields(sec, {}) : { fields: {} as Record<string, unknown> };
-    writes.push({ id: "PROCESS-ITEMS", kind: "PROCESS", source: "ITEMS", fields: built.fields, participation: { ...(state.participation ?? {}), default: pd }, lines: [`Regime de participação padrão dos itens: ${pd}`] });
-    decisionCount++;
-  }
   return { writes, errors, decisionCount };
 }
 
@@ -402,7 +420,7 @@ export async function executeSavePlan(
   isStale: (e: unknown) => boolean,
 ): Promise<SaveOutcome> {
   const rev = { ...start };
-  const scopeKey = (k: WriteKind) => (k === "ORG" ? "organization" : k === "PROCESS" ? "process" : "budget") as keyof typeof rev;
+  const scopeKey = (k: WriteKind) => (k === "ORG" ? "organization" : "process") as keyof typeof rev;
   const registered: PlannedWrite[] = [];
   for (let i = 0; i < writes.length; i++) {
     const w = writes[i];

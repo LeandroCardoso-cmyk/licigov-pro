@@ -42,7 +42,7 @@ import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/inst
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { completeProfile, fillTrParams, profileAsPrepView, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { completeProfile, fillTrParams, profileAsPrepView, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, orgProfilePending, toFormValue,
   type PlannedWrite, type PreparationStateView, type SectionEdits,
@@ -128,9 +128,8 @@ function writerFor(p: P, state: PreparationStateView, keys?: Map<string, string>
       const idempotencyKey = keys ? (keys.get(w.id) ?? (keys.set(w.id, key(w.id)), keys.get(w.id)!)) : key(w.id);
       const base = { confirm: true as const, idempotencyKey, decision: decision(), expectedRevision };
       let r: any;
-      if (w.kind === "DISCLOSURE") r = await tpl(p.org).governed.recordBudgetDisclosure({ ...base, processId: p.w.processId, disclosure: w.disclosure! });
-      else if (w.kind === "ORG") r = await tpl(p.org).governed.recordOrganizationFields({ ...base, catalogVersion: state.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
-      else r = await tpl(p.org).governed.recordProcessFields({ ...base, catalogVersion: state.catalogVersion, processId: p.w.processId, source: w.source as any, fields: w.fields ?? {}, ...(w.participation ? { participation: w.participation } : {}) });
+      if (w.kind === "ORG") r = await tpl(p.org).governed.recordOrganizationFields({ ...base, catalogVersion: state.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
+      else r = await tpl(p.org).governed.recordProcessFields({ ...base, catalogVersion: state.catalogVersion, processId: p.w.processId, source: w.source as any, fields: w.fields ?? {} });
       if (afterWrite) await afterWrite(w);
       return { revision: r.decision.revision as number };
     },
@@ -154,12 +153,12 @@ async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL"; skip
   if (scope === "ORG" || scope === "ALL") { const r = await completeProfile(harnessOf(p)); for (let i = 0; i < r.policiesTyped + r.rolesRegistered; i++) typed.push("perfil"); }
   if (scope === "PROCESS" || scope === "ALL") { await fillTrParams(harnessOf(p), {}, opts.skipTr); await stampTrLineage(conn, harnessOf(p), p.tr.documentId); }   // TR emitido com este snapshot
   if (scope === "ORG") return { rounds: 0, typed };
+  // PR #288: divulgação do orçamento (Pesquisa de Preços) e regime de participação (Itens) têm ORIGEM própria; o Edital não os pede.
+  { const st0 = await getState(p); if (!st0.budgetDisclosure) await setBudgetDisclosure(harnessOf(p)); if (st0.participationPending) await setItemsParticipation(harnessOf(p)); }
   for (let round = 1; round <= 8; round++) {
     const st = await getState(p);
     const pend = livePendingItems(st, {}).filter((i) => scope === "ALL" || i.section.scope === scope);
-    const needDisclosure = scope !== "ORG" && !st.budgetDisclosure;
-    const needParticipation = scope !== "ORG" && st.participationPending;
-    if (pend.length === 0 && !needDisclosure && !needParticipation) return { rounds: round - 1, typed };
+    if (pend.length === 0) return { rounds: round - 1, typed };
     const edits: Record<string, Record<string, any>> = {};
     for (const { section, field } of pend) {
       const v = scenarioValue(field.source, field.path);
@@ -167,7 +166,7 @@ async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL"; skip
       (edits[section.source] ??= {})[field.path] = toFormValue(field, v);   // ida e volta: o que a pessoa "digitaria"
       typed.push(field.name);
     }
-    const plan = buildSavePlan(st, { edits: edits as Record<string, SectionEdits>, disclosure: needDisclosure ? "publico" : "", participationDefault: needParticipation ? "Ampla participação, com os benefícios da LC nº 123/2006" : null });
+    const plan = buildSavePlan(st, { edits: edits as Record<string, SectionEdits> });
     expect(plan.errors).toEqual({});
     expect(plan.writes.length).toBeGreaterThan(0);
     const out = await executeSavePlan(plan.writes, st.revisions, writerFor(p, st), stale);
@@ -274,7 +273,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const sBefore = profileAsPrepView(await proc(b.org).licitacoesProfile({ processId: b.w.processId, ...WS }));
     const policy = sBefore.sections.find((s) => s.source === "POLICY")!;
     const field = policy.fields.find((f) => f.name === "sancoes.multaMoraPercentual")!;
-    const planChange = buildSavePlan(sBefore, { edits: { POLICY: { [field.path]: "0,7" } }, disclosure: "", participationDefault: null });
+    const planChange = buildSavePlan(sBefore, { edits: { POLICY: { [field.path]: "0,7" } } });
     expect(planChange.writes.map((w) => w.id)).toEqual(["ORG-POLICY"]);
     const changed = await executeSavePlan(planChange.writes, sBefore.revisions, writerFor(b, await getState(b)), stale);
     expect(changed.failed).toBeNull();
@@ -342,7 +341,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(on).toEqual(expect.arrayContaining(["srp.orgaoGerenciadorSrp", "srp.prazoVigenciaAta"]));
     expect(livePendingItems(s0, { PROCESS: { utilizaSrp: "false" } }).some((i) => i.field.name.startsWith("srp."))).toBe(false);
     // registrada a decisão, o servidor confirma (mesma avaliação que o composer fará)
-    const out = await executeSavePlan(buildSavePlan(s0, { edits: { PROCESS: { utilizaSrp: "true" } }, disclosure: "", participationDefault: null }).writes, s0.revisions, writerFor(p, s0), stale);
+    const out = await executeSavePlan(buildSavePlan(s0, { edits: { PROCESS: { utilizaSrp: "true" } } }).writes, s0.revisions, writerFor(p, s0), stale);
     expect(out.failed).toBeNull();
     const s1 = await getState(p);
     expect(get(s1, "srp.orgaoGerenciadorSrp")).toMatchObject({ status: "PENDING", class: "CONDITIONAL" });
@@ -377,8 +376,9 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(bySource("CERTAME_CONFIG").length).toBeGreaterThan(0);
     const edits: Record<string, Record<string, any>> = {};
     for (const { section, field } of [...bySource("PROCESS"), ...bySource("CERTAME_CONFIG")]) (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValue(field.source, field.path));
-    const plan = buildSavePlan(st, { edits: edits as any, disclosure: "publico", participationDefault: null });
-    expect(plan.writes.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-PROCESS", "PROCESS-CERTAME_CONFIG"]);
+    await setBudgetDisclosure(harnessOf(p));
+    const plan = buildSavePlan(st, { edits: edits as any });
+    expect(plan.writes.map((w) => w.id)).toEqual(["PROCESS-PROCESS", "PROCESS-CERTAME_CONFIG"]);
     // outra pessoa grava no PROCESSO depois da escrita do TR (antes de CERTAME_CONFIG): o CAS do registro inteiro muda
     const sharedKeys = new Map<string, string>();
     let intruded = false;
@@ -392,7 +392,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
         });
       }
     }), stale);
-    expect(out.registered.map((w) => w.id)).toEqual(["DISCLOSURE", "PROCESS-PROCESS"]);
+    expect(out.registered.map((w) => w.id)).toEqual(["PROCESS-PROCESS"]);
     expect(out.failed?.write.id).toBe("PROCESS-CERTAME_CONFIG");
     expect(out.failed?.stale).toBe(true);
     expect(out.notExecuted).toEqual([]);
@@ -403,7 +403,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(after.sections.find((s) => s.source === "PROCESS")!.fields.some((f) => f.hasValue)).toBe(true);
     expect(after.sections.find((s) => s.source === "NORMATIVE")!.fields.some((f) => f.hasValue)).toBe(true);
     // recarregado: nova tentativa com a revisão fresca converge (a pessoa revisa e confirma de novo)
-    const retry = buildSavePlan(after, { edits: { CERTAME_CONFIG: edits.CERTAME_CONFIG } as any, disclosure: "", participationDefault: null });
+    const retry = buildSavePlan(after, { edits: { CERTAME_CONFIG: edits.CERTAME_CONFIG } as any });
     const retryKeys = new Map<string, string>();
     const ok = await executeSavePlan(retry.writes, after.revisions, writerFor(p, after, retryKeys), stale);
     expect(ok.failed).toBeNull();

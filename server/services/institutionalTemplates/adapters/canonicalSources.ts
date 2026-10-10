@@ -40,6 +40,7 @@ import {
 import type { DocRefKind2 } from "../../../domain/institutionalTemplates/ast2";
 import type { OfficialDocumentPin } from "../../../domain/institutionalTemplates/composer";
 import { PROJECTION_BY_VARIABLE, canonicalProjectedPaths } from "../../../domain/institutionalTemplates/canonicalProjectionPolicy";
+import { ALWAYS_DERIVED } from "../../../domain/institutionalTemplates/certameAuthority";
 
 const unavailable = (source: string, reason: string, message: string) => new TemplateSourceUnavailableError(source, reason, message);
 export const sha256Of = (s: string): string => createHash("sha256").update(s).digest("hex");
@@ -62,6 +63,8 @@ export interface SourceReadContext {
   readonly official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>;
   /** GERAÇÃO/preflight (pin exato escolhido por pessoa): exige que os parâmetros estruturados do TR pertençam ao snapshot do TR pinado. */
   readonly pinned?: boolean;
+  /** Data (AAAA-MM-DD) do evento de composição (M1): a data de emissão do Edital é atribuída por ela. Ausente ⇒ `asOfDate`. */
+  readonly compositionDate?: string;
 }
 
 interface Memo {
@@ -116,7 +119,10 @@ function withGoverned(source: VariableSource2, data: Record<string, unknown>, re
 /** Reuso de contexto (TR estruturado, papéis, padrões institucionais) — lido UMA vez por composição, tenant-scoped. */
 async function reuseOf(rc: SourceReadContext, m: Memo): Promise<ContextReuse> {
   if (!m.reuse) {
-    const reuse = await loadContextReuse({ organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10) });
+    const reuse = await loadContextReuse({
+      organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10),
+      processRecord: await processRecordOf(rc, m), compositionDate: rc.compositionDate ?? rc.asOfDate.slice(0, 10),
+    });
     // INVARIANTE: TR oficial pinado + parâmetros estruturados do MESMO snapshot. Falha fechada; nunca usa o estado novo em silêncio.
     if (rc.pinned && rc.official?.TR) {
       const bad = await checkTrStructuredLineage(rc.organizationId, rc.official.TR, reuse);
@@ -140,6 +146,9 @@ async function govern(
   const defaults: Array<[string, unknown]> = [];
   for (const v of rc.catalog.vars) {
     if (v.source !== source) continue;
+    // PR #288: autoridade DERIVADA (plataforma, itens, orçamento, ciclo de vida): o valor governado/legado do mesmo caminho NUNCA vale,
+    // nem quando a origem ainda não tem o dado (falha fechada ⇒ MISSING_REQUIRED apontando a origem, jamais uma segunda autoridade).
+    if (ALWAYS_DERIVED(v.name) || reuse.problems.get(v.name)?.kind === "SCHEDULE") shadow.add(v.path);
     const r = reuse.values.get(v.name);
     if (!r) continue;
     if (r.kind === "ORG_DEFAULT") { defaults.push([v.path, r.value]); continue; }

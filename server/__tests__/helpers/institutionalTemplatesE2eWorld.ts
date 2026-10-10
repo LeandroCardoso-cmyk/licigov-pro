@@ -19,6 +19,7 @@ import { MODEL_PACKAGES } from "../../services/institutionalTemplates/modelPacka
 import { FF_INSTITUTIONAL_TEMPLATES_V1 } from "../../services/institutionalTemplates/portsRegistry";
 import { AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES } from "../../domain/institutionalTemplates/governedSources";
 import { isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
+import { ALWAYS_DERIVED } from "../../domain/institutionalTemplates/certameAuthority";
 import { recordContextAssertions } from "../../services/canonicalContextService";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import type { WorkflowContext } from "../../services/institutionalTemplates/ports";
@@ -47,6 +48,9 @@ export function syntheticCnpj(seed: number): string {
   return `${base}${d1}${d2}`;
 }
 
+/** Perfil da plataforma BLL SINTÉTICO (PR #288): configurado UMA vez por órgão; nunca digitado no Edital. */
+export const SYNTHETIC_PLATFORMS = { bll: { enderecoEletronico: "https://bllcompras.com", regulamentoVersao: "Regulamento da plataforma BLL — versão sintética 2026-01" } } as const;
+
 export interface World { org: number; processId: string; items: string[] }
 
 /** Cenário-base do mestre ajustado para satisfazer as REGRAS governadas (datas coerentes, acréscimo de consórcio na faixa). */
@@ -63,6 +67,7 @@ export function governedFieldsFor(source: VariableSource2, scenario: Scenario = 
   for (const def of BLL_CATALOG.vars) {
     if (def.source !== source || owned.has(def.path) || def.type === "document_ref") continue;
     if (isCanonicalProjection(def.name)) continue;       // autoridade canônica (projeção): nunca é decisão humana
+    if (ALWAYS_DERIVED(def.name)) continue;              // PR #288: plataforma/itens/orçamento/ciclo de vida: derivados da origem, nunca gravados no Edital
     if (def.name.startsWith("pos.")) continue;          // pós-homologação: NUNCA preenchido no pré-certame ("a preencher")
     const value = Object.prototype.hasOwnProperty.call(scenario, def.name) ? scenario[def.name] : sampleValue(def);
     if (value !== undefined) out[def.path] = value;
@@ -130,10 +135,13 @@ export async function seedGoverned(w: World, scenario: Scenario = E2E_SCENARIO, 
     const fields = governedFieldsFor(source, scenario);
     if (Object.keys(fields).length === 0) continue;
     await gov.recordProcessFields(ctx, { ...act(source), ...common, expectedRevision: rev++, processId: w.processId, source, fields,
-      ...(source === "ITEMS" ? { participation: { default: "Ampla participação, com os benefícios da LC nº 123/2006" } } : {}) });
+    });
   }
+  // PR #288: o regime de participação é configuração dos ITENS (origem); o Perfil da plataforma é do ÓRGÃO.
+  await gov.recordItemsParticipation(ctx, { ...act("participation"), catalogVersion: BLL_CATALOG.version, processId: w.processId, expectedRevision: rev, participation: { default: "Ampla participação, com os benefícios da LC nº 123/2006" } });
+  await gov.recordOrganizationProfile(ctx, { ...act("platform"), catalogVersion: BLL_CATALOG.version, expectedRevision: 0, platforms: SYNTHETIC_PLATFORMS });
   // por órgão: POLICY e IDENTITY (extensão)
-  let orev = 0;
+  let orev = 1;
   for (const source of ORG_SCOPE_SOURCES) {
     const fields = governedFieldsFor(source, scenario);
     if (Object.keys(fields).length === 0) continue;

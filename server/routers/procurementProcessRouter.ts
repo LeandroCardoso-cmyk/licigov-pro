@@ -26,6 +26,7 @@ import { templateIssuanceHook } from "../services/institutionalTemplates/integra
 import { generateTemplatedDocument, inspectTemplateReview, preflightTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { getEditalPreparationState } from "../services/institutionalTemplates/editalPreparationService";
 import { getLicitacoesProfileState } from "../services/institutionalTemplates/licitacoesProfileService";
+import { getBudgetDisclosureState, getCertameConfigState, getItemsParticipationState } from "../services/institutionalTemplates/certameConfigService";
 import { getTrStructuredState, recordTrStructuredParams, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
 import { generateEditalRouted, listEditalTrCandidates, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
@@ -716,6 +717,33 @@ export const procurementProcessRouter = router({
       return getLicitacoesProfileState(bridgeDeps(), orgId, params);
     }),
 
+  /** CertameConfig (somente leitura): decisões tomadas UMA vez por processo, consumidas pelo Edital e reutilizáveis por outros documentos. Escrita: `institutionalTemplates.governed.recordCertameConfig`. */
+  certameConfig: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getCertameConfigState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+    }),
+
+  /** Participação e estrutura dos Itens (origem do regime de participação e da forma de julgamento do Edital). Escrita: `institutionalTemplates.governed.recordItemsParticipation`. */
+  itemsParticipation: tenantProcedure
+    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getItemsParticipationState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
+    }),
+
+  /** Divulgação do orçamento (registrada UMA vez, na Pesquisa de Preços) e data-base. Escrita: `institutionalTemplates.governed.recordBudgetDisclosure`. */
+  budgetDisclosure: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      return getBudgetDisclosureState(bridgeDeps(), orgId, input.processId);
+    }),
+
   /** Confirma (humano) parâmetros estruturados do TR no Contexto Canônico: append-only, tenant-scoped, sem IA. */
   recordTrStructuredParams: orgRoleProcedure("operator")
     .input(z.object({
@@ -765,6 +793,7 @@ export const procurementProcessRouter = router({
       const upstreamIssues = prep.status === "READY_FOR_PREPARATION"
         ? [
           ...(prep.upstream.trPending.length ? [{ code: "TR_PARAMS_PENDING", source: "TR", message: `${prep.upstream.trPending.length} parâmetro(s) estruturado(s) do TR pendente(s): informe-os no TR (Parâmetros estruturados da contratação)` }] : []),
+          ...prep.upstream.sourcePending.map((p) => ({ code: "SOURCE_PENDING", source: p.fix, path: p.name, message: `${p.description || p.name}: ${p.reason}` })),
           ...(prep.upstream.profilePending.length ? [{ code: "LICITACOES_PROFILE_INCOMPLETE", source: "POLICY", message: `Perfil institucional de Licitações incompleto (${prep.upstream.profilePending.length} campo(s)): configure uma única vez em Configurações` }] : []),
         ]
         : [];

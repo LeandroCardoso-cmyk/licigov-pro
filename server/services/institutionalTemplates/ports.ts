@@ -211,7 +211,7 @@ export interface CanonicalReferencePort {
     organizationId: OrgId, subjectId: string, sources: readonly VariableSource2[], catalog: AnyVariableCatalog,
     official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>,
     /** `pinned` = `official` veio de pin EXATO escolhido por pessoa (geração/preflight): ativa a checagem de lineage dos parâmetros do TR. */
-    opts?: { readonly pinned?: boolean },
+    opts?: { readonly pinned?: boolean; /** Data (AAAA-MM-DD) do evento de composição: base da data de emissão atribuída pelo sistema. */ readonly compositionDate?: string },
   ): Promise<Partial<Record<VariableSource2, CanonicalSourceSnapshot>>>;
   /**
    * AUTORIDADE ATUAL: pin exato (documento + linhagem + versão + hash) da versão oficial EMITIDA mais recente de cada tipo.

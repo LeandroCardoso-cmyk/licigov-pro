@@ -31,6 +31,7 @@ import {
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
 } from "../../domain/institutionalTemplates/composer";
 import { manifestRevisionIssues, validateManifest, type GenerationManifest, type IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
+import { compositionDateOf } from "./compositionDate";
 import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
@@ -163,6 +164,8 @@ async function loadExactTemplate(ports: TemplatePorts, organizationId: OrgId, id
 async function loadCanonicalInputs(
   ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate,
   officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>,
+  /** Instante (ISO) do evento de composição: na geração = `createdAt` do M1; na revalidação = `createdAt` do M1 selado. */
+  compositionAt?: string,
 ) {
   const needs = templateRequirementsAny(t.revision.ast);
   // UMA autoridade por documento oficial: primeiro o pin validado (geração) / a autoridade atual (revalidação); as fontes — inclusive
@@ -173,7 +176,7 @@ async function loadCanonicalInputs(
       : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
-  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments, { pinned: officialPins !== undefined });
+  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments, { pinned: officialPins !== undefined, ...(compositionAt ? { compositionDate: compositionDateOf(compositionAt) } : {}) });
   return { sources, officialDocuments, identityFingerprint };
 }
 
@@ -251,8 +254,9 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
   if (t.revision.semanticHash !== resolution.revision.semanticHash) throw preconditionFailed(TEMPLATE_BINDING_INVALID, "revisão fixada divergente entre leituras");
 
   // 3. Fontes canônicas + rascunho de destino (leituras, fora da transação).
+  const compositionAt = ports.clock.now();
   const [canonical, generatedDocumentId] = await Promise.all([
-    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}),
+    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}, compositionAt),
     ports.drafts.reserveDraftId(params.organizationId, params.subjectId, params.documentType),
   ]);
 
@@ -261,7 +265,7 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
     organizationId: params.organizationId, identity: t.identity, revision: t.revision, catalog: t.catalog,
     pin: { identityId: t.identity.id, revisionId: t.revision.id, semanticHash: t.revision.semanticHash },
     sources: canonical.sources, officialDocuments: canonical.officialDocuments, aiNarratives: params.aiNarratives ?? [],
-    identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: ports.clock.now(), purpose: "GENERATION",
+    identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: compositionAt, purpose: "GENERATION",
     ...rulesFor(t),
   };
   return { template: t, generatedDocumentId, composed: composeTemplate(request) };
@@ -384,7 +388,7 @@ export interface PromotionTemplateIssuanceHook {
 
 /** Recompõe com as fontes ATUAIS a mesma revisão/rascunho/narrativas do M1 (para a revalidação). */
 async function recompose(ports: TemplatePorts, organizationId: OrgId, subjectId: string, m1: GenerationManifest, t: LoadedTemplate, narratives: readonly AiNarrativeOutput[]): Promise<ComposeResult<ComposedDocument>> {
-  const canonical = await loadCanonicalInputs(ports, organizationId, subjectId, t);
+  const canonical = await loadCanonicalInputs(ports, organizationId, subjectId, t, undefined, m1.createdAt);
   return composeTemplate({
     organizationId, identity: t.identity, revision: t.revision, catalog: t.catalog,
     pin: { identityId: m1.templateIdentityId, revisionId: m1.templateRevisionId, semanticHash: m1.templateSemanticHash },

@@ -81,7 +81,7 @@ describe("seção completa e visões orientadas por exceção", () => {
   });
   it("só as pendências aparecem; reaproveitados/opcionais ficam recolhidos; perfil do órgão separado do processo", () => {
     const proc = mkSection("PROCESS", "PROCESS", [mkField({ name: "p1", path: "p1" }), mkField({ name: "p2", path: "p2", status: "DECIDED", hasValue: true, currentValue: "v", displayValue: "v" }), mkField({ name: "p3", path: "p3", status: "HIDDEN_CONDITIONAL" })]);
-    const st = mkState([sec, proc], { upstream: { trDigest: "x", trPending: [], profilePending: [{ name: "b", description: "B", reason: "política do órgão ainda não registrada" }] } });
+    const st = mkState([sec, proc], { upstream: { trDigest: "x", trPending: [], sourcePending: [], profilePending: [{ name: "b", description: "B", reason: "política do órgão ainda não registrada" }] } });
     expect(pendingItems(st).map((i) => i.field.name)).toEqual(["b", "p1"]);
     expect(orgProfilePending(st).map((i) => i.name)).toEqual(["b"]);   // CONTEXT_REUSE 2.0: o perfil incompleto vem do servidor (card único)
     expect(processPending(st).map((i) => i.field.name)).toEqual(["p1"]);
@@ -137,22 +137,22 @@ describe("Salvar preparação: uma confirmação, escritas sequenciais, CAS enca
   const tr = mkSection("TR", "PROCESS", [mkField({ name: "t1", path: "t1", description: "Local de entrega", source: "TR" })]);
   const cert = mkSection("CERTAME_CONFIG", "PROCESS", [mkField({ name: "c1", path: "c1", type: "date", description: "Data de abertura", source: "CERTAME_CONFIG" })]);
   const st = mkState([org, tr, cert], { budgetDisclosure: null, participationPending: true, participation: null, revisions: { process: 3, organization: 5, budget: 1 } });
-  it("planeja na ordem órgão → divulgação → processo e lista cada decisão", () => {
-    const plan = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "2026-10-20" }, TR: { t1: "Almoxarifado" }, POLICY: { o1: "licitacao@exemplo.gov.br" } }, disclosure: "sigiloso", participationDefault: "Ampla participação" });
-    expect(plan.writes.map((w) => w.id)).toEqual(["ORG-POLICY", "DISCLOSURE", "PROCESS-TR", "PROCESS-CERTAME_CONFIG", "PROCESS-ITEMS"]);
-    expect(plan.decisionCount).toBe(5);
-    expect(plan.writes.flatMap((w) => w.lines)).toEqual(expect.arrayContaining(["Data de abertura: 20/10/2026", "Local de entrega: Almoxarifado", "Divulgação do orçamento: sigiloso", "Regime de participação padrão dos itens: Ampla participação"]));
-    expect(plan.writes.find((w) => w.id === "PROCESS-ITEMS")?.participation).toEqual({ default: "Ampla participação" });
+  it("planeja na ordem órgão → processo (CertameConfig) e lista cada decisão; divulgação e participação NÃO são escritas do Edital", () => {
+    const plan = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "2026-10-20" }, TR: { t1: "Almoxarifado" }, POLICY: { o1: "licitacao@exemplo.gov.br" } } });
+    expect(plan.writes.map((w) => w.id)).toEqual(["ORG-POLICY", "PROCESS-TR", "PROCESS-CERTAME_CONFIG"]);
+    expect(plan.decisionCount).toBe(3);
+    expect(plan.writes.flatMap((w) => w.lines)).toEqual(expect.arrayContaining(["Data de abertura: 20/10/2026", "Local de entrega: Almoxarifado"]));
+    expect(plan.writes.some((w) => (w.kind as string) === "DISCLOSURE" || (w as { participation?: unknown }).participation !== undefined)).toBe(false);
     expect(plan.errors).toEqual({});
   });
   it("sem alteração ⇒ nenhuma escrita; erro de tipo ⇒ nada planejado para a seção", () => {
-    expect(buildSavePlan(st, { edits: {}, disclosure: "", participationDefault: null }).writes).toEqual([]);
-    const bad = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "20/10/2026" } }, disclosure: "", participationDefault: null });
+    expect(buildSavePlan(st, { edits: {} }).writes).toEqual([]);
+    const bad = buildSavePlan(st, { edits: { CERTAME_CONFIG: { c1: "20/10/2026" } } });
     expect(bad.errors.CERTAME_CONFIG?.c1).toBeTruthy();
     expect(bad.writes).toEqual([]);
   });
   it("execução SEQUENCIAL com CAS encadeado por escopo (a revisão devolvida é a esperada da próxima)", async () => {
-    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } }, disclosure: "publico", participationDefault: null });
+    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } } });
     const calls: string[] = []; let inFlight = 0; let maxInFlight = 0;
     const writer = {
       async write(w: PlannedWrite, expected: number) {
@@ -165,10 +165,10 @@ describe("Salvar preparação: uma confirmação, escritas sequenciais, CAS enca
     const out = await executeSavePlan(plan.writes, st.revisions, writer, () => false);
     expect(out.failed).toBeNull();
     expect(maxInFlight).toBe(1);
-    expect(calls).toEqual(["ORG-POLICY@5", "DISCLOSURE@1", "PROCESS-TR@3", "PROCESS-CERTAME_CONFIG@4"]);
+    expect(calls).toEqual(["ORG-POLICY@5", "PROCESS-TR@3", "PROCESS-CERTAME_CONFIG@4"]);
   });
   it("conflito (CAS obsoleto): PARA, informa o que já foi registrado e o que não executou — nunca sobrescreve", async () => {
-    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } }, disclosure: "", participationDefault: null });
+    const plan = buildSavePlan(st, { edits: { TR: { t1: "A" }, CERTAME_CONFIG: { c1: "2026-10-20" }, POLICY: { o1: "x@y.gov.br" } } });
     const stale = new Error("STALE_STATE: outra pessoa registrou");
     let n = 0;
     const out = await executeSavePlan(plan.writes, st.revisions, { async write(_w, expected) { if (++n === 2) throw stale; return { revision: expected + 1 }; } }, (e) => e === stale);
@@ -265,8 +265,7 @@ describe("SSR da preparação orientada por exceções", () => {
   beforeAll(async () => { (globalThis as { React?: unknown }).React = React; View = (await import("./EditalPreparationView")).default; });
   const noop = () => {};
   const base = (state: PreparationStateView, over: object = {}) => ({
-    state, edits: {}, fieldErrors: {}, pending: pendingItems(state), optional: optionalItems(state), onEdit: noop, disclosure: "", onDisclosure: noop,
-    participationDefault: null, onParticipationDefault: noop, plan: { writes: [], errors: {}, decisionCount: 0 }, reviewing: false, onStartReview: noop,
+    state, edits: {}, fieldErrors: {}, pending: pendingItems(state), optional: optionalItems(state), onEdit: noop, plan: { writes: [], errors: {}, decisionCount: 0 }, reviewing: false, onStartReview: noop,
     onCancelReview: noop, decision: { decidedByName: "", decidedByRole: "", decidedAt: "2026-10-09", basisReference: "", reason: "", confirmed: false }, onDecision: noop,
     showErrors: false, busy: false, outcome: null, notice: null, onConfirm: noop, ...over,
   });
@@ -275,8 +274,8 @@ describe("SSR da preparação orientada por exceções", () => {
   const reusedOrg = mkSection("IDENTITY", "ORG", [mkField({ name: "o2", path: "o2", source: "IDENTITY", description: "Foro competente", class: "ORG_PROFILE", status: "ORG_REUSED", hasValue: true, currentValue: "Comarca X", displayValue: "Comarca X", origin: { label: "Perfil institucional do órgão", ref: { revision: 2, hash: "abc" } } })]);
   const tr = mkSection("TR", "PROCESS", [mkField({ name: "t1", path: "t1", source: "TR", description: "Local de entrega", class: "TR_PROJECTION", rule: "TR_SOURCE" })]);
   const st = mkState([org, reusedOrg, tr], {
-    budgetDisclosure: null, participationPending: true, orgProfile: { revision: 2, hash: "abc" },
-    upstream: { trDigest: "x", trPending: [], profilePending: [{ name: "o1", description: "Canal de esclarecimentos", reason: "política do órgão ainda não registrada" }] },
+    budgetDisclosure: null, participationPending: false, orgProfile: { revision: 2, hash: "abc" },
+    upstream: { trDigest: "x", trPending: [], sourcePending: [], profilePending: [{ name: "o1", description: "Canal de esclarecimentos", reason: "política do órgão ainda não registrada" }] },
     canonicalFields: [{ name: "processo.numeroProcesso", source: "PROCESS", path: "numeroProcesso", type: "string", description: "Número do processo", status: "AUTO", displayValue: "2026/0001", origin: { label: "Processo", ref: { processId: "p1" } } }],
     summary: { reusedAutomatically: 12, pendingDecisions: 4, groups: [{ id: "institucional", title: "Dados institucionais", total: 18, resolved: 18, reused: 18, pending: 0, blockedCanonical: 0 }, { id: "certame", title: "Configuração do certame", total: 9, resolved: 5, reused: 0, pending: 4, blockedCanonical: 0 }] },
   });
@@ -285,7 +284,7 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).toContain("12</strong> informações reaproveitadas automaticamente");
     expect(out).toContain("de você");
     // UX final: UM card de perfil incompleto (não despeja campos) + cartões por autoridade
-    expect(out).toContain("Complete o Perfil Institucional de Licitações");
+    expect(out).toContain("Complete a configuração única do órgão");
     expect(out).toContain("Configurar agora");
     expect(out).toContain('href="/configuracoes#perfil-licitacoes"');
     expect(out).toContain("Canal de esclarecimentos");            // listado só em "O que falta"
@@ -293,12 +292,13 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).toContain('data-card="perfil"');
     expect(out).toContain('data-card="processo"');
     expect(out).toContain('data-card="tr"');
-    expect(out).toContain('data-card="itens"');
-    expect(out).toContain("⚠ 4 decisões pendentes");
-    expect(out).toContain("Decisões deste processo");
+    expect(out).toContain('data-card="origens"');
+    expect(out).toMatch(/⚠ \d+ decis(ão|ões) pendente/);
+    expect(out).toContain("Decisões deste certame");
     expect(out).toContain("Local de entrega");
-    expect(out).toContain("Divulgação do orçamento");
-    expect(out).toContain("Regime de participação padrão dos itens");
+    // PR #288: divulgação do orçamento e regime de participação NÃO são campos do Edital
+    expect(out).not.toContain("Regime de participação padrão dos itens");
+    expect(out).not.toContain('name="edital-disclosure"');
     // recolhidos por padrão: <details> sem atributo open
     expect(out).toContain("Ver dados reaproveitados — 2");
     expect(out).toContain("Ver detalhes técnicos");
@@ -313,10 +313,11 @@ describe("SSR da preparação orientada por exceções", () => {
     const stale = html(base({ ...st, trPin: { state: "INVALID", code: "OFFICIAL_PIN_STALE" } }));
     expect(stale).toContain("não é mais válido");
     expect(stale).toContain("Selecione o TR oficial exato novamente");
-    const blocked = mkState([mkSection("PROCESS", "PROCESS", [mkField({ name: "processo.secretariaRequisitante", path: "secretariaRequisitante", class: "CANONICAL", rule: "PROJECTION", status: "CANONICAL_UNRESOLVED", editable: false, description: "Unidade requisitante", origin: { label: "Contexto canônico" } })])]);
-    const out = html(base(blocked));
-    expect(out).toContain("Dados do sistema incompletos");
+    const blocked = mkState([mkSection("PROCESS", "PROCESS", [mkField({ name: "processo.secretariaRequisitante", path: "secretariaRequisitante", class: "CANONICAL", rule: "PROJECTION", status: "CANONICAL_UNRESOLVED", entry: "REQUESTING_UNIT", editable: false, description: "Unidade requisitante", origin: { label: "Contexto canônico" } })])]);
+    const out = html(base(blocked, { onOpenStage: noop }));
+    expect(out).toContain("Dados a resolver na origem");
     expect(out).toContain("Unidade requisitante");
+    expect(out).toContain("Corrigir unidade requisitante");
     expect(out).not.toContain('id="prep-PROCESS-secretariaRequisitante"');     // sem input: a autoridade é outra
   });
   it("valor legado ignorado aparece só como aviso técnico no campo reaproveitado", () => {
@@ -333,7 +334,7 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).not.toContain("Salvar preparação do Edital");
   });
   it("UMA confirmação: botão 'Salvar preparação do Edital', resumo das decisões e autoridade humana antes de registrar", () => {
-    const plan = { writes: [{ id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: ["Local de entrega: Almoxarifado", "Prazo de execução: 5 dia(s)"] }, { id: "DISCLOSURE", kind: "DISCLOSURE" as const, lines: ["Divulgação do orçamento: público"] }], errors: {}, decisionCount: 3 };
+    const plan = { writes: [{ id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: ["Local de entrega: Almoxarifado", "Prazo de execução: 5 dia(s)"] }, { id: "PROCESS-CERTAME_CONFIG", kind: "PROCESS" as const, source: "CERTAME_CONFIG", lines: ["Utiliza SRP: Sim"] }], errors: {}, decisionCount: 3 };
     const before = html(base(st, { plan }));
     expect(before).toContain("Salvar preparação do Edital");
     expect(before).toContain("3 decisões para registrar");
@@ -341,15 +342,15 @@ describe("SSR da preparação orientada por exceções", () => {
     const review = html(base(st, { plan, reviewing: true }));
     expect(review).toContain("3 decisões serão registradas");
     expect(review).toContain("Local de entrega: Almoxarifado");
-    expect(review).toContain("Divulgação do orçamento: público");
+    expect(review).toContain("Utiliza SRP: Sim");
     expect(review).toContain("Autoridade humana");
     expect(review).toContain("Confirmar e registrar");
     expect((review.match(/Confirmar e registrar/g) ?? []).length).toBe(1);
   });
   it("conflito: informa o que já foi registrado e o que não executou", () => {
-    const outcome = { registered: [{ id: "DISCLOSURE", kind: "DISCLOSURE" as const, lines: [] }], failed: { write: { id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: [] }, stale: true, message: "x" }, notExecuted: [{ id: "PROCESS-CERTAME_CONFIG", kind: "PROCESS" as const, source: "CERTAME_CONFIG", lines: [] }] };
+    const outcome = { registered: [{ id: "ORG-POLICY", kind: "ORG" as const, source: "POLICY", lines: [] }], failed: { write: { id: "PROCESS-TR", kind: "PROCESS" as const, source: "TR", lines: [] }, stale: true, message: "x" }, notExecuted: [{ id: "PROCESS-CERTAME_CONFIG", kind: "PROCESS" as const, source: "CERTAME_CONFIG", lines: [] }] };
     const out = html(base(st, { outcome }));
-    expect(out).toContain("Já registrado: Divulgação do orçamento");
+    expect(out).toContain("Já registrado: Política do órgão");
     expect(out).toContain("Parou em Dados do TR: nada foi sobrescrito");
     expect(out).toContain("1 registro(s) não executado(s)");
   });
@@ -368,7 +369,9 @@ describe("guardas estruturais", () => {
     expect(ws).toContain("templateReviewBlockers={templateReviewBlockers}");
   });
   it("escrita pelos endpoints governados existentes, como ato humano (confirm + idempotência + CAS); sem fetch/JSON técnico", () => {
-    for (const m of ["recordProcessFields", "recordOrganizationFields", "recordBudgetDisclosure"]) expect(prep).toContain(m);
+    for (const m of ["recordCertameConfig", "recordOrganizationFields"]) expect(prep).toContain(m);
+    // PR #288: o Edital NÃO escreve a divulgação do orçamento (registrada na Pesquisa de Preços)
+    expect(prep).not.toContain("recordBudgetDisclosure");
     expect(prep).toContain("confirm: true");
     expect(prep).toContain("expectedRevision");
     expect(prep).toContain("idempotencyKey");

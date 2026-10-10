@@ -30,7 +30,9 @@ import { PROJECTION_BY_VARIABLE, isCanonicalProjection } from "../../domain/inst
 import { resolveEditalTemplate, type BridgeDeps, type EditalTemplateResolution } from "./editalBridgeService";
 import { resolveEditalProjections, type ProjectedValue } from "./editalProjections";
 import { TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, loadContextReuse, type ContextReuse } from "./editalContextReuse";
-import { ROLE_LABEL, isDefaultEligible, type AuthorityClass } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
+import { AUTHORITY_CLASSES, ROLE_LABEL, isDefaultEligible, type AuthorityClass, type EntryPoint } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
+import { ALWAYS_DERIVED } from "../../domain/institutionalTemplates/certameAuthority";
+import { compositionDateOf } from "./compositionDate";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
 import type { OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
@@ -46,6 +48,7 @@ export type FieldStatus =
   | "ORG_DEFAULT"          // padrão institucional EXPLÍCITO aplicado (pode ser alterado neste processo)
   | "PENDING_TR"           // depende de parâmetro estruturado do TR ainda não confirmado (informe no TR)
   | "PROFILE_INCOMPLETE"   // depende do Perfil institucional de Licitações (papel/política ausente ou vencido)
+  | "PENDING_SOURCE"       // autoridade DERIVADA ainda sem dado na ORIGEM (plataforma, itens, orçamento): resolva LÁ (`fix`), nunca no Edital
   | "CANONICAL_UNRESOLVED" // a autoridade canônica existe mas está incompleta (resolva na própria autoridade)
   | "HIDDEN_CONDITIONAL"   // condição inativa
   | "HIDDEN_POST_AWARD";   // pós-homologação
@@ -120,6 +123,10 @@ export interface CanonicalReadOnlyField {
   readonly status: FieldStatus;
   readonly displayValue?: unknown;
   readonly origin: PreparationOrigin;
+  /** Classe de autoridade e ONDE resolver quando falta (deep-link da tela). */
+  readonly authority?: AuthorityClass;
+  readonly entry?: EntryPoint;
+  readonly reason?: string;
 }
 
 export type SummaryGroupId = "institucional" | "politicas" | "processo" | "tr" | "itens" | "certame" | "normativo";
@@ -154,6 +161,17 @@ export interface PreparationMetrics {
   readonly ORG_ROLES_REUSED: number;
   readonly ORG_POLICIES_REUSED: number;
   readonly ORG_DEFAULTS_APPLIED: number;
+  /** PR #288 — o que o sistema resolveu SEM reentrada, por autoridade de origem. */
+  readonly AUTO_FROM_PLATFORM: number;
+  readonly AUTO_FROM_PRICE_RESEARCH: number;
+  readonly AUTO_FROM_ITEMS: number;
+  readonly AUTO_FROM_CERTAME_CONFIG: number;
+  readonly AUTO_FROM_SCHEDULE: number;
+  readonly AUTO_FROM_LIFECYCLE: number;
+  /** Decisões GENUINAMENTE independentes ainda visíveis (obrigatórias, aplicáveis e sem valor). */
+  readonly TRUE_NEW_DECISIONS_VISIBLE: number;
+  /** Pendências cuja resolução é NA ORIGEM (plataforma, itens, orçamento, cadastro), não no Edital. */
+  readonly PENDING_IN_SOURCE: number;
   readonly BY_AUTHORITY: Readonly<Record<AuthorityClass, number>>;
   readonly BY_CLASS: Readonly<Record<PreparationClass, number>>;
 }
@@ -183,6 +201,8 @@ export type EditalPreparationState =
       readonly trDigest: string;
       readonly trPending: readonly { readonly name: string; readonly description: string; readonly reason?: string }[];
       readonly profilePending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly role?: string }[];
+      /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços): cada uma com o `fix` (onde resolver). */
+      readonly sourcePending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly fix: EntryPoint }[];
     };
     readonly summary: { readonly groups: readonly SummaryGroup[]; readonly reusedAutomatically: number; readonly pendingDecisions: number };
     readonly metrics: PreparationMetrics;
@@ -213,6 +233,12 @@ const GROUP_TITLE: Readonly<Record<SummaryGroupId, string>> = {
   itens: "Itens e orçamento", certame: "Configuração do certame", normativo: "Fundamentos normativos e ciclo de vida",
 };
 const GROUP_ORDER: readonly SummaryGroupId[] = ["institucional", "processo", "tr", "itens", "certame", "politicas", "normativo"];
+
+const ORIGIN_LABEL: Readonly<Partial<Record<EntryPoint, string>>> = {
+  PLATFORM_PROFILE: "Configure no Perfil da plataforma", ITEMS: "Defina em Itens da contratação", PRICE_RESEARCH: "Registre na Pesquisa de Preços",
+  ORG_REGISTRY: "Corrija o cadastro do órgão", REQUESTING_UNIT: "Corrija a unidade requisitante",
+};
+const originLabelOf = (entry: EntryPoint): string => ORIGIN_LABEL[entry] ?? "Resolva na origem do dado";
 
 function storedValue(source: VariableSource2, path: string, process: GovernedRecord | null, org: GovernedRecord | null): unknown {
   const rec = scopeOf(source) === "ORG" ? org : process;
@@ -268,7 +294,9 @@ export async function getEditalPreparationState(
   ]);
   const disclosure: "publico" | "sigiloso" | null = budget?.outcome === "publico" || budget?.outcome === "sigiloso" ? budget.outcome : null;
   // Reuso de contexto (parâmetros do TR, papéis e padrões do Perfil de Licitações): MESMA resolução da composição.
-  let reuse: ContextReuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10) });
+  let reuse: ContextReuse = await loadContextReuse({
+    organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec, compositionDate: compositionDateOf(deps.now()),
+  });
   // INVARIANTE: TR oficial exato + parâmetros estruturados do MESMO snapshot. Divergente ⇒ os parâmetros atuais NÃO são reaproveitados
   // (o Edital não mistura TR v1 com parâmetros posteriores) e o preflight bloqueia; a pessoa revisa/emite a versão correspondente do TR.
   let trLineageBad = false;
@@ -294,7 +322,7 @@ export async function getEditalPreparationState(
       // Perfil e parâmetro estruturado do TR vencem o valor governado legado; padrão institucional só preenche o que falta.
       if (proj) known.set(v.name, proj.value);
       else if (ru && ru.kind !== "ORG_DEFAULT") known.set(v.name, ru.value);
-      else if (!isCanonicalProjection(v.name) && !isEmpty(stored)) known.set(v.name, stored);
+      else if (!isCanonicalProjection(v.name) && !ALWAYS_DERIVED(v.name) && !isEmpty(stored)) known.set(v.name, stored);
       else if (ru?.kind === "ORG_DEFAULT") known.set(v.name, ru.value);
     }
   }
@@ -320,7 +348,7 @@ export async function getEditalPreparationState(
     switch (`${v.source}.${v.path}`) {
       case "PROCESS.numeroProcesso": return process ? { status: "AUTO", displayValue: process.processNumber, origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Processo" } };
       case "PROCESS.ano": { const y = process ? /^(\d{4})\//.exec(process.processNumber)?.[1] : undefined; return y ? { status: "AUTO", displayValue: Number(y), origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Processo" } }; }
-      case "PROCESS.orcamentoSigilosoSimNao": return disclosure ? { status: "AUTO", displayValue: disclosure === "sigiloso", origin: { label: "Divulgação do orçamento", ref: { revision: budget?.revision ?? 0 } } } : { status: "AWAITING", origin: { label: "Divulgação do orçamento" } };
+      case "PROCESS.orcamentoSigilosoSimNao": return disclosure ? { status: "AUTO", displayValue: disclosure === "sigiloso", origin: { label: "Divulgação do orçamento (registrada na Pesquisa de Preços)", ref: { revision: budget?.revision ?? 0 } } } : { status: "PENDING_SOURCE", origin: { label: "Registre a divulgação do orçamento (público ou sigiloso) na Pesquisa de Preços" } };
       case "IDENTITY.municipioNome": return identity?.snapshot.municipio ? { status: "AUTO", displayValue: identity.snapshot.municipio, origin: { label: "Cadastro do órgão", ref: { organizationId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Cadastro do órgão" } };
       case "IDENTITY.municipioCnpj": return identity?.snapshot.cnpj ? { status: "AUTO", displayValue: identity.snapshot.cnpj, origin: { label: "Cadastro do órgão", ref: { organizationId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Cadastro do órgão" } };
       case "IDENTITY.municipioEndereco": return identity?.snapshot.address ? { status: "AUTO", displayValue: identity.snapshot.address, origin: { label: "Cadastro do órgão", ref: { organizationId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Cadastro do órgão" } };
@@ -330,7 +358,7 @@ export async function getEditalPreparationState(
         ? { status: "AUTO", displayValue: `${ctx!.items.length} item(ns) com quantidade prevista`, origin: { label: "Itens da contratação", ref: { items: ctx!.items.length, contextVersion: ctx!.version } } }
         : { status: "CANONICAL_UNRESOLVED", origin: { label: "Itens da contratação" } };
       case "BUDGET.valorEstimado": {
-        if (!disclosure) return { status: "AWAITING", origin: { label: "Orçamento" } };
+        if (!disclosure) return { status: "PENDING_SOURCE", origin: { label: "Registre a divulgação do orçamento na Pesquisa de Preços" } };
         if (disclosure === "sigiloso") return { status: "AUTO", displayValue: "não divulgado (orçamento sigiloso)", origin: { label: "Divulgação do orçamento", ref: { revision: budget?.revision ?? 0 } } };
         return ctx?.priceContext.complete && ctx.priceContext.estimatedTotalCents !== null
           ? { status: "AUTO", displayValue: ctx.priceContext.estimatedTotalCents, origin: { label: "Pesquisa de preços", ref: { contextVersion: ctx.version } } }
@@ -351,8 +379,9 @@ export async function getEditalPreparationState(
     a[k]++;
     groupAcc.set(g, a);
   };
-  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0 };
-  const byAuthority = Object.fromEntries(["EXISTING_CANONICAL", "ORG_ROLE_PROFILE", "ORG_POLICY_PROFILE", "UPSTREAM_PROCESS", "UPSTREAM_DFD", "UPSTREAM_ETP", "UPSTREAM_ITEMS", "UPSTREAM_PRICE_RESEARCH", "UPSTREAM_TR", "TRUE_PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"].map((k) => [k, 0])) as Record<AuthorityClass, number>;
+  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0, PLAT: 0, PRICE: 0, ITEMS: 0, CFG: 0, SCHED: 0, LIFE: 0, SRC_PEND: 0 };
+  const sourcePending: Array<{ name: string; description: string; reason: string; fix: EntryPoint }> = [];
+  const byAuthority = Object.fromEntries(AUTHORITY_CLASSES.map((k) => [k, 0])) as Record<AuthorityClass, number>;
   const trPending: Array<{ name: string; description: string; reason?: string }> = [];
   const profilePending: Array<{ name: string; description: string; reason: string; role?: string }> = [];
   const byClass = Object.fromEntries((["CANONICAL", "ORG_PROFILE", "TR_PROJECTION", "PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"] as const).map((k) => [k, 0])) as Record<PreparationClass, number>;
@@ -369,9 +398,35 @@ export async function getEditalPreparationState(
     // Autoridade canônica "dona" (nunca digitada): lista à parte, somente leitura.
     if (c.rule === "AUTHORITY_OWNED" || c.rule === "DOCUMENT_PIN") {
       const view = ownedView(v);
-      canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: view.status, ...(view.displayValue !== undefined ? { displayValue: view.displayValue } : {}), origin: view.origin });
+      canonicalFields.push({
+        name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: view.status,
+        ...(view.displayValue !== undefined ? { displayValue: view.displayValue } : {}), origin: view.origin, authority: c.authority, entry: c.entry,
+        ...(view.status === "PENDING_SOURCE" || view.status === "CANONICAL_UNRESOLVED" ? { reason: view.origin.label } : {}),
+      });
       if (view.status === "AUTO") { m.AUTO++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused"); }
-      else if (view.status === "CANONICAL_UNRESOLVED") { bump(group, "total"); bump(group, "blocked"); }
+      else if (view.status === "CANONICAL_UNRESOLVED" || view.status === "PENDING_SOURCE") {
+        bump(group, "total"); bump(group, "blocked");
+        sourcePending.push({ name: v.name, description: descriptor.description, reason: view.origin.label, fix: c.entry });
+        m.SRC_PEND++;
+      }
+      continue;
+    }
+
+    // PR #288 — autoridade DERIVADA (Perfil da plataforma, Itens, Pesquisa de Preços, ciclo de vida): valor + origem, ou pendência NA ORIGEM.
+    if (c.rule === "PLATFORM" || c.rule === "DERIVED") {
+      const ru = reuse.values.get(v.name); const pb = reuse.problems.get(v.name);
+      const legacy = storedValue(v.source, v.path, processRec, orgRec);
+      if (ru) {
+        canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "AUTO", displayValue: ru.value, origin: { label: ru.origin.label, ref: ru.origin.ref }, authority: c.authority, entry: c.entry });
+        m.AUTO++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused");
+        if (ru.kind === "PLATFORM") m.PLAT++; else if (ru.kind === "BUDGET") m.PRICE++; else if (ru.kind === "ITEMS") m.ITEMS++; else if (ru.kind === "LIFECYCLE") m.LIFE++;
+      } else {
+        const reason = pb?.reason ?? "dado ainda não disponível na origem";
+        canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "PENDING_SOURCE", origin: { label: originLabelOf(c.entry) }, authority: c.authority, entry: pb?.fix ?? c.entry, reason });
+        sourcePending.push({ name: v.name, description: descriptor.description, reason, fix: pb?.fix ?? c.entry });
+        m.SRC_PEND++; bump(group, "total"); bump(group, "blocked");
+      }
+      if (legacy !== undefined && !isEmpty(legacy)) m.LS++;   // valor legado no ledger: preservado como história e IGNORADO
       continue;
     }
 
@@ -387,7 +442,15 @@ export async function getEditalPreparationState(
     let canOverrideDefault = false;
 
     if (inactive.has(v.name)) { status = "HIDDEN_CONDITIONAL"; m.CH++; }
-    else if (canonProj) {
+    else if (reuse.values.get(v.name)?.kind === "SCHEDULE") {
+      // Cronograma DERIVADO por regra declarada no Perfil da plataforma: nunca digitado (o valor do ledger, se houver, é ignorado).
+      const ru = reuse.values.get(v.name)!;
+      status = "AUTO"; displayValue = ru.value; origin = { label: ru.origin.label, ref: ru.origin.ref }; editable = false; m.AUTO++; m.SCHED++;
+      shadowedLegacy = hasValue && !isEmpty(stored);
+    } else if (reuse.problems.get(v.name)?.kind === "SCHEDULE") {
+      // Cronograma governado por regra da plataforma, mas a base independente ainda não foi decidida: aguarda a base (não é decisão nova).
+      status = "AWAITING"; editable = false; origin = { label: reuse.problems.get(v.name)!.reason }; shadowedLegacy = hasValue && !isEmpty(stored);
+    } else if (canonProj) {
       // CANONICAL: nunca input, nunca decisão humana; o ledger legado é ignorado. Sem dado na autoridade de origem ⇒ aguarda LÁ.
       editable = false;
       shadowedLegacy = hasValue && !isEmpty(stored);
@@ -460,7 +523,8 @@ export async function getEditalPreparationState(
         origin = { label: "Perfil institucional do órgão", ref: { revision: orgLineage?.revision ?? 0, hash: (orgLineage?.hash ?? "").slice(0, 12) } };
       } else {
         status = "DECIDED"; m.DEC++;
-        origin = { label: "Decisão registrada para este processo", ref: { revision: processRec?.revision ?? 0 } };
+        if (c.authority === "CERTAME_CONFIG" || c.authority === "CERTAME_SCHEDULE") m.CFG++;
+        origin = { label: "Configuração do certame (registrada neste processo)", ref: { revision: processRec?.revision ?? 0 } };
       }
     } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
       status = "PENDING"; m.MAN++;
@@ -494,15 +558,12 @@ export async function getEditalPreparationState(
     sections.push({ source, scope: scopeOf(source), fields, pendingRequired: fields.filter((f) => f.status === "PENDING").length });
   }
 
-  // Regime de participação dos itens: exigido pela coluna obrigatória do quadro e ainda sem valor declarado.
+  // Regime de participação dos itens: DERIVADO da configuração dos Itens (nunca segunda decisão do Edital). Ausente ⇒ pendência NA ORIGEM (Itens).
   const itemsTable = catalog.vars.find((v) => v.source === "ITEMS" && v.path === "quadroItensContratacao");
   const participationNeeded = !!itemsTable?.columns?.some((col) => col.key === "regimeParticipacao" && col.required !== false);
   const part = processRec?.payload.participation ?? null;
-  const participationPending = participationNeeded && !part?.default && !Object.keys(part?.byItem ?? {}).length && !Object.keys(part?.byLot ?? {}).length;
-  if (participationPending) { bump("itens", "total"); bump("itens", "pending"); m.MAN++; }
-  else if (participationNeeded) { bump("itens", "total"); bump("itens", "resolved"); }
-  if (!disclosure) { bump("itens", "total"); bump("itens", "pending"); m.MAN++; }
-  else { bump("itens", "total"); bump("itens", "resolved"); }
+  const regimeProblem = [...reuse.problems.values()].some((p) => p.kind === "ITEMS" && p.fix === "ITEMS" && /regime/i.test(p.reason));
+  const participationPending = participationNeeded && regimeProblem;
 
   const groups: SummaryGroup[] = GROUP_ORDER.filter((id) => groupAcc.has(id)).map((id) => {
     const a = groupAcc.get(id)!;
@@ -516,12 +577,14 @@ export async function getEditalPreparationState(
     revisions: { process: processRec?.revision ?? 0, organization: orgRec?.revision ?? 0, budget: budget?.revision ?? 0 },
     budgetDisclosure: disclosure, participation: part, participationPending, trPin: trPinState,
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
-    upstream: { trDigest: reuse.trDigest, trPending, profilePending },
+    upstream: { trDigest: reuse.trDigest, trPending, profilePending, sourcePending },
     summary: { groups, reusedAutomatically, pendingDecisions },
     metrics: {
       TOTAL_TEMPLATE_FIELDS: catalog.vars.length, AUTO_RESOLVED: m.AUTO, ORG_REUSED: m.ORG, TR_PROJECTED: m.TRP, DECIDED: m.DEC,
       CONDITIONAL_HIDDEN: m.CH, POST_AWARD_HIDDEN: m.PH, OPTIONAL_HIDDEN: m.OH, MANUAL_DECISIONS_VISIBLE: m.MAN, LEGACY_SHADOWED: m.LS, BY_CLASS: byClass,
-      UPSTREAM_TR_REUSED: m.UTR, TR_PENDING: m.TRP_PEND, PROFILE_INCOMPLETE: m.PROF_PEND, ORG_ROLES_REUSED: m.ROLES, ORG_POLICIES_REUSED: m.POLS, ORG_DEFAULTS_APPLIED: m.DEFS, BY_AUTHORITY: byAuthority,
+      UPSTREAM_TR_REUSED: m.UTR, TR_PENDING: m.TRP_PEND, PROFILE_INCOMPLETE: m.PROF_PEND, ORG_ROLES_REUSED: m.ROLES, ORG_POLICIES_REUSED: m.POLS, ORG_DEFAULTS_APPLIED: m.DEFS,
+      AUTO_FROM_PLATFORM: m.PLAT, AUTO_FROM_PRICE_RESEARCH: m.PRICE, AUTO_FROM_ITEMS: m.ITEMS, AUTO_FROM_CERTAME_CONFIG: m.CFG, AUTO_FROM_SCHEDULE: m.SCHED, AUTO_FROM_LIFECYCLE: m.LIFE,
+      TRUE_NEW_DECISIONS_VISIBLE: m.MAN, PENDING_IN_SOURCE: m.SRC_PEND, BY_AUTHORITY: byAuthority,
     },
   };
 }

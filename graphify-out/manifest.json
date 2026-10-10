@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791602886.0695593,
-    "ast_hash": "4fe72161934e24551eee44b9502dd05a",
+    "mtime": 1791659864.9019513,
+    "ast_hash": "c0c38bd823862ec11d92e35bc462a28b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1790269614.8390336,
-    "ast_hash": "e5abe19ed9be0a1fe67a8ec63d557b64",
+    "mtime": 1791659974.7018447,
+    "ast_hash": "661b7514f56a078e26260a86d98a6a3d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.ux.test.ts": {
@@ -1855,13 +1855,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
-    "mtime": 1791249269.2040715,
-    "ast_hash": "4c2a2f1339b76203a3bb3c1b8b12b49e",
+    "mtime": 1791660051.3642147,
+    "ast_hash": "dad465a0211d59d9976e58ddd21db8df",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.tsx": {
-    "mtime": 1791249269.2040715,
-    "ast_hash": "c2e301eb37b65e320500beb09010eaee",
+    "mtime": 1791659981.3651934,
+    "ast_hash": "2bc1df44b303f3e81f2b4349fd1d7e82",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1791602886.0700147,
-    "ast_hash": "335746a3fc58533e9ba9a92db83ed314",
+    "mtime": 1791659864.9023721,
+    "ast_hash": "aaa87d9c2872b4f98b7efc46534ac06d",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -3225,8 +3225,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Settings.tsx": {
-    "mtime": 1791602812.0649986,
-    "ast_hash": "237f3ca01a1d13e16ef07f67583a4476",
+    "mtime": 1791659981.3658376,
+    "ast_hash": "72550d4766dc57557db0d64922e15f51",
     "semantic_hash": ""
   },
   "client/src/pages/SolicitarProposta.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "client/src/procurement-presentation-fallbacks.test.ts": {
-    "mtime": 1790269614.8490703,
-    "ast_hash": "7d526f8b196282d0992baaeb8f5cad13",
+    "mtime": 1791660051.3653104,
+    "ast_hash": "e844eb3b63e5e5d87131cc9480c4c799",
     "semantic_hash": ""
   },
   "client/src/services/download.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1791602711.8730247,
-    "ast_hash": "05fdf23a71354d45a619428f510b2210",
+    "mtime": 1791659484.243717,
+    "ast_hash": "e081c45d08adcb0d783c4574d0e1cd05",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791603160.4665718,
-    "ast_hash": "145beb3bc1c93a85b6b7567137cf8b07",
+    "mtime": 1791660539.6451137,
+    "ast_hash": "11bd751c29aac95b6eb31681e57bde99",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13035,8 +13035,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/procurementItemsView.r9-sem049-055-056-069.test.ts": {
-    "mtime": 1791249269.2083175,
-    "ast_hash": "622f9d13804cb8e5422876c8490b3a0b",
+    "mtime": 1791660051.364785,
+    "ast_hash": "53ce04d9246da8fb3621d184ab5b950f",
     "semantic_hash": ""
   },
   "client/src/components/sem060-labels-match-effect.test.ts": {
@@ -13835,13 +13835,13 @@
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
-    "mtime": 1791601160.9002144,
-    "ast_hash": "10039481174df38a4a80542886756135",
+    "mtime": 1791659364.6947598,
+    "ast_hash": "a876454a89680d3964231db0aa2d00ba",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalAdapter.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "aca9b3e34a881df8c83c4b1e25421f3b",
+    "mtime": 1791659138.2199771,
+    "ast_hash": "0e03eced7bdbddfc5cdcea30d0d38acf",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
@@ -13910,8 +13910,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/ports.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "94c98500e9f6e9f45520d2acab40ebeb",
+    "mtime": 1791659138.2193406,
+    "ast_hash": "a5fe33c2d030dc905d06682e2112d04a",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/portsRegistry.ts": {
@@ -13925,8 +13925,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "e038a8a7614120d84ef035c82d093862",
+    "mtime": 1791659138.2211072,
+    "ast_hash": "dae4cf811c64594348725f550a0328a9",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14020,8 +14020,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
-    "mtime": 1791594937.0303543,
-    "ast_hash": "dd1120eb604d50df18726573ad18f017",
+    "mtime": 1791659731.988322,
+    "ast_hash": "7bba87eb9d67a53a0b0c16cf48a02366",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesGovernanceFakes.ts": {
@@ -14210,8 +14210,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/governedSources.ts": {
-    "mtime": 1791601047.6286662,
-    "ast_hash": "9801d90784df76478c1f54eb5fe54002",
+    "mtime": 1791658979.4837658,
+    "ast_hash": "02e4cf29d22c27d640bbc4eac6196d25",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/masterCompiler.ts": {
@@ -14270,8 +14270,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalSources.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "81fe71473ae8a4a3bbb704557a35b6be",
+    "mtime": 1791660513.035629,
+    "ast_hash": "4c88a0c4047d7f67d053efdb2b346d9c",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/governanceAdapter.ts": {
@@ -14295,13 +14295,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/governedFieldsStore.ts": {
-    "mtime": 1791601047.62913,
-    "ast_hash": "93c88328dc3b0e4b619b7bc07f62ae39",
+    "mtime": 1791658979.4841592,
+    "ast_hash": "54f771099f039b826f776f16b4d198b9",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/governedSourceService.ts": {
-    "mtime": 1791601118.214455,
-    "ast_hash": "77438e29d26881067503f71d6dbb315f",
+    "mtime": 1791659364.6941824,
+    "ast_hash": "531b8ca1ad7d5a098248e1f4fa75ed34",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/modelPackages.ts": {
@@ -14410,8 +14410,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationPanel.tsx": {
-    "mtime": 1791602882.4444838,
-    "ast_hash": "a46feffaccfd6a74424ae922b6d65776",
+    "mtime": 1791660112.073193,
+    "ast_hash": "23f421feebb9772ee35670dbda96f23d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
@@ -14425,18 +14425,18 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalPreparation.test.ts": {
-    "mtime": 1791602934.8780513,
-    "ast_hash": "e3626aabb5dd39ab8abfc13d4f7f4241",
+    "mtime": 1791660098.8855066,
+    "ast_hash": "d9dfa2b7fa0bb74fe99acf5f7336f70d",
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1791602549.7263105,
-    "ast_hash": "78eb9eb06be810e7d15409a71638605d",
+    "mtime": 1791659801.687457,
+    "ast_hash": "37880781149fd8a298fed89d9b8287fb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
-    "mtime": 1791509544.7532933,
-    "ast_hash": "637aa3fbac09d4dabc4a586611a6af00",
+    "mtime": 1791660264.762123,
+    "ast_hash": "ba1c881179723b3966b08edaf3236a4a",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-structural-deviation-status.test.ts": {
@@ -14445,28 +14445,28 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalPreparationService.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "95f4c467ae27c429803b547a1b508948",
+    "mtime": 1791660513.0363219,
+    "ast_hash": "6deb16c4e3301b75ef4a8b2885c9a915",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationView.tsx": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "c057f9f26ff46b4774733bbd5f10f2f5",
+    "mtime": 1791659827.0103447,
+    "ast_hash": "86ec3200e958ea7fd2817016ac44bef7",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "96c690409eac73c6fade5a689087243d",
+    "mtime": 1791660317.3781528,
+    "ast_hash": "c232e76ac14faa98b1f907319ada812f",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-preparation-model.test.ts": {
-    "mtime": 1791639089.6533353,
-    "ast_hash": "2f6eb451e243f431d617ae69599f1eb2",
+    "mtime": 1791659569.9658763,
+    "ast_hash": "375531fead5c841e0aeaee3d3758ce15",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalPreparationModel.ts": {
-    "mtime": 1791601453.1346185,
-    "ast_hash": "c9a5def0112bb60d266d3835dbf1ac6b",
+    "mtime": 1791658920.2306502,
+    "ast_hash": "b34f5d0883f9924cd133eb0015f04d35",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalProjections.ts": {
@@ -14490,8 +14490,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/LicitacoesProfilePanel.tsx": {
-    "mtime": 1791603182.1339383,
-    "ast_hash": "0d32fa9025073bbfb2181cb3276d8b1a",
+    "mtime": 1791659918.3895934,
+    "ast_hash": "24e10b9abb2c3c45044392e44fb75d0c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TrStructuredParamsSection.tsx": {
@@ -14510,28 +14510,28 @@
     "semantic_hash": ""
   },
   "client/src/lib/contextReuse.ts": {
-    "mtime": 1791602786.245918,
-    "ast_hash": "592939c90af2419e1b5499c6b52359b7",
+    "mtime": 1791659918.3890522,
+    "ast_hash": "4df14746761b74fa028baf1cf925f808",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/contextReuseHelpers.ts": {
-    "mtime": 1791654856.926655,
-    "ast_hash": "4f18f92c97d1b2aa7a2916cfe11b8ce6",
+    "mtime": 1791659827.0120053,
+    "ast_hash": "8b1edd46aa6850f74261e9f5e4857fe4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts": {
-    "mtime": 1791654856.9292362,
-    "ast_hash": "c756dc94ff0d0f2d86349888ea68a609",
+    "mtime": 1791660305.8865392,
+    "ast_hash": "def6442dd095699098cf549c6ce402e6",
     "semantic_hash": ""
   },
   "server/__tests__/unit/context-reuse-authority-matrix.test.ts": {
-    "mtime": 1791654856.929899,
-    "ast_hash": "1f3a7794520d5a44ac9859d5ff0fb463",
+    "mtime": 1791659319.6442773,
+    "ast_hash": "b9fdf539f15bd1a35934c21a4062b470",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalAuthorityMatrix.ts": {
-    "mtime": 1791601648.7230272,
-    "ast_hash": "a297ab29a905e4a670ccaa4b428179e8",
+    "mtime": 1791658856.0824738,
+    "ast_hash": "2c0f63f9a576f2677101e40f20fff82b",
     "semantic_hash": ""
   },
   "server/domain/trStructuredParams.ts": {
@@ -14545,13 +14545,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalContextReuse.ts": {
-    "mtime": 1791654839.8218927,
-    "ast_hash": "a2e6b8196faf66a76fa4abd453d2c758",
+    "mtime": 1791660607.7461894,
+    "ast_hash": "2a8330e1d66c50c94f5b0ea82e66d626",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/licitacoesProfileService.ts": {
-    "mtime": 1791601838.967936,
-    "ast_hash": "2b7fc54688b36685c3009c2980bfc373",
+    "mtime": 1791659411.3290904,
+    "ast_hash": "2162f06b8a27f97ef3adf53471f700a9",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/trStructuredParamsService.ts": {
@@ -14560,8 +14560,48 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1791654911.4463644,
-    "ast_hash": "16142695fe3dc1cd407c5e4bdb496bd5",
+    "mtime": 1791660562.592464,
+    "ast_hash": "3d0c72f7d6d730c4de168ebb94550963",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/BudgetDisclosureCard.tsx": {
+    "mtime": 1791659974.688196,
+    "ast_hash": "92dc565123611d5b59f7945604c0f4a5",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/ItemsParticipationCard.tsx": {
+    "mtime": 1791659974.6827128,
+    "ast_hash": "520d13899ba85cd1281269176509d659",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts": {
+    "mtime": 1791660640.371753,
+    "ast_hash": "741915c3b47814459ab0e289a1eb0d36",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/certame-config-authority.test.ts": {
+    "mtime": 1791659319.646674,
+    "ast_hash": "634a6c720db7c935d094d00a3c2176f7",
+    "semantic_hash": ""
+  },
+  "server/db/priceResearchBaseDate.ts": {
+    "mtime": 1791659054.0960507,
+    "ast_hash": "f76d96535d72968d6961611f7d0044a5",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/certameAuthority.ts": {
+    "mtime": 1791658905.0466492,
+    "ast_hash": "b836fb124470363823d21a1d2a01e4d8",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/certameConfigService.ts": {
+    "mtime": 1791659484.2428467,
+    "ast_hash": "356ade7c7bf3000077b6697a83c80098",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/compositionDate.ts": {
+    "mtime": 1791659138.2046664,
+    "ast_hash": "01d6a450376ec8871813928c57be45d0",
     "semantic_hash": ""
   }
 }

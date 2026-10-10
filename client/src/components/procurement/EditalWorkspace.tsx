@@ -12,6 +12,7 @@ import EditalPreparationPanel from "./EditalPreparationPanel";
 import EditalPreflightCard from "./EditalPreflightCard";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
+import type { StageTarget } from "@/lib/editalPreparation";
 import { bridgeAllowsGeneration, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
   editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
@@ -90,11 +91,14 @@ export type EditalWorkspaceProps = {
   processId?: string;
   /** Abre o TR do processo (onde os Parâmetros estruturados são confirmados). */
   onOpenTr?: () => void;
+  /** Abre a etapa onde um dado é resolvido na origem (Itens, Pesquisa de Preços, DFD, TR). */
+  onOpenStage?: (stage: StageTarget) => void;
 };
 
 export default function EditalWorkspace({
   processId = "",
   onOpenTr,
+  onOpenStage,
 }: EditalWorkspaceProps) {
   const [object, setObject] = useState("");
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
@@ -161,6 +165,14 @@ export default function EditalWorkspace({
   );
   const resolution = (coreComplete ? resolutionQuery.data : undefined) as TemplateResolutionView | undefined;
   const bound = resolution?.status === "BOUND";
+  // PR #288: com modelo vinculado a CertameConfig é a ÚNICA autoridade do critério; o campo legado vira resumo somente leitura.
+  const certameQuery = trpc.procurementProcess.certameConfig.useQuery(
+    { processId, modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined },
+    { enabled: !!processId && bound },
+  );
+  const certameCriterion = certameQuery.data?.status === "READY"
+    ? (certameQuery.data.fields.find((f) => f.name === "julgamento.criterioJulgamento")?.value as string | undefined) ?? null
+    : null;
   const trQuery = trpc.procurementProcess.editalTrCandidates.useQuery({ processId }, { enabled: !!processId && bound });
   const trCandidates = (bound ? trQuery.data ?? [] : []) as TrCandidateView[];
   const [selectedTrId, setSelectedTrId] = useState<string | null>(null);
@@ -312,6 +324,18 @@ export default function EditalWorkspace({
         ) : null}
 
         {/* R5 (0311) — critério de julgamento / regime de execução: fatos institucionais persistidos (sem padrão). */}
+        {bound ? (
+          <div className="space-y-1 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm" aria-label="Critério e regime (resumo)" data-legacy-params="readonly">
+            <p><span className="font-medium text-foreground">Critério de julgamento:</span>{" "}
+              {certameCriterion ? <strong>{certameCriterion}</strong> : <span className="text-amber-700 dark:text-amber-300">defina na Configuração do certame (Preparação do Edital, abaixo)</span>}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Com modelo institucional vinculado, o critério é decidido UMA vez na Configuração do certame; este resumo é somente leitura.
+              {persisted?.judgmentCriterion ? <> Valor legado do cabeçalho (apenas histórico, não usado pelo modelo): {persisted.judgmentCriterion}.</> : null}
+              {" "}O regime de execução não é variável do modelo institucional{persisted?.executionRegime ? <> (histórico legado: {persisted.executionRegime})</> : null}.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-foreground">Critério de julgamento</span>
@@ -342,7 +366,8 @@ export default function EditalWorkspace({
             )}
           </label>
         </div>
-        {(["judgmentCriterion", "executionRegime"] as const).some((k) => proposedText[k]?.trim() === "" && !!persisted?.[k]) && (
+        )}
+        {!bound && (["judgmentCriterion", "executionRegime"] as const).some((k) => proposedText[k]?.trim() === "" && !!persisted?.[k]) && (
           <p className="text-xs text-muted-foreground">
             Um parâmetro já definido não é apagado ao deixar o campo vazio — o valor definido é mantido.
           </p>
@@ -413,7 +438,7 @@ export default function EditalWorkspace({
 
       {bound && (
         <div className="mt-6">
-          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onOpenStage={onOpenStage} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
         </div>
       )}
 
