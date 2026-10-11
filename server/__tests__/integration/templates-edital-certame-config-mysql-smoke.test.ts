@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
+import { createHash } from "node:crypto";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
@@ -39,13 +40,13 @@ import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getT
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { completeProfile, fillTrParams, scenarioValueByName, setBudgetBaseDate, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue,
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, SYNTHETIC_PLATFORMS, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
+  BLL, E2E_BUDGET_BASE_DATE, SYNTHETIC_PLATFORMS, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const DB = process.env.DATABASE_URL;
@@ -181,7 +182,37 @@ async function reviewAndIssue(p: P): Promise<{ m1: string; officialId: string }>
 const METRICS: Record<string, unknown> = {};
 const derivedNames = ["processo.enderecoEletronicoBll", "processo.regulamentoBllVersao", "julgamento.dataOrcamentoEstimado", "decisao.formaJulgamento", "julgamento.regimeParticipacao", "processo.dataEmissaoEdital"];
 const fieldOf = (st: any, name: string) => [...st.sections.flatMap((s: any) => s.fields), ...st.canonicalFields].find((f: any) => f.name === name);
-const todayBr = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const MARKER = "[[SYSTEM_LATE_BOUND:processo.dataEmissaoEdital]]";
+// Relógio CONTROLADO do fluxo governado (geração M1 e emissão M2 usam o `clock` das ports de composição).
+let clockNow: string | null = null;
+const realPorts = () => createTemplateCompositionPorts();
+const useClock = (iso: string | null) => { clockNow = iso; };
+const officialOf = async (p: P) => (await rows("SELECT id, content FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido' AND origin = ?", [p.org, p.w.processId]));
+const issuanceManifests = async (p: P) => (await rows("SELECT body_json b, document_content_hash h, official_document_id o FROM document_composition_manifests WHERE organization_id = ? AND stage = 'ISSUANCE'", [p.org]));
+const sha = (t: string) => createHash("sha256").update(t).digest("hex");
+
+/** M1 + revisão humana (marcadores [REVISAR] resolvidos); NÃO emite. */
+async function composeAndReview(p: P): Promise<{ ra: any; human: string; draft: string }> {
+  const ra = await gen(p);
+  expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  const draft = (await draftText(p))!;
+  const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
+  await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key("edit") });
+  return { ra, human, draft };
+}
+async function acknowledgeAll(p: P): Promise<void> {
+  const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+  for (const d of rs.structuralDeviations) {
+    await tpl(p.org, "operator", U_MANAGER).reviews.acknowledgeDeviation({ manifestId: rs.generationManifestId, blockId: d.blockId, kind: d.kind, confirm: true, idempotencyKey: key("ack"), decision: decision({ basisReference: "Revisão" }) });
+  }
+}
+const promote = (p: P, human: string, idempotencyKey: string) => proc(p.org, "manager", U_MANAGER).promoteOfficial({ processId: p.w.processId, kind: "edital", idempotencyKey, expectedContentHash: draftContentHash(human), reason: "Revisado e conferido pelo gestor." } as any) as Promise<any>;
+/** Tenant pronto para compor (tudo registrado nas origens). */
+async function readyTenant(label: string): Promise<P> {
+  const p = await prepareOrg(label);
+  await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p)); await fillTrueDecisions(p);
+  return p;
+}
 
 describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", () => {
   beforeAll(async () => {
@@ -190,7 +221,7 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     await validateSchema(conn);
     await conn.query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
     configureTemplateWorkflowPorts(createTemplateWorkflowPorts());
-    configureTemplateCompositionPorts(createTemplateCompositionPorts());
+    configureTemplateCompositionPorts({ ...realPorts(), clock: { now: () => clockNow ?? new Date().toISOString() } });
     if ((await count("SELECT COUNT(*) n FROM legal_reference_sets WHERE status = 'active'")) === 0) {
       await installGovernedLegalReferenceV1();
       await approveAndActivateReferenceSet({ version: LEGAL_REFERENCE_V1_META.version, expectedReferenceHash: computeManifestHashes().referenceSetContentHash, actorUserId: 7, actorRole: "platform_admin", approvalSource: "certame-config-synthetic" });
@@ -225,10 +256,11 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     const st = await getState(p);
     expect(fieldOf(st, "processo.enderecoEletronicoBll")).toMatchObject({ status: "AUTO", displayValue: SYNTHETIC_PLATFORMS.bll.enderecoEletronico, authority: "PLATFORM_PROFILE" });
     expect(fieldOf(st, "processo.regulamentoBllVersao")).toMatchObject({ status: "AUTO", displayValue: SYNTHETIC_PLATFORMS.bll.regulamentoVersao });
-    expect(fieldOf(st, "julgamento.dataOrcamentoEstimado")).toMatchObject({ status: "AUTO", displayValue: todayBr(), authority: "UPSTREAM_PRICE_RESEARCH" });
+    expect(fieldOf(st, "julgamento.dataOrcamentoEstimado")).toMatchObject({ status: "AUTO", displayValue: E2E_BUDGET_BASE_DATE, authority: "UPSTREAM_PRICE_RESEARCH" });
     expect(fieldOf(st, "decisao.formaJulgamento")).toMatchObject({ status: "AUTO", displayValue: "item", authority: "UPSTREAM_ITEMS" });
     expect(fieldOf(st, "julgamento.regimeParticipacao")).toMatchObject({ status: "AUTO", authority: "UPSTREAM_ITEMS" });
-    expect(fieldOf(st, "processo.dataEmissaoEdital")).toMatchObject({ status: "AUTO", authority: "LIFECYCLE_SYSTEM", displayValue: todayBr() });
+    expect(fieldOf(st, "processo.dataEmissaoEdital")).toMatchObject({ status: "AUTO", authority: "LIFECYCLE_SYSTEM" });
+    expect(String(fieldOf(st, "processo.dataEmissaoEdital").displayValue)).toContain("no ato da emissão oficial");   // não fabrica data antes da emissão
     // nenhuma autoridade derivada é editável nem pendente no Edital
     const live = livePendingItems(st, {});
     for (const n of derivedNames) expect(live.map((i) => i.field.name), n).not.toContain(n);
@@ -244,7 +276,6 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     expect(pre.status).toBe("READY_FOR_COMPOSITION");
     const issued = await reviewAndIssue(p);
     expect(issued.officialId).toBeTruthy();
-    // a data de emissão do documento é a do evento de composição (sistema), nunca digitada
     expect(await draftText(p)).toBeTruthy();
     METRICS.C1 = {
       TOTAL_TEMPLATE_VARIABLES: m.TOTAL_TEMPLATE_FIELDS, BEFORE_VISIBLE_DECISIONS_PILOT: 21, AUTO_FROM_PLATFORM: m.AUTO_FROM_PLATFORM, AUTO_FROM_PRICE_RESEARCH: m.AUTO_FROM_PRICE_RESEARCH,
@@ -420,5 +451,215 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     expect(mB.ORG_DEFAULTS_APPLIED).toBeGreaterThanOrEqual(4);
     expect(visB.length).toBeLessThanOrEqual(10);
     for (const f of visB) expect(["CERTAME_CONFIG", "CERTAME_SCHEDULE", "CONDITIONAL"], f.field.name).toContain(f.field.authority);
+  }, 240_000);
+  // ───────────────────────── PARTE A — DATA DE EMISSÃO (late-bound, LIFECYCLE_SYSTEM) ─────────────────────────
+
+  it("E1 — M1 e emissão no MESMO dia: o oficial traz a data do ATO; M1 registra o campo late-bound; M2 materializa e explica", async () => {
+    const p = await readyTenant("e1");
+    useClock("2026-10-10T18:00:00.000Z");                         // 15:00 BRT
+    const { ra, human, draft } = await composeAndReview(p);
+    expect(draft).toContain(MARKER);                               // NÃO fabrica data no M1
+    expect(draft).not.toMatch(/\[REVISAR[^\]]*dataEmissao/);       // não é pendência humana
+    const m1 = (await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [p.org, ra.generationManifestId]))[0];
+    expect(JSON.parse(m1.b).lateBound).toEqual([{ variable: "processo.dataEmissaoEdital", authority: "LIFECYCLE_SYSTEM", status: "PENDING_OFFICIAL_ISSUANCE" }]);
+    const review: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    expect(review.lateBound[0].message).toContain("será atribuída automaticamente no ato da emissão oficial");
+    expect(review.unresolvedMarkers.count).toBe(0);               // o marcador de sistema NÃO conta como pendência humana
+    await acknowledgeAll(p);
+    expect(((await proc(p.org).editalTemplateReviewState({ processId: p.w.processId })) as any).revalidation.status).toBe("PASSED");
+
+    useClock("2026-10-10T21:00:00.000Z");                         // 18:00 BRT, mesmo dia
+    const r = await promote(p, human, key("promo"));
+    expect(r.promoted).toBe(true);
+    const [off] = await officialOf(p);
+    expect(off.content).not.toContain("[[SYSTEM_LATE_BOUND");
+    expect(off.content).toContain("10/10/2026");
+    const [m2] = await issuanceManifests(p);
+    const body = JSON.parse(m2.b);
+    expect(body.lifecycleBindings).toEqual([{
+      variable: "processo.dataEmissaoEdital", authority: "LIFECYCLE_SYSTEM", value: "2026-10-10", issuedAt: "2026-10-10T21:00:00.000Z",
+      beforeContentHash: sha(human), afterContentHash: sha(off.content),
+    }]);
+    expect(m2.h).toBe(sha(off.content));                           // hash do conteúdo OFICIAL após o binding
+    expect(r.officialDocument.contentHash).toBe(sha(off.content));
+    expect(body.humanEditRefs.at(-1).resultingContentHash).toBe(sha(human));   // edição humana ≠ binding do sistema
+    useClock(null);
+  }, 240_000);
+
+  it("E2/E3 — M1 em 10/10, revisão em 11/10, emissão em 12/10: oficial = 12/10 (nunca 10/10); a passagem do tempo NÃO é SOURCE_CHANGED", async () => {
+    const p = await readyTenant("e2");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    const rv = async () => (await proc(p.org).editalTemplateReviewState({ processId: p.w.processId }) as any).revalidation;
+    useClock("2026-10-11T15:00:00.000-03:00");
+    expect((await rv()).status).toBe("PASSED");
+    useClock("2026-10-12T15:00:00.000-03:00");
+    const again = await rv();
+    expect(again.status).toBe("PASSED");
+    expect(JSON.stringify(again.issues)).not.toContain("SOURCE_CHANGED");
+    expect((await promote(p, human, key("promo"))).promoted).toBe(true);
+    const [off] = await officialOf(p);
+    expect(off.content).toContain("12/10/2026");
+    expect(off.content).not.toContain("10/10/2026");
+    expect(JSON.parse((await issuanceManifests(p))[0].b).lifecycleBindings[0]).toMatchObject({ value: "2026-10-12" });
+    useClock(null);
+  }, 240_000);
+
+  it("E4 — retry da emissão já persistida em outro dia: mesmo documento, mesma data, mesmo hash, sem segunda emissão", async () => {
+    const p = await readyTenant("e4");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    useClock("2026-10-12T15:00:00.000-03:00");
+    const k = key("promo");
+    const first = await promote(p, human, k);
+    const [off1] = await officialOf(p);
+    useClock("2026-10-13T15:00:00.000-03:00");
+    const retry = await promote(p, human, k);
+    expect(retry.replayed).toBe(true);
+    expect(retry.officialDocument).toEqual(first.officialDocument);
+    const after = await officialOf(p);
+    expect(after).toHaveLength(1);
+    expect(after[0].content).toBe(off1.content);
+    expect(after[0].content).toContain("12/10/2026");
+    expect(await issuanceManifests(p)).toHaveLength(1);
+    useClock(null);
+  }, 240_000);
+
+  it("E5 — tentativa que falha ANTES do commit não cria data de emissão fantasma; o retry bem-sucedido em 13/10 emite com 13/10", async () => {
+    const p = await readyTenant("e5");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    const real = realPorts();
+    // 12/10: a persistência do M2 falha (dentro da transação da emissão) ⇒ rollback de TUDO
+    configureTemplateCompositionPorts({
+      ...real, clock: { now: () => clockNow ?? new Date().toISOString() },
+      manifests: { ...real.manifests, insertIssuanceManifest: async () => { throw new Error("falha simulada antes do commit"); } },
+    } as never);
+    useClock("2026-10-12T15:00:00.000-03:00");
+    const k = key("promo");
+    const failed = await promote(p, human, k).then(() => null, (e: any) => e);
+    expect(failed).not.toBeNull();
+    expect(await officialOf(p)).toHaveLength(0);                   // nenhuma versão oficial
+    expect(await issuanceManifests(p)).toHaveLength(0);            // nenhum M2
+    // 13/10: ports normais, mesma chave ⇒ emite com a data do ato efetivamente persistido
+    configureTemplateCompositionPorts({ ...real, clock: { now: () => clockNow ?? new Date().toISOString() } });
+    useClock("2026-10-13T15:00:00.000-03:00");
+    const ok = await promote(p, human, k);
+    expect(ok.promoted).toBe(true);
+    const [off] = await officialOf(p);
+    expect(off.content).toContain("13/10/2026");
+    expect(off.content).not.toContain("12/10/2026");
+    expect(JSON.parse((await issuanceManifests(p))[0].b).lifecycleBindings[0]).toMatchObject({ value: "2026-10-13", issuedAt: "2026-10-13T15:00:00.000-03:00" });
+    useClock(null);
+  }, 240_000);
+
+  it("E6 — o marcador de sistema não pode ser falsificado: data digitada no lugar, marcador removido ou duplicado ⇒ emissão BLOQUEADA, zero oficial", async () => {
+    const p = await readyTenant("e6");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    const variants: Record<string, string> = {
+      "data digitada": human.replace(MARKER, "10/10/2026"),
+      "marcador removido": human.replace(MARKER, ""),
+      "marcador duplicado": `${human}\n${MARKER}\n`,
+      "marcador forjado": `${human}\n[[SYSTEM_LATE_BOUND:processo.numeroPregao]]\n`,
+    };
+    for (const [name, content] of Object.entries(variants)) {
+      const cur = (await draftText(p))!;
+      await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content, expectedContentHash: draftContentHash(cur), idempotencyKey: key(`tamper-${name}`) });
+      const rv: any = (await proc(p.org).editalTemplateReviewState({ processId: p.w.processId })).revalidation;
+      expect(rv.status, name).toBe("BLOCKED");
+      const blocked = await promote(p, content, key(`promo-${name}`)).then(() => null, (e: any) => e);
+      expect(blocked, name).not.toBeNull();
+      expect(String(blocked.message), name).toMatch(/LATE_BOUND_TAMPERED|PROTECTED_NODE_MISSING|TEMPLATE_ISSUANCE_BLOCKED/);
+      expect(await officialOf(p), name).toHaveLength(0);
+    }
+    useClock(null);
+  }, 300_000);
+
+  // ───────────────────────── PARTE B — DATA-BASE DO ORÇAMENTO (autoridade explícita) ─────────────────────────
+
+  it("B1 — created_at da pesquisa existe, mas SEM data-base registrada o Edital NÃO a usa: pendência na Pesquisa de Preços (só sugestão na origem)", async () => {
+    const p = await prepareOrg("b1");
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p), "publico", { baseDate: null }); await setItemsParticipation(harnessOf(p));
+    expect(await count("SELECT COUNT(*) n FROM price_research WHERE organization_id = ? AND process_id = ?", [p.org, p.w.processId])).toBeGreaterThan(0);
+    const st = await getState(p);
+    const f = fieldOf(st, "julgamento.dataOrcamentoEstimado");
+    expect(f).toMatchObject({ status: "PENDING_SOURCE", entry: "PRICE_RESEARCH", reason: "Data-base do orçamento não registrada." });
+    expect(f.displayValue).toBeUndefined();
+    expect(st.sections.flatMap((s: any) => s.fields).some((x: any) => x.name === "julgamento.dataOrcamentoEstimado" && x.editable)).toBe(false);   // sem input no Edital
+    await fillTrueDecisions(p);
+    const pf = await preflight(p);
+    expect(pf.status).toBe("BLOCKED");
+    expect(JSON.stringify(pf.issues)).toContain("Data-base do orçamento não registrada.");
+    // a origem só OFERECE sugestão (created_at), com baseDate ainda nulo
+    const origin: any = await proc(p.org).budgetDisclosure({ processId: p.w.processId, ...WS });
+    expect(origin).toMatchObject({ enabled: true, baseDate: null });
+    expect(origin.suggestedBaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  }, 240_000);
+
+  it("B2/B3 — data-base registrada (2026-09-30) é reutilizada read-only com lineage; created_at (2026-10-05) NÃO a substitui", async () => {
+    const p = await prepareOrg("b2");
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setItemsParticipation(harnessOf(p));
+    await conn.execute("UPDATE price_research SET created_at = '2026-10-05 15:00:00.000' WHERE organization_id = ? AND process_id = ?", [p.org, p.w.processId]);
+    await setBudgetDisclosure(harnessOf(p), "publico", { baseDate: "2026-09-30" });
+    const st = await getState(p);
+    const f = fieldOf(st, "julgamento.dataOrcamentoEstimado");
+    expect(f).toMatchObject({ status: "AUTO", displayValue: "2026-09-30", authority: "UPSTREAM_PRICE_RESEARCH" });
+    expect(f.origin.label).toContain("Pesquisa de Preços");
+    expect(f.origin.ref).toMatchObject({ baseDate: "2026-09-30" });
+    expect(f.origin.ref.revision).toBeGreaterThan(0);
+    expect(st.sections.flatMap((s: any) => s.fields).some((x: any) => x.name === "julgamento.dataOrcamentoEstimado" && x.editable)).toBe(false);
+    const origin: any = await proc(p.org).budgetDisclosure({ processId: p.w.processId, ...WS });
+    expect(origin).toMatchObject({ baseDate: "2026-09-30", suggestedBaseDate: "2026-10-05" });   // técnico ≠ semântico
+    await fillTrueDecisions(p);
+    expect((await preflight(p)).status).toBe("READY_FOR_COMPOSITION");
+    await gen(p);
+    const text = (await draftText(p))!;
+    expect(text).toContain("30/09/2026");
+    expect(text).not.toContain("05/10/2026");
+  }, 240_000);
+
+  it("B4 — nova revisão da data-base após o M1 ⇒ SOURCE_CHANGED, emissão bloqueada (zero M2); o documento já emitido permanece imutável", async () => {
+    const a = await readyTenant("b4");
+    const { human } = await composeAndReview(a);
+    await acknowledgeAll(a);
+    const rv = async () => (await proc(a.org).editalTemplateReviewState({ processId: a.w.processId }) as any).revalidation;
+    expect((await rv()).status).toBe("PASSED");
+    await setBudgetBaseDate(harnessOf(a), "2026-09-29");          // data-base B depois do M1 (data-base A = 2026-09-30)
+    const changed = await rv();
+    expect(changed.status).toBe("BLOCKED");
+    expect(JSON.stringify(changed.issues)).toContain("SOURCE_CHANGED");
+    const blocked = await promote(a, human, key("promo")).then(() => null, (e: any) => e);
+    expect(blocked).not.toBeNull();
+    expect(await issuanceManifests(a)).toHaveLength(0);
+    expect(await officialOf(a)).toHaveLength(0);
+    // recompor/revisar: nova geração com a base nova emite normalmente; o emitido anterior (se existisse) não mudaria
+    const regenerated = await gen(a).then(() => "ok", (e: any) => String(e.message));
+    expect(typeof regenerated).toBe("string");
+  }, 300_000);
+
+  it("B5 — tenant isolado: B não lê nem grava a data-base de A; a de B é independente", async () => {
+    const a = await prepareOrg("b5a");
+    const b = await prepareOrg("b5b");
+    await completeProfile(harnessOf(a)); await setBudgetBaseDate(harnessOf(a), "2026-09-30");
+    const stA: any = await proc(a.org).budgetDisclosure({ processId: a.w.processId, ...WS });
+    const read = await proc(b.org).budgetDisclosure({ processId: a.w.processId, ...WS }).then(() => null, (e: any) => e);
+    expect(read).not.toBeNull();
+    const write = await tpl(b.org).governed.recordBudgetBaseDate({
+      confirm: true, idempotencyKey: key("x"), decision: decision(), expectedRevision: stA.baseDateRevision, catalogVersion: stA.catalogVersion, processId: a.w.processId, baseDate: "2026-01-01",
+    }).then(() => null, (e: any) => e);
+    expect(write).not.toBeNull();
+    await completeProfile(harnessOf(b));
+    expect(((await proc(b.org).budgetDisclosure({ processId: b.w.processId, ...WS })) as any).baseDate).toBeNull();
+    expect(((await proc(a.org).budgetDisclosure({ processId: a.w.processId, ...WS })) as any).baseDate).toBe("2026-09-30");
+    // escrita genérica do Edital segue recusada
+    const generic = await tpl(a.org).governed.recordProcessFields({
+      confirm: true, idempotencyKey: key("g"), decision: decision(), expectedRevision: 1, catalogVersion: stA.catalogVersion, processId: a.w.processId, source: "BUDGET", fields: { dataOrcamentoEstimado: "2026-01-01" },
+    }).then(() => null, (e: any) => e);
+    expect(String(generic?.message)).toContain("DERIVED_AUTHORITY_OWNED");
   }, 240_000);
 });

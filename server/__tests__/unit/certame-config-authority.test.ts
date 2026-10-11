@@ -16,7 +16,9 @@ import { validateGovernedPayload, validateGovernedSection, validatePlatforms } f
 import { buildContextReuse, profileFingerprint } from "../../services/institutionalTemplates/editalContextReuse";
 import type { GovernedRecord } from "../../services/institutionalTemplates/governedFieldsStore";
 import { brasiliaDateOf } from "../../db/priceResearchBaseDate";
-import { compositionDateOf } from "../../services/institutionalTemplates/compositionDate";
+import { issuanceDateOf } from "../../services/institutionalTemplates/compositionDate";
+import { bindLifecycleVariables, isLateBoundVariable, lateBoundMarker, lateBoundTamperIssues } from "../../domain/institutionalTemplates/lifecycleLateBound";
+import { sha256Hex } from "../../domain/canonicalJson";
 
 const catalog = JSON.parse(readFileSync(path.resolve(__dirname, "../../domain/institutionalTemplates/models/edital-pregao-eletronico-bll/catalog.v2.json"), "utf8")) as VariableCatalog2;
 const def = (n: string) => catalog.vars.find((v) => v.name === n)!;
@@ -177,27 +179,73 @@ describe("Itens: item × lote e regime de participação derivados", () => {
   });
 });
 
-describe("Data-base do orçamento e data de emissão (autoridade do sistema)", () => {
-  it("data-base vem da Pesquisa de Preços; ausente ⇒ pendência NA Pesquisa de Preços; data inválida nunca é aceita", () => {
-    const ok = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", budgetDate: "2026-09-15" });
-    expect(ok.values.get("julgamento.dataOrcamentoEstimado")).toMatchObject({ kind: "BUDGET", value: "2026-09-15" });
-    for (const bad of [null, undefined, "2026-02-30", "15/09/2026"]) {
-      const r = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", budgetDate: bad as never });
-      expect(r.values.has("julgamento.dataOrcamentoEstimado")).toBe(false);
-      expect(r.problems.get("julgamento.dataOrcamentoEstimado")).toMatchObject({ code: "BUDGET_DATE_MISSING", fix: "PRICE_RESEARCH" });
+describe("Data-base do orçamento: autoridade EXPLÍCITA (nunca created_at)", () => {
+  const withBase = (date: unknown) => record({ process: { BUDGET: { dataOrcamentoEstimado: date as never } } });
+  it("sem data-base registrada ⇒ pendência na Pesquisa de Preços (nenhum timestamp técnico é usado)", () => {
+    const r = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", processRecord: record({}) });
+    expect(r.values.has("julgamento.dataOrcamentoEstimado")).toBe(false);
+    expect(r.problems.get("julgamento.dataOrcamentoEstimado")).toMatchObject({ code: "BUDGET_DATE_MISSING", fix: "PRICE_RESEARCH", reason: "Data-base do orçamento não registrada." });
+  });
+  it("data-base registrada ⇒ valor com lineage (revisão/hash do registro); data inválida nunca é aceita", () => {
+    const r = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", processRecord: withBase("2026-09-30") });
+    expect(r.values.get("julgamento.dataOrcamentoEstimado")).toMatchObject({ kind: "BUDGET", value: "2026-09-30" });
+    expect(r.values.get("julgamento.dataOrcamentoEstimado")!.origin.ref).toMatchObject({ baseDate: "2026-09-30", revision: 2 });
+    for (const bad of ["2026-02-30", "30/09/2026", 20260930]) {
+      const x = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", processRecord: withBase(bad) });
+      expect(x.values.has("julgamento.dataOrcamentoEstimado"), String(bad)).toBe(false);
     }
   });
-  it("a data de emissão é atribuída pelo sistema a partir do evento de composição (nunca de entrada humana) e é estável", () => {
-    const r = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", compositionDate: "2026-10-09" });
-    expect(r.values.get("processo.dataEmissaoEdital")).toMatchObject({ kind: "LIFECYCLE", value: "2026-10-09" });
-    // calendário de Brasília: 23:30 em Brasília de 09/10 é 02:30Z de 10/10
-    expect(compositionDateOf("2026-10-10T02:30:00.000Z")).toBe("2026-10-09");
-    expect(compositionDateOf("2026-10-10T12:00:00.000Z")).toBe("2026-10-10");
-    expect(() => compositionDateOf("lixo")).toThrow();
+  it("escrita genérica do Edital segue recusada; created_at só vira SUGESTÃO (o módulo não expõe leitura como autoridade)", () => {
+    const w = validateGovernedSection(catalog, "PROCESS", "BUDGET", { dataOrcamentoEstimado: "2026-09-30" }, "write");
+    expect(w.ok).toBe(false);
+    const src = readFileSync(path.resolve(__dirname, "../../services/institutionalTemplates/editalContextReuse.ts"), "utf8");
+    expect(src).not.toMatch(/readPriceResearch|priceResearchBaseDate|priceResearchTable/);
   });
-  it("brasiliaDateOf converte created_at UTC para o calendário de Brasília", () => {
+  it("brasiliaDateOf converte created_at UTC para o calendário de Brasília (usado só na sugestão)", () => {
     expect(brasiliaDateOf("2026-09-15 01:00:00.000")).toBe("2026-09-14");
     expect(brasiliaDateOf("2026-09-15 12:00:00")).toBe("2026-09-15");
     expect(brasiliaDateOf("inválido")).toBeNull();
+  });
+});
+
+describe("Data de emissão: LATE-BOUND (autoridade LIFECYCLE_SYSTEM; nunca a data do M1)", () => {
+  const emissao = () => def("processo.dataEmissaoEdital");
+  it("a composição NUNCA produz valor para a data de emissão (nem exige, nem fabrica)", () => {
+    const r = buildContextReuse({ catalog, orgRecord: null, trAssertions: [], asOf: "2026-10-10", processRecord: record({}) });
+    expect(r.values.has("processo.dataEmissaoEdital")).toBe(false);
+    expect(r.problems.has("processo.dataEmissaoEdital")).toBe(false);
+    expect(isLateBoundVariable(emissao())).toBe(true);
+    expect(isLateBoundVariable({ name: "processo.dataEmissaoEdital", source: "PROCESS" })).toBe(false);   // só a variável DECLARADA com a fonte do catálogo
+  });
+  it("marcador interno determinístico; contagem e forja detectadas; remoção/duplicação/inserção ⇒ adulteração", () => {
+    const marker = lateBoundMarker("processo.dataEmissaoEdital");
+    expect(marker).toBe("[[SYSTEM_LATE_BOUND:processo.dataEmissaoEdital]]");
+    const refs = [{ variable: "processo.dataEmissaoEdital", authority: "LIFECYCLE_SYSTEM", status: "PENDING_OFFICIAL_ISSUANCE" } as const];
+    const composed = `Edital emitido em ${marker}.\n`;
+    expect(lateBoundTamperIssues(refs, composed, composed)).toEqual([]);
+    expect(lateBoundTamperIssues(refs, composed, "Edital emitido em 10/10/2026.\n").length).toBe(1);            // data digitada no lugar do marcador
+    expect(lateBoundTamperIssues(refs, composed, `${composed}${marker}`).length).toBe(1);                       // duplicado
+    expect(lateBoundTamperIssues(refs, composed, `${composed}[[SYSTEM_LATE_BOUND:outra.variavel]]`).length).toBe(1);   // forjado
+  });
+  it("binding materializa a data OFICIAL (formatação do catálogo) e registra hash antes/depois; sem marcador remanescente", () => {
+    const refs = [{ variable: "processo.dataEmissaoEdital", authority: "LIFECYCLE_SYSTEM", status: "PENDING_OFFICIAL_ISSUANCE" } as const];
+    const before = `Emitido em ${lateBoundMarker("processo.dataEmissaoEdital")} (data de emissão ${lateBoundMarker("processo.dataEmissaoEdital")}).\n`;
+    const out = bindLifecycleVariables(before, catalog, refs, "2026-10-12T15:00:00.000Z", "2026-10-12");
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.text).toBe("Emitido em 12/10/2026 (data de emissão 12/10/2026).\n");
+      expect(out.bindings[0]).toMatchObject({ variable: "processo.dataEmissaoEdital", authority: "LIFECYCLE_SYSTEM", value: "2026-10-12", issuedAt: "2026-10-12T15:00:00.000Z" });
+      expect(out.bindings[0].beforeContentHash).toBe(sha256Hex(before));
+      expect(out.bindings[0].afterContentHash).toBe(sha256Hex(out.text));
+    }
+    expect(bindLifecycleVariables("sem marcador", catalog, refs, "2026-10-12T15:00:00.000Z", "2026-10-12").ok).toBe(false);
+    expect(bindLifecycleVariables(before, catalog, refs, "2026-10-12T15:00:00.000Z", "12/10/2026").ok).toBe(false);          // data fora do contrato
+    expect(bindLifecycleVariables(before, catalog, [{ ...refs[0], variable: "processo.numeroPregao" }], "x", "2026-10-12").ok).toBe(false);
+  });
+  it("issuanceDateOf: o dia do ATO em Brasília (02:30Z de 12/10 ainda é 11/10 em Brasília; 03:10Z já é 12/10)", () => {
+    expect(issuanceDateOf("2026-10-12T03:10:00.000Z")).toBe("2026-10-12");
+    expect(issuanceDateOf("2026-10-12T02:30:00.000Z")).toBe("2026-10-11");
+    expect(issuanceDateOf("2026-10-10T18:00:00-03:00")).toBe("2026-10-10");
+    expect(() => issuanceDateOf("lixo")).toThrow();
   });
 });

@@ -10,7 +10,6 @@
  * Multi-tenant: tudo é lido por (organizationId[, processId]); nunca "último processo".
  */
 import { listContextFacts } from "../../db/procurementContext";
-import { readPriceResearchBaseDate } from "../../db/priceResearchBaseDate";
 import { resolveProcurementContext } from "../canonicalContextService";
 import { getOfficialDocument } from "../../db/officialDocuments";
 import type { VariableCatalog2 } from "../../domain/institutionalTemplates";
@@ -65,10 +64,6 @@ export interface ReuseInputs {
   readonly processRecord?: GovernedRecord | null;
   /** Estrutura canônica dos Itens (item × lote); `null` = indisponível. */
   readonly items?: readonly ItemStructure[] | null;
-  /** Data-base do orçamento (AAAA-MM-DD) da Pesquisa de Preços; `null` = ausente. */
-  readonly budgetDate?: string | null;
-  /** Data (AAAA-MM-DD) do evento de composição governada: a MESMA na geração (M1), na revalidação e na emissão (M2). */
-  readonly compositionDate?: string;
 }
 
 const storedAt = (catalog: VariableCatalog2, record: GovernedRecord | null | undefined, name: string): unknown => {
@@ -116,14 +111,17 @@ export function buildContextReuse(input: ReuseInputs): ContextReuse {
         return;
       }
       case "BUDGET_DATE": {
-        if (input.budgetDate && isIsoDate(input.budgetDate)) values.set(v.name, { kind: "BUDGET", value: input.budgetDate, origin: { label: "Pesquisa de Preços (data-base)", ref: { baseDate: input.budgetDate } } });
-        else problem("BUDGET", "BUDGET_DATE_MISSING", "a Pesquisa de Preços que originou os Itens aprovados não tem data-base", "PRICE_RESEARCH");
+        // AUTORIDADE EXPLÍCITA: a data-base registrada UMA vez na Pesquisa de Preços/orçamento (ledger governado, BUDGET). Timestamps
+        // técnicos (`price_research.created_at`) NUNCA entram aqui — no máximo são sugestão de UX que a pessoa confirma.
+        const stored = storedAt(catalog, input.processRecord, v.name);
+        if (typeof stored === "string" && isIsoDate(stored)) {
+          values.set(v.name, { kind: "BUDGET", value: stored, origin: { label: "Pesquisa de Preços (data-base registrada)", ref: { baseDate: stored, revision: input.processRecord?.revision ?? 0, hash: (input.processRecord?.hash ?? "").slice(0, 12) } } });
+        } else problem("BUDGET", "BUDGET_DATE_MISSING", "Data-base do orçamento não registrada.", "PRICE_RESEARCH");
         return;
       }
-      case "EMISSION_DATE": {
-        if (input.compositionDate && isIsoDate(input.compositionDate)) values.set(v.name, { kind: "LIFECYCLE", value: input.compositionDate, origin: { label: "Ciclo de vida documental (atribuída pelo sistema)", ref: { compositionDate: input.compositionDate } } });
+      case "EMISSION_DATE":
+        // Late-bound: NÃO há valor na composição. A data nasce no ato oficial de emissão (ciclo de vida); aqui nada é fabricado.
         return;
-      }
       default: return;
     }
   };
@@ -217,17 +215,14 @@ export async function loadContextReuse(p: {
   organizationId: number; processId: string; catalog: VariableCatalog2; orgRecord: GovernedRecord | null; asOf: string;
   /** Registro governado do PROCESSO já lido (evita nova leitura); ausente ⇒ tratado como sem registro. */
   processRecord?: GovernedRecord | null;
-  /** Data do evento de composição (default = `asOf`). Na revalidação/emissão é a data do M1. */
-  compositionDate?: string;
 }): Promise<ContextReuse> {
-  const [facts, items, budgetDate] = await Promise.all([
+  const [facts, items] = await Promise.all([
     listContextFacts(p.organizationId, p.processId),
     loadItemStructure(p.organizationId, p.processId),
-    readPriceResearchBaseDate(p.organizationId, p.processId).catch(() => null),
   ]);
   return buildContextReuse({
     catalog: p.catalog, orgRecord: p.orgRecord, trAssertions: facts, asOf: p.asOf, processRecord: p.processRecord ?? null,
-    items, budgetDate, compositionDate: p.compositionDate ?? p.asOf,
+    items,
   });
 }
 

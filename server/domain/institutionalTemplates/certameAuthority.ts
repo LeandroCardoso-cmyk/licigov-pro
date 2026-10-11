@@ -7,7 +7,7 @@
  *  CERTAME_SCHEDULE   cronograma: só as datas/horas independentes são informadas; o equivalente técnico (limite das propostas = sessão,
  *                     início do recebimento = publicação) só é derivado quando o Perfil da plataforma DECLARA a regra. Sem prazo legal inventado.
  *  UPSTREAM_ITEMS     forma de julgamento (item × lote) e regime de participação: derivados da estrutura canônica dos Itens; ambiguidade ⇒ fail closed.
- *  UPSTREAM_PRICE_RESEARCH / LIFECYCLE_SYSTEM  data-base do orçamento e data de emissão: nunca digitadas no Edital.
+ *  UPSTREAM_PRICE_RESEARCH / LIFECYCLE_SYSTEM  data-base do orçamento (registrada na Pesquisa de Preços) e data de emissão (late-bound no ato oficial): nunca digitadas no Edital.
  *  CERTAME_CONFIG     decisões do certame registradas UMA vez por processo; o Edital as consome.
  */
 import { isRealCalendarDate } from "./valueTypes2";
@@ -239,10 +239,10 @@ const PF = { reusable: true, derivable: false, processSpecific: false } as const
 export const CERTAME_AUDIT: readonly CertameAuditRow[] = Object.freeze([
   row("processo.enderecoEletronicoBll", "PLATFORM_PROFILE", "Perfil da plataforma", PF, "Fato estável da plataforma BLL; igual para todo pregão do órgão na plataforma."),
   row("processo.regulamentoBllVersao", "PLATFORM_PROFILE", "Perfil da plataforma", PF, "Versão/data do regulamento vigente da plataforma; muda raramente e com revisão auditável, não por processo."),
-  row("julgamento.dataOrcamentoEstimado", "UPSTREAM_PRICE_RESEARCH", "Pesquisa de Preços", DV, "Data-base do orçamento pertence à Pesquisa de Preços que originou os Itens aprovados."),
+  row("julgamento.dataOrcamentoEstimado", "UPSTREAM_PRICE_RESEARCH", "Pesquisa de Preços", DV, "Data-base do orçamento: decisão registrada UMA vez na Pesquisa de Preços (ledger governado, BUDGET); timestamp técnico de criação não é autoridade."),
   row("decisao.formaJulgamento", "UPSTREAM_ITEMS", "Itens da contratação", DV, "Item × lote decorre da estrutura canônica dos Itens (lotes); misto ⇒ ambiguidade, decide-se em Itens."),
   row("julgamento.regimeParticipacao", "UPSTREAM_ITEMS", "Itens da contratação", DV, "Regime efetivo decorre da configuração de participação por item/lote; era duplicado pelo 'padrão dos itens' do Edital."),
-  row("processo.dataEmissaoEdital", "LIFECYCLE_SYSTEM", "Sistema", DV, "Evento do ciclo de vida documental, atribuído pelo sistema; nunca decisão humana."),
+  row("processo.dataEmissaoEdital", "LIFECYCLE_SYSTEM", "Sistema", DV, "Data do ATO REAL de emissão oficial: late-bound, materializada pelo ciclo de vida na emissão (M2); nunca digitada nem a data do M1."),
   row("processo.dataFimRecebimentoPropostas", "CERTAME_SCHEDULE", "Configuração do certame (cronograma)", DV, "Equivalente técnico da sessão SE o Perfil da plataforma declarar a regra; senão data independente."),
   row("processo.horarioFimRecebimentoPropostas", "CERTAME_SCHEDULE", "Configuração do certame (cronograma)", DV, "Idem: limite das propostas na sessão, somente por regra declarada."),
   row("processo.dataInicioRecebimentoPropostas", "CERTAME_SCHEDULE", "Configuração do certame (cronograma)", DV, "Início = publicação SE o Perfil da plataforma declarar a regra e o horário; senão data independente."),

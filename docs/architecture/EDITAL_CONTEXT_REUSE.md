@@ -46,11 +46,11 @@ REUSABLE / DERIVABLE / PROCESS_SPECIFIC / REASON) e posta no domínio correto. N
 | Variável | Autoridade correta | Como o Edital obtém |
 |---|---|---|
 | `processo.enderecoEletronicoBll`, `processo.regulamentoBllVersao` | `PLATFORM_PROFILE` | Perfil da plataforma (registro do ÓRGÃO no ledger existente, campo `platforms`, versionado por revisão; sem 2ª tabela, sem migration) |
-| `julgamento.dataOrcamentoEstimado` | `UPSTREAM_PRICE_RESEARCH` | data (Brasília) da Pesquisa de Preços que originou os Itens aprovados; ausente ⇒ pendência na Pesquisa de Preços |
+| `julgamento.dataOrcamentoEstimado` | `UPSTREAM_PRICE_RESEARCH` | **data-base registrada UMA vez na Pesquisa de Preços** (decisão humana no ledger governado, seção `BUDGET`; `recordBudgetBaseDate`); `price_research.created_at` é timestamp técnico e NÃO é autoridade (só sugestão de UX a confirmar); ausente ⇒ "Data-base do orçamento não registrada." na Pesquisa de Preços |
 | divulgação do orçamento (`controle.orcamentoSigilosoSimNao`) | `EXISTING_CANONICAL` | decisão registrada UMA vez na Pesquisa de Preços (`BudgetDisclosureCard`); o Edital não tem o campo |
 | `decisao.formaJulgamento` | `UPSTREAM_ITEMS` | todos os itens em lote ⇒ `lote`; nenhum ⇒ `item`; misto ⇒ **ambíguo, fail closed**, decide-se em Itens |
 | `julgamento.regimeParticipacao` | `UPSTREAM_ITEMS` | agregado do regime por item > lote > padrão configurado em Itens (`ItemsParticipationCard`); regimes diferentes ⇒ literal de combinação do modelo; item sem regime ⇒ pendência em Itens; "padrão dos itens" do Edital foi removido |
-| `processo.dataEmissaoEdital` | `LIFECYCLE_SYSTEM` | atribuída pelo sistema = data (Brasília) do **evento de composição (M1)** — a mesma na geração, na revalidação e na emissão (M2), então emitir em outro dia não gera `SOURCE_CHANGED`. Escrita humana é recusada (`DERIVED_AUTHORITY_OWNED`) |
+| `processo.dataEmissaoEdital` | `LIFECYCLE_SYSTEM` | **late-bound**: data do ATO REAL de emissão oficial (America/Sao_Paulo). No M1 não existe: o texto traz o marcador interno `[[SYSTEM_LATE_BOUND:processo.dataEmissaoEdital]]` e o M1 registra `lateBound = PENDING_OFFICIAL_ISSUANCE`. A emissão materializa a data antes do conteúdo oficial/hash e o M2 registra `lifecycleBindings` (variável, valor, instante, hash antes/depois). Escrita humana é recusada |
 | `processo.dataFimRecebimentoPropostas`, `…horarioFim…`, `…dataInicio…` | `CERTAME_SCHEDULE` | **somente** se o Perfil da plataforma DECLARAR a regra (limite = sessão; início = divulgação + horário declarado). Sem declaração são datas independentes. Nada é presumido da BLL |
 | `controle.dataDivulgacaoPrevista`, `processo.dataAbertura`, `processo.horarioAbertura` | `CERTAME_SCHEDULE` | independentes (horário aceita padrão institucional explícito) |
 | `processo.numeroPregao` | `CERTAME_CONFIG` | persistido UMA vez; outros documentos leem por `procurementProcess.certameConfig`; nunca copiado de outro processo; sem geração automática (não há regra governada) |
@@ -67,9 +67,23 @@ qualquer caminho derivado no Edital é recusada (`DERIVED_AUTHORITY_OWNED`); val
 **Campo legado do cabeçalho (critério/regime de execução).** Com modelo vinculado (BOUND) o critério vira resumo somente leitura da
 CertameConfig; o regime de execução não é variável do modelo institucional (histórico legado apenas). Sem modelo, o legado segue como antes.
 
-**Limite declarado.** A data de emissão é a do evento de composição (M1), não um carimbo posterior à edição humana: o catálogo do
-modelo publicado é imutável (`required`, sem `absentText`) e substituir a data no ato da promoção exigiria reescrever o conteúdo e a
-linhagem de hash. Fica como evolução governada se o jurídico exigir a data do ato de emissão.
+### Data de emissão late-bound (LIFECYCLE_SYSTEM)
+
+`processo.dataEmissaoEdital` é "Atribuída na emissão" (catálogo publicado, **inalterado** — o motor lê `source = LIFECYCLE`, `path = dataEmissaoEdital`).
+M1 ≠ emissão oficial, então:
+
+- **Composição/M1**: o composer NÃO fabrica data nem a exige; renderiza o marcador interno (protegido por fragmento: remover/alterar ⇒
+  bloqueio) e o M1 registra o campo late-bound. O marcador não é `[REVISAR]`, não é IA e não conta como pendência humana. A revisão mostra
+  "Data de emissão: será atribuída automaticamente no ato da emissão oficial".
+- **Revalidação**: o texto composto não depende de relógio ⇒ mudança de dia entre M1 e M2 **não** é `SOURCE_CHANGED`. Marcador forjado,
+  duplicado, removido ou substituído por data digitada ⇒ `LATE_BOUND_TAMPERED`/`PROTECTED_NODE_MISSING` (emissão bloqueada).
+- **Emissão**: o instante oficial (`clock` do fluxo de emissão) → AAAA-MM-DD em America/Sao_Paulo → `bindLifecycleVariables` materializa o
+  valor ANTES do conteúdo oficial e do hash. O M2 guarda `lifecycleBindings` e `documentContentHash` = hash do conteúdo OFICIAL; a cadeia de
+  edições humanas termina em `beforeContentHash` (edição humana ≠ transformação do sistema).
+- **Replay/retry**: retry de emissão já persistida devolve o mesmo documento (idempotência por chave, sem recalcular data); falha antes do
+  commit não persiste nada (sem "emissão fantasma"); o retry usa a data do ato efetivamente persistido. O oficial nunca é recalculado com "hoje".
+- Documentos oficiais antigos não são reescritos; manifests sem campo late-bound mantêm hashes idênticos (campos novos só entram quando presentes).
+- Janela residual: a data é fixada em `prepare` (antes da transação); um deadlock-retry reaproveita o mesmo conteúdo preparado.
 
 ## 2. Auditoria do que é realmente estruturado (provado por código/teste)
 

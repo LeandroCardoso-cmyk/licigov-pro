@@ -63,8 +63,6 @@ export interface SourceReadContext {
   readonly official?: Partial<Record<DocRefKind2, OfficialDocumentPin>>;
   /** GERAÇÃO/preflight (pin exato escolhido por pessoa): exige que os parâmetros estruturados do TR pertençam ao snapshot do TR pinado. */
   readonly pinned?: boolean;
-  /** Data (AAAA-MM-DD) do evento de composição (M1): a data de emissão do Edital é atribuída por ela. Ausente ⇒ `asOfDate`. */
-  readonly compositionDate?: string;
 }
 
 interface Memo {
@@ -121,7 +119,7 @@ async function reuseOf(rc: SourceReadContext, m: Memo): Promise<ContextReuse> {
   if (!m.reuse) {
     const reuse = await loadContextReuse({
       organizationId: rc.organizationId, processId: rc.processId, catalog: rc.catalog, orgRecord: await orgRecordOf(rc, m), asOf: rc.asOfDate.slice(0, 10),
-      processRecord: await processRecordOf(rc, m), compositionDate: rc.compositionDate ?? rc.asOfDate.slice(0, 10),
+      processRecord: await processRecordOf(rc, m)
     });
     // INVARIANTE: TR oficial pinado + parâmetros estruturados do MESMO snapshot. Falha fechada; nunca usa o estado novo em silêncio.
     if (rc.pinned && rc.official?.TR) {

@@ -20,6 +20,7 @@ import {
   computeRevalidationResultHash, deriveIssuanceManifest, validateManifest,
   type AiNarrativeRef, type CanonicalRevalidationRecord, type GenerationManifest, type HumanEditRef, type IssuanceManifest,
 } from "./manifest";
+import { lateBoundTamperIssues, type LifecycleBinding } from "./lifecycleLateBound";
 import { templateHash } from "./semanticHash";
 import { isSha256, type OrgId, type Sha256, type TemplateIssueCode } from "./types";
 
@@ -33,7 +34,8 @@ export type RevalidationIssueCode =
   | "HUMAN_EDIT_LINEAGE_INVALID"
   | "PROTECTED_NODE_MISSING"
   | "STRUCTURAL_DEVIATION_UNACKNOWLEDGED"
-  | "AI_NARRATIVE_NOT_ACCEPTED";
+  | "AI_NARRATIVE_NOT_ACCEPTED"
+  | "LATE_BOUND_TAMPERED";
 
 export interface RevalidationIssue {
   readonly code: RevalidationIssueCode;
@@ -226,6 +228,11 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
   const documentContentHash = sha256Hex(input.issuedContent);
   issues.push(...humanEditLineageIssues(m1.composedOutputHash, documentContentHash, input.humanEdits));
 
+  // 4b. Campos de sistema late-bound: marcadores íntegros (nem removidos, nem duplicados, nem forjados). Só o ato de emissão os resolve.
+  for (const why of lateBoundTamperIssues(m1.lateBound ?? [], re.content.text, input.issuedContent)) {
+    issues.push({ code: "LATE_BOUND_TAMPERED", path: "lateBound", message: `campo de sistema do ciclo de vida violado — ${why}` });
+  }
+
   // 5. Nós canônicos protegidos presentes no conteúdo emitido.
   const protectedNodes = re.protectedFragments.map((f) => ({ nodeId: f.nodeId, expectedFragmentHash: f.fragmentHash, found: input.issuedContent.includes(f.text) }));
   protectedNodes.filter((n) => !n.found).forEach((n) => {
@@ -284,13 +291,18 @@ export function issuanceManifestId(generationManifestId: string, documentContent
  * Deriva o M2 do M1 (o M1 NÃO é alterado: o objeto de entrada fica intacto e o M2 é um registro novo). As narrativas
  * entram com o aceite conferido na revalidação; `derivedFromManifestId` aponta para o M1.
  */
-export function buildIssuanceManifest(generation: GenerationManifest, passed: RevalidationPassed, createdAt: string): ReturnType<typeof deriveIssuanceManifest> {
+export function buildIssuanceManifest(
+  generation: GenerationManifest, passed: RevalidationPassed, createdAt: string, lifecycleBindings: readonly LifecycleBinding[] = [],
+): ReturnType<typeof deriveIssuanceManifest> {
+  // Com binding de lifecycle o conteúdo OFICIAL é o do último binding; a cadeia humana termina no conteúdo ANTES do binding.
+  const officialHash = lifecycleBindings.length > 0 ? lifecycleBindings[lifecycleBindings.length - 1].afterContentHash : passed.documentContentHash;
   return deriveIssuanceManifest(
     { ...generation, aiNarratives: passed.acceptedNarratives },
     {
-      id: issuanceManifestId(generation.id, passed.documentContentHash),
+      id: issuanceManifestId(generation.id, officialHash),
       createdAt,
-      documentContentHash: passed.documentContentHash,
+      documentContentHash: officialHash,
+      lifecycleBindings,
       humanEditRefs: passed.humanEditRefs,
       canonicalRevalidation: passed.record,
     },

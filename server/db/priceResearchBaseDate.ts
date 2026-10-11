@@ -1,8 +1,9 @@
 /**
- * Data-base do orçamento estimado (PR #288): derivada da PESQUISA DE PREÇOS que originou os Itens Inteligentes APROVADOS do processo
- * (`intelligent_items.source_research_id` → `price_research.created_at`). Mais recente entre elas; tenant-scoped; somente leitura.
- * Sem pesquisa vinculada a item aprovado ⇒ `null` (a pendência é registrada NA Pesquisa de Preços, nunca no Edital).
- * A data é convertida para o calendário de Brasília (America/Sao_Paulo); `created_at` é guardado em UTC.
+ * SUGESTÃO (e SOMENTE sugestão) de data-base do orçamento: a data de registro da pesquisa de preços que originou os Itens aprovados
+ * (`price_research.created_at`, timestamp TÉCNICO de criação). NÃO é autoridade: a data-base é uma decisão humana registrada na Pesquisa
+ * de Preços (`GovernedSourceService.recordBudgetBaseDate`); a UI apenas a oferece para confirmação explícita. Nunca entra no composer.
+ * Auditoria do domínio: nenhuma tabela da pesquisa/importação guarda uma data de referência estruturada (só timestamps de workflow).
+ * Tenant-scoped; somente leitura; convertida para o calendário de Brasília (America/Sao_Paulo).
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { intelligentItemsTable, priceResearchTable } from "../../drizzle/schema";
@@ -18,7 +19,7 @@ export function brasiliaDateOf(utcDatetime: string): string | null {
   return Number.isNaN(d.getTime()) ? null : SP.format(d);
 }
 
-export async function readPriceResearchBaseDate(organizationId: number, processId: string): Promise<string | null> {
+export async function readPriceResearchSuggestedDate(organizationId: number, processId: string): Promise<string | null> {
   const db = await getDb();
   if (!db) return null;
   const items = await db.select({ researchId: intelligentItemsTable.sourceResearchId }).from(intelligentItemsTable)

@@ -51,6 +51,9 @@ export function syntheticCnpj(seed: number): string {
 /** Perfil da plataforma BLL SINTÉTICO (PR #288): configurado UMA vez por órgão; nunca digitado no Edital. */
 export const SYNTHETIC_PLATFORMS = { bll: { enderecoEletronico: "https://bllcompras.com", regulamentoVersao: "Regulamento da plataforma BLL — versão sintética 2026-01" } } as const;
 
+/** Data-base do orçamento SINTÉTICA registrada na origem (Pesquisa de Preços). */
+export const E2E_BUDGET_BASE_DATE = "2026-09-30";
+
 export interface World { org: number; processId: string; items: string[] }
 
 /** Cenário-base do mestre ajustado para satisfazer as REGRAS governadas (datas coerentes, acréscimo de consórcio na faixa). */
@@ -129,8 +132,10 @@ export async function seedGoverned(w: World, scenario: Scenario = E2E_SCENARIO, 
   const act = (k: string) => ({ confirm: true, idempotencyKey: `e2e-${tag}-${k}-${w.org}`, decision: decision() });
   const common = { catalogVersion: BLL_CATALOG.version, expectedRevision: 0 } as const;
   await gov.recordBudgetDisclosure(ctx, { ...act("disclosure"), processId: w.processId, disclosure, expectedRevision: 0 });
-  // por processo: cada seção grava uma nova revisão do MESMO registro (CAS 0, 1, 2…)
-  let rev = 0;
+  // Data-base do orçamento: decisão registrada UMA vez na origem (BUDGET), não no Edital — revisão 0 → 1 do registro do processo.
+  await gov.recordBudgetBaseDate(ctx, { ...act("basedate"), catalogVersion: BLL_CATALOG.version, processId: w.processId, baseDate: E2E_BUDGET_BASE_DATE, expectedRevision: 0 });
+  // por processo: cada seção grava uma nova revisão do MESMO registro (CAS 1, 2, 3…)
+  let rev = 1;
   for (const source of PROCESS_SCOPE_SOURCES) {
     const fields = governedFieldsFor(source, scenario);
     if (Object.keys(fields).length === 0) continue;

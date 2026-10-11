@@ -250,7 +250,7 @@ export function fixAction(entry: EntryPoint | undefined): FixAction | null {
     case "ORG_REGISTRY": return { label: "Corrigir cadastro do órgão", href: "/configuracoes" };
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
     case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };
-    case "PRICE_RESEARCH": return { label: "Abrir a Pesquisa de Preços", stage: "price" };
+    case "PRICE_RESEARCH": return { label: "Corrigir na Pesquisa de Preços", stage: "price" };
     case "TR_SECTION": return { label: "Abrir o TR", stage: "tr" };
     default: return null;
   }
@@ -463,6 +463,8 @@ export interface ReviewStateView {
   composedByTemplate: boolean; generationManifestId?: string; templateRevisionId?: string;
   unresolvedMarkers: { count: number; slots: readonly string[]; samples: readonly string[] };
   structuralDeviations: readonly DeviationView[];
+  /** Campos de SISTEMA do ciclo de vida (ex.: data de emissão): informativo; atribuídos no ato oficial da emissão. */
+  lateBound?: readonly { variable: string; label: string; message: string }[];
   aiNarratives: readonly { slotKey: string; executionId: string; humanAccepted: boolean }[];
   revalidation: { status: "PASSED" | "BLOCKED"; issues: readonly { code: string; path: string; message: string }[] };
 }

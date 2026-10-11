@@ -16,6 +16,7 @@ import {
   type AiNarrativeRef, type AnnexRef, type ConditionalDecisionRef, type GenerationManifest, type ManifestSourceKey,
   type ManifestSourceRef, type OfficialDocumentReference,
 } from "./manifest";
+import type { LateBoundRef } from "./lifecycleLateBound";
 import { TEMPLATE_ID_RE } from "./revision";
 import { templateHash } from "./semanticHash";
 import { TEMPLATE_HASH_VERSION, isSha256, type OrgId, type Sha256 } from "./types";
@@ -169,6 +170,8 @@ export interface ManifestParts {
   readonly conditionalDecisions: readonly ConditionalDecisionRef[];
   readonly aiNarratives: readonly AiNarrativeRef[];
   readonly annexes: readonly AnnexRef[];
+  /** Campos de sistema late-bound renderizados como marcador (vazio ⇒ chave ausente do manifest: hashes antigos intactos). */
+  readonly lateBound?: readonly LateBoundRef[];
 }
 
 /** M1 selado (id derivado do conteúdo semântico; `createdAt` fora do hash) + consistência manifest × revisão. */
@@ -190,6 +193,7 @@ export function sealComposedManifest(
     conditionalDecisions: parts.conditionalDecisions,
     aiNarratives: parts.aiNarratives,
     annexes: parts.annexes,
+    ...(parts.lateBound && parts.lateBound.length > 0 ? { lateBound: parts.lateBound } : {}),
     identityFingerprint: req.identityFingerprint,
     composedOutputHash: parts.composedOutputHash,
     createdAt: req.createdAt,

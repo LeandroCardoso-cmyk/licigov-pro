@@ -11,6 +11,8 @@ import {
   BUDGET_DISCLOSURES, GOVERNED_FIELDS_SCHEMA, allowedSources, declaredPaths, encodeGovernedPayload, validateDefaults, validateGovernedPayload, validateGovernedSection, validateParticipation, validatePlatforms,
   type BudgetDisclosure, type GovernedPayload, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
+import { ALWAYS_DERIVED, DERIVED_VARIABLES } from "../../domain/institutionalTemplates/certameAuthority";
+import { normalizeValue2 } from "../../domain/institutionalTemplates/valueTypes2";
 import { authorityEntryOf, validateRoleAssignments } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { canonicalProjectedPaths } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
@@ -72,7 +74,11 @@ export class GovernedSourceService {
     // Substitui APENAS os campos que este catálogo declara para a fonte; campos de outros modelos permanecem intactos.
     // Caminhos de projeção CANONICAL ficam FORA da substituição: um valor legado no ledger é preservado como história (não é apagado
     // nem migrado), mas nunca entra na composição/preparação.
-    const canonicalPaths = canonicalProjectedPaths(catalog.vars, input.source);
+    const canonicalPaths = new Set([
+      ...canonicalProjectedPaths(catalog.vars, input.source),
+      // Autoridades DERIVADAS têm escritor próprio (ex.: data-base do orçamento): uma escrita genérica da seção nunca as apaga.
+      ...catalog.vars.filter((v) => v.source === input.source && ALWAYS_DERIVED(v.name)).map((v) => v.path),
+    ]);
     const declared = new Set([...declaredPaths(catalog, input.source)].filter((p) => !canonicalPaths.has(p)));
     const foreign = Object.fromEntries(Object.entries(current?.raw.sections?.[input.source] ?? {}).filter(([p]) => !declared.has(p)));
     const merged: GovernedPayload = {
@@ -220,6 +226,39 @@ export class GovernedSourceService {
       organizationId: ctx.organizationId, decisionId: out.decision.id, revision: out.decision.revision, replayed: out.replayed, actorUserId: ctx.actor.userId,
       roles: input.roles !== undefined ? Object.keys(input.roles as object).length : undefined, platforms: nextPlatforms ? Object.keys(nextPlatforms).length : undefined, defaults: nextDefaults ? Object.keys(nextDefaults).length : undefined, correlationId: ctx.correlationId,
     });
+    return out;
+  }
+
+  /**
+   * DATA-BASE DO ORÇAMENTO (PR #288 final): a data de referência do orçamento estimado é uma decisão registrada UMA vez, NA ORIGEM
+   * (Pesquisa de Preços / orçamento), no ledger governado existente (seção BUDGET do registro do processo, CAS do registro inteiro).
+   * O Edital e os demais documentos apenas a CONSOMEM. Timestamps técnicos (`price_research.created_at`) não são autoridade.
+   * Único escritor deste caminho: a escrita genérica do Edital o recusa (`DERIVED_AUTHORITY_OWNED`).
+   */
+  async recordBudgetBaseDate(ctx: WorkflowContext, input: DecisionActInput & { processId: string; catalogVersion: string; baseDate: string; expectedRevision: number }): Promise<RecordedDecision> {
+    assertHumanActor(ctx.actor);
+    requireConfirmed(input, "registrar a data-base do orçamento");
+    const catalog = this.catalog(input.catalogVersion);
+    const def = catalog.vars.find((v) => DERIVED_VARIABLES[v.name] === "BUDGET_DATE");
+    if (!def) throw new TemplateWorkflowError("VALIDATION_FAILED", "o modelo vinculado não usa data-base do orçamento");
+    const norm = normalizeValue2(def, input.baseDate);
+    if (!norm.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "data-base inválida", [{ code: "SOURCE_PAYLOAD_INVALID", path: `${def.source}.${def.path}`, message: norm.reason }]);
+    const current = await readGovernedRecord(ctx.organizationId, "PROCESS", input.processId, catalog).catch((e: unknown) => {
+      throw new TemplateWorkflowError("VALIDATION_FAILED", e instanceof Error ? e.message : "registro corrente ilegível");
+    });
+    const rawSections = (current?.raw.sections ?? {}) as Record<string, Record<string, unknown>>;
+    const merged: GovernedPayload = {
+      sections: { ...rawSections, [def.source]: { ...(rawSections[def.source] ?? {}), [def.path]: norm.value } } as GovernedPayload["sections"],
+      ...(current?.payload.participation ? { participation: current.payload.participation } : {}),
+    };
+    const whole = validateGovernedPayload(catalog, "PROCESS", merged);
+    if (!whole.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "o registro resultante é inválido", toIssues(whole.issues));
+    const { evidence } = encodeGovernedPayload(GOVERNED_FIELDS_SCHEMA, merged);
+    const out = await recordHumanDecision(ctx, {
+      subjectType: GOVERNED_SUBJECT_TYPE.PROCESS, decisionType: GOVERNED_DECISION_TYPE.PROCESS, outcome: GOVERNED_OUTCOME.PROCESS, mode: "revision",
+      subjectId: input.processId, evidence, act: input, expectedRevision: input.expectedRevision,
+    });
+    log.info("budget_base_date_recorded", { organizationId: ctx.organizationId, processId: input.processId, baseDate: input.baseDate, decisionId: out.decision.id, revision: out.decision.revision, replayed: out.replayed, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return out;
   }
 

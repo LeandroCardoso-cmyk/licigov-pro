@@ -36,6 +36,11 @@ export function EditalTemplateReviewView({ state, selected, busy = false, outcom
           </ul>
         )}
 
+      {(state.lateBound?.length ?? 0) > 0 && (
+        <ul className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground" aria-label="Campos atribuídos pelo sistema na emissão" data-late-bound="1">
+          {state.lateBound!.map((l) => <li key={l.variable}>{l.message}</li>)}
+        </ul>
+      )}
       {state.unresolvedMarkers.count > 0 && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
           <p className="font-medium">{state.unresolvedMarkers.count} marcador(es) [REVISAR] pendente(s) — substitua pelo texto revisado no editor acima.</p>

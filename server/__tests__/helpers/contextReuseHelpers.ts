@@ -10,7 +10,7 @@ import { getTemplateCompositionPorts } from "../../services/institutionalTemplat
 import { renderTrStructuredBlock } from "../../services/institutionalTemplates/trStructuredParamsService";
 import { buildSavePlan, executeSavePlan, isStaleSave, toFormValue, type PlannedWrite, type PreparationStateView, type SectionEdits } from "../../../client/src/lib/editalPreparation";
 import type { RoleAssignments } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
-import { BLL_CATALOG, E2E_SCENARIO, SYNTHETIC_PLATFORMS, decision } from "./institutionalTemplatesE2eWorld";
+import { BLL_CATALOG, E2E_BUDGET_BASE_DATE, E2E_SCENARIO, SYNTHETIC_PLATFORMS, decision } from "./institutionalTemplatesE2eWorld";
 import { sampleValue } from "./institutionalTemplatesBllHarness";
 
 export const SYNTHETIC_ROLES: RoleAssignments = {
@@ -136,8 +136,18 @@ export async function setItemsParticipation(h: ReuseHarness, regime = "Ampla par
   });
 }
 
-/** Divulgação do orçamento registrada UMA vez, na etapa do orçamento (Pesquisa de Preços). */
-export async function setBudgetDisclosure(h: ReuseHarness, disclosure: "publico" | "sigiloso" = "publico"): Promise<void> {
-  const st = await h.proc().budgetDisclosure({ processId: h.processId });
+/** Data-base do orçamento registrada UMA vez, NA ORIGEM (Pesquisa de Preços): decisão humana, nunca o timestamp técnico da pesquisa. */
+export async function setBudgetBaseDate(h: ReuseHarness, baseDate: string = E2E_BUDGET_BASE_DATE): Promise<void> {
+  const st = await h.proc().budgetDisclosure({ processId: h.processId, ...h.ws });
+  expect(st.catalogVersion).toBeTruthy();
+  await h.tpl().governed.recordBudgetBaseDate({
+    confirm: true, idempotencyKey: h.key("basedate"), decision: decision(), expectedRevision: st.baseDateRevision, catalogVersion: st.catalogVersion, processId: h.processId, baseDate,
+  });
+}
+
+/** Dados do orçamento para documentos (etapa do orçamento): divulgação + data-base, cada uma UMA vez. `baseDate: null` ⇒ não registra a data-base. */
+export async function setBudgetDisclosure(h: ReuseHarness, disclosure: "publico" | "sigiloso" = "publico", opts: { baseDate?: string | null } = {}): Promise<void> {
+  const st = await h.proc().budgetDisclosure({ processId: h.processId, ...h.ws });
   await h.tpl().governed.recordBudgetDisclosure({ confirm: true, idempotencyKey: h.key("disclosure"), decision: decision(), expectedRevision: st.revision, processId: h.processId, disclosure });
+  if (opts.baseDate !== null && !st.baseDate) await setBudgetBaseDate(h, opts.baseDate ?? E2E_BUDGET_BASE_DATE);
 }

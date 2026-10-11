@@ -8,7 +8,7 @@
  * Também expõe os estados de ORIGEM que o Edital apenas consome: participação nos Itens e divulgação do orçamento.
  */
 import { getCurrentDecision } from "../../db/institutionalDecisions";
-import { readPriceResearchBaseDate } from "../../db/priceResearchBaseDate";
+import { readPriceResearchSuggestedDate } from "../../db/priceResearchBaseDate";
 import type { EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import { authorityEntryOf, type AuthorityClass } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { COMBINATION_PREFIX, DERIVED_VARIABLES, deriveFormaJulgamento, deriveRegimeParticipacao, type ItemStructure } from "../../domain/institutionalTemplates/certameAuthority";
@@ -19,7 +19,6 @@ import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore"
 import { loadContextReuse } from "./editalContextReuse";
 import { describeVariable } from "./editalPreparationService";
 import { resolveProcurementContext } from "../canonicalContextService";
-import { compositionDateOf } from "./compositionDate";
 
 export type CertameFieldStatus = "DECIDED" | "ORG_DEFAULT" | "DERIVED" | "PENDING" | "OPTIONAL";
 
@@ -57,7 +56,7 @@ export async function getCertameConfigState(deps: BridgeDeps, organizationId: nu
     readGovernedRecord(organizationId, "PROCESS", processId, catalog),
     readGovernedRecord(organizationId, "ORG", GOVERNED_ORG_SUBJECT, catalog),
   ]);
-  const reuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec, compositionDate: compositionDateOf(deps.now()) });
+  const reuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec });
   const fields: CertameConfigField[] = [];
   let numeroPregao: string | null = null;
   for (const v of catalog.vars) {
@@ -131,17 +130,30 @@ export interface BudgetDisclosureState {
   readonly disclosure: "publico" | "sigiloso" | null;
   /** CAS da decisão de divulgação; 0 = nenhuma. */
   readonly revision: number;
-  /** Data-base derivada da Pesquisa de Preços que originou os Itens aprovados (AAAA-MM-DD) ou null. */
+  /** Data-base REGISTRADA (AAAA-MM-DD) na seção BUDGET do registro governado do processo, ou null. É a ÚNICA autoridade. */
   readonly baseDate: string | null;
+  /** CAS do registro do processo (escrita da data-base); 0 = nenhum registro. */
+  readonly baseDateRevision: number;
+  /** Versão do catálogo do modelo (necessária para registrar a data-base); null = modelo indisponível para este processo. */
+  readonly catalogVersion: string | null;
+  /** SUGESTÃO de UX (data de registro da pesquisa): nunca é usada sem confirmação humana explícita. */
+  readonly suggestedBaseDate: string | null;
 }
 
-export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId: number, processId: string): Promise<BudgetDisclosureState> {
+export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<BudgetDisclosureState> {
   const enabled = !!deps.ports && (await deps.ports.enablement.isEnabled(organizationId));
-  if (!enabled) return { enabled: false, disclosure: null, revision: 0, baseDate: null };
-  const [d, baseDate] = await Promise.all([
+  if (!enabled) return { enabled: false, disclosure: null, revision: 0, baseDate: null, baseDateRevision: 0, catalogVersion: null, suggestedBaseDate: null };
+  const loaded = await loadEditalCatalog(deps, organizationId, params);
+  const [d, suggested, rec] = await Promise.all([
     getCurrentDecision(null, organizationId, "procurement.budget_disclosure", processId),
-    readPriceResearchBaseDate(organizationId, processId).catch(() => null),
+    readPriceResearchSuggestedDate(organizationId, processId).catch(() => null),
+    loaded.status === "OK" ? readGovernedRecord(organizationId, "PROCESS", processId, loaded.catalog) : Promise.resolve(null),
   ]);
   const disclosure = d?.outcome === "publico" || d?.outcome === "sigiloso" ? d.outcome : null;
-  return { enabled: true, disclosure, revision: d?.revision ?? 0, baseDate };
+  const budgetDef = loaded.status === "OK" ? loaded.catalog.vars.find((v) => DERIVED_VARIABLES[v.name] === "BUDGET_DATE") : undefined;
+  const stored = budgetDef ? (rec?.payload.sections[budgetDef.source] as Record<string, unknown> | undefined)?.[budgetDef.path] : undefined;
+  return {
+    enabled: true, disclosure, revision: d?.revision ?? 0, baseDate: typeof stored === "string" ? stored : null, baseDateRevision: rec?.revision ?? 0,
+    catalogVersion: loaded.status === "OK" && budgetDef ? loaded.catalog.version : null, suggestedBaseDate: suggested,
+  };
 }

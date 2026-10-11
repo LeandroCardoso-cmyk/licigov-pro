@@ -208,6 +208,11 @@ export async function promoteOfficialDocument(params: {
       })
       : null;
 
+    // Conteúdo OFICIAL final: o revisado + os campos de sistema do ciclo de vida materializados NO ATO (ex.: data de emissão).
+    // Sem modelo/sem campo late-bound é exatamente o rascunho revisado. O ledger e a idempotência seguem no hash do RASCUNHO revisado.
+    const officialContent = templated ? templated.officialContent : draft.content;
+    const officialContentHash = officialContent === draft.content ? contentHash : draftContentHash(officialContent);
+
     const db = await getDb();
     if (!db) {
       // GUARD (fail-closed) — a emissão CRIA autoridade institucional persistida e auditável. Sem
@@ -229,10 +234,11 @@ export async function promoteOfficialDocument(params: {
       // Versão oficial IMUTÁVEL "emitido" (append-only; GET_LOCK por linhagem serializa a numeração).
       const official = await createDocument({
         organizationId: params.organizationId, businessDomain: BUSINESS_DOMAIN, documentType: params.kind,
-        origin: params.processId, title: draft.title, content: draft.content, author: String(params.actorUserId),
+        origin: params.processId, title: draft.title, content: officialContent, author: String(params.actorUserId),
         status: "emitido", correlationId: params.correlationId,
         metadata: {
           promotedFromDraftId: draft.id, contentHash,
+          ...(officialContentHash !== contentHash ? { reviewedContentHash: contentHash, officialContentHash } : {}),
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
           // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
@@ -264,7 +270,7 @@ export async function promoteOfficialDocument(params: {
       if (templated) await templated.persist({ officialDocumentId: official.id, officialVersion: official.version }, tx);
 
       result = {
-        officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash },
+        officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash: officialContentHash },
         promoted: true, replayed: false,
       };
       // Marca a chave COMPLETED com a resposta cacheável — na MESMA transação (atomicidade).

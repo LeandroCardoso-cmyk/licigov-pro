@@ -31,7 +31,9 @@ import {
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
 } from "../../domain/institutionalTemplates/composer";
 import { manifestRevisionIssues, validateManifest, type GenerationManifest, type IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
-import { compositionDateOf } from "./compositionDate";
+import { issuanceDateOf } from "./compositionDate";
+import { LATE_BOUND_VARIABLES, bindLifecycleVariables, type LifecycleBinding } from "../../domain/institutionalTemplates/lifecycleLateBound";
+import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTemplates/astVersions";
 import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
@@ -164,8 +166,6 @@ async function loadExactTemplate(ports: TemplatePorts, organizationId: OrgId, id
 async function loadCanonicalInputs(
   ports: TemplatePorts, organizationId: OrgId, subjectId: string, t: LoadedTemplate,
   officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>,
-  /** Instante (ISO) do evento de composição: na geração = `createdAt` do M1; na revalidação = `createdAt` do M1 selado. */
-  compositionAt?: string,
 ) {
   const needs = templateRequirementsAny(t.revision.ast);
   // UMA autoridade por documento oficial: primeiro o pin validado (geração) / a autoridade atual (revalidação); as fontes — inclusive
@@ -176,7 +176,7 @@ async function loadCanonicalInputs(
       : ports.canonical.resolveOfficialDocuments(organizationId, subjectId, needs.docRefKinds),
     ports.canonical.identityFingerprint(organizationId),
   ]);
-  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments, { pinned: officialPins !== undefined, ...(compositionAt ? { compositionDate: compositionDateOf(compositionAt) } : {}) });
+  const sources = await ports.canonical.resolveSources(organizationId, subjectId, requiredSources(t.revision, t.catalog), t.catalog, officialDocuments, { pinned: officialPins !== undefined });
   return { sources, officialDocuments, identityFingerprint };
 }
 
@@ -254,9 +254,8 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
   if (t.revision.semanticHash !== resolution.revision.semanticHash) throw preconditionFailed(TEMPLATE_BINDING_INVALID, "revisão fixada divergente entre leituras");
 
   // 3. Fontes canônicas + rascunho de destino (leituras, fora da transação).
-  const compositionAt = ports.clock.now();
   const [canonical, generatedDocumentId] = await Promise.all([
-    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}, compositionAt),
+    loadCanonicalInputs(ports, params.organizationId, params.subjectId, t, params.officialPins ?? {}),
     ports.drafts.reserveDraftId(params.organizationId, params.subjectId, params.documentType),
   ]);
 
@@ -265,7 +264,7 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
     organizationId: params.organizationId, identity: t.identity, revision: t.revision, catalog: t.catalog,
     pin: { identityId: t.identity.id, revisionId: t.revision.id, semanticHash: t.revision.semanticHash },
     sources: canonical.sources, officialDocuments: canonical.officialDocuments, aiNarratives: params.aiNarratives ?? [],
-    identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: compositionAt, purpose: "GENERATION",
+    identityFingerprint: canonical.identityFingerprint, generatedDocumentId, createdAt: ports.clock.now(), purpose: "GENERATION",
     ...rulesFor(t),
   };
   return { template: t, generatedDocumentId, composed: composeTemplate(request) };
@@ -374,6 +373,12 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
 
 export interface TemplateIssuancePreparation {
   readonly issuanceManifest: IssuanceManifest;
+  /**
+   * Conteúdo OFICIAL final: o texto revisado com os campos de sistema do ciclo de vida (ex.: data de emissão) materializados NO ATO da
+   * emissão. Igual ao conteúdo revisado quando o M1 não tem campos late-bound. Seu hash = `issuanceManifest.documentContentHash`.
+   */
+  readonly officialContent: string;
+  readonly lifecycleBindings: readonly LifecycleBinding[];
   /** Grava o M2 na transação da promoção (repetida inteira pelo retry do SEM-084; o id do M2 é determinístico). */
   persist(link: { readonly officialDocumentId: string; readonly officialVersion: number }, tx: TemplateTxExecutor): Promise<void>;
 }
@@ -388,7 +393,7 @@ export interface PromotionTemplateIssuanceHook {
 
 /** Recompõe com as fontes ATUAIS a mesma revisão/rascunho/narrativas do M1 (para a revalidação). */
 async function recompose(ports: TemplatePorts, organizationId: OrgId, subjectId: string, m1: GenerationManifest, t: LoadedTemplate, narratives: readonly AiNarrativeOutput[]): Promise<ComposeResult<ComposedDocument>> {
-  const canonical = await loadCanonicalInputs(ports, organizationId, subjectId, t, undefined, m1.createdAt);
+  const canonical = await loadCanonicalInputs(ports, organizationId, subjectId, t);
   return composeTemplate({
     organizationId, identity: t.identity, revision: t.revision, catalog: t.catalog,
     pin: { identityId: m1.templateIdentityId, revisionId: m1.templateRevisionId, semanticHash: m1.templateSemanticHash },
@@ -408,6 +413,8 @@ export interface TemplateReviewState {
   readonly templateRevisionId?: string;
   readonly unresolvedMarkers: { readonly count: number; readonly slots: readonly string[]; readonly samples: readonly string[] };
   readonly structuralDeviations: readonly { readonly blockId: string; readonly kind: StructuralDeviationKind; readonly acknowledged: boolean }[];
+  /** Campos de SISTEMA do ciclo de vida (ex.: data de emissão): atribuídos no ato oficial da emissão — informativo, sem ação humana. */
+  readonly lateBound?: readonly { readonly variable: string; readonly label: string; readonly message: string }[];
   readonly aiNarratives: readonly { readonly slotKey: string; readonly executionId: string; readonly humanAccepted: boolean }[];
   /** Resultado da MESMA revalidação canônica da emissão (nenhum detector paralelo). */
   readonly revalidation: { readonly status: "PASSED" | "BLOCKED"; readonly issues: readonly { readonly code: string; readonly path: string; readonly message: string }[] };
@@ -450,6 +457,7 @@ export async function inspectTemplateReview(
   } catch (err) {
     if (err instanceof TemplateSourceUnavailableError) {
       return { composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations: [], aiNarratives,
+        lateBound: lateBoundView(m1.lateBound),
         revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: err.source, message: `${err.source} — ${err.reason}` }] } };
     }
     throw err;
@@ -464,9 +472,13 @@ export async function inspectTemplateReview(
     : [];
   return {
     composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations, aiNarratives,
+    lateBound: lateBoundView(m1.lateBound),
     revalidation: outcome.ok ? { status: "PASSED", issues: [] } : { status: "BLOCKED", issues: outcome.issues.map((i) => ({ code: i.code, path: i.path, message: i.message })) },
   };
 }
+
+const lateBoundView = (refs: readonly { readonly variable: string }[] | undefined) =>
+  (refs ?? []).map((r) => ({ variable: r.variable, label: LATE_BOUND_VARIABLES[r.variable]?.label ?? r.variable, message: `${LATE_BOUND_VARIABLES[r.variable]?.label ?? r.variable}: ${LATE_BOUND_VARIABLES[r.variable]?.pendingMessage ?? "atribuída pelo sistema no ato da emissão oficial"}.` }));
 
 export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTemplateIssuanceHook {
   return {
@@ -513,13 +525,26 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         ports.review.listAiAcceptances(input.organizationId, m1.id),
         ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),
       ]);
+      // Instante OFICIAL do ato de emissão (fluxo governado): base da data de emissão e do M2. NÃO é o instante do M1.
+      const issuedAt = ports.clock.now();
       const outcome = revalidateForIssuance({
         organizationId: input.organizationId, generation: m1, recomposition, issuedContent: input.content,
-        humanEdits, aiAcceptances, acknowledgments, checkedAt: ports.clock.now(),
+        humanEdits, aiAcceptances, acknowledgments, checkedAt: issuedAt,
       });
       if (!outcome.ok) throw blocked(codesOf(outcome.issues), outcome.issues.map((i) => i.message).join(" "));
 
-      const m2 = buildIssuanceManifest(m1, outcome.value, ports.clock.now());
+      // Campos de SISTEMA late-bound (data de emissão): materializados AGORA, antes do conteúdo oficial final e do seu hash.
+      // Transformação do ciclo de vida (registrada no M2), distinta da edição humana revisada acima.
+      let officialContent = input.content;
+      let lifecycleBindings: readonly LifecycleBinding[] = [];
+      if ((m1.lateBound?.length ?? 0) > 0) {
+        if (!isCatalogV2Late(t.catalog)) throw blocked("LATE_BOUND_TAMPERED", "campo late-bound exige catálogo tpl-catalog/2");
+        const bound = bindLifecycleVariables(input.content, t.catalog, m1.lateBound!, issuedAt, issuanceDateOf(issuedAt));
+        if (!bound.ok) throw blocked("LATE_BOUND_TAMPERED", bound.reason);
+        officialContent = bound.text;
+        lifecycleBindings = bound.bindings;
+      }
+      const m2 = buildIssuanceManifest(m1, outcome.value, issuedAt, lifecycleBindings);
       if (!m2.ok) throw blocked(codesOf(m2.issues), "M2 inválido");
       const issuanceManifest = m2.value;
       log.info("template_issuance_revalidated", {
@@ -527,7 +552,7 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         status: issuanceManifest.canonicalRevalidation.status, correlationId: input.correlationId,
       });
       return {
-        issuanceManifest,
+        issuanceManifest, officialContent, lifecycleBindings,
         persist: (link, tx) => ports.manifests.insertIssuanceManifest(issuanceManifest, link, { actorUserId: input.actorUserId, correlationId: input.correlationId }, tx),
       };
     },

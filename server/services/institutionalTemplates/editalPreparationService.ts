@@ -32,7 +32,7 @@ import { resolveEditalProjections, type ProjectedValue } from "./editalProjectio
 import { TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, loadContextReuse, type ContextReuse } from "./editalContextReuse";
 import { AUTHORITY_CLASSES, ROLE_LABEL, isDefaultEligible, type AuthorityClass, type EntryPoint } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { ALWAYS_DERIVED } from "../../domain/institutionalTemplates/certameAuthority";
-import { compositionDateOf } from "./compositionDate";
+import { LATE_BOUND_VARIABLES, isLateBoundVariable } from "../../domain/institutionalTemplates/lifecycleLateBound";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
 import type { OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
@@ -295,7 +295,7 @@ export async function getEditalPreparationState(
   const disclosure: "publico" | "sigiloso" | null = budget?.outcome === "publico" || budget?.outcome === "sigiloso" ? budget.outcome : null;
   // Reuso de contexto (parâmetros do TR, papéis e padrões do Perfil de Licitações): MESMA resolução da composição.
   let reuse: ContextReuse = await loadContextReuse({
-    organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec, compositionDate: compositionDateOf(deps.now()),
+    organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec,
   });
   // INVARIANTE: TR oficial exato + parâmetros estruturados do MESMO snapshot. Divergente ⇒ os parâmetros atuais NÃO são reaproveitados
   // (o Edital não mistura TR v1 com parâmetros posteriores) e o preflight bloqueia; a pessoa revisa/emite a versão correspondente do TR.
@@ -416,7 +416,12 @@ export async function getEditalPreparationState(
     if (c.rule === "PLATFORM" || c.rule === "DERIVED") {
       const ru = reuse.values.get(v.name); const pb = reuse.problems.get(v.name);
       const legacy = storedValue(v.source, v.path, processRec, orgRec);
-      if (ru) {
+      const late = LATE_BOUND_VARIABLES[v.name];
+      if (late && isLateBoundVariable(v)) {
+        // Campo de SISTEMA late-bound: a data nasce no ato oficial de emissão; nada é digitado nem fabricado antes disso.
+        canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "AUTO", displayValue: `${late.pendingMessage}`, origin: { label: "Ciclo de vida documental (atribuída pelo sistema no ato da emissão oficial)" }, authority: c.authority, entry: c.entry });
+        m.AUTO++; m.LIFE++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused");
+      } else if (ru) {
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "AUTO", displayValue: ru.value, origin: { label: ru.origin.label, ref: ru.origin.ref }, authority: c.authority, entry: c.entry });
         m.AUTO++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused");
         if (ru.kind === "PLATFORM") m.PLAT++; else if (ru.kind === "BUDGET") m.PRICE++; else if (ru.kind === "ITEMS") m.ITEMS++; else if (ru.kind === "LIFECYCLE") m.LIFE++;
@@ -426,7 +431,7 @@ export async function getEditalPreparationState(
         sourcePending.push({ name: v.name, description: descriptor.description, reason, fix: pb?.fix ?? c.entry });
         m.SRC_PEND++; bump(group, "total"); bump(group, "blocked");
       }
-      if (legacy !== undefined && !isEmpty(legacy)) m.LS++;   // valor legado no ledger: preservado como história e IGNORADO
+      if (legacy !== undefined && !isEmpty(legacy) && ru?.kind !== "BUDGET") m.LS++;   // valor legado no ledger: preservado como história e IGNORADO
       continue;
     }
 

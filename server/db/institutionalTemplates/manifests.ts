@@ -21,7 +21,7 @@ import {
 import {
   TEMPLATE_HASH_VERSION, TEMPLATE_ID_RE, manifestRevisionIssues, templateCanonicalJson, validateManifest,
   type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef,
-  type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type ManifestSourceRef, type OfficialDocumentReference,
+  type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
 import { isDuplicateKey, isForeignKeyViolation, requireReader, type TemplatesContext, type TemplatesReader, type TemplatesTx } from "./executor";
@@ -37,6 +37,8 @@ interface ManifestBody {
   readonly annexes: readonly AnnexRef[];
   readonly humanEditRefs?: readonly HumanEditRef[];
   readonly canonicalRevalidation?: CanonicalRevalidationRecord;
+  readonly lateBound?: readonly LateBoundRef[];
+  readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
 const corrupt = (why: string) => new TemplatePersistenceError("PERSISTED_RECORD_CORRUPT", `manifest persistido inválido: ${why}`);
@@ -51,8 +53,13 @@ export interface StoredManifest {
 export interface PersistedManifest extends StoredManifest { readonly created: boolean }
 
 function bodyOf(m: CompositionManifest): ManifestBody {
-  const common = { sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes };
-  return m.stage === "ISSUANCE" ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation } : common;
+  const common = {
+    sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes,
+    ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
+  };
+  return m.stage === "ISSUANCE"
+    ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation, ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}) }
+    : common;
 }
 
 /** Linhas → manifest do domínio, RECALCULANDO o hash (fail-closed). */
@@ -68,6 +75,7 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
     templateIdentityId: row.templateIdentityId, templateRevisionId: row.templateRevisionId, templateSemanticHash: row.templateSemanticHash,
     hashVersion: row.hashVersion as HashVersion, catalogVersion: row.catalogVersion, sources: body.sources, officialDocRefs,
     conditionalDecisions: body.conditionalDecisions, aiNarratives: body.aiNarratives, annexes: body.annexes,
+    ...(body.lateBound && body.lateBound.length > 0 ? { lateBound: body.lateBound } : {}),
     identityFingerprint: row.identityFingerprint, composedOutputHash: row.composedOutputHash, manifestHash: row.manifestHash,
     createdAt: row.manifestCreatedAtIso,
   };
@@ -79,6 +87,7 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
     manifest = {
       ...common, stage: "ISSUANCE", derivedFromManifestId: row.derivedFromManifestId, documentContentHash: row.documentContentHash,
       humanEditRefs: body.humanEditRefs, canonicalRevalidation: body.canonicalRevalidation,
+      ...(body.lifecycleBindings && body.lifecycleBindings.length > 0 ? { lifecycleBindings: body.lifecycleBindings } : {}),
     };
   } else {
     throw corrupt(`estágio desconhecido (${row.stage})`);
@@ -163,6 +172,7 @@ function inheritedPart(m: CompositionManifest): string {
     catalogVersion: m.catalogVersion, sources: m.sources, officialDocRefs: m.officialDocRefs, conditionalDecisions: m.conditionalDecisions,
     aiNarratives: m.aiNarratives.map((n) => ({ slotKey: n.slotKey, executionId: n.executionId, outputHash: n.outputHash })),
     annexes: m.annexes, identityFingerprint: m.identityFingerprint, composedOutputHash: m.composedOutputHash,
+    ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
   });
 }
 

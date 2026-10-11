@@ -38,7 +38,7 @@ import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from 
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import {
-  SYNTHETIC_PLATFORMS, BLL, U_AUTHOR, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedOfficialTr, seedWorld, type World,
+  E2E_BUDGET_BASE_DATE, SYNTHETIC_PLATFORMS, BLL, U_AUTHOR, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const DB = process.env.DATABASE_URL;
@@ -129,10 +129,15 @@ async function saveDisclosure(p: Bare, disclosure: "publico" | "sigiloso" = "pub
   const st = await prep(p);
   return tpl(p.org).governed.recordBudgetDisclosure({ ...act("disc"), processId: p.w.processId, disclosure, expectedRevision: st.revisions.budget });
 }
+async function saveBaseDate(p: Bare) {
+  const st = await prep(p);
+  return tpl(p.org).governed.recordBudgetBaseDate({ ...act("bd"), catalogVersion: st.catalogVersion, processId: p.w.processId, baseDate: E2E_BUDGET_BASE_DATE, expectedRevision: st.revisions.process });
+}
 async function prepareAll(p: Bare) {
   for (const s of ["IDENTITY", "POLICY"] as const) await saveOrg(p, s);
   await savePlatform(p);
   await saveDisclosure(p);
+  await saveBaseDate(p);
   const st = await prep(p);
   for (const s of st.sections.filter((x: any) => x.scope === "PROCESS").map((x: any) => x.source)) await saveProcess(p, s);
   await saveParticipation(p);
@@ -196,6 +201,7 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     await savePlatform(p);
     expect((await prep(p)).revisions.organization).toBe(3);
     await saveDisclosure(p, "publico");
+    await saveBaseDate(p);
     const st1 = await prep(p);
     expect(st1.budgetDisclosure).toBe("publico");
     const processSources = st1.sections.filter((s: any) => s.scope === "PROCESS").map((s: any) => s.source);
@@ -203,7 +209,7 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     for (const s of processSources) await saveProcess(p, s);
     await saveParticipation(p);
     const st2 = await prep(p);
-    expect(st2.revisions.process).toBe(processSources.length + 1);
+    expect(st2.revisions.process).toBe(processSources.length + 2);
     expect(st2.sections.reduce((a: number, s: any) => a + s.pendingRequired, 0)).toBe(0);
     expect(st2.participation).toBeTruthy();
 

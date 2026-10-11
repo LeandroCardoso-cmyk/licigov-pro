@@ -104,11 +104,11 @@ put("processo.enderecoEletronicoBll processo.regulamentoBllVersao",
 put("decisao.formaJulgamento julgamento.regimeParticipacao",
   E("UPSTREAM_ITEMS", "ITEMS", "Derivado da estrutura canônica dos Itens (item × lote; regime de participação por item/lote): o Edital não cria segunda decisão"));
 put("julgamento.dataOrcamentoEstimado",
-  E("UPSTREAM_PRICE_RESEARCH", "PRICE_RESEARCH", "Data-base derivada da Pesquisa de Preços que originou os Itens aprovados: nunca digitada no Edital"));
+  E("UPSTREAM_PRICE_RESEARCH", "PRICE_RESEARCH", "Data-base do orçamento registrada UMA vez na Pesquisa de Preços (ledger governado, BUDGET): o Edital só consome; timestamp técnico não é autoridade"));
 
 // ── Ciclo de vida documental: atribuído pelo sistema ───────────────────────────────────────────────────────────────
 put("processo.dataEmissaoEdital",
-  E("LIFECYCLE_SYSTEM", "NONE", "Evento do ciclo de vida documental: atribuída pelo sistema (data da composição governada, a mesma na revalidação e na emissão); sem entrada humana"));
+  E("LIFECYCLE_SYSTEM", "NONE", "Data do ATO REAL de emissão oficial: late-bound, materializada pelo ciclo de vida na emissão (registrada no M2); sem entrada humana e diferente da data do M1"));
 
 // ── Cronograma do certame: só as decisões independentes são informadas; o equivalente técnico é derivado por regra governada ─
 const SCH = (names: string, basis: string, eligible = false) => put(names, E("CERTAME_SCHEDULE", "CERTAME_CONFIG", basis, eligible));

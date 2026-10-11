@@ -735,13 +735,13 @@ export const procurementProcessRouter = router({
       return getItemsParticipationState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
     }),
 
-  /** Divulgação do orçamento (registrada UMA vez, na Pesquisa de Preços) e data-base. Escrita: `institutionalTemplates.governed.recordBudgetDisclosure`. */
+  /** Dados do orçamento para documentos: divulgação e DATA-BASE (ambas registradas UMA vez, na Pesquisa de Preços). Escrita: `institutionalTemplates.governed.recordBudgetDisclosure`. */
   budgetDisclosure: tenantProcedure
-    .input(z.object({ processId: z.string().min(1) }))
+    .input(z.object({ processId: z.string().min(1), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
-      return getBudgetDisclosureState(bridgeDeps(), orgId, input.processId);
+      return getBudgetDisclosureState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
     }),
 
   /** Confirma (humano) parâmetros estruturados do TR no Contexto Canônico: append-only, tenant-scoped, sem IA. */
