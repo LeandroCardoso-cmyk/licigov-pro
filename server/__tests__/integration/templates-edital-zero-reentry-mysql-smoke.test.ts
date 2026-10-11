@@ -369,6 +369,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
   it("Z4 — escritas SEQUENCIAIS com CAS encadeado: conflito no meio para, informa o registrado e não sobrescreve; replay idempotente", async () => {
     const p = await prepareOrg("z4");
     await fillPending(p, { scope: "ORG" });
+    await setBudgetDisclosure(harnessOf(p));      // origem do orçamento (divulgação + data-base) antes de ler o CAS do processo
     const st = await getState(p);
     const pend = livePendingItems(st, {}).filter((i) => i.section.scope === "PROCESS");
     const bySource = (s: string) => pend.filter((i) => i.section.source === s);
@@ -376,7 +377,6 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(bySource("CERTAME_CONFIG").length).toBeGreaterThan(0);
     const edits: Record<string, Record<string, any>> = {};
     for (const { section, field } of [...bySource("PROCESS"), ...bySource("CERTAME_CONFIG")]) (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValue(field.source, field.path));
-    await setBudgetDisclosure(harnessOf(p));
     const plan = buildSavePlan(st, { edits: edits as any });
     expect(plan.writes.map((w) => w.id)).toEqual(["PROCESS-PROCESS", "PROCESS-CERTAME_CONFIG"]);
     // outra pessoa grava no PROCESSO depois da escrita do TR (antes de CERTAME_CONFIG): o CAS do registro inteiro muda
