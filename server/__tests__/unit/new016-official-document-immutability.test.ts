@@ -86,7 +86,7 @@ describe("NEW-016 — guarda estrutural: official_documents é append-only", () 
     const persist = svc.split("const persist = async")[1].split("if (executor) return persist")[0];
     expect(persist).toMatch(/if \(acquired !== 1\)/);
     expect(persist).toContain("lockLatestVersionForUpdate(");
-    expect(persist).toContain("tx, { locked: true });");
+    expect(persist).toContain("tx, { locked: true, createdAt: doc.createdAt });");
     expect(persist).not.toContain("countVersions(");
   });
 

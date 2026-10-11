@@ -580,6 +580,122 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     useClock(null);
   }, 300_000);
 
+  // ───────────────────────── INSTANTE OFICIAL DA EMISSÃO — preso à transação (virada de dia) ─────────────────────────
+
+  /**
+   * Simula o tempo passando ENTRE a preparação (`prepare`, fora da tx) e a tentativa transacional: o relógio mostra `prepAt` até a
+   * transação ser aberta e `txAt[n]` na n-ésima tentativa. `failAttempts` desfaz (rollback REAL) as primeiras tentativas com erro de
+   * deadlock DEPOIS de executar o callback inteiro. Só vale para `db.transaction` aberto APÓS o relógio ter sido consultado pelo
+   * `prepare` (as transações anteriores — ex.: reserva de idempotência — não alteram o relógio).
+   */
+  async function withTransactionClock<T>(prepAt: string, txAt: string[], failAttempts: number, run: () => Promise<T>): Promise<{ out: T; clockReads: Array<{ phase: string; at: string }>; attempts: number }> {
+    const db: any = await (await import("../../db/connection")).getDb();
+    const original = db.transaction;
+    const clockReads: Array<{ phase: string; at: string }> = [];
+    let phase = "prepare"; let reads = 0; let attempts = 0;
+    clockNow = null;
+    configureTemplateCompositionPorts({
+      ...realPorts(),
+      clock: { now: () => { reads++; const at = phase === "prepare" ? prepAt : txAt[Math.min(attempts, txAt.length) - 1]; clockReads.push({ phase, at }); return at; } },
+    } as never);
+    db.transaction = async function (this: unknown, fn: (tx: unknown) => Promise<unknown>, cfg?: unknown) {
+      if (reads === 0) return original.call(db, fn, cfg);          // transação anterior ao prepare: não é a do ato
+      phase = "transaction"; attempts++;
+      const n = attempts;
+      return original.call(db, async (tx: unknown) => {
+        const r = await fn(tx);
+        if (n <= failAttempts) throw Object.assign(new Error("Deadlock found when trying to get lock; try restarting transaction"), { code: "ER_LOCK_DEADLOCK", errno: 1213, sqlState: "40001" });
+        return r;
+      }, cfg);
+    };
+    try { return { out: await run(), clockReads, attempts }; }
+    finally {
+      db.transaction = original;
+      configureTemplateCompositionPorts({ ...realPorts(), clock: { now: () => clockNow ?? new Date().toISOString() } });
+    }
+  }
+  /** DATETIME(3) como ISO UTC (o banco guarda UTC; sem depender do fuso do driver). */
+  const isoOf = (v: unknown): string => `${String(v).replace(" ", "T")}Z`;
+  async function officialInstants(p: P, officialId: string) {
+    const [o] = await rows("SELECT CAST(created_at AS CHAR) c, CAST(updated_at AS CHAR) u, lineage_id l FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, officialId]);
+    const [pr] = await rows("SELECT CAST(created_at AS CHAR) c FROM official_document_promotions WHERE organization_id = ? AND official_document_id = ?", [p.org, officialId]);
+    const tl = await rows("SELECT CAST(created_at AS CHAR) c FROM official_document_timeline WHERE tenant_id = ? AND lineage_id = ? AND event_type = 'documento_emitido'", [p.org, o.l]);
+    return { createdAt: isoOf(o.c), updatedAt: isoOf(o.u), ledger: isoOf(pr.c), timeline: tl.map((r: any) => isoOf(r.c)) };
+  }
+
+  it("E7 — virada de dia: prepare 10/10 23:59:59.900 BRT, transação 11/10 00:00:00.100 BRT ⇒ o oficial é de 11/10 e TODOS os instantes do ato são o mesmo", async () => {
+    const p = await readyTenant("e7");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    const PREP = "2026-10-10T23:59:59.900-03:00";
+    const TX = "2026-10-11T00:00:00.100-03:00";
+    const { out: r, clockReads } = await withTransactionClock(PREP, [TX], 0, () => promote(p, human, key("promo")));
+    expect(r.promoted).toBe(true);
+    expect(clockReads[0]).toEqual({ phase: "prepare", at: PREP });         // a revalidação teve o seu relógio real…
+    expect(clockReads.some((c) => c.phase === "transaction" && c.at === TX)).toBe(true);   // …e o ato foi decidido DENTRO da transação
+    const [off] = await officialOf(p);
+    expect(off.content).toContain("11/10/2026");
+    expect(off.content).not.toContain("10/10/2026");
+    const [m2] = await issuanceManifests(p);
+    const body = JSON.parse(m2.b);
+    expect(body.lifecycleBindings).toHaveLength(1);
+    expect(body.lifecycleBindings[0]).toMatchObject({ variable: "processo.dataEmissaoEdital", value: "2026-10-11", issuedAt: TX, beforeContentHash: sha(human), afterContentHash: sha(off.content) });
+    expect(m2.h).toBe(sha(off.content));
+    // Consistência temporal: documento oficial, ledger, timeline e M2 representam o MESMO instante (normalizado em UTC).
+    const t = await officialInstants(p, off.id);
+    const instant = new Date(TX).toISOString();                    // 2026-10-11T03:00:00.100Z
+    expect(t.createdAt).toBe(instant);
+    expect(t.updatedAt).toBe(instant);
+    expect(t.ledger).toBe(instant);
+    expect(t.timeline).toEqual([instant]);
+    expect(new Date(body.lifecycleBindings[0].issuedAt).toISOString()).toBe(instant);
+    // O instante de preparação (dia 10) NÃO vazou para nenhuma autoridade persistida.
+    expect(JSON.stringify([t, body.lifecycleBindings])).not.toContain("2026-10-10T");
+    METRICS.E7 = { PREP: PREP, TX, DATA_EMISSAO: body.lifecycleBindings[0].value, INSTANT: instant };
+  }, 240_000);
+
+  it("E8 — retry por deadlock: a tentativa 1 (10/10 23:59:59.900, desfeita) não deixa nada; a tentativa 2 (11/10 00:00:00.100) é a que persiste", async () => {
+    const p = await readyTenant("e8");
+    useClock("2026-10-10T15:00:00.000-03:00");
+    const { human } = await composeAndReview(p);
+    await acknowledgeAll(p);
+    const PREP = "2026-10-10T23:59:59.800-03:00";
+    const A1 = "2026-10-10T23:59:59.900-03:00";
+    const A2 = "2026-10-11T00:00:00.100-03:00";
+    const k = key("promo");
+    const { out: r, clockReads, attempts } = await withTransactionClock(PREP, [A1, A2], 1, () => promote(p, human, k));
+    expect(attempts).toBe(2);                                       // a tentativa 1 executou o callback inteiro e foi DESFEITA
+    expect(r.promoted).toBe(true);
+    expect(clockReads.filter((c) => c.phase === "transaction").map((c) => c.at)).toEqual([A1, A2]);   // cada tentativa capturou o SEU instante
+    const offs = await officialOf(p);
+    expect(offs).toHaveLength(1);                                   // só uma versão oficial
+    expect(offs[0].content).toContain("11/10/2026");
+    expect(offs[0].content).not.toContain("10/10/2026");
+    const ms = await issuanceManifests(p);
+    expect(ms).toHaveLength(1);
+    const body = JSON.parse(ms[0].b);
+    expect(body.lifecycleBindings[0]).toMatchObject({ value: "2026-10-11", issuedAt: A2 });
+    const t = await officialInstants(p, offs[0].id);
+    const instant = new Date(A2).toISOString();
+    expect([t.createdAt, t.updatedAt, t.ledger, ...t.timeline]).toEqual([instant, instant, instant, instant]);
+    // Nada do instante da tentativa desfeita (10/10 23:59:59.900 BRT = 11/10 02:59:59.900Z) foi persistido em lugar nenhum.
+    const failedInstant = new Date(A1).toISOString();
+    expect(JSON.stringify([t, ms[0].b, offs[0].content])).not.toContain(failedInstant);
+    expect(await count("SELECT COUNT(*) n FROM official_document_promotions WHERE organization_id = ? AND process_id = ?", [p.org, p.w.processId])).toBe(1);
+    expect(await count("SELECT COUNT(*) n FROM official_document_timeline WHERE tenant_id = ? AND lineage_id = ? AND event_type = 'documento_emitido'", [p.org, (await rows("SELECT lineage_id l FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, offs[0].id]))[0].l])).toBe(1);
+    // Replay COMPLETED reutiliza TUDO (mesmo instante, sem nova emissão), mesmo com o relógio em outro dia.
+    useClock("2026-10-20T10:00:00.000-03:00");
+    const again = await promote(p, human, k);
+    expect(again.replayed).toBe(true);
+    expect(again.officialDocument).toEqual(r.officialDocument);
+    expect(await officialOf(p)).toHaveLength(1);
+    expect(await issuanceManifests(p)).toHaveLength(1);
+    expect(await officialInstants(p, offs[0].id)).toEqual(t);
+    METRICS.E8 = { ATTEMPTS: attempts, PERSISTED_INSTANT: instant, FAILED_ATTEMPT_PERSISTED: false, REPLAY_REUSES_ORIGINAL: true };
+    useClock(null);
+  }, 240_000);
+
   // ───────────────────────── PARTE B — DATA-BASE DO ORÇAMENTO (autoridade explícita) ─────────────────────────
 
   it("B1 — created_at da pesquisa existe, mas SEM data-base registrada o Edital NÃO a usa: pendência na Pesquisa de Preços (só sugestão na origem)", async () => {

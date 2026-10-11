@@ -44,7 +44,7 @@ import { serviceLogger } from "../observabilityService";
 import { runTransactionWithDeadlockRetry } from "../transactionDeadlockRetry";
 import {
   TEMPLATE_SOURCE_UNAVAILABLE, TemplatePersistenceUnavailableError, TemplateSourceUnavailableError,
-  type RequestedOfficialPin, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor,
+  type ClockPort, type RequestedOfficialPin, type TemplatePorts, type TemplateTransactionPort, type TemplateTxExecutor,
 } from "./ports";
 import type { DocRefKind2 } from "../../domain/institutionalTemplates/ast2";
 
@@ -371,7 +371,10 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
 
 // ─── Emissão (revalidação canônica → M2 na transação da promoção) ────────────────────────────────────────────────
 
-export interface TemplateIssuancePreparation {
+/**
+ * Resultado da materialização do ato oficial para UM instante de emissão. Puro e síncrono: não lê relógio nem banco.
+ */
+export interface MaterializedTemplateIssuance {
   readonly issuanceManifest: IssuanceManifest;
   /**
    * Conteúdo OFICIAL final: o texto revisado com os campos de sistema do ciclo de vida (ex.: data de emissão) materializados NO ATO da
@@ -381,6 +384,19 @@ export interface TemplateIssuancePreparation {
   readonly lifecycleBindings: readonly LifecycleBinding[];
   /** Grava o M2 na transação da promoção (repetida inteira pelo retry do SEM-084; o id do M2 é determinístico). */
   persist(link: { readonly officialDocumentId: string; readonly officialVersion: number }, tx: TemplateTxExecutor): Promise<void>;
+}
+
+/**
+ * Plano de emissão PREPARADO (leituras/revalidações fora da transação). NÃO decide o instante oficial: quem abre a transação que
+ * efetivamente commita a emissão captura `clock.now()` DENTRO da tentativa e chama `materializeForOfficialIssuance(instante)`.
+ */
+export interface TemplateIssuancePreparation {
+  /** Relógio da emissão (o mesmo `ports.clock` dos Modelos Institucionais) — lido pela fronteira transacional, dentro da tentativa. */
+  readonly clock: ClockPort;
+  /** Instante REAL da revalidação canônica (fora da transação) — registrado no M2 como `canonicalRevalidation.checkedAt`, nunca falsificado. */
+  readonly revalidatedAt: string;
+  /** Data de emissão, hashes, bindings e M2 para ESTE instante oficial. Falha fechada (TRPCError) se o marcador late-bound foi adulterado. */
+  materializeForOfficialIssuance(officialIssuanceAt: string): MaterializedTemplateIssuance;
 }
 
 /** Hook consumido por `promoteOfficialDocument`. `null` ⇒ o rascunho não foi composto por template. */
@@ -525,36 +541,44 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         ports.review.listAiAcceptances(input.organizationId, m1.id),
         ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),
       ]);
-      // Instante OFICIAL do ato de emissão (fluxo governado): base da data de emissão e do M2. NÃO é o instante do M1.
-      const issuedAt = ports.clock.now();
+      // A revalidação acontece AQUI (fora da transação) e registra o seu PRÓPRIO instante. O instante OFICIAL da emissão NÃO nasce
+      // aqui: é capturado pela fronteira transacional que commita o ato (ver `materializeForOfficialIssuance`).
+      const revalidatedAt = ports.clock.now();
       const outcome = revalidateForIssuance({
         organizationId: input.organizationId, generation: m1, recomposition, issuedContent: input.content,
-        humanEdits, aiAcceptances, acknowledgments, checkedAt: issuedAt,
+        humanEdits, aiAcceptances, acknowledgments, checkedAt: revalidatedAt,
       });
       if (!outcome.ok) throw blocked(codesOf(outcome.issues), outcome.issues.map((i) => i.message).join(" "));
 
-      // Campos de SISTEMA late-bound (data de emissão): materializados AGORA, antes do conteúdo oficial final e do seu hash.
+      // Campos de SISTEMA late-bound (data de emissão): materializados no instante OFICIAL, antes do conteúdo oficial final e do seu hash.
       // Transformação do ciclo de vida (registrada no M2), distinta da edição humana revisada acima.
-      let officialContent = input.content;
-      let lifecycleBindings: readonly LifecycleBinding[] = [];
-      if ((m1.lateBound?.length ?? 0) > 0) {
-        if (!isCatalogV2Late(t.catalog)) throw blocked("LATE_BOUND_TAMPERED", "campo late-bound exige catálogo tpl-catalog/2");
-        const bound = bindLifecycleVariables(input.content, t.catalog, m1.lateBound!, issuedAt, issuanceDateOf(issuedAt));
-        if (!bound.ok) throw blocked("LATE_BOUND_TAMPERED", bound.reason);
-        officialContent = bound.text;
-        lifecycleBindings = bound.bindings;
-      }
-      const m2 = buildIssuanceManifest(m1, outcome.value, issuedAt, lifecycleBindings);
-      if (!m2.ok) throw blocked(codesOf(m2.issues), "M2 inválido");
-      const issuanceManifest = m2.value;
-      log.info("template_issuance_revalidated", {
-        organizationId: input.organizationId, generationManifestId: m1.id, issuanceManifestId: issuanceManifest.id,
-        status: issuanceManifest.canonicalRevalidation.status, correlationId: input.correlationId,
-      });
-      return {
-        issuanceManifest, officialContent, lifecycleBindings,
-        persist: (link, tx) => ports.manifests.insertIssuanceManifest(issuanceManifest, link, { actorUserId: input.actorUserId, correlationId: input.correlationId }, tx),
+      const materialize = (officialIssuanceAt: string): MaterializedTemplateIssuance => {
+        let officialContent = input.content;
+        let lifecycleBindings: readonly LifecycleBinding[] = [];
+        if ((m1.lateBound?.length ?? 0) > 0) {
+          if (!isCatalogV2Late(t.catalog)) throw blocked("LATE_BOUND_TAMPERED", "campo late-bound exige catálogo tpl-catalog/2");
+          const bound = bindLifecycleVariables(input.content, t.catalog, m1.lateBound!, officialIssuanceAt, issuanceDateOf(officialIssuanceAt));
+          if (!bound.ok) throw blocked("LATE_BOUND_TAMPERED", bound.reason);
+          officialContent = bound.text;
+          lifecycleBindings = bound.bindings;
+        }
+        const m2 = buildIssuanceManifest(m1, outcome.value, officialIssuanceAt, lifecycleBindings);
+        if (!m2.ok) throw blocked(codesOf(m2.issues), "M2 inválido");
+        const issuanceManifest = m2.value;
+        log.info("template_issuance_materialized", {
+          organizationId: input.organizationId, generationManifestId: m1.id, issuanceManifestId: issuanceManifest.id,
+          status: issuanceManifest.canonicalRevalidation.status, correlationId: input.correlationId,
+        });
+        return {
+          issuanceManifest, officialContent, lifecycleBindings,
+          persist: (link, tx) => ports.manifests.insertIssuanceManifest(issuanceManifest, link, { actorUserId: input.actorUserId, correlationId: input.correlationId }, tx),
+        };
       };
+
+      // Pré-checagem ANTES de abrir a transação (adulteração do marcador/M2 inválido bloqueia sem efeito): materialização de PROVA com o
+      // instante da revalidação — descartada, nunca persistida e nunca usada como autoridade temporal.
+      materialize(revalidatedAt);
+      return { clock: ports.clock, revalidatedAt, materializeForOfficialIssuance: materialize };
     },
   };
 }
