@@ -75,7 +75,9 @@ describe("guardas estruturais", () => {
   });
   it("em BOUND envia o pin EXATO do TR (nunca latest) e o botão deixa claro o motor", () => {
     expect(ws).toContain("officialPins: { TR: trPin }");
-    expect(ws).toContain("Gerar edital com modelo institucional");
+    // O botão agora vive em EditalGenerateCta (CTA ciente de prontidão); a workspace só soma as regras de desabilitação.
+    expect(ws).toContain("<EditalGenerateCta");
+    expect(read("client/src/components/procurement/EditalGenerateCta.tsx")).toContain("Gerar edital com modelo institucional");
     expect(ws).toContain("!bridgeGate.allowed");
     expect(ws).toContain("|| !!regenerationBlock}");
   });

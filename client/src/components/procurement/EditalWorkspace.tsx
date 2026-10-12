@@ -10,6 +10,9 @@ import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
 import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
 import EditalPreparationPanel from "./EditalPreparationPanel";
 import EditalPreflightCard from "./EditalPreflightCard";
+import { useEditalPreparationState } from "./useEditalPreparationState";
+import EditalGenerateCta from "./EditalGenerateCta";
+import { buildEditalReadiness, generationCta } from "@/lib/editalReadiness";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
@@ -186,6 +189,10 @@ export default function EditalWorkspace({
   );
   const preflight = (bound && trPin ? preflightQuery.data : undefined) as PreflightView | undefined;
   const genReady = generateReady(bound, !!trPin, preflight);
+  // Prontidão (view-model puro sobre o MESMO estado da preparação — uma única requisição): define quem tem o protagonismo (Resolver pendências × Gerar).
+  const { state: preparationState } = useEditalPreparationState(processId, boundParams, trPin, bound);
+  const cta = bound && preparationState ? generationCta(buildEditalReadiness(preparationState), genReady) : null;
+  const generateBlockedReason = bound ? (cta?.generateDisabledReason ?? (!genReady.ready ? genReady.reason : undefined)) : undefined;
   const reviewQuery = trpc.procurementProcess.editalTemplateReviewState.useQuery({ processId }, { enabled: !!processId });
   const templateReviewBlockers = reviewReadiness(reviewQuery.data as ReviewStateView | undefined).blockers;
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
@@ -411,18 +418,18 @@ export default function EditalWorkspace({
           <p role="alert" className="text-xs text-destructive">O TR oficial selecionado foi substituído por uma versão mais recente. Selecione o TR oficial exato novamente — nenhuma versão é escolhida automaticamente.</p>
         )}
         {bound && (
+          <div className="pt-2">
+            <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onOpenStage={onOpenStage} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+          </div>
+        )}
+        {bound && (
           <EditalPreflightCard preflight={preflight} loading={preflightQuery.isFetching} hasTrPin={!!trPin} onRecheck={() => { void preflightQuery.refetch(); }} />
         )}
-        {bound && !genReady.ready && trPin && genReady.reason && <p className="text-xs text-amber-600 dark:text-amber-400">{genReady.reason}</p>}
-
-        <button
-          type="button"
-          onClick={() => handleGenerate()}
+        {/* CTA: com pendências, o protagonismo é "Resolver pendências"; a geração existe, desabilitada, com o motivo visível. */}
+        <EditalGenerateCta
+          cta={cta} bound={bound} pending={generateNotice.isPending} reason={generateBlockedReason} onGenerate={() => handleGenerate()}
           disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
-        >
-          {generateNotice.isPending ? "Gerando..." : bound ? "Gerar edital com modelo institucional" : "Gerar edital"}
-        </button>
+        />
         {!processId && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Selecione um processo para gerar o edital.
@@ -435,12 +442,6 @@ export default function EditalWorkspace({
           </p>
         )}
       </div>
-
-      {bound && (
-        <div className="mt-6">
-          <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onOpenStage={onOpenStage} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
-        </div>
-      )}
 
       {draft && (
         <div className="mt-6">

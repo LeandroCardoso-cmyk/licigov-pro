@@ -281,8 +281,10 @@ describe("SSR da preparação orientada por exceções", () => {
   });
   it("resumo operacional, pendências em blocos separados e dados reaproveitados RECOLHIDOS (explicabilidade sob expansão)", () => {
     const out = html(base(st));
-    expect(out).toContain("12</strong> informações reaproveitadas automaticamente");
-    expect(out).toContain("de você");
+    // Vocabulário unificado (UX): contadores derivados do estado real (campos com valor efetivo), não do resumo legado do servidor.
+    expect(out).toContain("2 informações obtidas automaticamente");
+    expect(out).not.toContain("12 informações");
+    expect(out).toContain("deste certame");
     // UX final: UM card de perfil incompleto (não despeja campos) + cartões por autoridade
     expect(out).toContain("Complete a configuração única do órgão");
     expect(out).toContain("Configurar agora");
@@ -290,10 +292,10 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(out).toContain("Canal de esclarecimentos");            // listado só em "O que falta"
     expect(out).not.toContain('id="prep-POLICY-o1"');             // sem input do perfil na preparação
     expect(out).toContain('data-card="perfil"');
-    expect(out).toContain('data-card="processo"');
     expect(out).toContain('data-card="tr"');
     expect(out).toContain('data-card="origens"');
-    expect(out).toMatch(/⚠ \d+ decis(ão|ões) pendente/);
+    expect(out).toContain('data-card="decisoes"');
+    expect(out).toMatch(/1 decisão (ainda precisa ser definida|será necessária)/);
     expect(out).toContain("Decisões deste certame");
     expect(out).toContain("Local de entrega");
     // PR #288: divulgação do orçamento e regime de participação NÃO são campos do Edital
@@ -362,7 +364,11 @@ describe("guardas estruturais", () => {
   const review = read("client/src/components/procurement/EditalTemplateReviewPanel.tsx");
   it("workspace: painel só quando BOUND; botão depende do preflight; mantém o guard de regeneração e o NOT_BOUND", () => {
     expect(ws).toContain("<EditalPreparationPanel");
-    expect(ws).toMatch(/\{bound && \(\s*<div className="mt-6">\s*<EditalPreparationPanel/);
+    expect(ws).toMatch(/\{bound && \(\s*<div className="pt-2">\s*<EditalPreparationPanel/);
+    // ordem de leitura: modelo/TR → prontidão e preparação → preflight → CTA de geração
+    expect(ws.indexOf("<EditalTemplateBridgeCard")).toBeLessThan(ws.indexOf("<EditalPreparationPanel"));
+    expect(ws.indexOf("<EditalPreparationPanel")).toBeLessThan(ws.indexOf("<EditalPreflightCard"));
+    expect(ws.indexOf("<EditalPreflightCard")).toBeLessThan(ws.indexOf("<EditalGenerateCta"));
     expect(ws).toContain("!genReady.ready");
     expect(ws).toContain("|| !!regenerationBlock}");
     expect(ws).toContain("<EditalTemplateReviewPanel");
