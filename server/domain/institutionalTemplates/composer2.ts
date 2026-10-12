@@ -32,6 +32,7 @@ import {
 import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
 import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, OfficialDocumentReference } from "./manifest";
+import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
 import { validateTemplateRevision } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
@@ -45,6 +46,8 @@ export interface ResolvedVariables2 {
   readonly values: Readonly<Record<string, unknown>>;
   /** Fontes do catálogo efetivamente consultadas (ordenadas). */
   readonly usedSources: readonly VariableSource2[];
+  /** Campos de SISTEMA late-bound (ciclo de vida): não vêm de fonte alguma; o valor só nasce no ato oficial de emissão. */
+  readonly lateBound: readonly string[];
 }
 
 /**
@@ -82,7 +85,10 @@ export function resolveTemplateVariables2(
   const values: Record<string, unknown> = {};
   const absent = new Set<string>();
   const used = new Set<VariableSource2>();
+  const lateBound: string[] = [];
   for (const def of ordered) {
+    // Campo de sistema late-bound (ex.: data de emissão): NUNCA lido de fonte — nem exigido, nem fabricado — na composição.
+    if (isLateBoundVariable(def)) { lateBound.push(def.name); continue; }
     used.add(def.source);
     const snap = sources[def.source];
     const raw = snap ? readCatalogPath(snap.data, def.path) : undefined;
@@ -106,7 +112,7 @@ export function resolveTemplateVariables2(
     }
   }
   if (issues.length) return { ok: false, issues };
-  return { ok: true, value: { values, usedSources: [...used].sort() } };
+  return { ok: true, value: { values, usedSources: [...used].sort(), lateBound } };
 }
 
 // ─── Árvore renderizável (já sem condicionais) ──────────────────────────────────────────────────────────────────────
@@ -141,10 +147,13 @@ interface ECtx {
   readonly fragments: ProtectedFragment[];
   readonly blocks: StructuralBlock[];
   readonly annexes: RAnnex[];
+  /** Variáveis de sistema late-bound deste catálogo/AST e o registro (M1) das efetivamente renderizadas como marcador. */
+  readonly lateBound: ReadonlySet<string>;
+  readonly lateBoundRefs: Map<string, LateBoundRef>;
 }
 
 function scratch(ctx: ECtx): ECtx {
-  return { ...ctx, record: false, issues: [], decisions: [], refs: new Map(ctx.refs), ai: [], fragments: [], blocks: [], annexes: [] };
+  return { ...ctx, record: false, issues: [], decisions: [], refs: new Map(ctx.refs), ai: [], fragments: [], blocks: [], annexes: [], lateBoundRefs: new Map() };
 }
 
 function pushStr(out: RInline[], s: string): void {
@@ -179,6 +188,16 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
           break;
         }
         const v = ctx.values[x.name];
+        if (v === undefined && ctx.lateBound.has(x.name)) {
+          // Late-bound: marcador INTERNO protegido (remoção/alteração ⇒ PROTECTED_NODE_MISSING); o M1 registra PENDING_OFFICIAL_ISSUANCE.
+          const marker = lateBoundMarker(x.name);
+          if (ctx.record) {
+            ctx.fragments.push({ nodeId: p, text: marker, fragmentHash: sha256Hex(marker) });
+            ctx.lateBoundRefs.set(x.name, { variable: x.name, authority: "LIFECYCLE_SYSTEM", status: LATE_BOUND_PENDING });
+          }
+          pushStr(out, marker);
+          break;
+        }
         if (v === undefined) { pushStr(out, def.absentText ?? MISSING_VALUE_MARK(x.name)); break; }
         const text = formatValue2(def, v);
         if (ctx.record && text.trim()) ctx.fragments.push({ nodeId: p, text, fragmentHash: sha256Hex(text) });
@@ -563,6 +582,7 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
     catalog, values: resolved.value.values, allowedCents: canonicalCents2(catalog, resolved.value.values),
     docPins: req.officialDocuments, narratives: pins.narratives, record: true,
     issues: [], decisions: [], refs: new Map(), ai: [], fragments: [], blocks: [], annexes: [],
+    lateBound: new Set(resolved.value.lateBound), lateBoundRefs: new Map(),
   };
   const tree = expandNodes(ast.root, "root", ectx);
   if (ectx.issues.length) return { ok: false, issues: ectx.issues };
@@ -602,6 +622,7 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
     conditionalDecisions: ectx.decisions,
     aiNarratives: ectx.ai,
     annexes: annexRefs,
+    lateBound: [...ectx.lateBoundRefs.values()].sort((a, b) => (a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0)),
   }, purpose);
   if (!sealed.ok) return sealed;
 

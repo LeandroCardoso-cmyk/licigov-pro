@@ -216,13 +216,14 @@ export async function countDocumentTimeline(lineageId: string, tenantId: number,
  * (upsert de `summary`). SEM-043: o evento de exportação (`documento_exportado`) agora também é `insertOnly` (na
  * transação do ledger de artefatos) — nenhum chamador usa mais o ramo de upsert (remoção: follow-up, NEW-004 #8).
  */
-export async function insertDocumentTimelineEntry(params: { tenantId: number; lineageId: string; documentId: string; order: number; eventType: string; actor: string; summary: string; correlationId: string }, executor?: OfficialDocsExecutor, opts: { insertOnly?: boolean } = {}): Promise<void> {
+export async function insertDocumentTimelineEntry(params: { tenantId: number; lineageId: string; documentId: string; order: number; eventType: string; actor: string; summary: string; correlationId: string; /** Instante do evento (ISO). Ausente ⇒ default do banco (comportamento anterior). */ createdAt?: string }, executor?: OfficialDocsExecutor, opts: { insertOnly?: boolean } = {}): Promise<void> {
   const db = executor ?? await getDb();
   if (!db) return;
   const id = createHash("sha256").update(`odtl:${params.tenantId}:${params.lineageId}:${params.order}:${params.eventType}`).digest("hex").slice(0, 20);
   const values = {
     id, tenantId: params.tenantId, lineageId: params.lineageId, documentId: params.documentId, eventOrder: params.order,
     eventType: params.eventType, actor: params.actor, summary: params.summary, correlationId: params.correlationId,
+    ...(params.createdAt !== undefined ? { createdAt: toDb(params.createdAt) } : {}),
   };
   if (!opts.insertOnly) {
     await db.insert(officialDocumentTimelineTable).values(values).onDuplicateKeyUpdate({ set: { summary: params.summary } });

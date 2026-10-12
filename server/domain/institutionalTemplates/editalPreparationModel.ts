@@ -16,6 +16,7 @@
  */
 import { PROJECTION_BY_VARIABLE, type ProjectionKey } from "./canonicalProjectionPolicy";
 import { ROLE_VARIABLES, authorityEntryOf, type AuthorityClass, type EntryPoint } from "./editalAuthorityMatrix";
+import { DERIVED_VARIABLES, PLATFORM_VARIABLES } from "./certameAuthority";
 import { AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, type GovernedScope } from "./governedSources";
 import type { VariableCatalog2, VariableDef2 } from "./variableCatalog2";
 
@@ -34,7 +35,7 @@ export interface VariableClassification {
   /** Projeção determinística disponível (a classe pode exigir pendência humana quando o dado estruturado não existir). */
   readonly projection?: ProjectionKey;
   /** Regra que decidiu (auditável em teste e explicável na UI). */
-  readonly rule: "POST_AWARD" | "AUTHORITY_OWNED" | "DOCUMENT_PIN" | "PROJECTION" | "REQUIRED_WHEN" | "ORG_SOURCE" | "TR_SOURCE" | "PROCESS_SOURCE" | "ORG_ROLE" | "TR_PARAM";
+  readonly rule: "POST_AWARD" | "AUTHORITY_OWNED" | "DOCUMENT_PIN" | "PROJECTION" | "REQUIRED_WHEN" | "ORG_SOURCE" | "TR_SOURCE" | "PROCESS_SOURCE" | "ORG_ROLE" | "TR_PARAM" | "PLATFORM" | "DERIVED";
   /** Classe operacional da Authority Matrix (12 classes). Modelos fora da matriz derivam da classe de preparação. */
   readonly authority: AuthorityClass;
   /** Onde a pessoa informa o dado quando ele ainda não existe. */
@@ -62,11 +63,11 @@ export class PreparationClassificationUnsupportedError extends Error {
 const PROCESS_DECISION_SOURCES: readonly string[] = ["PROCESS", "ITEMS", "CERTAME_CONFIG", "NORMATIVE", "BUDGET", "LIFECYCLE"];
 
 const FALLBACK_AUTHORITY: Readonly<Record<PreparationClass, AuthorityClass>> = {
-  CANONICAL: "EXISTING_CANONICAL", ORG_PROFILE: "ORG_POLICY_PROFILE", TR_PROJECTION: "UPSTREAM_TR", PROCESS_DECISION: "TRUE_PROCESS_DECISION",
+  CANONICAL: "EXISTING_CANONICAL", ORG_PROFILE: "ORG_POLICY_PROFILE", TR_PROJECTION: "UPSTREAM_TR", PROCESS_DECISION: "CERTAME_CONFIG",
   CONDITIONAL: "CONDITIONAL", POST_AWARD: "POST_AWARD",
 };
 const FALLBACK_ENTRY: Readonly<Record<PreparationClass, EntryPoint>> = {
-  CANONICAL: "NONE", ORG_PROFILE: "ORG_PROFILE", TR_PROJECTION: "PREPARATION", PROCESS_DECISION: "PREPARATION", CONDITIONAL: "PREPARATION", POST_AWARD: "NONE",
+  CANONICAL: "NONE", ORG_PROFILE: "ORG_PROFILE", TR_PROJECTION: "CERTAME_CONFIG", PROCESS_DECISION: "CERTAME_CONFIG", CONDITIONAL: "CERTAME_CONFIG", POST_AWARD: "NONE",
 };
 
 export function classifyVariable(v: VariableDef2): VariableClassification {
@@ -74,6 +75,13 @@ export function classifyVariable(v: VariableDef2): VariableClassification {
   // Authority Matrix (CONTEXT_REUSE 2.0): papéis e parâmetros do TR mudam a CLASSE e a ENTRADA; o resto herda da matriz.
   const entry = authorityEntryOf(v.name);
   if (!entry) return { ...c, authority: FALLBACK_AUTHORITY[c.class], entry: FALLBACK_ENTRY[c.class] };
+  // PR #288: autoridade DERIVADA (plataforma, itens, orçamento, ciclo de vida) — nunca decisão do Edital. O cronograma derivável
+  // continua sendo decisão independente quando a plataforma não declara a regra (resolvido no serviço).
+  if (c.class !== "POST_AWARD") {
+    if (PLATFORM_VARIABLES[v.name]) return { ...c, class: "CANONICAL", scope: "ORG", rule: "PLATFORM", authority: entry.cls, entry: entry.entry };
+    const dk = DERIVED_VARIABLES[v.name];
+    if (dk && dk !== "SCHEDULE") return { ...c, class: "CANONICAL", scope: "NONE", rule: "DERIVED", authority: entry.cls, entry: entry.entry };
+  }
   if (c.class === "PROCESS_DECISION" || c.class === "ORG_PROFILE" || c.class === "TR_PROJECTION") {
     if (ROLE_VARIABLES[v.name]) return { ...c, class: "ORG_PROFILE", scope: "ORG", rule: "ORG_ROLE", authority: entry.cls, entry: entry.entry };
     if (entry.cls === "UPSTREAM_TR" && !c.projection) return { ...c, class: "TR_PROJECTION", scope: "PROCESS", rule: "TR_PARAM", authority: entry.cls, entry: entry.entry };
@@ -122,4 +130,6 @@ export const RULE_LABEL: Readonly<Record<VariableClassification["rule"], string>
   PROCESS_SOURCE: "Decisão do certame",
   ORG_ROLE: "Papel institucional do Perfil de Licitações",
   TR_PARAM: "Parâmetro estruturado do TR",
+  PLATFORM: "Perfil da plataforma",
+  DERIVED: "Derivado da autoridade de origem",
 };

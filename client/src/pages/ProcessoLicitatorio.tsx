@@ -267,7 +267,7 @@ function StagePanel({
     case "tr":
       return <TRWorkspace processId={processId} startWithImport={startWithImport} />;
     case "edital":
-      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} />;
+      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} onOpenStage={(stage) => onNavigate?.(stage)} />;
     default:
       return null;
   }

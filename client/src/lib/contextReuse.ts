@@ -93,6 +93,42 @@ export function changedRoles(current: Readonly<Record<string, RoleAssignmentView
   return out.sort();
 }
 
+// ─── Perfil da PLATAFORMA (master data estável do órgão) ────────────────────────
+
+export interface PlatformScheduleView { limitePropostas?: "ABERTURA_DA_SESSAO"; inicioPropostas?: "PUBLICACAO"; horarioInicioPropostas?: string }
+export interface PlatformViewModel {
+  slug: string; label: string; missing: number; cronograma: PlatformScheduleView | null;
+  fields: readonly { field: "enderecoEletronico" | "regulamentoVersao"; name: string; description: string; type: string; value: string | null }[];
+}
+export interface PlatformForm { enderecoEletronico: string; regulamentoVersao: string; limitePropostas: "" | "ABERTURA_DA_SESSAO"; inicioPropostas: "" | "PUBLICACAO"; horarioInicioPropostas: string }
+export const platformToForm = (p: PlatformViewModel): PlatformForm => ({
+  enderecoEletronico: p.fields.find((f) => f.field === "enderecoEletronico")?.value ?? "", regulamentoVersao: p.fields.find((f) => f.field === "regulamentoVersao")?.value ?? "",
+  limitePropostas: p.cronograma?.limitePropostas ?? "", inicioPropostas: p.cronograma?.inicioPropostas ?? "", horarioInicioPropostas: p.cronograma?.horarioInicioPropostas ?? "",
+});
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** Formulário → perfil canônico da plataforma. A regra de cronograma só existe se a pessoa a DECLARAR (nada é presumido da plataforma). */
+export function buildPlatform(f: PlatformForm): { profile: { enderecoEletronico?: string; regulamentoVersao?: string; cronograma?: PlatformScheduleView }; error?: string } {
+  const profile: { enderecoEletronico?: string; regulamentoVersao?: string; cronograma?: PlatformScheduleView } = {};
+  const url = f.enderecoEletronico.trim();
+  if (url) { if (!/^https?:\/\/[^\s<>"]+$/i.test(url)) return { profile, error: "Informe a URL oficial iniciada por http:// ou https://." }; profile.enderecoEletronico = url; }
+  if (f.regulamentoVersao.trim()) profile.regulamentoVersao = f.regulamentoVersao.trim();
+  const c: PlatformScheduleView = {};
+  if (f.limitePropostas) c.limitePropostas = f.limitePropostas;
+  if (f.inicioPropostas) {
+    if (!HHMM.test(f.horarioInicioPropostas.trim())) return { profile, error: "Início do recebimento na publicação exige o horário (HH:MM)." };
+    c.inicioPropostas = f.inicioPropostas; c.horarioInicioPropostas = f.horarioInicioPropostas.trim();
+  }
+  if (Object.keys(c).length) profile.cronograma = c;
+  return { profile };
+}
+/** Plataformas alteradas (para o resumo "N alterações"). */
+export function changedPlatforms(current: readonly PlatformViewModel[], next: Readonly<Record<string, ReturnType<typeof buildPlatform>["profile"]>>): string[] {
+  return current.filter((p) => {
+    const cur = { ...(platformToForm(p).enderecoEletronico ? { enderecoEletronico: platformToForm(p).enderecoEletronico } : {}), ...(platformToForm(p).regulamentoVersao ? { regulamentoVersao: platformToForm(p).regulamentoVersao } : {}), ...(p.cronograma ? { cronograma: p.cronograma } : {}) };
+    return JSON.stringify(cur) !== JSON.stringify(next[p.slug] ?? {});
+  }).map((p) => p.slug);
+}
+
 // ─── Padrões institucionais ─────────────────────────────────────────────────────
 
 export interface DefaultViewModel { name: string; description: string; type: string; enumValues?: readonly string[]; value: unknown; hasValue: boolean; incompatibleReason?: string }
@@ -117,8 +153,8 @@ export function defaultConsentText(description: string, valueText: string, exist
 
 export interface ProfileStateView {
   status: "READY"; catalogVersion: string; revision: number; hash: string | null; asOf: string; sections: PrepSection[];
-  roles: RoleViewModel[]; defaults: DefaultViewModel[];
-  summary: { policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; pendingCount: number };
+  roles: RoleViewModel[]; defaults: DefaultViewModel[]; platforms: PlatformViewModel[];
+  summary: { policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; platformsPending: number; pendingCount: number };
 }
 
 /** O estado do Perfil na forma que `buildSavePlan` consome (escopo ÓRGÃO, sem processo): reutiliza o MESMO plano/CAS da preparação. */

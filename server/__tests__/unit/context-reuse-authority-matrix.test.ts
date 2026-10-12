@@ -23,7 +23,7 @@ const catalog = JSON.parse(readFileSync(path.resolve(__dirname, "../../domain/in
 const def = (name: string) => catalog.vars.find((v) => v.name === name)!;
 
 describe("Authority Matrix — 100% explícita, sem fallback manual", () => {
-  it("toda variável do catálogo BLL tem linha; nenhuma linha sobra; as 12 classes somam o total", () => {
+  it("toda variável do catálogo BLL tem linha; nenhuma linha sobra; as classes somam o total", () => {
     expect(uncoveredVariables(catalog.vars)).toEqual([]);
     const names = new Set(catalog.vars.map((v) => v.name));
     expect(AUTHORITY_MATRIX_VARIABLES.filter((n) => !names.has(n))).toEqual([]);
@@ -36,6 +36,9 @@ describe("Authority Matrix — 100% explícita, sem fallback manual", () => {
     // o ETP é documento textual: nenhuma variável tem autoridade ETP estruturada (provado abaixo)
     expect(counts.UPSTREAM_ETP).toBe(0);
     expect(counts.POST_AWARD).toBe(20);
+    // PR #288: nenhuma variável permanece como "decisão do Edital" sem classe semântica (a classe genérica foi extinta)
+    expect(AUTHORITY_CLASSES).not.toContain("TRUE_PROCESS_DECISION" as never);
+    expect(counts).toMatchObject({ PLATFORM_PROFILE: 2, CERTAME_CONFIG: 15, CERTAME_SCHEDULE: 6, LIFECYCLE_SYSTEM: 1, UPSTREAM_PRICE_RESEARCH: 2, UPSTREAM_ITEMS: 3 });
   });
 
   it("POST_AWARD ⇔ pos.*; CONDITIONAL ⇔ requiredWhen (exceto a estimativa, que é UPSTREAM_PRICE_RESEARCH)", () => {
@@ -65,7 +68,7 @@ describe("Authority Matrix — 100% explícita, sem fallback manual", () => {
     for (const v of eligible) {
       expect(["date", "datetime", "money", "table", "document_ref"], v.name).not.toContain(v.type);
       expect(v.name).not.toMatch(/objeto|quantidade|valorEstimado|numeroPregao|criterioJulgamento|formaJulgamento|utilizaSrp|inversaoFases|regimeParticipacao|tratamentoRegional|exclusivoMeEpp|cotaReservada|beneficioAfastado|subcontratacao|consorcio|exigeGarantia|exigeAmostra|prazoExecucao|prazoVigencia|localEntrega/);
-      expect(["TRUE_PROCESS_DECISION", "UPSTREAM_TR"], v.name).toContain(authorityEntryOf(v.name)!.cls);
+      expect(["CERTAME_CONFIG", "CERTAME_SCHEDULE", "UPSTREAM_TR"], v.name).toContain(authorityEntryOf(v.name)!.cls);
     }
     for (const n of ["processo.dataAbertura", "processo.dataEmissaoEdital", "controle.dataDivulgacaoPrevista", "julgamento.dataOrcamentoEstimado", "processo.objetoCompleto", "julgamento.valorEstimado", "decisao.consorcio"]) {
       expect(isDefaultEligible(n), n).toBe(false);

@@ -1,3 +1,4 @@
+import BudgetDisclosureCard from "./BudgetDisclosureCard";
 import { useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
@@ -131,6 +132,8 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           compõem a base de itens do TR.
         </p>
       </div>
+
+      {processId && <BudgetDisclosureCard processId={processId} />}
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

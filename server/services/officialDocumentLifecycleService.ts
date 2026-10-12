@@ -36,7 +36,7 @@ import { isStorageConfigured, storageFallbackAllowed, assertStorageUsable, stora
 
 async function recordDocEvent(
   doc: OfficialDocument, eventType: string, summary: string, executor?: OfficialDocsExecutor,
-  opts: { locked?: boolean } = {},
+  opts: { locked?: boolean; createdAt?: string } = {},
 ): Promise<void> {
   // `locked` (NEW-016): dentro da transação da versão — ordem por leitura corrente com lock e INSERT
   // puro (colisão ⇒ CONFLICT; nunca reescreve um evento já registrado).
@@ -44,6 +44,7 @@ async function recordDocEvent(
   await insertDocumentTimelineEntry({
     tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
     eventType, actor: doc.author, summary, correlationId: doc.correlationId,
+    ...(opts.createdAt !== undefined ? { createdAt: opts.createdAt } : {}),
   }, executor, { insertOnly: opts.locked });
 }
 
@@ -76,6 +77,8 @@ export interface CreateDocumentParams {
   author: string;
   status?: OfficialDocument["status"];
   correlationId: string;
+  /** Instante (ISO) do ato: vira createdAt/updatedAt do documento e o instante do evento de timeline de criação/emissão. Ausente ⇒ agora. */
+  createdAt?: string;
 }
 
 /**
@@ -90,6 +93,7 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
     tenantId: params.organizationId, businessDomain: params.businessDomain, documentType: params.documentType,
     origin: params.origin, instrumentId: params.instrumentId, title: params.title, content: params.content, version, metadata: params.metadata,
     author: params.author, status: params.status, correlationId: params.correlationId,
+    ...(params.createdAt !== undefined ? { createdAt: params.createdAt } : {}),
   });
   // C.4B.1 — evento sensível ao status: uma versão "emitido" é uma EMISSÃO oficial governada,
   // não um snapshot técnico "gerado". A distinção fica fiel na timeline documental (append-only).
@@ -139,7 +143,8 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
       const version = (await lockLatestVersionForUpdate(lineageId, params.organizationId, tx)) + 1;
       const doc = makeDoc(version);
       await insertOfficialDocument(doc, tx);
-      await recordDocEvent(doc, eventTypeFor(doc, version), summaryFor(doc, version), tx, { locked: true });
+      // O evento de criação/emissão representa o MESMO ato do documento: createdAt do evento = createdAt da versão.
+      await recordDocEvent(doc, eventTypeFor(doc, version), summaryFor(doc, version), tx, { locked: true, createdAt: doc.createdAt });
       return doc;
     } finally {
       await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);

@@ -226,13 +226,25 @@ export async function promoteOfficialDocument(params: {
     let result!: PromoteOfficialResult;
     // SEM084-A — fronteira DONA da transação (versão emitida + ledger + idempotência): deadlock ⇒ repete INTEIRA.
     await runTransactionWithDeadlockRetry({ label: "official_document.promote", organizationId: params.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
+      // INSTANTE OFICIAL DO ATO: capturado AQUI, dentro da TENTATIVA transacional que pode commitar (o retry de deadlock reexecuta este
+      // callback e captura de novo — a tentativa desfeita não deixa autoridade temporal). Alimenta data de emissão, bindings, M2,
+      // createdAt/updatedAt do documento, ledger de promoção e timeline: todos representam o MESMO ato.
+      const officialIssuanceAt = templated ? templated.clock.now() : null;
+      // Conteúdo OFICIAL final: o revisado + os campos de sistema do ciclo de vida materializados NESTE instante (ex.: data de emissão).
+      // Sem modelo/sem campo late-bound é exatamente o rascunho revisado. O ledger e a idempotência seguem no hash do RASCUNHO revisado.
+      const materialized = templated ? templated.materializeForOfficialIssuance(officialIssuanceAt!) : null;
+      const officialContent = materialized ? materialized.officialContent : draft.content;
+      const officialContentHash = officialContent === draft.content ? contentHash : draftContentHash(officialContent);
+
       // Versão oficial IMUTÁVEL "emitido" (append-only; GET_LOCK por linhagem serializa a numeração).
       const official = await createDocument({
         organizationId: params.organizationId, businessDomain: BUSINESS_DOMAIN, documentType: params.kind,
-        origin: params.processId, title: draft.title, content: draft.content, author: String(params.actorUserId),
+        origin: params.processId, title: draft.title, content: officialContent, author: String(params.actorUserId),
         status: "emitido", correlationId: params.correlationId,
+        ...(officialIssuanceAt ? { createdAt: officialIssuanceAt } : {}),
         metadata: {
           promotedFromDraftId: draft.id, contentHash,
+          ...(officialContentHash !== contentHash ? { reviewedContentHash: contentHash, officialContentHash } : {}),
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
           // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
@@ -243,10 +255,10 @@ export async function promoteOfficialDocument(params: {
           object: process?.object ?? null,
           // CONTEXT_REUSE 2.0 — snapshot lógico dos Parâmetros estruturados do TR que participaram DESTA versão (marcador do rascunho).
           ...(params.kind === "tr" && trParamsMarker(draft.sources) ? { structuredParamsDigest: trParamsMarker(draft.sources) } : {}),
-          ...(templated ? {
-            templateGenerationManifestId: templated.issuanceManifest.derivedFromManifestId,
-            templateIssuanceManifestId: templated.issuanceManifest.id,
-            templateManifestHash: templated.issuanceManifest.manifestHash,
+          ...(materialized ? {
+            templateGenerationManifestId: materialized.issuanceManifest.derivedFromManifestId,
+            templateIssuanceManifestId: materialized.issuanceManifest.id,
+            templateManifestHash: materialized.issuanceManifest.manifestHash,
           } : {}),
         },
       }, tx);
@@ -258,13 +270,14 @@ export async function promoteOfficialDocument(params: {
         actorUserId: params.actorUserId, authorUserId: draft.authorUserId, previousStatus: draft.status,
         nextStatus: "emitido", reason: params.reason ?? null, correlationId: params.correlationId,
         idempotencyKey: params.idempotencyKey,
+        ...(officialIssuanceAt ? { createdAt: officialIssuanceAt } : {}),
       }, tx);
 
       // Institutional Templates — M2 derivado do M1, na MESMA transação da versão emitida e do ledger.
-      if (templated) await templated.persist({ officialDocumentId: official.id, officialVersion: official.version }, tx);
+      if (materialized) await materialized.persist({ officialDocumentId: official.id, officialVersion: official.version }, tx);
 
       result = {
-        officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash },
+        officialDocument: { id: official.id, version: official.version, status: official.status, lineageId: official.lineageId, contentHash: officialContentHash },
         promoted: true, replayed: false,
       };
       // Marca a chave COMPLETED com a resposta cacheável — na MESMA transação (atomicidade).

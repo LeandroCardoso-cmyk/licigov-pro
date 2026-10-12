@@ -85,6 +85,9 @@ export interface CanonicalRevalidationRecord {
   readonly checkedAt: string;
 }
 
+import type { LateBoundRef, LifecycleBinding } from "./lifecycleLateBound";
+import { LATE_BOUND_PENDING, LATE_BOUND_VARIABLES } from "./lifecycleLateBound";
+
 interface ManifestCore {
   readonly id: string;
   readonly organizationId: OrgId;
@@ -99,6 +102,11 @@ interface ManifestCore {
   readonly conditionalDecisions: readonly ConditionalDecisionRef[];
   readonly aiNarratives: readonly AiNarrativeRef[];
   readonly annexes: readonly AnnexRef[];
+  /**
+   * Campos de SISTEMA late-bound (ex.: data de emissão): existem no texto como marcador, ainda sem valor (`PENDING_OFFICIAL_ISSUANCE`).
+   * Ausente quando não há nenhum (os hashes de manifests anteriores permanecem idênticos).
+   */
+  readonly lateBound?: readonly LateBoundRef[];
   /** = `official_document_artifacts.identity_fingerprint`. */
   readonly identityFingerprint: string;
   readonly composedOutputHash: Sha256;
@@ -118,6 +126,12 @@ export interface IssuanceManifest extends ManifestCore {
   readonly documentContentHash: Sha256;
   readonly humanEditRefs: readonly HumanEditRef[];
   readonly canonicalRevalidation: CanonicalRevalidationRecord;
+  /**
+   * Materialização dos campos late-bound NO ATO oficial de emissão (variável, valor, instante, hash antes/depois). Quando presente,
+   * `documentContentHash` é o hash do conteúdo OFICIAL final (depois do binding) e a cadeia de edições humanas termina em
+   * `lifecycleBindings[0].beforeContentHash`. Ausente quando o M1 não tem campos late-bound.
+   */
+  readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
 export type CompositionManifest = GenerationManifest | IssuanceManifest;
@@ -215,6 +229,11 @@ export function validateManifest(m: CompositionManifest): TemplateResult<Composi
   m.annexes.forEach((a, i) => {
     if (!a.id || !isSha256(a.contentHash)) issues.push(issue("MANIFEST_INVALID", `annexes[${i}]`, "anexo exige id e contentHash"));
   });
+  (m.lateBound ?? []).forEach((r, i) => {
+    if (!LATE_BOUND_VARIABLES[r.variable] || r.authority !== "LIFECYCLE_SYSTEM" || r.status !== LATE_BOUND_PENDING) {
+      issues.push(issue("MANIFEST_INVALID", `lateBound[${i}]`, "campo late-bound deve ser variável de sistema LIFECYCLE_SYSTEM em PENDING_OFFICIAL_ISSUANCE"));
+    }
+  });
 
   if (m.stage === "ISSUANCE") {
     if (!m.derivedFromManifestId) issues.push(issue("MANIFEST_INVALID", "derivedFromManifestId", "manifest de emissão deriva do manifest de geração"));
@@ -222,9 +241,31 @@ export function validateManifest(m: CompositionManifest): TemplateResult<Composi
     m.humanEditRefs.forEach((e, i) => {
       if (!e.editRef || !isSha256(e.resultingContentHash)) issues.push(issue("MANIFEST_INVALID", `humanEditRefs[${i}]`, "edição humana exige editRef e hash resultante"));
     });
-    if (m.documentContentHash !== m.composedOutputHash) {
+    // Conteúdo ANTES do binding de lifecycle: é o que a pessoa revisou (cadeia de edições humanas); o binding é transformação do sistema.
+    const bindings = m.lifecycleBindings ?? [];
+    let preBindingHash: string = m.documentContentHash;
+    if (bindings.length > 0) {
+      preBindingHash = bindings[0].beforeContentHash;
+      const pending = new Set((m.lateBound ?? []).map((r) => r.variable));
+      let cursor: string = bindings[0].beforeContentHash;
+      bindings.forEach((b, i) => {
+        const spec = LATE_BOUND_VARIABLES[b.variable];
+        if (!spec || !pending.has(b.variable)) issues.push(issue("MANIFEST_INVALID", `lifecycleBindings[${i}].variable`, "binding de lifecycle sem campo late-bound registrado no M1"));
+        if (!b.value || !b.issuedAt || b.authority !== "LIFECYCLE_SYSTEM" || !isSha256(b.beforeContentHash) || !isSha256(b.afterContentHash)) {
+          issues.push(issue("MANIFEST_INVALID", `lifecycleBindings[${i}]`, "binding exige variável, autoridade LIFECYCLE_SYSTEM, valor, instante e hashes antes/depois"));
+        }
+        if (b.beforeContentHash !== cursor) issues.push(issue("MANIFEST_INVALID", `lifecycleBindings[${i}].beforeContentHash`, "cadeia de bindings não é contígua"));
+        cursor = b.afterContentHash;
+      });
+      if (cursor !== m.documentContentHash) issues.push(issue("MANIFEST_INVALID", "lifecycleBindings", "o último binding não produz o conteúdo oficial (documentContentHash)"));
+      if (new Set(bindings.map((b) => b.variable)).size !== bindings.length) issues.push(issue("MANIFEST_INVALID", "lifecycleBindings", "variável de lifecycle materializada mais de uma vez"));
+      if ((m.lateBound ?? []).some((r) => !bindings.some((b) => b.variable === r.variable))) issues.push(issue("MANIFEST_INVALID", "lifecycleBindings", "campo late-bound do M1 sem materialização no M2"));
+    } else if ((m.lateBound ?? []).length > 0) {
+      issues.push(issue("MANIFEST_INVALID", "lifecycleBindings", "M1 com campo late-bound exige a materialização de lifecycle no M2"));
+    }
+    if (preBindingHash !== m.composedOutputHash) {
       const last = m.humanEditRefs[m.humanEditRefs.length - 1];
-      if (!last || last.resultingContentHash !== m.documentContentHash) {
+      if (!last || last.resultingContentHash !== preBindingHash) {
         issues.push(issue("MANIFEST_INVALID", "humanEditRefs", "conteúdo emitido difere do composto sem edição humana registrada que o explique"));
       }
     }
@@ -256,6 +297,7 @@ export interface IssuanceDerivation {
   readonly documentContentHash: Sha256;
   readonly humanEditRefs: readonly HumanEditRef[];
   readonly canonicalRevalidation: CanonicalRevalidationRecord;
+  readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
 /**
@@ -272,6 +314,7 @@ export function deriveIssuanceManifest(generation: GenerationManifest, d: Issuan
     documentContentHash: d.documentContentHash,
     humanEditRefs: d.humanEditRefs,
     canonicalRevalidation: d.canonicalRevalidation,
+    ...(d.lifecycleBindings && d.lifecycleBindings.length > 0 ? { lifecycleBindings: d.lifecycleBindings } : {}),
     manifestHash: "",
   };
   const sealed: IssuanceManifest = { ...draft, manifestHash: computeManifestHash(draft) };

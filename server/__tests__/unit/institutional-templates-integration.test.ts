@@ -173,7 +173,10 @@ describe("regras estruturais dos adapters e do lifecycle atômico", () => {
   it("promoção oficial: o hook de Modelos entra pelo parâmetro opcional e o M2 é gravado DENTRO da transação da emissão", () => {
     const src = strip(read("server/services/documentPromotionService.ts"));
     expect(src).toContain("templateIssuance?: PromotionTemplateIssuanceHook");
-    expect(src.indexOf("templated.persist(")).toBeGreaterThan(src.indexOf("insertOfficialPromotion("));
-    expect(src.indexOf("templated.persist(")).toBeLessThan(src.indexOf("saveIdempotencyResult("));
+    expect(src.indexOf("materialized.persist(")).toBeGreaterThan(src.indexOf("insertOfficialPromotion("));
+    expect(src.indexOf("materialized.persist(")).toBeLessThan(src.indexOf("saveIdempotencyResult("));
+    // INSTANTE OFICIAL: capturado DENTRO do callback transacional (retry de deadlock recaptura), nunca no prepare().
+    expect(src.indexOf("templated.clock.now()")).toBeGreaterThan(src.indexOf("db.transaction("));
+    expect(src.indexOf("materializeForOfficialIssuance(")).toBeGreaterThan(src.indexOf("db.transaction("));
   });
 });

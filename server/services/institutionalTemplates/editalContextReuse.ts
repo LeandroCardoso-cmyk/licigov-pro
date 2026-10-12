@@ -10,18 +10,23 @@
  * Multi-tenant: tudo é lido por (organizationId[, processId]); nunca "último processo".
  */
 import { listContextFacts } from "../../db/procurementContext";
+import { resolveProcurementContext } from "../canonicalContextService";
 import { getOfficialDocument } from "../../db/officialDocuments";
 import type { VariableCatalog2 } from "../../domain/institutionalTemplates";
 import {
-  ROLE_LABEL, authorityEntryOf, isDefaultEligible, resolveRoleVariable, type RoleKey,
+  ROLE_LABEL, authorityEntryOf, isDefaultEligible, resolveRoleVariable, type EntryPoint, type RoleKey,
 } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
+import {
+  BLL_PLATFORM, DERIVED_VARIABLES, SCHEDULE, deriveFormaJulgamento, deriveRegimeParticipacao, deriveSchedule, isIsoDate, resolvePlatformVariable,
+  type ItemStructure, type PlatformProfiles,
+} from "../../domain/institutionalTemplates/certameAuthority";
 import type { GovernedRecord } from "./governedFieldsStore";
 import { TR_PARAMS_DIGEST_RE, resolveTrParams, trParamsDigest, type ResolvedTrParam } from "../../domain/trStructuredParams";
 import { validateDefaults } from "../../domain/institutionalTemplates/governedSources";
 import { templateHash } from "../../domain/institutionalTemplates/semanticHash";
 import type { VariableDef2 } from "../../domain/institutionalTemplates/variableCatalog2";
 
-export type ReuseKind = "TR_PARAM" | "ORG_ROLE" | "ORG_DEFAULT";
+export type ReuseKind = "TR_PARAM" | "ORG_ROLE" | "ORG_DEFAULT" | "PLATFORM" | "ITEMS" | "BUDGET" | "LIFECYCLE" | "SCHEDULE";
 
 export interface ReusedValue {
   readonly kind: ReuseKind;
@@ -29,8 +34,11 @@ export interface ReusedValue {
   readonly origin: { readonly label: string; readonly ref: Readonly<Record<string, string | number>> };
 }
 
-export type ReuseProblemCode = "ROLE_MISSING" | "ROLE_STALE" | "DEFAULT_INCOMPATIBLE" | "TR_PARAM_INVALID" | "TR_PARAM_CONFLICT";
-export interface ReuseProblem { readonly name: string; readonly kind: ReuseKind; readonly code: ReuseProblemCode; readonly reason: string; readonly role?: RoleKey }
+export type ReuseProblemCode =
+  | "ROLE_MISSING" | "ROLE_STALE" | "DEFAULT_INCOMPATIBLE" | "TR_PARAM_INVALID" | "TR_PARAM_CONFLICT"
+  | "PLATFORM_MISSING" | "ITEMS_MISSING" | "ITEMS_AMBIGUOUS" | "ITEMS_INVALID" | "BUDGET_DATE_MISSING" | "SCHEDULE_BASE_MISSING";
+/** `fix` = onde a pessoa resolve (a origem da autoridade), nunca o Edital. */
+export interface ReuseProblem { readonly name: string; readonly kind: ReuseKind; readonly code: ReuseProblemCode; readonly reason: string; readonly role?: RoleKey; readonly fix?: EntryPoint }
 
 export interface ContextReuse {
   readonly values: ReadonlyMap<string, ReusedValue>;
@@ -52,7 +60,18 @@ export interface ReuseInputs {
   readonly trAssertions: Parameters<typeof resolveTrParams>[1];
   /** Data (AAAA-MM-DD) de referência para vigência de papéis. */
   readonly asOf: string;
+  /** Registro governado do PROCESSO (CertameConfig + participação): base do cronograma derivado e do regime de participação. */
+  readonly processRecord?: GovernedRecord | null;
+  /** Estrutura canônica dos Itens (item × lote); `null` = indisponível. */
+  readonly items?: readonly ItemStructure[] | null;
 }
+
+const storedAt = (catalog: VariableCatalog2, record: GovernedRecord | null | undefined, name: string): unknown => {
+  const v = catalog.vars.find((x) => x.name === name);
+  if (!v) return undefined;
+  const sec = record?.payload.sections[v.source] as Record<string, unknown> | undefined;
+  return sec && Object.prototype.hasOwnProperty.call(sec, v.path) ? sec[v.path] : undefined;
+};
 
 /** Puro: monta o reuso a partir dos registros já lidos. */
 export function buildContextReuse(input: ReuseInputs): ContextReuse {
@@ -63,6 +82,49 @@ export function buildContextReuse(input: ReuseInputs): ContextReuse {
 
   const trParams = resolveTrParams(trParamDefs(catalog), input.trAssertions);
   const rejectedDefaults = new Map((orgRecord?.payload.defaultsRejected ?? []).map((r) => [r.name, r.reason] as const));
+
+  const platforms = orgRecord?.payload.platforms as PlatformProfiles | undefined;
+  const platformRef = { revision: orgRecord?.revision ?? 0, hash: (orgRecord?.hash ?? "").slice(0, 12) };
+  const itemsList = input.items ?? null;
+  const derive = (v: VariableCatalog2["vars"][number], kind: NonNullable<(typeof DERIVED_VARIABLES)[string]>): void => {
+    const problem = (kindR: ReuseKind, code: ReuseProblemCode, reason: string, fix: EntryPoint) => problems.set(v.name, { name: v.name, kind: kindR, code, reason, fix });
+    switch (kind) {
+      case "PLATFORM": {
+        const r = resolvePlatformVariable(v.name, platforms);
+        if (!r) return;
+        if (r.state === "OK") values.set(v.name, { kind: "PLATFORM", value: r.value, origin: { label: `Perfil da plataforma · ${r.platform.toUpperCase()}`, ref: { ...platformRef, platform: r.platform } } });
+        else problem("PLATFORM", "PLATFORM_MISSING", r.reason, "PLATFORM_PROFILE");
+        return;
+      }
+      case "FORMA_JULGAMENTO": {
+        if (!itemsList) { problem("ITEMS", "ITEMS_MISSING", "estrutura dos Itens da contratação indisponível", "ITEMS"); return; }
+        const r = deriveFormaJulgamento(itemsList);
+        if (r.state === "OK") values.set(v.name, { kind: "ITEMS", value: r.value, origin: { label: "Itens da contratação (estrutura item × lote)", ref: { items: itemsList.length, lots: new Set(itemsList.map((i) => i.lotId).filter(Boolean)).size } } });
+        else problem("ITEMS", r.state === "EMPTY" ? "ITEMS_MISSING" : "ITEMS_AMBIGUOUS", r.state === "EMPTY" ? "o processo não possui Itens da contratação" : r.reason, "ITEMS");
+        return;
+      }
+      case "REGIME_PARTICIPACAO": {
+        if (!itemsList) { problem("ITEMS", "ITEMS_MISSING", "estrutura dos Itens da contratação indisponível", "ITEMS"); return; }
+        const r = deriveRegimeParticipacao(input.processRecord?.payload.participation, itemsList, v.enumValues ?? []);
+        if (r.state === "OK") values.set(v.name, { kind: "ITEMS", value: r.value, origin: { label: r.combined ? "Itens da contratação (regimes diferentes por item/lote)" : "Itens da contratação (regime de participação)", ref: { items: itemsList.length, revision: input.processRecord?.revision ?? 0 } } });
+        else problem("ITEMS", r.state === "MISSING" ? "ITEMS_MISSING" : "ITEMS_INVALID", r.reason, "ITEMS");
+        return;
+      }
+      case "BUDGET_DATE": {
+        // AUTORIDADE EXPLÍCITA: a data-base registrada UMA vez na Pesquisa de Preços/orçamento (ledger governado, BUDGET). Timestamps
+        // técnicos (`price_research.created_at`) NUNCA entram aqui — no máximo são sugestão de UX que a pessoa confirma.
+        const stored = storedAt(catalog, input.processRecord, v.name);
+        if (typeof stored === "string" && isIsoDate(stored)) {
+          values.set(v.name, { kind: "BUDGET", value: stored, origin: { label: "Pesquisa de Preços (data-base registrada)", ref: { baseDate: stored, revision: input.processRecord?.revision ?? 0, hash: (input.processRecord?.hash ?? "").slice(0, 12) } } });
+        } else problem("BUDGET", "BUDGET_DATE_MISSING", "Data-base do orçamento não registrada.", "PRICE_RESEARCH");
+        return;
+      }
+      case "EMISSION_DATE":
+        // Late-bound: NÃO há valor na composição. A data nasce no ato oficial de emissão (ciclo de vida); aqui nada é fabricado.
+        return;
+      default: return;
+    }
+  };
 
   for (const v of catalog.vars) {
     const entry = authorityEntryOf(v.name);
@@ -76,6 +138,13 @@ export function buildContextReuse(input: ReuseInputs): ContextReuse {
       } else {
         problems.set(v.name, { name: v.name, kind: "ORG_ROLE", code: role.state === "STALE" ? "ROLE_STALE" : "ROLE_MISSING", reason: role.reason, role: role.role });
       }
+      continue;
+    }
+
+    // 1b) autoridades DERIVADAS (PR #288): plataforma, itens, orçamento, ciclo de vida. Nunca entrada do Edital.
+    const dk = DERIVED_VARIABLES[v.name];
+    if (dk && dk !== "SCHEDULE") {
+      derive(v, dk);
       continue;
     }
 
@@ -93,10 +162,35 @@ export function buildContextReuse(input: ReuseInputs): ContextReuse {
     }
 
     // 3) padrão institucional explícito (decisões do certame elegíveis)
-    if (entry.cls === "TRUE_PROCESS_DECISION" && isDefaultEligible(v.name) && orgRecord?.payload.defaults && Object.prototype.hasOwnProperty.call(orgRecord.payload.defaults, v.name)) {
+    if ((entry.cls === "CERTAME_CONFIG" || entry.cls === "CERTAME_SCHEDULE") && isDefaultEligible(v.name) && orgRecord?.payload.defaults && Object.prototype.hasOwnProperty.call(orgRecord.payload.defaults, v.name)) {
       values.set(v.name, { kind: "ORG_DEFAULT", value: orgRecord.payload.defaults[v.name], origin: { label: "Padrão institucional", ref: profileRef } });
     } else if (rejectedDefaults.has(v.name)) {
       problems.set(v.name, { name: v.name, kind: "ORG_DEFAULT", code: "DEFAULT_INCOMPATIBLE", reason: rejectedDefaults.get(v.name)! });
+    }
+  }
+
+  // Cronograma: equivalência técnica SOMENTE por regra declarada no Perfil da plataforma (valor-base conhecido = decisão registrada ou padrão).
+  const rule = platforms?.[BLL_PLATFORM]?.cronograma;
+  if (rule) {
+    const known: Record<string, unknown> = {};
+    for (const n of [SCHEDULE.divulgacao, SCHEDULE.abertura, SCHEDULE.horarioAbertura]) {
+      const st = storedAt(catalog, input.processRecord, n);
+      const dv = values.get(n);
+      const val = st !== undefined && st !== null && st !== "" ? st : dv?.kind === "ORG_DEFAULT" ? dv.value : undefined;
+      if (val !== undefined) known[n] = val;
+    }
+    const derived = deriveSchedule(rule, known);
+    for (const [n, d] of derived) {
+      if (!catalog.vars.some((x) => x.name === n)) continue;
+      values.set(n, { kind: "SCHEDULE", value: d.value, origin: { label: `Cronograma (${d.rule})`, ref: { basis: d.basis.join(","), platform: BLL_PLATFORM, revision: orgRecord?.revision ?? 0 } } });
+    }
+    // Regra DECLARADA ⇒ a variável é derivada, NUNCA digitada: enquanto a base (data/horário independente) falta, aguarda a base (não é decisão nova).
+    const governedByRule: Array<[string, string]> = [];
+    if (rule.limitePropostas === "ABERTURA_DA_SESSAO") governedByRule.push([SCHEDULE.fim, SCHEDULE.abertura], [SCHEDULE.horarioFim, SCHEDULE.horarioAbertura]);
+    if (rule.inicioPropostas === "PUBLICACAO" && rule.horarioInicioPropostas) governedByRule.push([SCHEDULE.inicio, SCHEDULE.divulgacao]);
+    for (const [n, base] of governedByRule) {
+      if (derived.has(n) || !catalog.vars.some((x) => x.name === n)) continue;
+      problems.set(n, { name: n, kind: "SCHEDULE", code: "SCHEDULE_BASE_MISSING", reason: `derivado pela regra da plataforma; aguarda ${base === SCHEDULE.abertura ? "a data da sessão" : base === SCHEDULE.horarioAbertura ? "o horário da sessão" : "a data prevista de divulgação"}`, fix: "CERTAME_CONFIG" });
     }
   }
 
@@ -119,9 +213,25 @@ export function trParamProposals(catalog: VariableCatalog2, orgRecord: GovernedR
 /** Carrega o reuso: fatos do TR do PROCESSO (tenant-scoped) + registro do ÓRGÃO já lido. */
 export async function loadContextReuse(p: {
   organizationId: number; processId: string; catalog: VariableCatalog2; orgRecord: GovernedRecord | null; asOf: string;
+  /** Registro governado do PROCESSO já lido (evita nova leitura); ausente ⇒ tratado como sem registro. */
+  processRecord?: GovernedRecord | null;
 }): Promise<ContextReuse> {
-  const facts = await listContextFacts(p.organizationId, p.processId);
-  return buildContextReuse({ catalog: p.catalog, orgRecord: p.orgRecord, trAssertions: facts, asOf: p.asOf });
+  const [facts, items] = await Promise.all([
+    listContextFacts(p.organizationId, p.processId),
+    loadItemStructure(p.organizationId, p.processId),
+  ]);
+  return buildContextReuse({
+    catalog: p.catalog, orgRecord: p.orgRecord, trAssertions: facts, asOf: p.asOf, processRecord: p.processRecord ?? null,
+    items,
+  });
+}
+
+/** Estrutura canônica dos Itens (item × lote), tenant-scoped; `null` quando o processo não pôde ser resolvido. */
+export async function loadItemStructure(organizationId: number, processId: string): Promise<ItemStructure[] | null> {
+  const ctx = await resolveProcurementContext({ organizationId, processId }).catch(() => null);
+  if (!ctx) return null;
+  const lotCode = new Map(ctx.lots.map((l) => [l.id, l.code] as const));
+  return ctx.items.map((it) => ({ key: it.key, lotId: it.lotId, lotCode: it.lotId ? lotCode.get(it.lotId) ?? null : null }));
 }
 
 /** Define `value` no caminho pontuado sem sobrescrever o que já existe. Retorna se definiu. */
@@ -147,9 +257,10 @@ export function setNestedIfAbsent(data: Record<string, unknown>, path: string, v
  * usa papéis nem padrões ⇒ o snapshot (e o digest de manifests anteriores) permanece EXATAMENTE igual.
  */
 export function profileFingerprint(record: GovernedRecord | null): string | null {
-  const roles = record?.raw.roles, defaults = record?.raw.defaults;
-  if (!roles && !defaults) return null;
-  return templateHash({ roles: roles ?? null, defaults: defaults ?? null });
+  const roles = record?.raw.roles, defaults = record?.raw.defaults, platforms = record?.raw.platforms;
+  if (!roles && !defaults && !platforms) return null;
+  // `platforms` só entra quando existe: o fingerprint de órgãos sem Perfil da plataforma permanece EXATAMENTE o anterior.
+  return templateHash(platforms ? { roles: roles ?? null, defaults: defaults ?? null, platforms } : { roles: roles ?? null, defaults: defaults ?? null });
 }
 
 // ─── Lineage dos parâmetros estruturados × TR oficial EXATO ─────────────────────────────────────────────────────────

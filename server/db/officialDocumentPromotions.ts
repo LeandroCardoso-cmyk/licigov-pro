@@ -8,6 +8,7 @@
  */
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "./connection";
+import { toDbDatetime } from "./institutionalConsultations";
 import { officialDocumentPromotionsTable } from "../../drizzle/schema";
 
 type PromoDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -28,6 +29,8 @@ export interface OfficialPromotionRecord {
   reason: string | null;
   correlationId: string;
   idempotencyKey: string;
+  /** Instante (ISO) do ato. Ausente ⇒ default do banco (comportamento anterior). Emissão templated: instante oficial da transação. */
+  createdAt?: string;
 }
 
 /** Insere UMA emissão no ledger (append-only). Idempotência garantida pela UNIQUE (org, idempotencyKey). */
@@ -39,6 +42,7 @@ export async function insertOfficialPromotion(rec: OfficialPromotionRecord, exec
     lineageId: rec.lineageId, documentKind: rec.documentKind, version: rec.version, contentHash: rec.contentHash,
     actorUserId: rec.actorUserId, authorUserId: rec.authorUserId, previousStatus: rec.previousStatus,
     nextStatus: rec.nextStatus, reason: rec.reason, correlationId: rec.correlationId, idempotencyKey: rec.idempotencyKey,
+    ...(rec.createdAt !== undefined ? { createdAt: toDbDatetime(rec.createdAt) ?? undefined } : {}),
   });
 }
 

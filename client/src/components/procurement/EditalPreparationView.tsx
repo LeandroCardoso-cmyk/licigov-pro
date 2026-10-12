@@ -1,4 +1,5 @@
 import PrepFieldControl from "./PrepFieldControl";
+import { fixAction, sourceIssues, type FixAction, type StageTarget } from "@/lib/editalPreparation";
 import DecisionFieldset from "./DecisionFieldset";
 import UseAsDefaultButton from "./UseAsDefaultButton";
 import type { DecisionFormState } from "@/lib/institutionalTemplatesView";
@@ -15,10 +16,6 @@ export interface PreparationViewProps {
   pending: readonly PendingItem[];
   optional: readonly PendingItem[];
   onEdit: (source: string, field: PrepField, value: FormValue) => void;
-  disclosure: "" | "publico" | "sigiloso";
-  onDisclosure: (v: "publico" | "sigiloso") => void;
-  participationDefault: string | null;
-  onParticipationDefault: (v: string) => void;
   plan: SavePlan;
   reviewing: boolean;
   onStartReview: () => void;
@@ -32,10 +29,19 @@ export interface PreparationViewProps {
   onConfirm: () => void;
   /** Abre o TR do processo (onde os Parâmetros estruturados são informados). */
   onOpenTr?: () => void;
+  /** Abre a etapa do processo onde o dado é resolvido (Itens, Pesquisa de Preços, DFD, TR). */
+  onOpenStage?: (stage: StageTarget) => void;
+  /** Recarrega a preparação depois de a pessoa corrigir o dado na origem. */
+  onRefresh?: () => void;
   processId?: string;
 }
 
-const INPUT = "rounded-lg border border-input bg-background px-3 py-2 text-sm";
+function FixButton({ action, onOpenStage }: { action: FixAction; onOpenStage?: (s: StageTarget) => void }) {
+  const cls = "inline-block rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground";
+  if (action.href) return <a href={action.href} className={cls}>{action.label}</a>;
+  if (action.stage && onOpenStage) return <button type="button" onClick={() => onOpenStage(action.stage!)} className={cls}>{action.label}</button>;
+  return null;
+}
 
 function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly PendingItem[]; edits: PreparationViewProps["edits"]; errors: PreparationViewProps["fieldErrors"]; busy: boolean; onEdit: PreparationViewProps["onEdit"] }) {
   const sources = [...new Set(items.map((i) => i.section.source))];
@@ -62,12 +68,13 @@ function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly Pe
 export default function EditalPreparationView(p: PreparationViewProps) {
   const { state } = p;
   const procBlock = p.pending.filter((i) => i.section.scope === "PROCESS");
-  const pendingCount = p.pending.length + (state.budgetDisclosure || p.disclosure ? 0 : 1) + (state.participationPending && !p.participationDefault?.trim() ? 1 : 0);
+  // Só decisões GENUINAMENTE independentes do certame: divulgação do orçamento e regime de participação vêm das origens (Pesquisa de Preços / Itens).
+  const pendingCount = p.pending.length;
+  const scheduleBlock = procBlock.filter((i) => i.field.authority === "CERTAME_SCHEDULE");
+  const decisionBlock = procBlock.filter((i) => i.field.authority !== "CERTAME_SCHEDULE");
+  const issues = sourceIssues(state);
+  const issuesByAction = [...new Map(issues.map((i) => [fixAction(i.entry)?.label ?? "—", i.entry])).entries()];
   const reused = reusedItems(state);
-  const blockedCanonical = [
-    ...state.canonicalFields.filter((c) => c.status === "CANONICAL_UNRESOLVED").map((c) => ({ key: c.name, label: c.description || c.name, origin: c.origin.label })),
-    ...state.sections.flatMap((s) => s.fields).filter((f) => f.status === "CANONICAL_UNRESOLVED").map((f) => ({ key: f.name, label: f.description || f.name, origin: f.origin?.label ?? "autoridade de origem" })),
-  ];
   const profilePending = orgProfilePending(state);
   const trPending = trParamsPending(state);
   const m = state.metrics;
@@ -100,7 +107,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
 
       <ul className="grid gap-2 sm:grid-cols-2" aria-label="Resumo da preparação">
         <li className={`rounded-lg border px-3 py-2 text-sm ${profilePending.length ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-card="perfil">
-          <p className="font-medium text-foreground">Perfil institucional</p>
+          <p className="font-medium text-foreground">Configuração única do órgão</p>
           {profilePending.length ? <p className="text-amber-700 dark:text-amber-300">⚠ incompleto</p>
             : <p className="text-emerald-700 dark:text-emerald-300">✓ {reusedProfile} reutilizados{state.orgProfile ? ` · revisão ${state.orgProfile.revision}` : ""}</p>}
         </li>
@@ -114,9 +121,10 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             : trPending.length ? <p className="text-amber-700 dark:text-amber-300">⚠ {trPending.length} parâmetro(s) a confirmar no TR</p>
               : <p className="text-emerald-700 dark:text-emerald-300">✓ {(m.UPSTREAM_TR_REUSED ?? 0) + m.TR_PROJECTED} reutilizados do TR</p>}
         </li>
-        <li className="rounded-lg border border-border px-3 py-2 text-sm" data-card="itens">
-          <p className="font-medium text-foreground">Itens e orçamento</p>
-          {state.summary.groups.find((g) => g.id === "itens")?.blockedCanonical ? <p className="text-destructive">⚠ dado(s) do sistema incompleto(s)</p> : <p className="text-emerald-700 dark:text-emerald-300">✓ itens e pesquisa de preços</p>}
+        <li className={`rounded-lg border px-3 py-2 text-sm ${issues.length ? "border-destructive/50 bg-destructive/5" : "border-border"}`} data-card="origens">
+          <p className="font-medium text-foreground">Plataforma, itens e orçamento</p>
+          {issues.length ? <p className="text-destructive">⚠ {issues.length} dado(s) a resolver na origem</p>
+            : <p className="text-emerald-700 dark:text-emerald-300">✓ {(m.AUTO_FROM_PLATFORM ?? 0) + (m.AUTO_FROM_ITEMS ?? 0) + (m.AUTO_FROM_PRICE_RESEARCH ?? 0)} derivados da plataforma, dos itens e da pesquisa</p>}
         </li>
         <li className={`rounded-lg border px-3 py-2 text-sm ${pendingCount > 0 ? "border-amber-500/50 bg-amber-500/5" : "border-border"}`} data-card="decisoes">
           <p className="font-medium text-foreground">Decisões deste certame</p>
@@ -132,8 +140,8 @@ export default function EditalPreparationView(p: PreparationViewProps) {
 
       {profilePending.length > 0 && (
         <div role="status" className="space-y-1 rounded-lg border border-amber-500/40 p-3" aria-label="Perfil institucional de Licitações incompleto">
-          <h3 className="text-sm font-semibold text-foreground">Complete o Perfil Institucional de Licitações</h3>
-          <p className="text-xs text-muted-foreground">Configuração única do órgão — {profilePending.length} {profilePending.length === 1 ? "campo pendente" : "campos pendentes"}. Depois disso, nenhum Edital pede estes dados de novo.</p>
+          <h3 className="text-sm font-semibold text-foreground">Complete a configuração única do órgão</h3>
+          <p className="text-xs text-muted-foreground">Estes são dados do ÓRGÃO, não do processo — {profilePending.length} {profilePending.length === 1 ? "campo pendente" : "campos pendentes"}. Configure uma vez; nenhum Edital pede estes dados de novo.</p>
           <a href="/configuracoes#perfil-licitacoes" className="inline-block rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Configurar agora</a>
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground">O que falta</summary>
@@ -159,39 +167,35 @@ export default function EditalPreparationView(p: PreparationViewProps) {
       )}
       {p.outcome && (p.outcome.registered.length > 0 || p.outcome.failed) && (
         <div role={p.outcome.failed ? "alert" : "status"} className="rounded-lg border border-border px-3 py-2 text-sm">
-          {p.outcome.registered.length > 0 && <p>Já registrado: {p.outcome.registered.map((w) => (w.source ? SOURCE_TITLE[w.source] ?? w.source : "Divulgação do orçamento")).join(", ")}.</p>}
-          {p.outcome.failed && <p className="text-destructive">Parou em {p.outcome.failed.write.source ? SOURCE_TITLE[p.outcome.failed.write.source] ?? p.outcome.failed.write.source : "Divulgação do orçamento"}: nada foi sobrescrito. {p.outcome.notExecuted.length > 0 ? `${p.outcome.notExecuted.length} registro(s) não executado(s) — revise e confirme novamente.` : ""}</p>}
+          {p.outcome.registered.length > 0 && <p>Já registrado: {p.outcome.registered.map((w) => (w.source ? SOURCE_TITLE[w.source] ?? w.source : "Configuração do certame")).join(", ")}.</p>}
+          {p.outcome.failed && <p className="text-destructive">Parou em {p.outcome.failed.write.source ? SOURCE_TITLE[p.outcome.failed.write.source] ?? p.outcome.failed.write.source : "Configuração do certame"}: nada foi sobrescrito. {p.outcome.notExecuted.length > 0 ? `${p.outcome.notExecuted.length} registro(s) não executado(s) — revise e confirme novamente.` : ""}</p>}
         </div>
       )}
 
-      {blockedCanonical.length > 0 && (
-        <div role="alert" className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" aria-label="Dados do sistema incompletos">
-          <h3 className="font-semibold text-destructive">Dados do sistema incompletos</h3>
-          <p className="text-xs text-muted-foreground">Estas informações têm autoridade própria e não são digitadas aqui. Complete-as na origem (abertura do processo, DFD ou cadastro do órgão).</p>
-          <ul className="list-disc pl-5 text-xs">{blockedCanonical.map((b) => <li key={b.key}>{b.label} — {b.origin}</li>)}</ul>
+      {issues.length > 0 && (
+        <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" aria-label="Dados a resolver na origem">
+          <h3 className="font-semibold text-destructive">Dados a resolver na origem</h3>
+          <p className="text-xs text-muted-foreground">Estas informações têm autoridade própria (plataforma, itens, pesquisa de preços, cadastro) e NÃO são digitadas no Edital. Resolva-as na origem; esta tela atualiza em seguida.</p>
+          <ul className="list-disc pl-5 text-xs">{issues.map((b) => <li key={b.key}>{b.label} — {b.reason}</li>)}</ul>
+          <div className="flex flex-wrap items-center gap-2">
+            {issuesByAction.map(([label, entry]) => { const a = fixAction(entry); return a ? <FixButton key={label} action={a} onOpenStage={p.onOpenStage} /> : null; })}
+            {p.onRefresh && <button type="button" onClick={p.onRefresh} className="rounded-lg border border-input px-3 py-1.5 text-xs">Já corrigi — atualizar</button>}
+          </div>
         </div>
       )}
 
-      {(procBlock.length > 0 || !state.budgetDisclosure || state.participationPending) && (
+      {scheduleBlock.length > 0 && (
+        <div className="space-y-3 rounded-lg border border-border p-3" aria-label="Cronograma do certame">
+          <h3 className="text-sm font-semibold text-foreground">Cronograma do certame</h3>
+          <p className="text-xs text-muted-foreground">Informe só as datas e horários independentes. O que é equivalente técnico só é derivado quando o Perfil da plataforma declara a regra.</p>
+          <FieldBlock items={scheduleBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
+        </div>
+      )}
+      {decisionBlock.length > 0 && (
         <div className="space-y-3 rounded-lg border border-border p-3" aria-label="Decisões do certame">
-          <h3 className="text-sm font-semibold text-foreground">Decisões deste processo</h3>
-          {!state.budgetDisclosure && (
-            <fieldset className="space-y-1">
-              <legend className="text-sm font-medium">Divulgação do orçamento <span className="text-destructive">*</span></legend>
-              <div className="flex gap-4 text-sm">
-                {(["publico", "sigiloso"] as const).map((o) => (
-                  <label key={o} className="flex items-center gap-1"><input type="radio" name="edital-disclosure" checked={p.disclosure === o} onChange={() => p.onDisclosure(o)} />{o === "publico" ? "Público" : "Sigiloso"}</label>
-                ))}
-              </div>
-            </fieldset>
-          )}
-          {state.participationPending && (
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium">Regime de participação padrão dos itens <span className="text-destructive">*</span></span>
-              <input type="text" className={INPUT} value={p.participationDefault ?? ""} onChange={(e) => p.onParticipationDefault(e.target.value)} />
-            </label>
-          )}
-          <FieldBlock items={procBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
+          <h3 className="text-sm font-semibold text-foreground">Decisões deste certame</h3>
+          <p className="text-xs text-muted-foreground">Registradas uma vez na Configuração do certame; o Edital e os demais documentos apenas a consomem.</p>
+          <FieldBlock items={decisionBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
         </div>
       )}
       {pendingCount === 0 && p.plan.writes.length === 0 && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">Nenhuma decisão pendente. Verifique o preflight para gerar o Edital.</p>}
@@ -233,7 +237,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           {state.canonicalFields.map((c) => (
             <li key={c.name}>
               <details>
-                <summary className="cursor-pointer">{c.description || c.name}: <span className="text-muted-foreground">{c.status === "AUTO" ? formatDisplay(c.type, c.displayValue) : "aguardando"}</span></summary>
+                <summary className="cursor-pointer">{c.description || c.name}: <span className="text-muted-foreground">{c.status === "AUTO" ? formatDisplay(c.type, c.displayValue) : "a resolver na origem"}</span></summary>
                 <dl className="ml-4 text-xs text-muted-foreground"><dt>Origem</dt><dd>{c.origin.label}</dd>{c.origin.ref && <><dt>Referência</dt><dd>{Object.entries(c.origin.ref).map(([k, v]) => `${k}: ${v}`).join(" · ")}</dd></>}</dl>
               </details>
             </li>
@@ -253,7 +257,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Ver detalhes técnicos</summary>
         <div className="space-y-1 px-3 pb-3 text-xs text-muted-foreground">
           <p>Catálogo {state.catalogVersion} · revisão {state.revisionId}</p>
-          <p>CAS: processo {state.revisions.process} · órgão {state.revisions.organization} · orçamento {state.revisions.budget}</p>
+          <p>CAS: Configuração do certame {state.revisions.process} · órgão {state.revisions.organization} · orçamento {state.revisions.budget}</p>
           <p>Campos do modelo: {state.metrics.TOTAL_TEMPLATE_FIELDS} · automáticos {state.metrics.AUTO_RESOLVED + state.metrics.TR_PROJECTED} · perfil do órgão {state.metrics.ORG_REUSED} · decisões registradas {state.metrics.DECIDED} · condicionais ocultos {state.metrics.CONDITIONAL_HIDDEN} · pós-homologação {state.metrics.POST_AWARD_HIDDEN} · decisões visíveis {state.metrics.MANUAL_DECISIONS_VISIBLE}</p>
           <ul className="list-disc pl-5">{p.pending.map(({ field }) => <li key={field.name} className="font-mono">{field.name} ← {field.source}.{field.path} ({field.type})</li>)}</ul>
         </div>

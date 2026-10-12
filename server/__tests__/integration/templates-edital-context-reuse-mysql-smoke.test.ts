@@ -53,7 +53,7 @@ import { GOVERNED_FIELDS_SCHEMA, encodeGovernedPayload } from "../../domain/inst
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { SYNTHETIC_ROLES, completeProfile, fillTrParams, scenarioValueByName, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { SYNTHETIC_ROLES, completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { recordContextAssertions } from "../../services/canonicalContextService";
 import { generateDocument } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
@@ -144,9 +144,8 @@ function writerFor(p: P, state: PreparationStateView, keys?: Map<string, string>
       const idempotencyKey = keys ? (keys.get(w.id) ?? (keys.set(w.id, key(w.id)), keys.get(w.id)!)) : key(w.id);
       const base = { confirm: true as const, idempotencyKey, decision: decision(), expectedRevision };
       let r: any;
-      if (w.kind === "DISCLOSURE") r = await tpl(p.org).governed.recordBudgetDisclosure({ ...base, processId: p.w.processId, disclosure: w.disclosure! });
-      else if (w.kind === "ORG") r = await tpl(p.org).governed.recordOrganizationFields({ ...base, catalogVersion: state.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
-      else r = await tpl(p.org).governed.recordProcessFields({ ...base, catalogVersion: state.catalogVersion, processId: p.w.processId, source: w.source as any, fields: w.fields ?? {}, ...(w.participation ? { participation: w.participation } : {}) });
+      if (w.kind === "ORG") r = await tpl(p.org).governed.recordOrganizationFields({ ...base, catalogVersion: state.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
+      else r = await tpl(p.org).governed.recordProcessFields({ ...base, catalogVersion: state.catalogVersion, processId: p.w.processId, source: w.source as any, fields: w.fields ?? {} });
       if (afterWrite) await afterWrite(w);
       return { revision: r.decision.revision as number };
     },
@@ -172,15 +171,15 @@ const draftText = async (p: P) => (await rows("SELECT content FROM generated_doc
 /** Decisões genuínas do certame (preparação do Edital): digita SÓ o que a tela mostra como pendente, com o plano da tela. */
 async function fillTrueDecisions(p: P): Promise<string[]> {
   const typed: string[] = [];
+  // PR #288: divulgação do orçamento (Pesquisa de Preços) e regime de participação (Itens) têm ORIGEM própria; o Edital não os pede.
+  { const st0 = await getState(p); if (!st0.budgetDisclosure) await setBudgetDisclosure(harnessOf(p)); if (st0.participationPending) await setItemsParticipation(harnessOf(p)); }
   for (let round = 1; round <= 8; round++) {
     const st = await getState(p);
     const pend = livePendingItems(st, {});
-    const needDisclosure = !st.budgetDisclosure;
-    const needParticipation = st.participationPending;
-    if (pend.length === 0 && !needDisclosure && !needParticipation) return typed;
+    if (pend.length === 0) return typed;
     const edits: Record<string, Record<string, any>> = {};
     for (const { section, field } of pend) { (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValueByName(field.name)); typed.push(field.name); }
-    const plan = buildSavePlan(st, { edits: edits as any, disclosure: needDisclosure ? "publico" : "", participationDefault: needParticipation ? "Ampla participação, com os benefícios da LC nº 123/2006" : null });
+    const plan = buildSavePlan(st, { edits: edits as any });
     expect(plan.errors).toEqual({});
     const out = await executeSavePlan(plan.writes, st.revisions, writerFor(p, st), stale);
     expect(out.failed, JSON.stringify(out.failed)).toBeNull();
@@ -301,7 +300,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     expect(firstVisible.length).toBeGreaterThan(0);
     const typedA = await fillTrueDecisions(a);
     for (const n of firstVisible) expect(typedA, n).toContain(n);   // + condicionais ativadas em cascata pelas decisões
-    for (const n of typedA) expect(["TRUE_PROCESS_DECISION", "CONDITIONAL"], n).toContain(authority(n));
+    for (const n of typedA) expect(["CERTAME_CONFIG", "CERTAME_SCHEDULE", "CONDITIONAL"], n).toContain(authority(n));
 
     // ── preflight READY → M1 → revisão → M2 ──────────────────────────────────────────────────────────────────────────────────
     const pf = await preflight(a);
@@ -333,7 +332,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     // nada do processo A foi copiado: as decisões do certame de B são só as do certame (datas, SRP, critério…) — NÃO os valores de A
     const visB = await visibleDecisions(b);
     expect(visB.map((i) => i.field.name)).not.toEqual([]);
-    for (const { field } of visB) expect(field.authority, field.name).toMatch(/TRUE_PROCESS_DECISION|CONDITIONAL/);
+    for (const { field } of visB) expect(field.authority, field.name).toMatch(/CERTAME_CONFIG|CERTAME_SCHEDULE|CONDITIONAL/);
     expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND subject_type = 'procurement.source_fields' AND subject_id = ?", [b.org, b.w.processId])).toBe(0);
     // TR de B: propostas do padrão institucional; só valem após confirmação humana
     const trB0 = await trState(b);
@@ -434,7 +433,7 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     // nada oculto para bater meta: o inventário fecha (toda variável aparece em exatamente uma classe da matriz)
     const by = sb.metrics.BY_AUTHORITY as Record<string, number>;
     expect(Object.values(by).reduce((x, y) => x + y, 0)).toBe(sb.metrics.TOTAL_TEMPLATE_FIELDS);
-    for (const r of remaining) expect(["TRUE_PROCESS_DECISION", "CONDITIONAL"], r.name).toContain(r.authority);
+    for (const r of remaining) expect(["CERTAME_CONFIG", "CERTAME_SCHEDULE", "CONDITIONAL"], r.name).toContain(r.authority);
   }, 900_000);
 
   it("R3 — adversarial de tenant e de processo: perfil/TR/decisões de A nunca são lidos por B; TR de outro processo falha fechado", async () => {

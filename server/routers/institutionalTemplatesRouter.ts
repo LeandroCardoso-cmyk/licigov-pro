@@ -134,7 +134,9 @@ const actBase = { confirm: z.boolean(), idempotencyKey: z.string().min(8).max(12
 const governedFieldsBase = { catalogVersion: z.string().min(3).max(120), fields: z.record(z.string().min(1).max(200), z.unknown()), participation: z.unknown().optional(), ...actBase };
 const processFieldsInput = z.object({ processId: z.string().min(1).max(20), source: z.enum(["PROCESS", "TR", "ITEMS", "CERTAME_CONFIG", "NORMATIVE", "BUDGET", "LIFECYCLE"]), ...governedFieldsBase }).strict();
 const orgFieldsInput = z.object({ source: z.enum(["POLICY", "IDENTITY"]), ...governedFieldsBase }).strict();
-const profileInput = z.object({ catalogVersion: z.string().min(3).max(120), roles: z.unknown().optional(), defaults: z.unknown().optional(), ...actBase }).strict();
+const profileInput = z.object({ catalogVersion: z.string().min(3).max(120), roles: z.unknown().optional(), defaults: z.unknown().optional(), platforms: z.unknown().optional(), ...actBase }).strict();
+const baseDateInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), baseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), ...actBase }).strict();
+const participationInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), participation: z.unknown(), ...actBase }).strict();
 const budgetInput = z.object({ processId: z.string().min(1).max(20), disclosure: z.enum(["publico", "sigiloso"]), ...actBase }).strict();
 
 const generateInput = z.object({
@@ -331,11 +333,29 @@ export const institutionalTemplatesRouter = router({
         await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
         return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordProcessFields(ctx.wctx, input);
       })),
+    /** CertameConfig: decisões tomadas UMA vez por processo (escrita semântica; o Edital apenas as consome). */
+    recordCertameConfig: templatesProcedure("govern").input(processFieldsInput)
+      .mutation(({ ctx, input }) => guarded(async () => {
+        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordCertameConfig(ctx.wctx, input);
+      })),
+    /** Regime de participação dos Itens (item > lote > padrão): a configuração canônica da qual o Edital DERIVA o regime. */
+    recordItemsParticipation: templatesProcedure("govern").input(participationInput)
+      .mutation(({ ctx, input }) => guarded(async () => {
+        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordItemsParticipation(ctx.wctx, input);
+      })),
     recordOrganizationFields: templatesProcedure("govern").input(orgFieldsInput)
       .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationFields(ctx.wctx, input))),
     /** Perfil institucional de Licitações (órgão): papéis + padrões institucionais EXPLÍCITOS. Nova revisão a cada gravação (CAS). */
     recordLicitacoesProfile: templatesProcedure("govern").input(profileInput)
       .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationProfile(ctx.wctx, input))),
+    /** Data-base do orçamento: registrada UMA vez na Pesquisa de Preços (ledger governado, seção BUDGET); o Edital só consome. */
+    recordBudgetBaseDate: templatesProcedure("govern").input(baseDateInput)
+      .mutation(({ ctx, input }) => guarded(async () => {
+        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetBaseDate(ctx.wctx, input);
+      })),
     recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
       .mutation(({ ctx, input }) => guarded(async () => {
         await assertProcessInTenant(input.processId, ctx.wctx.organizationId);

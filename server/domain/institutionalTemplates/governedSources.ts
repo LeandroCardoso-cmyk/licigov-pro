@@ -17,6 +17,7 @@
  */
 import { isCanonicalProjection } from "./canonicalProjectionPolicy";
 import { isDefaultEligible, validateRoleAssignments, type RoleAssignments } from "./editalAuthorityMatrix";
+import { ALWAYS_DERIVED, PLATFORM_VARIABLES, validatePlatformProfiles, type PlatformProfiles } from "./certameAuthority";
 import { fail, issue, ok, type TemplateIssue, type TemplateResult } from "./types";
 import { templateCanonicalJson, templateHash } from "./semanticHash";
 import { normalizeValue2 } from "./valueTypes2";
@@ -67,6 +68,8 @@ export interface GovernedPayload {
   readonly roles?: RoleAssignments;
   /** Perfil de Licitações — padrões institucionais explícitos. Só escopo ÓRGÃO. Na leitura, padrão incompatível é descartado (`defaultsRejected`). */
   readonly defaults?: GovernedDefaults;
+  /** Perfil da(s) PLATAFORMA(s): master data estável (endereço oficial, regulamento, regras de cronograma). Só escopo ÓRGÃO; versionado pelo ledger. */
+  readonly platforms?: PlatformProfiles;
   /** Derivado na leitura (nunca persistido): padrões que o catálogo ATUAL não aceita (incompatível/inelegível) e que NÃO são aplicados. */
   readonly defaultsRejected?: readonly RejectedDefault[];
 }
@@ -77,6 +80,8 @@ export function allowedSources(scope: GovernedScope): readonly VariableSource2[]
 
 /** Valida UMA seção contra o catálogo v2 (tipos e caminhos). Devolve os campos normalizados. */
 export const CANONICAL_AUTHORITY_OWNED = "CANONICAL_AUTHORITY_OWNED";
+/** PR #288: a autoridade é DERIVADA (plataforma, itens, orçamento, ciclo de vida) — recusada como escrita humana no Edital. */
+export const DERIVED_AUTHORITY_OWNED = "DERIVED_AUTHORITY_OWNED";
 
 /**
  * `mode = "write"` (novo registro humano): recusa também as variáveis de projeção CANONICAL (`CANONICAL_AUTHORITY_OWNED`).
@@ -101,11 +106,40 @@ export function validateGovernedSection(catalog: VariableCatalog2, scope: Govern
       issues.push(bad(`${source}.${path}`, `${CANONICAL_AUTHORITY_OWNED}: a autoridade é canônica (processo/cadastro do órgão); não é decisão humana nem pode ser gravada de novo`));
       continue;
     }
+    if (mode === "write" && ALWAYS_DERIVED(def.name)) {
+      issues.push(bad(`${source}.${path}`, `${DERIVED_AUTHORITY_OWNED}: o valor é derivado da autoridade de origem (Perfil da plataforma, Itens, Pesquisa de Preços ou ciclo de vida); não é decisão do Edital`));
+      continue;
+    }
     const norm = normalizeValue2(def, raw);
     if (!norm.ok) { issues.push(bad(`${source}.${path}`, norm.reason)); continue; }
     out[path] = norm.value;
   }
   return issues.length ? fail(issues) : ok(out);
+}
+
+/**
+ * Valida o Perfil da PLATAFORMA contra o catálogo: a forma (`validatePlatformProfiles`) e o valor de cada campo pelo TIPO da variável
+ * que ele alimenta (url, string). Plataforma/campo que o catálogo não usa permanece no registro (é de outro modelo) e não é aplicado.
+ */
+export function validatePlatforms(catalog: VariableCatalog2, raw: unknown): { ok: true; value: PlatformProfiles } | { ok: false; issues: TemplateIssue[] } {
+  const shape = validatePlatformProfiles(raw);
+  if (!shape.ok) return { ok: false, issues: shape.issues.map((m) => bad("platforms", m)) };
+  const byName = new Map(catalog.vars.map((v) => [v.name, v] as const));
+  const issues: TemplateIssue[] = [];
+  const value: Record<string, Record<string, unknown>> = {};
+  for (const [slug, prof] of Object.entries(shape.value)) {
+    const copy: Record<string, unknown> = { ...prof };
+    for (const [name, pv] of Object.entries(PLATFORM_VARIABLES)) {
+      if (pv.platform !== slug) continue;
+      const def = byName.get(name);
+      const v = prof[pv.field];
+      if (!def || v === undefined) continue;
+      const norm = normalizeValue2(def, v);
+      if (!norm.ok) issues.push(bad(`platforms.${slug}.${pv.field}`, norm.reason)); else copy[pv.field] = norm.value;
+    }
+    value[slug] = copy;
+  }
+  return issues.length ? { ok: false, issues } : { ok: true, value: value as PlatformProfiles };
 }
 
 /**
@@ -203,7 +237,7 @@ export function declaredPaths(catalog: VariableCatalog2, source: string): Readon
  * modelo e são IGNORADOS na leitura (não entram nos dados nem no digest); os que ele declara são validados por tipo.
  */
 export function validateGovernedPayload(catalog: VariableCatalog2, scope: GovernedScope, raw: unknown): TemplateResult<GovernedPayload> {
-  if (!isObj(raw) || !isObj(raw.sections) || Object.keys(raw).some((k) => !["sections", "participation", "roles", "defaults"].includes(k))) return fail([bad("", "payload deve ter { sections, participation?, roles?, defaults? }")]);
+  if (!isObj(raw) || !isObj(raw.sections) || Object.keys(raw).some((k) => !["sections", "participation", "roles", "defaults", "platforms"].includes(k))) return fail([bad("", "payload deve ter { sections, participation?, roles?, defaults?, platforms? }")]);
   const issues: TemplateIssue[] = [];
   const sections: Partial<Record<VariableSource2, GovernedFields>> = {};
   for (const [source, fields] of Object.entries(raw.sections)) {
@@ -221,6 +255,11 @@ export function validateGovernedPayload(catalog: VariableCatalog2, scope: Govern
     if (scope !== "ORG") issues.push(bad("roles", "papéis institucionais só existem no escopo do órgão"));
     else { const r = validateRoleAssignments(raw.roles); if (!r.ok) issues.push(...r.issues.map((m) => bad("roles", m))); else roles = r.value; }
   }
+  let platforms: PlatformProfiles | undefined;
+  if (raw.platforms !== undefined) {
+    if (scope !== "ORG") issues.push(bad("platforms", "o Perfil da plataforma só existe no escopo do órgão"));
+    else { const pl = validatePlatforms(catalog, raw.platforms); if (!pl.ok) issues.push(...pl.issues); else platforms = pl.value; }
+  }
   let defaults: GovernedDefaults | undefined;
   let defaultsRejected: RejectedDefault[] | undefined;
   if (raw.defaults !== undefined) {
@@ -228,6 +267,6 @@ export function validateGovernedPayload(catalog: VariableCatalog2, scope: Govern
     else { const d = validateDefaults(catalog, raw.defaults, "read"); if (!d.ok) issues.push(...d.issues); else { defaults = d.value; if (d.rejected.length) defaultsRejected = d.rejected; } }
   }
   return issues.length ? fail(issues) : ok({
-    sections, ...(participation ? { participation } : {}), ...(roles ? { roles } : {}), ...(defaults ? { defaults } : {}), ...(defaultsRejected ? { defaultsRejected } : {}),
+    sections, ...(participation ? { participation } : {}), ...(roles ? { roles } : {}), ...(platforms ? { platforms } : {}), ...(defaults ? { defaults } : {}), ...(defaultsRejected ? { defaultsRejected } : {}),
   });
 }

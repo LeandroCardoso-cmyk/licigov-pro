@@ -19,3 +19,5 @@ export * from "./variableCatalog2";
 export * from "./ast2";
 export * from "./astVersions";
 export * from "./modelRules";
+
+export * from "./lifecycleLateBound";

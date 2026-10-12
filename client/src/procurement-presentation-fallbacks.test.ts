@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
 }));
 
 const mutation = vi.hoisted(() => () => ({ mutate: () => {}, isPending: false, isError: false, isSuccess: false, error: null, data: undefined }));
+vi.mock("@/components/procurement/BudgetDisclosureCard", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ procurementProcess: { listItems: { invalidate: () => {} } } }),

@@ -12,6 +12,7 @@ import {
 } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { classifyVariable } from "../../domain/institutionalTemplates/editalPreparationModel";
 import { AUTHORITY_OWNED_PATHS } from "../../domain/institutionalTemplates/governedSources";
+import { PLATFORM_VARIABLES, type PlatformSchedule } from "../../domain/institutionalTemplates/certameAuthority";
 import type { BridgeDeps } from "./editalBridgeService";
 import { loadEditalCatalog } from "./editalCatalogLoader";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore";
@@ -39,6 +40,16 @@ export interface DefaultView {
   readonly incompatibleReason?: string;
 }
 
+/** Perfil da PLATAFORMA (master data estável, versionada com o registro do órgão). */
+export interface PlatformView {
+  readonly slug: string;
+  readonly label: string;
+  readonly fields: readonly { readonly field: "enderecoEletronico" | "regulamentoVersao"; readonly name: string; readonly description: string; readonly type: string; readonly value: string | null }[];
+  readonly cronograma: PlatformSchedule | null;
+  /** Campos obrigatórios da plataforma ainda sem valor. */
+  readonly missing: number;
+}
+
 export type LicitacoesProfileState =
   | { readonly status: "UNAVAILABLE"; readonly reason: string }
   | {
@@ -52,7 +63,9 @@ export type LicitacoesProfileState =
     readonly sections: readonly PreparationSection[];
     readonly roles: readonly RoleView[];
     readonly defaults: readonly DefaultView[];
-    readonly summary: { readonly policyTotal: number; readonly policyFilled: number; readonly policyPending: number; readonly rolesNeeded: number; readonly rolesOk: number; readonly rolesPending: number; readonly pendingCount: number };
+    /** Perfil da(s) plataforma(s) usada(s) pelo modelo: configurado UMA vez por órgão, reutilizado por todo Edital. */
+    readonly platforms: readonly PlatformView[];
+    readonly summary: { readonly policyTotal: number; readonly policyFilled: number; readonly policyPending: number; readonly rolesNeeded: number; readonly rolesOk: number; readonly rolesPending: number; readonly platformsPending: number; readonly pendingCount: number };
   };
 
 const ORG_SOURCES: readonly VariableSource2[] = ["IDENTITY", "POLICY"];
@@ -111,10 +124,22 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
     return { name: v.name, description: d.description, type: v.type, ...(v.enumValues ? { enumValues: v.enumValues } : {}), value: has ? current[v.name] : null, hasValue: has, ...(rejected.has(v.name) ? { incompatibleReason: rejected.get(v.name)! } : {}) };
   }).sort((a, b) => (a.name < b.name ? -1 : 1));
 
+  // Perfil da plataforma: cada plataforma que o catálogo usa (campos que ela alimenta + regras de cronograma declaradas).
+  const stored = (record?.payload.platforms ?? {}) as Record<string, { enderecoEletronico?: string; regulamentoVersao?: string; cronograma?: PlatformSchedule }>;
+  const slugs = [...new Set(catalog.vars.map((v) => PLATFORM_VARIABLES[v.name]?.platform).filter((x): x is string => !!x))];
+  const platforms: PlatformView[] = slugs.map((slug): PlatformView => {
+    const fieldsOf = catalog.vars.filter((v) => PLATFORM_VARIABLES[v.name]?.platform === slug).map((v) => {
+      const pv = PLATFORM_VARIABLES[v.name];
+      return { field: pv.field, name: v.name, description: describeVariable(v).description, type: v.type, value: stored[slug]?.[pv.field] ?? null };
+    });
+    return { slug, label: slug.toUpperCase(), fields: fieldsOf, cronograma: stored[slug]?.cronograma ?? null, missing: fieldsOf.filter((f) => !f.value).length };
+  });
+  const platformsPending = platforms.reduce((n, p) => n + p.missing, 0);
+
   const rolesOk = needed.filter((r) => r.state === "OK").length;
   const rolesPending = needed.length - rolesOk;
   return {
-    status: "READY", catalogVersion: catalog.version, revision: record?.revision ?? 0, hash: record?.hash ?? null, asOf, sections, roles, defaults,
-    summary: { policyTotal, policyFilled, policyPending, rolesNeeded: needed.length, rolesOk, rolesPending, pendingCount: policyPending + rolesPending },
+    status: "READY", catalogVersion: catalog.version, revision: record?.revision ?? 0, hash: record?.hash ?? null, asOf, sections, roles, defaults, platforms,
+    summary: { policyTotal, policyFilled, policyPending, rolesNeeded: needed.length, rolesOk, rolesPending, platformsPending, pendingCount: policyPending + rolesPending + platformsPending },
   };
 }

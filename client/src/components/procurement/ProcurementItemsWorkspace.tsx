@@ -9,6 +9,7 @@ import {
 } from "./procurementItemsView";
 import { shouldRotateAssistKeyOnError } from "./dfdFieldSources";
 import { useHydratedForm } from "../../lib/formHydration";
+import ItemsParticipationCard from "./ItemsParticipationCard";
 
 /**
  * Itens da contratação — área TRANSVERSAL do processo (qualquer etapa de início). O sistema encontra os itens
@@ -67,6 +68,7 @@ export default function ProcurementItemsWorkspace({ processId = "" }: Procuremen
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-6">
+      {processId && <ItemsParticipationCard processId={processId} />}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Itens da contratação</h1>
