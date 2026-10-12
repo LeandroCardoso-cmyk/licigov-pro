@@ -33,8 +33,8 @@ import {
 } from "../../services/legalOpinionAuthorityService";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 990701;
-const ORG_B = 990702;
+const ORG_A = 996141;
+const ORG_B = 996142;
 const RUN = Date.now().toString(36);
 
 const ORG_TABLES: Array<[string, string]> = [

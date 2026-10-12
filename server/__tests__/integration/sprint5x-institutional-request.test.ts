@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import {
@@ -20,6 +21,9 @@ import { insertRequest, getRequest, listPendingForDomain, listRequestTimeline, l
 
 const ORG_ID = 10600;
 const CORR = "corr-5x00";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("Sprint 5.X — Institutional Request Engine (Kernel)", () => {
 

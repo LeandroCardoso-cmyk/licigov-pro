@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 import fs from "fs";
 
 // Lifecycle
@@ -41,6 +42,9 @@ function walk(dir: string, acc: string[] = []): string[] {
 }
 
 const SERVER_TS = walk("server").filter(f => !f.includes("__tests__") && !f.endsWith(".test.ts"));
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("RC-3.5.1 — Kernel Infrastructure Refinement", () => {
 

@@ -41,7 +41,9 @@ import { makeContext, mockUser } from "../helpers/fixtures";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
-const BASE_ORG = 973_000_000 + STAMP * 10;
+// Faixa PRÓPRIA deste arquivo ([974.000.000, 976.000.000)): arquivos distintos nunca compartilham ids de órgão (antes duas famílias usavam a MESMA base,
+// e bases distintas se sobrepunham). Dentro da faixa: 20 mil posições de 100 órgãos por posição (≥ órgãos usados por arquivo).
+const BASE_ORG = 974_000_000 + (STAMP % 20_000) * 100;
 const RUN = STAMP.toString(36);
 let orgSeq = 0;
 let keySeq = 0;

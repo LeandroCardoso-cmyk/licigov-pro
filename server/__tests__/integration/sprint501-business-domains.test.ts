@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import {
@@ -44,6 +45,9 @@ import { upsertBusinessDomain, listLicensedModules, upsertLicensedModule } from 
 const ORG_ID = 10400;
 const CORR = "corr-5010";
 const NOW = "2026-07-06T00:00:00.000Z";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("Sprint 5.0.1 — Business Domain Architecture & Modular Licensing", () => {
 

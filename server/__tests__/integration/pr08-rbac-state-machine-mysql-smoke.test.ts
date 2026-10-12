@@ -40,8 +40,8 @@ let cmdKeySeq = 0;
 const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 990801;
-const ORG_B = 990802;
+const ORG_A = 996151;
+const ORG_B = 996152;
 const ROLES = ["viewer", "operator", "manager", "admin", "owner"] as const;
 type Role = typeof ROLES[number];
 

@@ -26,8 +26,8 @@ import {
 import { getOfficialDocument } from "../../services/documentEngineService";
 
 const DB = process.env.DATABASE_URL;
-const ORG = 994401;
-const ORG_OTHER = 994402;
+const ORG = 996191;
+const ORG_OTHER = 996192;
 const SIGNER = 8801;            // procurador (signatário)
 const SIGNER_NAME = "Procurador Homologacao V1";
 const SIGNER_ROLE = "manager"; // papel institucional no organization_members

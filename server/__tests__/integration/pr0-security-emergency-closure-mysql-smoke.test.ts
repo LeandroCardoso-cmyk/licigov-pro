@@ -21,8 +21,8 @@ import { main as bootstrapAdmin, ConfigError } from "../../../scripts/bootstrap-
 import { hashPassword, verifyPassword } from "../../services/passwordSecurity";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 950101;
-const ORG_B = 950102;
+const ORG_A = 996101;
+const ORG_B = 996102;
 const NONEXISTENT_ORG = 950199;
 
 describe.skipIf(!DB)("PR 0 (Security Emergency Closure) — MySQL real", () => {

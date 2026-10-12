@@ -21,8 +21,23 @@ const ORG_B = 980402; // flag OFF
 
 let conn: mysql.Connection;
 
+// A chave de idempotência do shadow é derivada de (org, id da contratação, docType, hash da entrada) e a tabela `idempotency_keys`
+// retém a resposta por 24h. IDs de contratação FIXOS faziam a 2ª execução do arquivo (no mesmo banco) ser um REPLAY da 1ª
+// ("replayed" = true, nenhuma observabilidade nova). Cada execução usa uma faixa de ids própria — e o replay DENTRO do
+// cenário (mesma entrada, mesmo id) continua exercitado pelo teste de replay.
+const RUN_BASE = 5_000_000 + (Date.now() % 4_000_000);
+const DC_ID = { flagOn: RUN_BASE, isolation: RUN_BASE + 1, replay: RUN_BASE + 2 } as const;
+
+/** Limpeza SOMENTE dos subjects deste arquivo (tenant-scoped; nunca uma flag/linha de outro tenant). */
+async function cleanupOwnRows(): Promise<void> {
+  const orgs = [ORG_A, ORG_B];
+  await conn.execute("DELETE FROM tenant_feature_flags WHERE flagName = ? AND organizationId IN (?, ?)", [FF_DIRECT_CONTRACT_SHADOW, ...orgs]).catch(() => {});
+  await conn.execute("DELETE FROM idempotency_keys WHERE operation = 'direct-contract.shadow' AND organizationId IN (?, ?)", orgs).catch(() => {});
+  for (const org of orgs) await conn.execute("DELETE FROM cognitive_observability WHERE tenant_id = ?", [org]).catch(() => {});
+}
+
 const dc = (over: Partial<any> = {}) => ({
-  id: 5001,
+  id: DC_ID.flagOn,
   processId: null as number | null,
   object: "Aquisição de material de escritório",
   value: 150000,
@@ -54,7 +69,7 @@ describe.skipIf(!DB)("PR C.3A — Shadow Contratação Direta (MySQL real)", () 
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
-    await conn.execute("DELETE FROM tenant_feature_flags WHERE flagName = ?", [FF_DIRECT_CONTRACT_SHADOW]).catch(() => {});
+    await cleanupOwnRows();
     // Habilita a flag SOMENTE para ORG_A (tenant-aware). ORG_B permanece OFF (fail-closed).
     await conn.execute(
       "INSERT INTO tenant_feature_flags (organizationId, flagName, enabled, percentage) VALUES (?, ?, 1, 100)",
@@ -62,17 +77,13 @@ describe.skipIf(!DB)("PR C.3A — Shadow Contratação Direta (MySQL real)", () 
     );
     invalidateAllFlagsForTenant(ORG_A);
     invalidateAllFlagsForTenant(ORG_B);
-    for (const org of [ORG_A, ORG_B]) {
-      await conn.execute("DELETE FROM cognitive_observability WHERE tenant_id = ?", [org]).catch(() => {});
-    }
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
-    await conn.execute("DELETE FROM tenant_feature_flags WHERE flagName = ?", [FF_DIRECT_CONTRACT_SHADOW]).catch(() => {});
-    for (const org of [ORG_A, ORG_B]) {
-      await conn.execute("DELETE FROM cognitive_observability WHERE tenant_id = ?", [org]).catch(() => {});
-    }
+    await cleanupOwnRows();
+    invalidateAllFlagsForTenant(ORG_A);
+    invalidateAllFlagsForTenant(ORG_B);
     await conn.end();
   });
 
@@ -97,9 +108,11 @@ describe.skipIf(!DB)("PR C.3A — Shadow Contratação Direta (MySQL real)", () 
   }, 60_000);
 
   it("replay: mesma entrada não duplica execução/observabilidade institucional", async () => {
-    const first = await runDirectContractShadow(shadowInput(ORG_A));
+    const input = () => shadowInput(ORG_A, { directContract: dc({ id: DC_ID.replay }) });
+    const first = await runDirectContractShadow(input());
+    expect(first.replayed).toBe(false);
     const before = await countObs(first.correlationId!);
-    const replay = await runDirectContractShadow(shadowInput(ORG_A));
+    const replay = await runDirectContractShadow(input());
     expect(replay.replayed).toBe(true);
     expect(replay.correlationId).toBe(first.correlationId);
     expect(await countObs(first.correlationId!)).toBe(before); // sem 2ª linha
@@ -118,7 +131,7 @@ describe.skipIf(!DB)("PR C.3A — Shadow Contratação Direta (MySQL real)", () 
   }, 60_000);
 
   it("isolamento: observabilidade do shadow é atribuída ao tenant correto", async () => {
-    const r = await runDirectContractShadow(shadowInput(ORG_A, { directContract: dc({ id: 5002 }) }));
+    const r = await runDirectContractShadow(shadowInput(ORG_A, { directContract: dc({ id: DC_ID.isolation }) }));
     const row = await getObservabilityByCorrelation(r.correlationId!);
     expect(row!.tenantId).toBe(ORG_A);
     // a mesma linha nunca aparece sob ORG_B

@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
@@ -43,7 +44,9 @@ import {
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
-const BASE_ORG = 985_000_000 + STAMP * 10;
+// Faixa PRÓPRIA deste arquivo ([985.000.000, 987.000.000)): arquivos distintos nunca compartilham ids de órgão (antes duas famílias usavam a MESMA base,
+// e bases distintas se sobrepunham). Dentro da faixa: 20 mil posições de 100 órgãos por posição (≥ órgãos usados por arquivo).
+const BASE_ORG = 985_000_000 + (STAMP % 20_000) * 100;
 const RUN = STAMP.toString(36);
 let orgSeq = 0;
 let keySeq = 0;
@@ -142,6 +145,9 @@ async function prepareAll(p: Bare) {
   for (const s of st.sections.filter((x: any) => x.scope === "PROCESS").map((x: any) => x.source)) await saveProcess(p, s);
   await saveParticipation(p);
 }
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
 
 describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rotas da UI, SEM seedGoverned)", () => {
   beforeAll(async () => {

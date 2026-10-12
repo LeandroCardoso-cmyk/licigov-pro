@@ -22,8 +22,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 960201;
-const ORG_B = 960202;
+const ORG_A = 996121;
+const ORG_B = 996122;
 const SENTINEL = "SENTINEL-R2PR02-SMOKE";
 
 describe.skipIf(!DB)("R2 / PR-02 — superfícies legadas desativadas (MySQL real)", () => {

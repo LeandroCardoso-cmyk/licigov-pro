@@ -12,6 +12,7 @@ import {
   createDirectContract, getDirectContractById,
 } from "../../db";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const DB = process.env.DATABASE_URL;
 const M = LEGAL_REFERENCE_V1_META;
@@ -23,6 +24,9 @@ async function cleanLegal(conn: mysql.Connection) {
   await conn.execute("DELETE FROM legal_reference_entries");
   await conn.execute("DELETE FROM legal_reference_sets");
 }
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
 
 describe.skipIf(!DB)("A3-RD1 — bridge governada em direct_contracts (MySQL real)", () => {
   let conn: mysql.Connection;

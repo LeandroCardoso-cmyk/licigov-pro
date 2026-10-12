@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // HD-01 (opção A) — a geração NOVA de TR/Edital exige Itens da contratação. Este arquivo roda SEM banco, então o contexto
 // do Edital recebe um estado canônico válido (sem pendências); o bloqueio sem Itens é provado em
@@ -37,6 +38,9 @@ import { insertProcess, getProcess, listProcesses, listIntelligentItems, recordP
 const ORG_ID = 10500;
 const CORR = "corr-5100";
 const PID = "proc-1";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
 

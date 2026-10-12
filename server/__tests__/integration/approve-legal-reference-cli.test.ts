@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const read = (rel: string) => readFileSync(path.join(process.cwd(), rel), "utf8");
 
@@ -32,6 +33,9 @@ const baseArgv = [
 ];
 
 beforeEach(() => approveMock.mockReset());
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
 
 describe("A3-RD1 — parseApproveArgs (fail-closed antes do domínio)", () => {
   it("parseia todos os campos obrigatórios + opcionais", () => {

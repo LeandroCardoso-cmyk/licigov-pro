@@ -40,8 +40,8 @@ import {
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
-const ORG = 993301;
-const ORG_OTHER = 993302; // isolamento multi-tenant
+const ORG = 996171;
+const ORG_OTHER = 996172; // isolamento multi-tenant
 const REQUESTER = 41;
 const LAWYER = 77;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;

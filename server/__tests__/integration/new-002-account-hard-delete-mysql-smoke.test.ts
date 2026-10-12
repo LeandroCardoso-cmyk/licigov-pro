@@ -20,8 +20,8 @@ import { ACCOUNT_HARD_DELETE_DISABLED, ACCOUNT_HARD_DELETE_DISABLED_MESSAGE } fr
 import { LGPD_EXPORT_DISABLED, LGPD_EXPORT_DISABLED_MESSAGE } from "../../services/lgpdExportGuard";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 960201;
-const ORG_B = 960202;
+const ORG_A = 996111;
+const ORG_B = 996112;
 
 describe.skipIf(!DB)("NEW-002 — lgpd.deleteMyAccount sem exclusão física (MySQL real)", () => {
   let conn: mysql.Connection;

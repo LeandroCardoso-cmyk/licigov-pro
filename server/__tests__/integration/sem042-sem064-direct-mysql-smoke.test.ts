@@ -33,8 +33,8 @@ import * as aiEngine from "../../services/aiExecutionEngine";
 import * as orchestrator from "../../services/workspaceOrchestratorService";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 960601;
-const ORG_B = 960602;
+const ORG_A = 960781;
+const ORG_B = 960782;
 
 const ORG_TABLES = [
   "direct_procurement_workspaces", "direct_procurement_procedures", "proposal_collections", "proposal_documents",
