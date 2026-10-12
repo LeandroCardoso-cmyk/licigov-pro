@@ -197,6 +197,11 @@ export async function cleanupOrgs(conn: mysql.Connection, orgs: number[]): Promi
     `DELETE FROM intelligent_items WHERE organization_id IN (${q})`,
     `DELETE FROM price_research WHERE organization_id IN (${q})`,
     `DELETE FROM procurement_processes WHERE organization_id IN (${q})`,
+    // Ledgers por tenant que sobrevivem ao fim do cenário e fariam um novo cenário com o MESMO org/processo ser tratado como REPLAY:
+    // `idempotency_keys` (chave `e2e-items-<org>-<nº do processo>` ⇒ a confirmação de Itens devolvia a resposta antiga e o processo ficava SEM itens)
+    // e os fatos canônicos de contexto. Escopo estrito: só os orgs sintéticos do cenário.
+    `DELETE FROM idempotency_keys WHERE organizationId IN (${q})`,
+    `DELETE FROM procurement_context_facts WHERE organization_id IN (${q})`,
   ];
   for (const sql of stmts) await conn.query(sql).catch(() => { /* tabela/coluna ausente em esquemas antigos */ });
 }

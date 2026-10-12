@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import {
-  createOfficialDocument, computeLineageId, computeReplayHash, officialFilename,
+  createOfficialDocument, computeLineageId, officialFilename,
   OFFICIAL_FORMATS,
 } from "../../domain/officialDocument";
 // Service (Document Engine)
@@ -21,6 +22,9 @@ import { documentEngineRouter } from "../../routers/documentEngineRouter";
 
 const ORG = 11200;
 const CORR = "corr-rc3";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("RC-3 — Official Document Engine", () => {
 

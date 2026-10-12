@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import {
@@ -34,6 +35,9 @@ import { operationRecordRouter } from "../../routers/operationRecordRouter";
 const ORG_ID = 11100;
 const CORR = "corr-5op0";
 const TODAY = "2026-03-01";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("FASE 5 — Business Domain 5: Centro de Operações", () => {
 

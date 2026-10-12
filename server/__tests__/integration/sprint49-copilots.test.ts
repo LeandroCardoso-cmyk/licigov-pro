@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import {
@@ -65,6 +66,9 @@ import {
 
 const ORG_ID = 10200;
 const CORR = "corr-4900";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("Sprint 4.9 — Institutional Cognitive Copilots", () => {
 

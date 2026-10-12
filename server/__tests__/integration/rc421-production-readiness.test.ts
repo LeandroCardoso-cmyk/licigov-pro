@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 import { executeCognitiveTask } from "../../services/aiExecutionEngine";
 import { recoverCognitiveObservability, getCognitiveObservability } from "../../services/cognitive/cognitiveObservabilityService";
@@ -17,6 +18,9 @@ import { providerReadiness, operationalHealth, productionReadinessReport } from 
 import { environmentDiagnostic, validateRequiredEnv, PRODUCTION_REQUIRED_ENV } from "../../config/env";
 
 const ORG = 12000;
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("RC-4.2.1 — Production Readiness", () => {
 
@@ -41,7 +45,7 @@ describe("RC-4.2.1 — Production Readiness", () => {
       })).toBeNull();
       expect(await getObservabilityByCorrelation("corr-rc421-b")).toBeNull();
       // facade nunca lança
-      await expect(persistObservability({ correlationId: "c", task: "GENERATE_DOCUMENT" } as any, { tenantId: ORG, replayHash: "z".repeat(32), provider: "mock" })).resolves.toBeUndefined();
+      await expect(persistObservability({ correlationId: "c", task: "GENERATE_DOCUMENT" } as never, { tenantId: ORG, replayHash: "z".repeat(32), provider: "mock" })).resolves.toBeUndefined();
       expect(await recoverObservabilityRow("inexistente")).toBeNull();
     });
 

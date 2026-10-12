@@ -5370,8 +5370,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/approve-legal-reference-cli.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "c6d6f0ec696ac7e7de610ee25e7464d8",
+    "mtime": 1791774169.8015563,
+    "ast_hash": "009586d977c2ca3bd6154b33be38e9ad",
     "semantic_hash": ""
   },
   "server/__tests__/integration/auth.test.ts": {
@@ -5535,13 +5535,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-contract-governed-bridge-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "7629b2c040c8bad0df2c735121fb364e",
+    "mtime": 1791774169.8015563,
+    "ast_hash": "489c2bd575157aa3e099689a3cce90a4",
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-contract-shadow-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "f468ccf8eb7ccc387e105024e533eefd",
+    "mtime": 1791774169.8015563,
+    "ast_hash": "73cabae34f4b98bfe2a1db272e26b98d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-contract-shadow.test.ts": {
@@ -5775,8 +5775,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-request-engine-mysql-smoke.test.ts": {
-    "mtime": 1791289211.580123,
-    "ast_hash": "c65a9f554cfe8016bb4aa89faf870f7b",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "bc0c1e4e67cc047667aadb1b99907041",
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitation-service.test.ts": {
@@ -5785,8 +5785,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitations-mysql-smoke.test.ts": {
-    "mtime": 1790643729.3193083,
-    "ast_hash": "5092dd1ca3740f77382d809d8ab24e0f",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "c4a89b3cc2782f2bb8015c5b5a8eb38b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitations-router.test.ts": {
@@ -5810,8 +5810,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinion-signature-snapshot-mysql-smoke.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "fc74d55fcd498fc169ef74574b1fd643",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "dd0d2d664e0251df12d7eb02a7886f1f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-opinions-tenant-isolation-mysql-smoke.test.ts": {
@@ -5820,8 +5820,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legal-reference-governance-mysql-smoke.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "14eecb2eb28c823e403ba3930eda2c6f",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "5af7093d108cd21de058206472167477",
     "semantic_hash": ""
   },
   "server/__tests__/integration/migrations-chain.test.ts": {
@@ -5830,8 +5830,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new003-lgpd-export-disabled-mysql-smoke.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "b136a948ddaed207d39d5c2865e7515e",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "7c5e155d878f9abb401eefef4243b9b6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new003-lgpd-export-disabled.test.ts": {
@@ -5995,8 +5995,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr0-security-emergency-closure-mysql-smoke.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "715c85e9f37a6273dd7d872aa29ba363",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "af6e41e6ac14bfc498d4c6ed5abc0fdd",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr0-security-emergency-closure.test.ts": {
@@ -6010,8 +6010,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/prc-idempotency-mysql-smoke.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "cf8c2c78a49a6ac4b4134fbb89e5a0b1",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "eb94ac569b106ffd026048998b61ddac",
     "semantic_hash": ""
   },
   "server/__tests__/integration/predeploy-release-orchestrator.test.ts": {
@@ -6045,8 +6045,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-mysql-smoke.test.ts": {
-    "mtime": 1790881396.2888765,
-    "ast_hash": "f479c2aa5038e6bd5d26ee73f53b73fa",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "5503108aac8d464943b285f99dbfe09e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-create-process.test.ts": {
@@ -6090,8 +6090,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/r2-pr02-legacy-endpoints-disabled-mysql-smoke.test.ts": {
-    "mtime": 1790881530.0368845,
-    "ast_hash": "e497d7fa0f56493ad44e07e11bdae445",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "3ca8be5379d6f3c2c6e5feec65056713",
     "semantic_hash": ""
   },
   "server/__tests__/integration/r2-pr02-legacy-endpoints-disabled.test.ts": {
@@ -6160,8 +6160,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc3-document-engine.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "51e63303853252fcf05662a8565a0271",
+    "mtime": 1791774175.8356364,
+    "ast_hash": "177c3bf66ab30c22f863808929fb772c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc35-kernel-infrastructure.test.ts": {
@@ -6170,8 +6170,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc351-kernel-refinement.test.ts": {
-    "mtime": 1791289219.4121225,
-    "ast_hash": "ed6e5e51f103bd779d542fa75bf885dc",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "d4a9eddeeba2a25f46d938f9292c0afb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc352-boundary-enforcement.test.ts": {
@@ -6200,8 +6200,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc421-production-readiness.test.ts": {
-    "mtime": 1790643729.320021,
-    "ast_hash": "0ff66fe8af2eabe1e31c5f913eb0e8f1",
+    "mtime": 1791774178.7439084,
+    "ast_hash": "333e6ac7e2f8373ec11899fe648d586e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc422-production-monitoring.test.ts": {
@@ -6460,43 +6460,43 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint481-kg-wiring.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "b03cfc94c04f3c8d3684cb9383dc9134",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "50ad1111403d076573687d0b23f094a0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint49-copilots.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "44d2ae6818d240993195e6e25627ae46",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "5d1b075238688fec897cac1936f26a70",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint50-workspace.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "4aa57929e7a0f85c630b7b67d9de03ee",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "62208c0a3480d628f2dbde0483df4132",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint501-business-domains.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "546cfdc3bc672b44d53b271d2732a918",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "0a768ffa31b47825eaf83ac2852abd03",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint51-procurement.test.ts": {
-    "mtime": 1791289211.592123,
-    "ast_hash": "02be1930ae1e0fd8269d4ab5d2c6d343",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "e3cd44c9870f10172e106024604c7034",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5op-department-operation.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "773b382e2566aa4988d4625620b0abfd",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "63239f7660f7acc999dc245460399f7f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5w-contracts.test.ts": {
-    "mtime": 1791290250.252074,
-    "ast_hash": "e9b788f2565476a3cc76c496a205b2c7",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "84428d6e381054119612014d2d0cba8c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5x-institutional-request.test.ts": {
-    "mtime": 1791289211.592123,
-    "ast_hash": "49e0756775ebe7f522faf385b6c5415f",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "b2d36ad8e37474500c0730c1c4516ee9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5xx-consolidation.test.ts": {
@@ -6505,13 +6505,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5y-legal-opinion.test.ts": {
-    "mtime": 1790643729.3280208,
-    "ast_hash": "726809b944f1a6b745ec5d80d6bff8dd",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "72ba1880db3fee942ec3b0a576fcc428",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sprint5z-direct-procurement.test.ts": {
-    "mtime": 1791289219.2641225,
-    "ast_hash": "e439ec534333744f1dd4347d9dd63ffb",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "a86851723f1e12d0969aa7a869db8892",
     "semantic_hash": ""
   },
   "server/__tests__/integration/task-attachment-policy.test.ts": {
@@ -6555,8 +6555,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/v1-functional-closure-mysql-smoke.test.ts": {
-    "mtime": 1791290036.3667703,
-    "ast_hash": "c4bf602ad1fd57f22a197607c6a92bf3",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "f9f0fdcc65559eac2c71f04072adbf15",
     "semantic_hash": ""
   },
   "server/__tests__/intelligentItemTransition.test.ts": {
@@ -12590,8 +12590,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new-002-account-hard-delete-mysql-smoke.test.ts": {
-    "mtime": 1790890252.2982614,
-    "ast_hash": "26924e3ca31f8c458e872f226d1854b2",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "571ce4c68fe7ff8dc649fab0b098f4cb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/r2-leg009-legacy-documents-disabled-mysql-smoke.test.ts": {
@@ -12760,8 +12760,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791289219.2641225,
-    "ast_hash": "cd7dbc37fd2b74c046c15b0dc98fd4fe",
+    "mtime": 1791774169.8015563,
+    "ast_hash": "c2a5c6d75d936f8a03d9ed3b6200fff9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-decision-ledger-mysql-smoke.test.ts": {
@@ -12785,8 +12785,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-assignment-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791289219.5881226,
-    "ast_hash": "fb5e3c3718f2e6765f347a6fd8d9881d",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "e9ac1cd2bd300e4ca594ebffb170cb5a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-receive-claim.test.ts": {
@@ -13085,8 +13085,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr08-rbac-state-machine-mysql-smoke.test.ts": {
-    "mtime": 1791290028.4269137,
-    "ast_hash": "1b6e0e2e6b670d59f1af5909363673f6",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "733cba500d53cb88b3a13a92e9978106",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr08-rbac-state-machine.test.ts": {
@@ -13175,8 +13175,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sem042-sem064-direct-mysql-smoke.test.ts": {
-    "mtime": 1791289219.2641225,
-    "ast_hash": "47b7717b3d2b20c174266415d46aa3db",
+    "mtime": 1791774169.8055563,
+    "ast_hash": "9c9f95f420bed8fce38416d25186e8bd",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sem043-migration-0315-mysql-smoke.test.ts": {
@@ -13715,17 +13715,17 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
-    "mtime": 1791347321.4050002,
+    "mtime": 1791769650.895219,
     "ast_hash": "22969365147e1650ad1f5a7e20150be0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-integration-mysql-smoke.test.ts": {
-    "mtime": 1791347321.4050002,
-    "ast_hash": "9d47a541bf3a08cac4dc74e041af5991",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "6b09c739b425e94d31b5aecf830eb7f9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-persistence-mysql-smoke.test.ts": {
-    "mtime": 1791375884.3519645,
+    "mtime": 1791769650.9054184,
     "ast_hash": "91ef2390bedce58e2807a7c2ab5d8a41",
     "semantic_hash": ""
   },
@@ -14020,8 +14020,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
-    "mtime": 1791755360.733211,
-    "ast_hash": "64048a3bba8a511da6b0c8d88b75e312",
+    "mtime": 1791774169.8015563,
+    "ast_hash": "d84b30b4fd6c5f864470d2ecbc4cc988",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesGovernanceFakes.ts": {
@@ -14045,23 +14045,23 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0317-migration-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
+    "mtime": 1791769650.896083,
     "ast_hash": "7d8d7d5f6ea313c68d03c26a758025c2",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "bd5bde5a154fbf0ba2af0054c62ba4e9",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "09dcc51a2caeb5f53f05b145b10f8b50",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "cb7b3535055dafa77912ede6f1e0384f",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "394c60c11712a1aef943b01a988a28f1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-sources-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "390dbf3488cbc2b25a7711a4265c3113",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "02934fe2b541ed0a17937fbd77461dd9",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-ast2-composer.test.ts": {
@@ -14385,8 +14385,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "e63756b11db223d8e5f1de6160474406",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "85d0c8b7b550a48edc967d0a25f34a0b",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-bridge.test.ts": {
@@ -14435,8 +14435,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "52de76132b45ef4e342f2e27b636b100",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "c53bc4ea91f99e30f01fd5d74e29efbb",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-structural-deviation-status.test.ts": {
@@ -14455,8 +14455,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "75dd5ffed44b64580913b88c6733d974",
+    "mtime": 1791774169.8135562,
+    "ast_hash": "59bc19b06d5078bdd0bcea901deb2ee0",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-preparation-model.test.ts": {
@@ -14520,8 +14520,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts": {
-    "mtime": 1791755360.737211,
-    "ast_hash": "def6442dd095699098cf549c6ce402e6",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "dfd065e76fddb5aa2b6bda8b6a254a46",
     "semantic_hash": ""
   },
   "server/__tests__/unit/context-reuse-authority-matrix.test.ts": {
@@ -14575,8 +14575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts": {
-    "mtime": 1791757055.1894362,
-    "ast_hash": "7c950591fd09958769dc8bdea2989774",
+    "mtime": 1791774169.8095562,
+    "ast_hash": "bf20033dfccb7f4c80f8aab2ac3b6702",
     "semantic_hash": ""
   },
   "server/__tests__/unit/certame-config-authority.test.ts": {
@@ -14607,6 +14607,26 @@
   "server/domain/institutionalTemplates/lifecycleLateBound.ts": {
     "mtime": 1791755360.765211,
     "ast_hash": "491a2970236b566273fdd8174b4dea2f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/globalFixtureLock.ts": {
+    "mtime": 1791768136.9855926,
+    "ast_hash": "fd056d889a7542c86589a4255061d515",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/noDatabase.ts": {
+    "mtime": 1791767919.1811016,
+    "ast_hash": "cbc9f8808d3115e05a57d5c8f10e29c5",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/mysql-smoke-isolation-guards.test.ts": {
+    "mtime": 1791769729.3436081,
+    "ast_hash": "aa082f3ef0fb4398042097b6d322a322",
+    "semantic_hash": ""
+  },
+  "docs/technical/MYSQL_TEST_WRITING_RULES.md": {
+    "mtime": 1791769754.6895828,
+    "ast_hash": "803c2f364ede39e95191ff7418a8d765",
     "semantic_hash": ""
   }
 }

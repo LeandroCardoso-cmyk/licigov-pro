@@ -27,6 +27,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
+import { COOKIE_NAME } from "@shared/const";
 
 const DB = process.env.DATABASE_URL;
 const ORG_A = 950101;
@@ -46,6 +47,8 @@ describe.skipIf(!DB)("PR A.1 — acesso institucional (MySQL real)", () => {
   let onboardedUserId: number;
   let onboardedToken: string;
   let orgBInvitationId: number;
+  /** Cookies emitidos pelo router através do `res` do contexto (o aceite de convite abre sessão). */
+  const issuedCookies: Array<{ name: string; value: string }> = [];
 
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
@@ -100,7 +103,8 @@ describe.skipIf(!DB)("PR A.1 — acesso institucional (MySQL real)", () => {
     return appRouter.createCaller({
       user: userId === null ? null : ({ id: userId, role, name: `Usuário ${userId}`, email: `invite-smoke-${userId}@teste.local` } as never),
       req: { headers: {}, ip: undefined } as never,
-      res: {} as never,
+      // O router de convites emite o cookie de sessão no aceite (`ctx.res.cookie`): o contexto de teste precisa do contrato mínimo de `res`.
+      res: { cookie: (name: string, value: string) => { issuedCookies.push({ name, value }); }, clearCookie: () => undefined } as never,
       correlationId: `test-invite-smoke-${userId ?? "anon"}`,
     } as never);
   }
@@ -182,6 +186,8 @@ describe.skipIf(!DB)("PR A.1 — acesso institucional (MySQL real)", () => {
     });
     expect(acceptResult.success).toBe(true);
     expect(acceptResult.organizationId).toBe(onboardedOrgId);
+    expect(issuedCookies.map((c) => c.name)).toEqual([COOKIE_NAME]);   // sessão aberta no aceite (conta nova)
+    expect(issuedCookies[0].value.length).toBeGreaterThan(20);
 
     const [userRows] = await conn.execute<mysql.RowDataPacket[]>(`SELECT id, tokenVersion FROM users WHERE email = ?`, [onboardedEmail]);
     expect(userRows).toHaveLength(1);

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain — Workspace
 import {
@@ -44,6 +45,9 @@ const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const ORG_ID = 10900;
 const CORR = "corr-5w00";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("FASE 5 — Business Domain: Contratos", () => {
 

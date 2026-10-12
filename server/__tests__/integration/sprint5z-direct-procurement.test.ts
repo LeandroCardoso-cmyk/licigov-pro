@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain — Workspace
 import {
@@ -40,6 +41,9 @@ import { directProcurementRouter } from "../../routers/directProcurementRouter";
 
 const ORG_ID = 10800;
 const CORR = "corr-5z00";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("FASE 5 — Business Domain: Contratação Direta", () => {
 

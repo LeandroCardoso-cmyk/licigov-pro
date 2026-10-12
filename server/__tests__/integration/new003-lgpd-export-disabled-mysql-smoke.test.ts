@@ -10,7 +10,8 @@
  * Contrato verificado:
  *  - todo ator (sem órgão, viewer, operator, manager, owner, admin de plataforma, membership ativa ou
  *    inativa, usuário de outro órgão) recebe FORBIDDEN com LGPD_EXPORT_DISABLED — mensagem idêntica;
- *  - ZERO leitura de banco após o guard: `Com_select` global inalterado durante as chamadas;
+ *  - ZERO acesso do app ao banco após o guard: nenhuma query/execute/getConnection no pool do app durante as chamadas
+ *    (medido NO pool do app — não no `Com_select` GLOBAL do servidor, que conta SELECTs de qualquer outra suíte concorrente);
  *  - ZERO leak: nem a resposta via createCaller nem o corpo HTTP (fetch adapter + superjson) contêm
  *    chaves proibidas, hash bcrypt, e-mail, conteúdo ou referências de storage dos fixtures;
  *  - nenhuma linha é alterada (contagens e colunas sensíveis idênticas antes/depois);
@@ -116,10 +117,21 @@ describe.skipIf(!DB)("NEW-003 — lgpd.exportMyData desativado (MySQL real)", ()
     const { appRouter } = await import("../../routers");
     return appRouter.createCaller(ctx as unknown as Parameters<typeof appRouter.createCaller>[0]);
   }
-  const comSelect = async () => {
-    const [rows] = await conn.query<mysql.RowDataPacket[]>("SHOW GLOBAL STATUS LIKE 'Com_select'");
-    return Number((rows[0] as { Value: string }).Value);
-  };
+  /**
+   * Quantos acessos o APP fez ao banco (query/execute/getConnection no pool do singleton `getDb()`) durante `fn`.
+   * Substitui `SHOW GLOBAL STATUS Com_select`, que é um contador do SERVIDOR inteiro e quebrava (falso positivo)
+   * sempre que outro arquivo de teste consultava o MySQL em paralelo. Aqui só conta o que ESTE processo do app faz.
+   */
+  async function appDbAccessesDuring(fn: () => Promise<void>): Promise<number> {
+    const { getDb } = await import("../../db/connection");
+    const pool = (await getDb() as unknown as { $client: Record<string, (...a: unknown[]) => unknown> }).$client;
+    const methods = ["query", "execute", "getConnection"] as const;
+    const originals = Object.fromEntries(methods.map((m) => [m, pool[m]]));
+    let accesses = 0;
+    for (const m of methods) pool[m] = function (this: unknown, ...a: unknown[]) { accesses++; return (originals[m] as (...x: unknown[]) => unknown).apply(pool, a); };
+    try { await fn(); } finally { for (const m of methods) pool[m] = originals[m]; }
+    return accesses;
+  }
   async function sensitiveSnapshot() {
     const users = Object.values(ids);
     const [u] = await conn.query<mysql.RowDataPacket[]>(
@@ -146,12 +158,11 @@ describe.skipIf(!DB)("NEW-003 — lgpd.exportMyData desativado (MySQL real)", ()
     it(`${a.label} ⇒ FORBIDDEN LGPD_EXPORT_DISABLED, zero leitura e zero leak`, async () => {
       const before = await sensitiveSnapshot();
       const c = await appRouterCaller(ctxFor(a.tag, a.role, a.org, a.orgRole, a.active ?? true));
-      const s0 = await comSelect();
-      const err = await errOf(() => c.lgpd.exportMyData());
-      const s1 = await comSelect();
+      let err!: Awaited<ReturnType<typeof errOf>>;
+      const accesses = await appDbAccessesDuring(async () => { err = await errOf(() => c.lgpd.exportMyData()); });
       expect(err).toEqual({ code: "FORBIDDEN", message: LGPD_EXPORT_DISABLED_MESSAGE });
       expect(err.message).toContain(LGPD_EXPORT_DISABLED);
-      expect(s1 - s0, "nenhum SELECT no banco durante a chamada").toBe(0);
+      expect(accesses, "nenhum acesso do app ao banco durante a chamada").toBe(0);
       const blob = JSON.stringify(err);
       expect(blob).not.toMatch(FORBIDDEN_RE);
       expect(blob).not.toMatch(BCRYPT_RE);
@@ -162,18 +173,19 @@ describe.skipIf(!DB)("NEW-003 — lgpd.exportMyData desativado (MySQL real)", ()
 
   it("fio HTTP real (fetch adapter + superjson + appRouter): 403 sem segredo, conteúdo ou storage ref", async () => {
     const { appRouter } = await import("../../routers");
-    const s0 = await comSelect();
-    const res = await fetchRequestHandler({
-      endpoint: "/api/trpc",
-      req: new Request("http://localhost/api/trpc/lgpd.exportMyData", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ json: null }),
-      }),
-      router: appRouter,
-      createContext: () => ctxFor("holder", "user", ORG_B, "operator", false, "n003-wire") as never,
-      onError: () => {},
+    let res!: Response; let body = "";
+    const accesses = await appDbAccessesDuring(async () => {
+      res = await fetchRequestHandler({
+        endpoint: "/api/trpc",
+        req: new Request("http://localhost/api/trpc/lgpd.exportMyData", {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ json: null }),
+        }),
+        router: appRouter,
+        createContext: () => ctxFor("holder", "user", ORG_B, "operator", false, "n003-wire") as never,
+        onError: () => {},
+      });
+      body = await res.text();
     });
-    const body = await res.text();
-    const s1 = await comSelect();
     expect(res.status).toBe(403);
     expect(body).toContain(LGPD_EXPORT_DISABLED);
     expect(body).not.toMatch(FORBIDDEN_RE);
@@ -181,7 +193,7 @@ describe.skipIf(!DB)("NEW-003 — lgpd.exportMyData desativado (MySQL real)", ()
     expect(body).not.toContain("CONTEUDO INSTITUCIONAL");
     expect(body).not.toContain("secret-key");
     expect(body).not.toContain(email("holder"));
-    expect(s1 - s0).toBe(0);
+    expect(accesses, "nenhum acesso do app ao banco na chamada HTTP").toBe(0);
   }, 30_000);
 
   it("retry: 5 chamadas seguidas do mesmo titular ⇒ mesma recusa, nada muda", async () => {

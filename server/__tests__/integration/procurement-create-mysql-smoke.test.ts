@@ -59,8 +59,12 @@ const DDL_GENERATED_DOCS = `CREATE TABLE IF NOT EXISTS \`generated_documents\` (
   PRIMARY KEY (\`id\`), INDEX \`idx_gd_org\` (\`organization_id\`), INDEX \`idx_gd_process\` (\`process_id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
 
-const ORG_A = 950100;
-const ORG_B = 950101;
+// Faixa própria (950101/950102 pertencem a outros smokes que inserem `organizations`: evita colisão de tenant em execução paralela).
+const ORG_A = 950880;
+const ORG_B = 950881;
+// Chaves de idempotência estáveis DENTRO da execução (replay), distintas ENTRE execuções: `idempotency_keys` retém a resposta por 24h,
+// e uma chave fixa fazia a 2ª execução no mesmo banco devolver o DFD "já gerado" de uma execução anterior (sem recriar o documento).
+const RUN = Date.now().toString(36);
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 async function cleanup() {
@@ -68,6 +72,7 @@ async function cleanup() {
   await conn.query("DELETE FROM `procurement_processes` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
   await conn.query("DELETE FROM `process_timeline` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
   await conn.query("DELETE FROM `generated_documents` WHERE organization_id IN (?, ?)", [ORG_A, ORG_B]);
+  await conn.query("DELETE FROM `idempotency_keys` WHERE organizationId IN (?, ?)", [ORG_A, ORG_B]);
   await conn.end();
 }
 
@@ -154,7 +159,7 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     // C.4A: idempotencyKey + actorUserId são obrigatórios (contrato replay-safe).
     const { document: created } = await generateDFDDraft({
       organizationId: ORG_A, processId: process.id, object: process.object, correlationId: "smoke-dfd",
-      idempotencyKey: "smoke-dfd-400-2026", actorUserId: 1,
+      idempotencyKey: `smoke-dfd-400-2026-${RUN}`, actorUserId: 1,
     });
     expect(created.kind).toBe("dfd");
     expect(created.status).toBe("rascunho");
@@ -171,7 +176,7 @@ describe.skipIf(!DB)("Smoke MySQL real — criação canônica de Processo Licit
     await saveDFDDraft({
       organizationId: ORG_A, processId: process.id, object: process.object,
       content: "# DFD revisado\nConteúdo editado pelo servidor.", actorUserId: 2,
-      expectedContentHash: draftContentHash(loaded!.content), idempotencyKey: "smoke-dfd-save-400-2026",
+      expectedContentHash: draftContentHash(loaded!.content), idempotencyKey: `smoke-dfd-save-400-2026-${RUN}`,
       correlationId: "smoke-dfd",
     });
     const afterSave = await listGeneratedDocuments(process.id, ORG_A).then(ds => ds.filter(d => d.kind === "dfd"));

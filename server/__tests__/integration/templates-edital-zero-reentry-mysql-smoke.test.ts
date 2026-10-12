@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
@@ -53,7 +54,9 @@ import {
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
-const BASE_ORG = 984_000_000 + STAMP * 10;
+// Faixa PRÓPRIA deste arquivo ([983.000.000, 985.000.000)): arquivos distintos nunca compartilham ids de órgão (antes duas famílias usavam a MESMA base,
+// e bases distintas se sobrepunham). Dentro da faixa: 20 mil posições de 100 órgãos por posição (≥ órgãos usados por arquivo).
+const BASE_ORG = 983_000_000 + (STAMP % 20_000) * 100;
 const RUN = STAMP.toString(36);
 let orgSeq = 0;
 let keySeq = 0;
@@ -176,6 +179,9 @@ async function fillPending(p: P, opts: { scope?: "ORG" | "PROCESS" | "ALL"; skip
 }
 
 const gen = (p: P) => proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), idempotencyKey: key("gen") } as any) as Promise<any>;
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
 
 describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas e plano do cliente, SEM seedGoverned)", () => {
   beforeAll(async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain
 import { createKnowledgeNode, updateNodeVersion } from "../../domain/knowledgeNode";
@@ -46,6 +47,9 @@ import {
 } from "../../services/institutionalRetrievalService";
 
 const ORG_ID = 10101;
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("Sprint 4.8.1 — Knowledge Graph Operational Wiring", () => {
 

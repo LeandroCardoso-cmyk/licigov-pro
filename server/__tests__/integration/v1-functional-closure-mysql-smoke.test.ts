@@ -37,8 +37,8 @@ const cmdKey = () => `cmd-${Date.now().toString(36)}-${++cmdKeySeq}`;
 
 const DB = process.env.DATABASE_URL;
 const STRICT = "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO";
-const ORG = 991061;
-const ORG2 = 991062;
+const ORG = 996161;
+const ORG2 = 996162;
 const LAWYER = 8;
 const SIGNER = 8;
 const USER = 5;

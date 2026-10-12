@@ -34,8 +34,8 @@ import * as aiEngine from "../../services/aiExecutionEngine";
 import * as orchestrator from "../../services/workspaceOrchestratorService";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 960501;
-const ORG_B = 960502;
+const ORG_A = 996131;
+const ORG_B = 996132;
 const ROLE_DENIED = (min: string) => `Esta ação requer papel mínimo '${min}' na organização.`;
 const NOT_FOUND_MSG = "Processo de contratação direta não encontrado nesta organização.";
 

@@ -45,10 +45,13 @@ import {
   BLL, BLL_CATALOG, E2E_SCENARIO, U_AUTHOR, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedAiExecution,
   seedGoverned, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
-const BASE_ORG = 981_000_000 + STAMP * 10;
+// Faixa PRÓPRIA deste arquivo ([981.000.000, 983.000.000)): arquivos distintos nunca compartilham ids de órgão (antes duas famílias usavam a MESMA base,
+// e bases distintas se sobrepunham). Dentro da faixa: 20 mil posições de 100 órgãos por posição (≥ órgãos usados por arquivo).
+const BASE_ORG = 981_000_000 + (STAMP % 20_000) * 100;
 const RUN = STAMP.toString(36);
 let orgSeq = 0;
 let keySeq = 0;
@@ -148,6 +151,9 @@ const NO_RESIDUE = (text: string) => {
   expect(text, "marcador pendente").not.toMatch(/\[REVISAR/);
   expect(text, "xref quebrada").not.toMatch(/⟦|⟧|\[XREF|xref:/);
 };
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
 
 describe.skipIf(!DB)("Piloto Edital — E2E integrado A+B+C (MySQL real, dados sintéticos)", () => {
   beforeAll(async () => {

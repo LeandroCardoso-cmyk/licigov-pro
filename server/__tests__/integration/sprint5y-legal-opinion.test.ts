@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { useNoDatabase } from "../helpers/noDatabase";
 
 // Domain — Workspace
 import {
@@ -36,6 +37,9 @@ import { legalOpinionWorkspaceRouter } from "../../routers/legalOpinionWorkspace
 const ORG_ID = 10700;
 const CORR = "corr-5y00";
 const REQ = "req-parecer-1";
+
+// Este arquivo afirma a degradação SEM banco: independe de DATABASE_URL do ambiente.
+useNoDatabase();
 
 describe("FASE 5 — Business Domain: Parecer Jurídico", () => {
 
