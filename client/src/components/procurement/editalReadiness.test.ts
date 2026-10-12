@@ -12,7 +12,7 @@ import {
   fixAction, generateReady, type AuthorityClass, type EntryPoint, type FieldStatus, type PrepField, type PrepSection, type PreparationStateView, type StageTarget,
 } from "@/lib/editalPreparation";
 import {
-  ORIGIN_LABEL, TR_OFFICIAL_EXACT_MESSAGE, TR_OFFICIAL_EXACT_REQUIRED, TR_SELECTION_ANCHOR, buildEditalReadiness, generationCta, isDecisionsOpen, originGroups, readinessHeadline,
+  LARGE_ORIGIN_GROUP_THRESHOLD, ORIGIN_LABEL, TR_OFFICIAL_EXACT_MESSAGE, TR_OFFICIAL_EXACT_REQUIRED, TR_SELECTION_ANCHOR, buildEditalReadiness, generationCta, isDecisionsOpen, isLargeOriginGroup, originGroups, profileReadiness, readinessHeadline,
 } from "@/lib/editalReadiness";
 import { livePendingItems, pendingItems, optionalItems } from "@/lib/editalPreparation";
 
@@ -300,6 +300,106 @@ describe("UX — SSR da preparação (progressive disclosure)", () => {
     expect(out).toContain('data-origin="ORG_REGISTRY"');
     expect(out).toContain("Cadastro do órgão");
     expect(out).toContain("Pesquisa de Preços");
+  });
+
+  // ───────────────────────── Final UX amend — grupos grandes na origem + perfil necessário ao documento ─────────────────────────
+  const VALID_PIN = { state: "VALID" as const, ref: { documentId: "d", version: 1, contentHash: "h" } };
+  const trParams = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `tr.param${i + 1}`, description: `Parâmetro do TR ${i + 1}`, reason: "confirme em Parâmetros estruturados do TR" }));
+  const trState = (n: number) => state([], { trPin: VALID_PIN, upstream: { trDigest: "x", trPending: trParams(n), profilePending: [], sourcePending: [] } });
+  const regionOf = (out: string, id: string) => new RegExp(`<div id="${id}"[^>]*>`).exec(out)?.[0] ?? "";
+
+  it("UX13 — grupo grande do TR (20 parâmetros): contagem preservada, lista RECOLHIDA, ação visível, conteúdo montado e hidden; abre sob demanda", () => {
+    const st = trState(20);
+    const r = buildEditalReadiness(st);
+    expect(r.counters.ORIGIN_ACTION_REQUIRED_TOTAL).toBe(20);                       // os 20 continuam contando (nada reclassificado nem escondido da contagem)
+    expect(r.originGroups).toHaveLength(1);
+    expect(r.originGroups[0]).toMatchObject({ entry: "TR_SECTION" });
+    expect(isLargeOriginGroup(r.originGroups[0])).toBe(true);
+
+    const out = html(st);
+    expect(out).toContain('data-origin="TR_SECTION" data-large="true"');
+    expect(out).toContain('data-count="20"');
+    expect(out).toContain("20 parâmetros precisam ser confirmados no TR");           // cabeçalho do grupo com a contagem
+    expect(out).toContain("Abrir o TR");                                            // ação visível com o grupo recolhido (fora do conteúdo recolhido)
+    expect(out).toMatch(/<button[^>]*aria-expanded="false"[^>]*aria-controls="edital-origem-TR_SECTION"/);
+    expect(out).toContain("Ver 20 parâmetros");
+    expect(regionOf(out, "edital-origem-TR_SECTION")).toMatch(/hidden/);
+    for (let i = 1; i <= 20; i++) expect(out).toContain(`Parâmetro do TR ${i} —`);   // os 20 continuam montados (hidden), não removidos
+    // a ação NÃO está dentro da região recolhida
+    const hiddenRegion = /<div id="edital-origem-TR_SECTION"[\s\S]*?<\/ul><\/div>/.exec(out)?.[0] ?? "";
+    expect(hiddenRegion).toContain("Parâmetro do TR 20");                          // (a regex realmente capturou a região recolhida)
+    expect(hiddenRegion).not.toContain("Abrir o TR");
+    // abrir: aria-expanded=true e a região deixa de estar hidden
+    const open = html(st, { initialOpenOriginGroups: ["TR_SECTION"] });
+    expect(open).toMatch(/<button[^>]*aria-expanded="true"[^>]*aria-controls="edital-origem-TR_SECTION"/);
+    expect(regionOf(open, "edital-origem-TR_SECTION")).not.toMatch(/hidden/);
+    // blocker principal continua na árvore principal (alerta de origem fora do recolhimento)
+    expect(out).toContain('aria-label="Dados a resolver na origem"');
+    expect(out).toContain('role="alert"');
+  });
+
+  it("UX13b — o limite é genérico (não só TR): até N itens a lista é direta; acima de N, recolhida; grupos pequenos não ganham accordion", () => {
+    expect(LARGE_ORIGIN_GROUP_THRESHOLD).toBe(5);
+    const mk = (n: number, entry: EntryPoint) => state([], { upstream: { trDigest: "x", trPending: [], profilePending: [], sourcePending: Array.from({ length: n }, (_, i) => pendingSource(`${entry}.${i}`, entry)) } });
+    const atLimit = html(mk(LARGE_ORIGIN_GROUP_THRESHOLD, "ORG_REGISTRY"));
+    expect(atLimit).toContain('data-origin="ORG_REGISTRY" data-large="false"');
+    expect(atLimit).not.toContain("edital-origem-ORG_REGISTRY");                    // sem accordion
+    expect(atLimit).toContain("Corrigir cadastro do órgão");
+    const above = html(mk(LARGE_ORIGIN_GROUP_THRESHOLD + 1, "PRICE_RESEARCH"));
+    expect(above).toContain('data-origin="PRICE_RESEARCH" data-large="true"');
+    expect(above).toContain(`${LARGE_ORIGIN_GROUP_THRESHOLD + 1} informações precisam ser corrigidas em Pesquisa de Preços`);
+    expect(above).toMatch(/aria-expanded="false"[^>]*aria-controls="edital-origem-PRICE_RESEARCH"/);
+    expect(above).toContain("Corrigir na Pesquisa de Preços");
+  });
+
+  it("UX14 — perfil 33 pendentes = 4 necessários + 29 adicionais: 'O que falta' lista exatamente 4; adicionais só no disclosure próprio", () => {
+    const required = many(4, { source: "POLICY", authority: "ORG_POLICY_PROFILE", class: "ORG_PROFILE", status: "PROFILE_INCOMPLETE", editable: false, required: true });
+    const extra = many(29, { source: "POLICY", authority: "ORG_POLICY_PROFILE", class: "ORG_PROFILE", status: "PROFILE_INCOMPLETE", editable: false, required: false });
+    const st = state([section("POLICY", "ORG", [...required, ...extra])], { upstream: { trDigest: "x", trPending: [], sourcePending: [], profilePending: [...required, ...extra].map((f) => profileEntry(f.name)) } });
+    const r = buildEditalReadiness(st);
+    expect(r.counters.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL).toBe(4);
+    expect(readinessHeadline(r.counters)).toContain("4 a configurar uma única vez");
+    expect(r.profile.required.map((i) => i.name)).toEqual(required.map((f) => f.name));
+    expect(r.profile.additional).toHaveLength(29);
+    expect(profileReadiness(st)).toEqual(r.profile);                                  // a MESMA função alimenta contador, detalhes e lista
+
+    const out = html(st);
+    const reqList = /<ul[^>]*data-profile-list="required">([\s\S]*?)<\/ul>/.exec(out)?.[1] ?? "";
+    expect((reqList.match(/<li/g) ?? []).length).toBe(4);
+    for (const f of extra) expect(reqList).not.toContain(`Perfil ${f.name} —`);
+    for (const f of required) expect(reqList).toContain(`Perfil ${f.name} —`);
+    expect(out).toContain("O que falta para este Edital — 4");
+    expect(out).toContain("4 informações necessárias para este Edital");
+    expect(out).toContain("O Perfil institucional possui 29 campos adicionais não preenchidos, não necessários para este Edital.");
+    // adicionais: disclosure separado, recolhido; os 29 só existem ali
+    expect(out).toMatch(/aria-expanded="false"[^>]*aria-controls="edital-perfil-adicionais"/);
+    expect(out).toContain("Ver campos adicionais do perfil");
+    expect(regionOf(out, "edital-perfil-adicionais")).toMatch(/hidden/);
+    const addList = /<ul[^>]*data-profile-list="additional">([\s\S]*?)<\/ul>/.exec(out)?.[1] ?? "";
+    expect((addList.match(/<li/g) ?? []).length).toBe(29);
+    for (const f of required) expect(addList).not.toContain(`Perfil ${f.name} —`);
+    // abrir o disclosure dos adicionais não muda a lista de "O que falta"
+    const open = html(st, { initialAdditionalProfileOpen: true });
+    expect(open).toMatch(/aria-expanded="true"[^>]*aria-controls="edital-perfil-adicionais"/);
+    expect(regionOf(open, "edital-perfil-adicionais")).not.toMatch(/hidden/);
+    expect(((/<ul[^>]*data-profile-list="required">([\s\S]*?)<\/ul>/.exec(open)?.[1] ?? "").match(/<li/g) ?? []).length).toBe(4);
+  });
+
+  it("invariante — ONE_TIME_CONFIGURATION_REQUIRED_TOTAL === itens exibidos em 'O que falta para este Edital' (em qualquer mistura)", () => {
+    const mix = (req: number, add: number) => {
+      const a = many(req, { source: "POLICY", authority: "ORG_POLICY_PROFILE", class: "ORG_PROFILE", status: "PROFILE_INCOMPLETE", editable: false, required: true });
+      const b = many(add, { source: "POLICY", authority: "ORG_ROLE_PROFILE", class: "ORG_PROFILE", status: "PROFILE_INCOMPLETE", editable: false, required: false });
+      return state([section("POLICY", "ORG", [...a, ...b])], { upstream: { trDigest: "x", trPending: [], sourcePending: [], profilePending: [...a, ...b].map((f) => profileEntry(f.name)) } });
+    };
+    for (const [req, add] of [[1, 0], [4, 29], [33, 0], [8, 25], [2, 1]] as const) {
+      const st = mix(req, add);
+      const total = buildEditalReadiness(st).counters.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL;
+      const list = /<ul[^>]*data-profile-list="required">([\s\S]*?)<\/ul>/.exec(html(st))?.[1] ?? "";
+      expect(total, `${req}+${add}`).toBe(req);
+      expect((list.match(/<li/g) ?? []).length, `${req}+${add}`).toBe(total);
+    }
+    // sem pendência necessária não há bloco "O que falta"
+    expect(html(mix(0, 3))).not.toContain("O que falta para este Edital");
   });
 
   it("cronograma: datas independentes (editáveis) separadas das derivadas (somente leitura, com a regra explicada)", () => {

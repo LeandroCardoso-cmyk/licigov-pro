@@ -3,13 +3,14 @@ import PrepFieldControl from "./PrepFieldControl";
 import Disclosure from "./Disclosure";
 import { type FixAction, type StageTarget } from "@/lib/editalPreparation";
 import {
-  READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, readinessHeadline, type ReadinessStep,
+  READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, isLargeOriginGroup, readinessHeadline,
+  type OriginGroup, type ReadinessStep,
 } from "@/lib/editalReadiness";
 import DecisionFieldset from "./DecisionFieldset";
 import UseAsDefaultButton from "./UseAsDefaultButton";
 import type { DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
-  SOURCE_TITLE, formatDisplay, orgProfilePending, toFormValue,
+  SOURCE_TITLE, formatDisplay, toFormValue,
   type FormValue, type PendingItem, type PrepField, type PreparationStateView, type SaveOutcome, type SavePlan, type SectionEdits,
 } from "@/lib/editalPreparation";
 
@@ -41,6 +42,10 @@ export interface PreparationViewProps {
   processId?: string;
   /** Escolha inicial da pessoa para a seção de decisões (`null`/ausente ⇒ segue a prontidão: recolhida com bloqueios, aberta quando pronta). */
   initialDecisionsOpen?: boolean | null;
+  /** Grupos de origem GRANDES já abertos (padrão: todos recolhidos). Estado só de apresentação — nada é persistido. */
+  initialOpenOriginGroups?: readonly string[];
+  /** Disclosure dos campos ADICIONAIS do perfil já aberto (padrão: recolhido). */
+  initialAdditionalProfileOpen?: boolean;
 }
 
 function FixButton({ action, onOpenStage }: { action: FixAction; onOpenStage?: (s: StageTarget) => void }) {
@@ -67,6 +72,31 @@ function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly Pe
   );
 }
 
+
+/** Um grupo de origem: pequeno ⇒ lista direta; GRANDE (> LARGE_ORIGIN_GROUP_THRESHOLD) ⇒ contagem + ação visíveis e a lista recolhida (Disclosure). */
+function OriginGroupBlock({ group, onOpenStage, initialOpen }: { group: OriginGroup; onOpenStage?: (s: StageTarget) => void; initialOpen: boolean }) {
+  const [open, setOpen] = useState(initialOpen);
+  const n = group.items.length;
+  const isTr = group.entry === "TR_SECTION";
+  const list = <ul className="list-disc pl-5 text-xs">{group.items.map((b) => <li key={b.key}>{b.label} — {b.reason}</li>)}</ul>;
+  return (
+    <li className="space-y-2" data-origin={group.entry} data-large={isLargeOriginGroup(group) ? "true" : "false"}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.origin}</p>
+      {isLargeOriginGroup(group) ? (
+        <>
+          <p className="text-xs text-foreground" data-count={n}>{isTr ? `${n} parâmetros precisam ser confirmados no TR` : `${n} informações precisam ser corrigidas em ${group.origin}`}</p>
+          {group.action && <FixButton action={group.action} onOpenStage={onOpenStage} />}
+          <Disclosure id={`edital-origem-${group.entry}`} open={open} onToggle={setOpen} title={isTr ? `Ver ${n} parâmetros` : `Ver ${n} itens`}>{list}</Disclosure>
+        </>
+      ) : (
+        <>
+          {list}
+          {group.action && <FixButton action={group.action} onOpenStage={onOpenStage} />}
+        </>
+      )}
+    </li>
+  );
+}
 
 const ICON: Record<"ok" | "todo", string> = { ok: "✓", todo: "!" };
 const BTN = "inline-block w-full rounded-lg bg-primary px-3 py-2 text-center text-xs font-medium text-primary-foreground sm:w-auto";
@@ -99,6 +129,7 @@ function StepRow({ step, next, children }: { step: ReadinessStep; next: boolean;
 export default function EditalPreparationView(p: PreparationViewProps) {
   const { state } = p;
   const [userChoice, setUserChoice] = useState<boolean | null>(p.initialDecisionsOpen ?? null);
+  const [additionalOpen, setAdditionalOpen] = useState(p.initialAdditionalProfileOpen ?? false);
   const readiness = buildEditalReadiness(state, p.edits);
   const { counters, details } = readiness;
   const decisionsOpen = isDecisionsOpen(readiness, userChoice);
@@ -112,7 +143,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const decidedFields = allFields.filter(({ field }) => field.status === "DECIDED");
   const autoCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority !== "LIFECYCLE_SYSTEM");
   const systemCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority === "LIFECYCLE_SYSTEM");
-  const profilePending = orgProfilePending(state);
+  const profile = readiness.profile;   // MESMA fonte do contador: lista "O que falta" = ONE_TIME_CONFIGURATION_REQUIRED_TOTAL
   const defaultsApplied = allFields.filter(({ field }) => field.status === "ORG_DEFAULT");
   const eligibleDecided = allFields.filter(({ field }) => field.status === "DECIDED" && field.defaultEligible && field.hasValue).map(({ field }) => field);
   const canSave = p.plan.writes.length > 0 && Object.keys(p.plan.errors).length === 0 && !p.busy;
@@ -181,28 +212,26 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           </p>
           <a href="/configuracoes#perfil-licitacoes" className={BTN}>Configurar agora</a>
           <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground">O que falta</summary>
-            <ul className="mt-1 list-disc pl-5">{profilePending.map((i) => <li key={i.name}>{i.description || i.name} — {i.reason}</li>)}</ul>
-            {details.profileGlobalIncomplete > 0 && <p className="mt-1 text-muted-foreground">O Perfil institucional possui {details.profileGlobalIncomplete} {details.profileGlobalIncomplete === 1 ? "campo adicional" : "campos adicionais"} não preenchido{details.profileGlobalIncomplete === 1 ? "" : "s"} (não necessário{details.profileGlobalIncomplete === 1 ? "" : "s"} para este Edital).</p>}
+            <summary className="cursor-pointer text-muted-foreground">O que falta para este Edital — {profile.required.length}</summary>
+            <ul className="mt-1 list-disc pl-5" data-profile-list="required">{profile.required.map((i) => <li key={i.name}>{i.description} — {i.reason}</li>)}</ul>
           </details>
         </div>
       )}
-      {cfgStep.count === 0 && details.profileGlobalIncomplete > 0 && (
-        <p className="text-xs text-muted-foreground">O Perfil institucional possui {details.profileGlobalIncomplete} {details.profileGlobalIncomplete === 1 ? "campo adicional" : "campos adicionais"} não preenchido{details.profileGlobalIncomplete === 1 ? "" : "s"} — não necessário{details.profileGlobalIncomplete === 1 ? "" : "s"} para este Edital.</p>
+      {profile.additional.length > 0 && (
+        <div className="space-y-2" data-profile-additional={profile.additional.length}>
+          <p className="text-xs text-muted-foreground">O Perfil institucional possui {profile.additional.length} {profile.additional.length === 1 ? "campo adicional não preenchido" : "campos adicionais não preenchidos"}, não necessário{profile.additional.length === 1 ? "" : "s"} para este Edital.</p>
+          <Disclosure id="edital-perfil-adicionais" open={additionalOpen} onToggle={setAdditionalOpen} title="Ver campos adicionais do perfil">
+            <ul className="list-disc pl-5 text-xs" data-profile-list="additional">{profile.additional.map((i) => <li key={i.name}>{i.description} — {i.reason}</li>)}</ul>
+          </Disclosure>
+        </div>
       )}
 
       {readiness.originGroups.length > 0 && (
         <div role="alert" className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" aria-label="Dados a resolver na origem">
           <h3 className="font-semibold text-destructive">Dados a resolver na origem</h3>
           <p className="text-xs text-muted-foreground">Estas informações têm autoridade própria (plataforma, itens, pesquisa de preços, cadastro, TR) e NÃO são digitadas no Edital. Resolva-as na origem; esta tela atualiza em seguida.</p>
-          <ul className="space-y-3">
-            {readiness.originGroups.map((g) => (
-              <li key={g.entry} className="space-y-1" data-origin={g.entry}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.origin}</p>
-                <ul className="list-disc pl-5 text-xs">{g.items.map((b) => <li key={b.key}>{b.label} — {b.reason}</li>)}</ul>
-                {g.action && <FixButton action={g.action} onOpenStage={p.onOpenStage} />}
-              </li>
-            ))}
+          <ul className="space-y-4">
+            {readiness.originGroups.map((g) => <OriginGroupBlock key={g.entry} group={g} onOpenStage={p.onOpenStage} initialOpen={p.initialOpenOriginGroups?.includes(g.entry) ?? false} />)}
           </ul>
           {p.onRefresh && <button type="button" onClick={p.onRefresh} className="w-full rounded-lg border border-input px-3 py-2 text-xs sm:w-auto">Já corrigi — atualizar</button>}
         </div>

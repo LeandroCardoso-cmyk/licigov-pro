@@ -27,3 +27,11 @@ Invariante verificado contra o MySQL real: `AUTO_RESOLVED_TOTAL + systemAtIssuan
 ## CTA
 Com pendências: **"Resolver pendências"** lidera (âncora para a prontidão) e "Gerar edital com modelo institucional" existe, desabilitado, com o motivo
 visível (`aria-describedby`). Com prontidão completa e preflight READY, a geração assume o protagonismo. O backend segue fail closed.
+
+## Detalhes (amend final)
+- **Grupos grandes na origem** (`LARGE_ORIGIN_GROUP_THRESHOLD = 5`, genérico — não só TR): acima do limite o grupo mostra a contagem
+  ("20 parâmetros precisam ser confirmados no TR") e a ação ("Abrir o TR") e recolhe a lista num `Disclosure` (`aria-expanded`, conteúdo montado e `hidden`).
+  Grupos pequenos seguem com a lista direta. A contagem em `ORIGIN_ACTION_REQUIRED_TOTAL` não muda.
+- **Perfil necessário ao documento:** `profileReadiness(state)` é a ÚNICA fonte de `required × additional`. O contador, "O que falta para este Edital"
+  e os detalhes usam o mesmo resultado (`ONE_TIME_CONFIGURATION_REQUIRED_TOTAL === itens listados`). Os campos adicionais do Perfil aparecem separados
+  ("Ver campos adicionais do perfil"), nunca misturados à lista do Edital.

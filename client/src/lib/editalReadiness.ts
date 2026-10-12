@@ -102,6 +102,8 @@ export interface EditalPreparationReadinessView {
   steps: readonly ReadinessStep[];
   tr: { status: "OK" | typeof TR_OFFICIAL_EXACT_REQUIRED; message?: string };
   originGroups: readonly OriginGroup[];
+  /** Perfil necessário a este Edital × adicional (a MESMA fonte do contador). */
+  profile: ProfileReadiness;
   /** Existe pré-requisito (TR exato, configuração do órgão ou dado na origem) que bloqueia a composição. */
   blockingPrerequisites: boolean;
   /** Primeiro passo ainda pendente (a progressão). `null` ⇒ tudo pronto, inclusive as decisões. */
@@ -144,6 +146,45 @@ export function originGroups(state: PreparationStateView): OriginGroup[] {
   return [...groups.values()];
 }
 
+export interface ProfileItem { name: string; description: string; reason: string; role?: string }
+export interface ProfileReadiness {
+  /** Necessários a ESTE Edital (REQUIRED_FOR_CURRENT_DOCUMENT): alimentam o contador, "O que falta" e o grupo de papéis/políticas. */
+  required: readonly ProfileItem[];
+  /** Perfil global incompleto, NÃO necessário a este Edital (PROFILE_GLOBAL_INCOMPLETE): nunca entram no contador nem em "O que falta". */
+  additional: readonly ProfileItem[];
+  /** Quantos dos `required` são papéis institucionais (o resto são políticas do órgão). */
+  requiredRoles: number;
+}
+
+/**
+ * UMA regra para "o que o perfil exige deste Edital" (contador, detalhes e lista visual usam o MESMO resultado — nada de divergência):
+ *  - necessário = pendência do perfil cujo campo do modelo é obrigatório/condicional ativo (sem o campo no estado: necessário, conservador);
+ *  - adicional  = pendência do perfil NÃO necessária + campos de perfil opcionais ainda sem valor.
+ */
+export function profileReadiness(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>> = {}): ProfileReadiness {
+  const fields = state.sections.flatMap((s) => s.fields);
+  const live = liveStatuses(state, edits);
+  const statusOf = (f: PrepField): FieldStatus => live.get(f.name)?.status ?? f.status;
+  const incompleteByName = new Map(fields.filter((f) => statusOf(f) === "PROFILE_INCOMPLETE").map((f) => [f.name, f] as const));
+  const pending = state.upstream?.profilePending ?? [];
+  const required: ProfileItem[] = []; const additional: ProfileItem[] = [];
+  for (const e of pending) {
+    const f = incompleteByName.get(e.name);
+    (!f || isRequiredForDocument(f) ? required : additional).push({ name: e.name, description: e.description || e.name, reason: e.reason, ...(e.role ? { role: e.role } : {}) });
+  }
+  for (const f of fields) {
+    if ((f.authority === "ORG_ROLE_PROFILE" || f.authority === "ORG_POLICY_PROFILE") && statusOf(f) === "OPTIONAL" && !f.hasValue && !additional.some((a) => a.name === f.name)) {
+      additional.push({ name: f.name, description: f.description || f.name, reason: "campo opcional do perfil, não necessário para este Edital" });
+    }
+  }
+  const requiredRoles = required.filter((e) => incompleteByName.get(e.name)?.authority === "ORG_ROLE_PROFILE" || !!e.role).length;
+  return { required, additional, requiredRoles };
+}
+
+/** Grupo de origem GRANDE (mais que N itens) começa recolhido: a contagem e a ação continuam visíveis; só a lista é progressiva. */
+export const LARGE_ORIGIN_GROUP_THRESHOLD = 5;
+export const isLargeOriginGroup = (g: Pick<OriginGroup, "items">): boolean => g.items.length > LARGE_ORIGIN_GROUP_THRESHOLD;
+
 /**
  * View-model de prontidão. `edits` (opcional) aplica as condicionais AO VIVO (o que a pessoa digitou ainda não salvo), exatamente como
  * as pendências da tela; sem `edits` usa o estado do servidor.
@@ -166,14 +207,9 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
   const scheduleDerived = fields.filter((f) => f.authority === "CERTAME_SCHEDULE" && statusOf(f) === "AUTO").length;
 
   // ── configuração única: necessário a ESTE Edital × perfil global incompleto ───────────────────────────────────
-  const incompleteByName = new Map(fields.filter((f) => statusOf(f) === "PROFILE_INCOMPLETE").map((f) => [f.name, f] as const));
-  const profilePending = state.upstream?.profilePending ?? [];
-  // Sem o campo correspondente no estado, conta como necessário (conservador: nunca subnotifica um bloqueio).
-  const requiredEntries = profilePending.filter((e) => { const f = incompleteByName.get(e.name); return !f || isRequiredForDocument(f); });
-  const additionalPending = profilePending.length - requiredEntries.length;
-  const optionalProfileGaps = fields.filter((f) => (f.authority === "ORG_ROLE_PROFILE" || f.authority === "ORG_POLICY_PROFILE") && statusOf(f) === "OPTIONAL" && !f.hasValue).length;
-  const ONE_TIME_CONFIGURATION_REQUIRED_TOTAL = requiredEntries.length;
-  const profileRoles = requiredEntries.filter((e) => incompleteByName.get(e.name)?.authority === "ORG_ROLE_PROFILE" || !!e.role).length;
+  const profile = profileReadiness(state, edits);
+  const ONE_TIME_CONFIGURATION_REQUIRED_TOTAL = profile.required.length;
+  const profileRoles = profile.requiredRoles;
 
   // ── origem ─────────────────────────────────────────────────────────────────────────────────────
   const groups = originGroups(state);
@@ -221,12 +257,13 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
       postAwardHidden: state.metrics.POST_AWARD_HIDDEN,
       systemAtIssuance, decisionsRegistered: fields.filter((f) => statusOf(f) === "DECIDED").length,
       sourceIssues: originIssues - trParams, trParametersToConfirm: trParams, trOfficialRequired: trRequired,
-      requiredForCurrentDocument: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, profileGlobalIncomplete: additionalPending + optionalProfileGaps,
+      requiredForCurrentDocument: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, profileGlobalIncomplete: profile.additional.length,
       profileRoles, profilePolicies: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL - profileRoles, scheduleIndependent, scheduleDerived,
     },
     steps,
     tr: trRequired ? { status: TR_OFFICIAL_EXACT_REQUIRED, message: TR_OFFICIAL_EXACT_MESSAGE } : { status: "OK" },
     originGroups: groups,
+    profile,
     blockingPrerequisites,
     nextStep,
     decisionsDefaultOpen: !blockingPrerequisites,
