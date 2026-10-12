@@ -159,6 +159,8 @@ describe("guardas estruturais — nenhuma autoridade 'latest' paralela na proje�
   });
   it("a tela envia o TR exato escolhido à preparação (sem pin não há projeção do TR)", () => {
     expect(read("client/src/components/procurement/EditalWorkspace.tsx")).toContain("trPin={trPin}");
-    expect(read("client/src/components/procurement/EditalPreparationPanel.tsx")).toContain("officialPins: { TR: trPin }");
+    // O pin EXATO é montado em UM só lugar (hook compartilhado pelo painel e pelo CTA: mesma entrada ⇒ mesma chave de cache).
+    expect(read("client/src/components/procurement/useEditalPreparationState.ts")).toContain("officialPins: { TR: trPin }");
+    expect(read("client/src/components/procurement/EditalPreparationPanel.tsx")).toContain("useEditalPreparationState(processId, params, trPin)");
   });
 });

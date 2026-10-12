@@ -41,6 +41,7 @@ import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getT
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
+import { buildEditalReadiness, generationCta } from "../../../client/src/lib/editalReadiness";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetBaseDate, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue,
@@ -458,6 +459,43 @@ describe.skipIf(!DB)("PR #288 — CertameConfig como autoridade (MySQL real)", (
     expect(visB.length).toBeLessThanOrEqual(10);
     for (const f of visB) expect(["CERTAME_CONFIG", "CERTAME_SCHEDULE", "CONDITIONAL"], f.field.name).toContain(f.field.authority);
   }, 240_000);
+  it("UX-R — a PRONTIDÃO (view-model puro da UI) sobre o estado REAL do servidor: contadores unificados sem dupla contagem, recolhe com bloqueios, abre quando pronto", async () => {
+    const p = await prepareOrg("uxr");
+    // (1) equivalente ao piloto: TR exato NÃO selecionado, perfil do órgão incompleto, origens pendentes
+    const s0 = await getState(p, false);
+    const r0 = buildEditalReadiness(s0 as never);
+    expect(r0.tr.status).toBe("TR_OFFICIAL_EXACT_REQUIRED");
+    expect(r0.blockingPrerequisites).toBe(true);
+    expect(r0.decisionsDefaultOpen).toBe(false);                                   // decisões RECOLHIDAS por padrão
+    expect(r0.counters.PROCESS_DECISIONS_TOTAL).toBe(s0.metrics.TRUE_NEW_DECISIONS_VISIBLE);   // mesma contagem do servidor (nada inventado)
+    // sem dupla contagem: o que o servidor chama de "reaproveitado" = automáticos + campos de SISTEMA atribuídos só na emissão
+    expect(r0.counters.AUTO_RESOLVED_TOTAL + r0.details.systemAtIssuance).toBe(s0.summary.reusedAutomatically);
+    expect(r0.counters.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL).toBeGreaterThan(0);
+    expect(r0.counters.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL).toBeLessThanOrEqual((s0.upstream?.profilePending ?? []).length);
+    const ids = new Set(r0.originGroups.flatMap((g) => g.items.map((i) => i.key)));
+    expect(ids.size).toBe(r0.originGroups.reduce((n, g) => n + g.items.length, 0));   // nenhuma pendência repetida entre origens
+    // (2) TR exato selecionado, mas perfil/origens ainda pendentes ⇒ continua bloqueado; só o TR deixa de bloquear
+    const s1 = await getState(p, true);
+    const r1 = buildEditalReadiness(s1 as never);
+    expect(r1.steps.find((x) => x.key === "TR_OFFICIAL")!.done).toBe(true);
+    expect(r1.blockingPrerequisites).toBe(true);
+    expect(generationCta(r1).primary).toBe("RESOLVE_PENDING");
+    // (3) tudo configurado nas origens: as decisões do certame abrem por padrão e o CTA assume a geração
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    const s2 = await getState(p);
+    const r2 = buildEditalReadiness(s2 as never);
+    expect(r2.blockingPrerequisites).toBe(false);
+    expect(r2.decisionsDefaultOpen).toBe(true);
+    expect(r2.counters).toMatchObject({ ORIGIN_ACTION_REQUIRED_TOTAL: 0, ONE_TIME_CONFIGURATION_REQUIRED_TOTAL: 0 });
+    expect(r2.counters.PROCESS_DECISIONS_TOTAL).toBe(s2.metrics.TRUE_NEW_DECISIONS_VISIBLE);
+    expect(r2.counters.AUTO_RESOLVED_TOTAL + r2.details.systemAtIssuance).toBe(s2.summary.reusedAutomatically);
+    METRICS.UXR = {
+      PILOT_LIKE: { ...r0.counters, details: { requiredForCurrentDocument: r0.details.requiredForCurrentDocument, profileGlobalIncomplete: r0.details.profileGlobalIncomplete, systemAtIssuance: r0.details.systemAtIssuance, conditionalHidden: r0.details.conditionalHidden, postAwardHidden: r0.details.postAwardHidden }, decisionsDefaultOpen: r0.decisionsDefaultOpen },
+      TR_PINNED_ONLY: { ...r1.counters, decisionsDefaultOpen: r1.decisionsDefaultOpen },
+      READY: { ...r2.counters, decisionsDefaultOpen: r2.decisionsDefaultOpen },
+    };
+  }, 240_000);
+
   // ───────────────────────── PARTE A — DATA DE EMISSÃO (late-bound, LIFECYCLE_SYSTEM) ─────────────────────────
 
   it("E1 — M1 e emissão no MESMO dia: o oficial traz a data do ATO; M1 registra o campo late-bound; M2 materializa e explica", async () => {

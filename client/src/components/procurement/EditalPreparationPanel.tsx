@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import EditalPreparationView from "./EditalPreparationView";
+import { useEditalPreparationState } from "./useEditalPreparationState";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
   STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveOptionalItems, livePendingItems,
-  type FormValue, type PlannedWrite, type StageTarget, type PrepField, type PreparationStateView, type SaveOutcome, type SectionEdits,
+  type FormValue, type PlannedWrite, type StageTarget, type PrepField, type SaveOutcome, type SectionEdits,
 } from "@/lib/editalPreparation";
 
 export interface EditalPreparationParams { modality?: string; form?: string; platform?: string }
@@ -22,7 +23,6 @@ export interface EditalPreparationPanelProps {
   onOpenStage?: (stage: StageTarget) => void;
 }
 
-type State = PreparationStateView | { status: "UNAVAILABLE"; resolution: string; reason: string };
 const today = () => new Date().toISOString().slice(0, 10);
 
 /**
@@ -32,10 +32,8 @@ const today = () => new Date().toISOString().slice(0, 10);
  */
 export default function EditalPreparationPanel({ processId, params, trPin = null, onChanged, onOpenTr, onOpenStage }: EditalPreparationPanelProps) {
   const utils = trpc.useUtils();
-  const input = { processId, ...params, ...(trPin ? { officialPins: { TR: trPin } } : {}) } as never;
-  const query = trpc.procurementProcess.editalTemplatePreparation.useQuery(input, { enabled: !!processId });
-  const data = query.data as State | undefined;
-  const state = data?.status === "READY_FOR_PREPARATION" ? data : undefined;
+  // Mesma entrada/chave de cache usada pelo CTA da workspace (uma única requisição).
+  const { state } = useEditalPreparationState(processId, params, trPin);
 
   const [decision, setDecision] = useState<DecisionFormState>(() => emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);

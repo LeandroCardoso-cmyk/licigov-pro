@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791755360.153211,
-    "ast_hash": "c0c38bd823862ec11d92e35bc462a28b",
+    "mtime": 1791823575.0492678,
+    "ast_hash": "a2bdf518db3ab88c732658dd28b88ab7",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -14370,13 +14370,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateBridgeCard.tsx": {
-    "mtime": 1791755360.153211,
-    "ast_hash": "b046a483edd7f9204d6fdb8e078b5685",
+    "mtime": 1791823427.3141096,
+    "ast_hash": "a655d06d2c21121b5c4a319972b94916",
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalTemplateBridge.test.ts": {
-    "mtime": 1791755360.157211,
-    "ast_hash": "47188b43e3907e6ed752a589f16bf3bf",
+    "mtime": 1791823621.7225168,
+    "ast_hash": "7ac4b1ee481a5967ea9e12bfc395dbeb",
     "semantic_hash": ""
   },
   "client/src/lib/editalTemplateBridge.ts": {
@@ -14410,8 +14410,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationPanel.tsx": {
-    "mtime": 1791755360.153211,
-    "ast_hash": "23f421feebb9772ee35670dbda96f23d",
+    "mtime": 1791823749.3986988,
+    "ast_hash": "0bb9802c7ef38e43aaf6d74414ed0ead",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
@@ -14425,13 +14425,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalPreparation.test.ts": {
-    "mtime": 1791755360.157211,
-    "ast_hash": "d9dfa2b7fa0bb74fe99acf5f7336f70d",
+    "mtime": 1791823621.7230363,
+    "ast_hash": "5a2b9a7047600c22e16ac9359862f5e3",
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1791755360.157211,
-    "ast_hash": "e1f42e811ee63d963d80f9c32151f87d",
+    "mtime": 1791823310.7398496,
+    "ast_hash": "fc8b4169b27e1b61f5b0e466a779cb36",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14450,8 +14450,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationView.tsx": {
-    "mtime": 1791755360.153211,
-    "ast_hash": "86ec3200e958ea7fd2817016ac44bef7",
+    "mtime": 1791834931.0438287,
+    "ast_hash": "743ff8a1db5cdd1ad7f5e0686301e819",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
@@ -14460,8 +14460,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-preparation-model.test.ts": {
-    "mtime": 1791755360.741211,
-    "ast_hash": "0b21022c8285486a73f07328b9336666",
+    "mtime": 1791824481.3569045,
+    "ast_hash": "bb9022c32bbf6a3f31c80f232d796751",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalPreparationModel.ts": {
@@ -14575,8 +14575,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts": {
-    "mtime": 1791774169.8095562,
-    "ast_hash": "bf20033dfccb7f4c80f8aab2ac3b6702",
+    "mtime": 1791823790.1940632,
+    "ast_hash": "1f7b4b6efaa4d73caa71c7ac1104e6ec",
     "semantic_hash": ""
   },
   "server/__tests__/unit/certame-config-authority.test.ts": {
@@ -14627,6 +14627,36 @@
   "docs/technical/MYSQL_TEST_WRITING_RULES.md": {
     "mtime": 1791769754.6895828,
     "ast_hash": "803c2f364ede39e95191ff7418a8d765",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/Disclosure.tsx": {
+    "mtime": 1791823316.7139122,
+    "ast_hash": "647351698f1f46f8e2dd2106ba9262f1",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/EditalGenerateCta.tsx": {
+    "mtime": 1791823575.0299063,
+    "ast_hash": "42b3f4cea7bd2d33e8fe3963bf4a4450",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/editalReadiness.test.ts": {
+    "mtime": 1791834999.7412777,
+    "ast_hash": "97b203f11cf0b37a7a2dfe19faaaca0f",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/useEditalPreparationState.ts": {
+    "mtime": 1791823427.300049,
+    "ast_hash": "9f45ffcf6b28539efa23c4de14c61979",
+    "semantic_hash": ""
+  },
+  "client/src/lib/editalReadiness.ts": {
+    "mtime": 1791834893.9996543,
+    "ast_hash": "0b4f91ef9abdb55b4ef9e8a194b72d7e",
+    "semantic_hash": ""
+  },
+  "docs/architecture/EDITAL_PREPARATION_READINESS_UX.md": {
+    "mtime": 1791835014.8958337,
+    "ast_hash": "f493167ff02337a615fa96640c1e545c",
     "semantic_hash": ""
   }
 }

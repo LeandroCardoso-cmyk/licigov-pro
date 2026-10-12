@@ -245,7 +245,7 @@ export interface FixAction { label: string; href?: string; stage?: StageTarget }
 /** Ação (deep-link) para resolver um dado NA ORIGEM da autoridade — o Edital nunca recebe a digitação. */
 export function fixAction(entry: EntryPoint | undefined): FixAction | null {
   switch (entry) {
-    case "PLATFORM_PROFILE": return { label: "Configurar o Perfil da plataforma", href: "/configuracoes#perfil-licitacoes" };
+    case "PLATFORM_PROFILE": return { label: "Configurar Perfil da plataforma", href: "/configuracoes#perfil-licitacoes" };
     case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: "/configuracoes#perfil-licitacoes" };
     case "ORG_REGISTRY": return { label: "Corrigir cadastro do órgão", href: "/configuracoes" };
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
