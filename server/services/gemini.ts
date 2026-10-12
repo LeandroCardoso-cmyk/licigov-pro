@@ -23,14 +23,18 @@ import { shouldDisableThinking } from "../_core/ai/gemini";
 // Config de geração COMUM a todos os documentos institucionais (DFD/ETP/TR/Edital/
 // Contrato/Ata/Parecer) — fonte única, sem duplicação. Usa o modelo VIVO configurado
 // (AI_CONFIG.model = versão pinada gemini-3.8-flash por padrão; sem alias móvel) — o antigo
-// "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos Flash 2.5
-// (senão consome o orçamento de saída e trunca o documento — ver #175). Cada tipo
+// "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Cada tipo
 // documental mantém seu próprio teto de saída (maxOutputTokens), o resto é idêntico.
-function buildDocGenerationConfig(maxOutputTokens: number) {
+//
+// Parâmetros de amostragem (temperature/topP/topK) NÃO são enviados: o Google os descontinuou nos modelos
+// Gemini 3.x (ignorados hoje, erro 400 em breve). O modelo usa seus padrões.
+//
+// LEGADO: `thinkingBudget: 0` só vai para os Flash 2.5 listados em THINKING_DISABLE_COMPATIBLE_MODELS
+// (senão o thinking consome o orçamento de saída e trunca o documento — ver #175). Os modelos 2.5 não
+// suportam `thinkingLevel`. Remover este ramo quando o 2.5 for aposentado. Nos 3.x (padrão) nada é enviado:
+// vale o thinking padrão do modelo.
+export function buildDocGenerationConfig(maxOutputTokens: number) {
   return {
-    temperature: 0.3, // Baixo para respostas determinísticas
-    topP: 0.8,
-    topK: 40,
     maxOutputTokens,
     ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
   } as const;
