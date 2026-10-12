@@ -13,7 +13,7 @@ import type {
 } from "./composer";
 import {
   MANIFEST_SOURCE_KEYS, manifestRevisionIssues, sealGenerationManifest,
-  type AiNarrativeRef, type AnnexRef, type ConditionalDecisionRef, type GenerationManifest, type ManifestSourceKey,
+  type AiNarrativeRef, type AnnexRef, type ConditionalDecisionRef, type DeferredPublicationRef, type GenerationManifest, type ManifestSourceKey,
   type ManifestSourceRef, type OfficialDocumentReference,
 } from "./manifest";
 import type { LateBoundRef } from "./lifecycleLateBound";
@@ -172,6 +172,8 @@ export interface ManifestParts {
   readonly annexes: readonly AnnexRef[];
   /** Campos de sistema late-bound renderizados como marcador (vazio ⇒ chave ausente do manifest: hashes antigos intactos). */
   readonly lateBound?: readonly LateBoundRef[];
+  /** Dados de publicação diferidos consultados (vazio ⇒ chave ausente do manifest: hashes antigos intactos). */
+  readonly deferredPublication?: readonly DeferredPublicationRef[];
 }
 
 /** M1 selado (id derivado do conteúdo semântico; `createdAt` fora do hash) + consistência manifest × revisão. */
@@ -194,6 +196,7 @@ export function sealComposedManifest(
     aiNarratives: parts.aiNarratives,
     annexes: parts.annexes,
     ...(parts.lateBound && parts.lateBound.length > 0 ? { lateBound: parts.lateBound } : {}),
+    ...(parts.deferredPublication && parts.deferredPublication.length > 0 ? { deferredPublication: parts.deferredPublication } : {}),
     identityFingerprint: req.identityFingerprint,
     composedOutputHash: parts.composedOutputHash,
     createdAt: req.createdAt,

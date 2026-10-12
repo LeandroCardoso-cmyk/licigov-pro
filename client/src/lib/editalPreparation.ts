@@ -39,7 +39,9 @@ export function evaluateCond(c: Cond, facts: Readonly<Record<string, unknown>>):
 export interface PrepColumn { key: string; type: string; label: string; required: boolean }
 export type FieldStatus =
   | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
-  | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD";
+  | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD"
+  /** Dado de PUBLICAÇÃO diferido ainda sem valor: nunca decisão pendente nem bloqueio da composição. */
+  | "DEFERRED";
 export type AuthorityClass =
   | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
   | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
@@ -49,7 +51,9 @@ export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
   name: string; source: string; path: string; type: string; description: string; required: boolean; conditional: boolean;
-  requiredWhenVariables: readonly string[]; requiredWhen?: Cond; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
+  requiredWhenVariables: readonly string[]; requiredWhen?: Cond;
+  /** Política de completude do catálogo (dado de publicação diferido) e pergunta operacional (apresentação). */
+  completionPolicy?: "DEFERRED_PUBLICATION"; question?: string; enumValues?: readonly string[]; itemType?: string; columns?: readonly PrepColumn[];
   hasValue: boolean; currentValue?: unknown;
   class: PreparationClass; rule: string; authority?: AuthorityClass; entry?: EntryPoint;
   status: FieldStatus; editable: boolean; displayValue?: unknown; origin?: PrepOrigin; reason?: string; canOverrideDefault?: boolean; defaultEligible?: boolean;
@@ -66,7 +70,13 @@ export interface PreparationMetrics {
   UPSTREAM_TR_REUSED?: number; TR_PENDING?: number; PROFILE_INCOMPLETE?: number; ORG_ROLES_REUSED?: number; ORG_POLICIES_REUSED?: number;
   ORG_DEFAULTS_APPLIED?: number; BY_AUTHORITY?: Partial<Record<AuthorityClass, number>>;
   AUTO_FROM_PLATFORM?: number; AUTO_FROM_PRICE_RESEARCH?: number; AUTO_FROM_ITEMS?: number; AUTO_FROM_CERTAME_CONFIG?: number; AUTO_FROM_SCHEDULE?: number;
-  AUTO_FROM_LIFECYCLE?: number; TRUE_NEW_DECISIONS_VISIBLE?: number; PENDING_IN_SOURCE?: number;
+  AUTO_FROM_LIFECYCLE?: number; TRUE_NEW_DECISIONS_VISIBLE?: number; PENDING_IN_SOURCE?: number; DEFERRED_PUBLICATION?: number;
+}
+
+export interface PublicationView {
+  deferredPolicy: boolean;
+  schedule: Readonly<Record<string, string | null>>;
+  readiness: { complete: boolean; total: number; missing: readonly string[]; missingVariables: readonly string[] };
 }
 export interface UpstreamView {
   trDigest: string;
@@ -87,6 +97,8 @@ export interface PreparationStateView {
   upstream?: UpstreamView;
   summary: { groups: SummaryGroup[]; reusedAutomatically: number; pendingDecisions: number };
   metrics: PreparationMetrics;
+  /** PublicationReadiness + projeção do cronograma (não bloqueiam a geração). Ausente quando o modelo não tem dados de publicação. */
+  publication?: PublicationView;
 }
 
 export const DURATION_UNIT_LABEL: Record<string, string> = {

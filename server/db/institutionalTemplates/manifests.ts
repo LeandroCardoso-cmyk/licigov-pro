@@ -21,7 +21,7 @@ import {
 import {
   TEMPLATE_HASH_VERSION, TEMPLATE_ID_RE, manifestRevisionIssues, templateCanonicalJson, validateManifest,
   type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef,
-  type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
+  type DeferredPublicationRef, type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
 import { isDuplicateKey, isForeignKeyViolation, requireReader, type TemplatesContext, type TemplatesReader, type TemplatesTx } from "./executor";
@@ -38,6 +38,7 @@ interface ManifestBody {
   readonly humanEditRefs?: readonly HumanEditRef[];
   readonly canonicalRevalidation?: CanonicalRevalidationRecord;
   readonly lateBound?: readonly LateBoundRef[];
+  readonly deferredPublication?: readonly DeferredPublicationRef[];
   readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
@@ -56,6 +57,7 @@ function bodyOf(m: CompositionManifest): ManifestBody {
   const common = {
     sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
+    ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
   };
   return m.stage === "ISSUANCE"
     ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation, ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}) }
@@ -76,6 +78,7 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
     hashVersion: row.hashVersion as HashVersion, catalogVersion: row.catalogVersion, sources: body.sources, officialDocRefs,
     conditionalDecisions: body.conditionalDecisions, aiNarratives: body.aiNarratives, annexes: body.annexes,
     ...(body.lateBound && body.lateBound.length > 0 ? { lateBound: body.lateBound } : {}),
+    ...(body.deferredPublication && body.deferredPublication.length > 0 ? { deferredPublication: body.deferredPublication } : {}),
     identityFingerprint: row.identityFingerprint, composedOutputHash: row.composedOutputHash, manifestHash: row.manifestHash,
     createdAt: row.manifestCreatedAtIso,
   };
@@ -173,6 +176,7 @@ function inheritedPart(m: CompositionManifest): string {
     aiNarratives: m.aiNarratives.map((n) => ({ slotKey: n.slotKey, executionId: n.executionId, outputHash: n.outputHash })),
     annexes: m.annexes, identityFingerprint: m.identityFingerprint, composedOutputHash: m.composedOutputHash,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
+    ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
   });
 }
 

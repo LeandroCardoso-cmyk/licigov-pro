@@ -226,6 +226,10 @@ export default function EditalWorkspace({
         processId, object: object.trim(),
         modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
         officialPins: { TR: trPin }, idempotencyKey: editalKey,
+        // Rascunho já composto: o hash que a pessoa viu habilita a RECOMPOSIÇÃO governada (nova versão; o anterior fica no histórico).
+        // Edição humana no rascunho ⇒ o servidor recusa e a tela pede a confirmação explícita (confirmReplace).
+        ...(draft?.contentHash ? { expectedContentHash: draft.contentHash } : {}),
+        ...(confirmed && draft?.contentHash ? { confirmReplace: true } : {}),
       });
       return;
     }

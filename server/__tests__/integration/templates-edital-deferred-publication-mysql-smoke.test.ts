@@ -1,0 +1,436 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * DADOS DE PUBLICAÇÃO DIFERIDOS — MySQL REAL, dados SINTÉTICOS, pelas MESMAS rotas e planos da tela.
+ *
+ *  Revisão 2 CANDIDATA (1.0.2-draft) registrada/publicada/vinculada SÓ em órgão sintético (nunca em produção; a API pública não a registra).
+ *  P1   (PUB1–PUB6, PUB9) sem número/cronograma: preflight pronto, geração permitida, texto "A DEFINIR PARA PUBLICAÇÃO", sem [REVISAR]/datas inventadas,
+ *       manifest DEFERRED; contadores: PROCESS_DECISIONS_TOTAL × DEFERRED_PUBLICATION_TOTAL; Revisão 1 segue exigindo (baseline)
+ *  P2   (PUB10–PUB14) preencher DEPOIS pelo mecanismo governado (ator, revisão, CAS, idempotência) → readiness completo → nova versão do rascunho;
+ *       versão antiga preservada; hashes distintos
+ *  P3   (PUB7, PUB15–PUB16) preenchimento parcial; emissão oficial com dados diferidos; documento emitido imutável / regeneração exige novo ciclo
+ *  S    (SRP4–SRP7) pergunta operacional, decisão humana (sem origem anterior, sem heurística textual), gravação governada
+ *  L    (LEGAL1–LEGAL4) composição NÃO consulta módulo/parecer/autorização jurídica
+ * Só roda com DATABASE_URL. Nenhum dado real, nenhum processo 2026/253, nenhum modelo de produção.
+ */
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import mysql from "mysql2/promise";
+import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
+
+const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
+vi.mock("../../services/tenantService", () => ({
+  resolveTenantForUser: vi.fn(async () => ({
+    organizationId: tenant.org,
+    membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+  })),
+}));
+const legacy = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("../../services/procurementProcessService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/procurementProcessService")>();
+  return { ...actual, generateNotice: vi.fn(async () => { legacy.calls++; throw new Error("gerador legado não deve ser chamado no fluxo BOUND"); }) };
+});
+
+import { procurementProcessRouter } from "../../routers/procurementProcessRouter";
+import { institutionalTemplatesRouter } from "../../routers/institutionalTemplatesRouter";
+import { runMigrations, validateSchema } from "../../bootstrap";
+import { draftContentHash } from "../../domain/generatedDocument";
+import { InstitutionalTemplatesWorkflow } from "../../services/institutionalTemplates/workflowService";
+import { ModelRegistrationService } from "../../services/institutionalTemplates/modelRegistrationService";
+import { TemplateGovernanceService } from "../../services/institutionalTemplates/governanceService";
+import { createTemplateCompositionPorts, createTemplateWorkflowPorts } from "../../services/institutionalTemplates/integration";
+import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
+import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
+import { getModelPackageVersion } from "../../services/institutionalTemplates/modelPackages";
+import { makeContext, mockUser } from "../helpers/fixtures";
+import { buildEditalReadiness } from "../../../client/src/lib/editalReadiness";
+import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import {
+  buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue,
+  type PlannedWrite, type PreparationStateView,
+} from "../../../client/src/lib/editalPreparation";
+import {
+  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
+} from "../helpers/institutionalTemplatesE2eWorld";
+
+const R2 = getModelPackageVersion(BLL.modelKey, "1.0.2-draft")!;
+const DB = process.env.DATABASE_URL;
+const STAMP = (Date.now() % 1_000_000);
+// Faixa PRÓPRIA deste arquivo ([991.000.000, 993.000.000)): arquivos distintos nunca compartilham ids de órgão (antes duas famílias usavam a MESMA base,
+// e bases distintas se sobrepunham). Dentro da faixa: 20 mil posições de 100 órgãos por posição (≥ órgãos usados por arquivo).
+const BASE_ORG = 993_000_000 + (STAMP % 20_000) * 100;
+const RUN = STAMP.toString(36);
+let orgSeq = 0;
+let keySeq = 0;
+const key = (p: string) => `${p}-${RUN}-${++keySeq}-pdf`;
+const ORGS: number[] = [];
+const newOrg = () => { const o = BASE_ORG + orgSeq++; ORGS.push(o); return o; };
+
+let conn: mysql.Connection;
+let installedReferenceSet = false;
+const rows = async <T = any>(sql: string, args: unknown[] = []): Promise<T[]> => (await conn.execute(sql, args as never))[0] as T[];
+const count = async (sql: string, args: unknown[] = []): Promise<number> => Number((await rows<{ n: number }>(sql, args))[0].n);
+const ctx = (org: number, role: string, userId: number) => {
+  tenant.org = org; tenant.role = role;
+  return { ...makeContext({ ...mockUser, id: userId }), correlationId: `corr-pdf-${org}-${userId}`, requestId: `req-pdf-${org}` } as any;
+};
+const proc = (org: number, role = "manager", userId = 101) => procurementProcessRouter.createCaller(ctx(org, role, userId));
+const tpl = (org: number, role = "manager", userId = U_MANAGER) => institutionalTemplatesRouter.createCaller(ctx(org, role, userId));
+const WS = { modality: "pregao", form: "eletronico", platform: "bll" } as const;
+const pin = (tr: { documentId: string; version: number; contentHash: string }) => ({ TR: { documentId: tr.documentId, version: tr.version, contentHash: tr.contentHash } });
+
+async function publishBll(org: number, rev: 1 | 2): Promise<{ identityId: string; revisionId: string }> {
+  const wports = getTemplateWorkflowPorts();
+  const pkg = rev === 2 ? R2 : BLL;
+  const reg = await new ModelRegistrationService(wports, { allowCandidatePackages: rev === 2 }).register(ctxOf(org), {
+    target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: BLL.slug }, templateKey: BLL.modelKey, displayName: BLL.displayName,
+    declaredScope: BLL.declaredScope, source: { kind: "MODEL_PACKAGE", modelKey: BLL.modelKey, ...(rev === 2 ? { packageVersion: R2.provenance.sourceLogicalVersion } : {}) },
+    sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256,
+    confirm: true, idempotencyKey: key("reg"), decision: decision(),
+  });
+  await new TemplateGovernanceService(wports).recordLegalEvidence(ctxOf(org), {
+    revisionId: reg.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: key("ev"), decision: decision({ basisReference: "Parecer jurídico — [preencher no piloto]" }),
+    evidence: { sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256 },
+  });
+  const wf = new InstitutionalTemplatesWorkflow(wports);
+  await wf.approve(ctxOf(org), { revisionId: reg.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decision({ basisReference: "Ato de aprovação" }) });
+  await wf.publish(ctxOf(org), { revisionId: reg.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato de publicação" }) });
+  await wf.setBinding(ctxOf(org), { documentKind: "edital", scope: { ...BLL.declaredScope }, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, effectiveFrom: "2026-01-01T00:00:00Z", confirm: true });
+  return { identityId: reg.identity.id, revisionId: reg.revision.id };
+}
+
+type RevNo = 1 | 2;
+interface P { org: number; w: World; tr: { documentId: string; version: number; contentHash: string }; model: { identityId: string; revisionId: string } | null }
+const TR_META = { object: "Aquisição sintética de material de expediente (objeto estruturado do TR)" };
+
+/** Órgão + modelo publicado/vinculado + processo + TR oficial emitido (com objeto estruturado). SEM campos governados. */
+async function prepareOrg(label: string, rev: RevNo = 2): Promise<P> {
+  const org = newOrg();
+  const w = await seedWorld(conn, org, label, { flagOn: true });
+  const tr = await seedOfficialTr(conn, w, 1, "TERMO DE REFERÊNCIA — conteúdo sintético v1", TR_META);
+  return { org, w, tr, model: await publishBll(org, rev) };
+}
+/** Estado de preparação; por padrão com o TR EXATO selecionado (como a tela faz); `pinned=false` ⇒ ainda sem seleção do TR. */
+const getState = async (p: P, pinned = true): Promise<PreparationStateView> =>
+  (await proc(p.org).editalTemplatePreparation({ processId: p.w.processId, ...WS, ...(pinned ? { officialPins: pin(p.tr) } : {}) })) as any;
+const preflight = (p: P): Promise<any> => proc(p.org).editalTemplatePreflight({ processId: p.w.processId, ...WS, officialPins: pin(p.tr) });
+/** O que a UI faz ao "Confirmar e registrar": escritas sequenciais pelas rotas governadas existentes. */
+function writerFor(p: P, state: PreparationStateView, keys?: Map<string, string>, afterWrite?: (w: PlannedWrite) => Promise<void>) {
+  return {
+    async write(w: PlannedWrite, expectedRevision: number) {
+      const idempotencyKey = keys ? (keys.get(w.id) ?? (keys.set(w.id, key(w.id)), keys.get(w.id)!)) : key(w.id);
+      const base = { confirm: true as const, idempotencyKey, decision: decision(), expectedRevision };
+      let r: any;
+      if (w.kind === "ORG") r = await tpl(p.org).governed.recordOrganizationFields({ ...base, catalogVersion: state.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
+      else r = await tpl(p.org).governed.recordProcessFields({ ...base, catalogVersion: state.catalogVersion, processId: p.w.processId, source: w.source as any, fields: w.fields ?? {} });
+      if (afterWrite) await afterWrite(w);
+      return { revision: r.decision.revision as number };
+    },
+  };
+}
+const stale = (e: unknown) => isStaleSave((e as any)?.data?.code, e instanceof Error ? e.message : String(e));
+
+
+const harnessOf = (p: P): ReuseHarness => ({ org: p.org, proc: () => proc(p.org), tpl: () => tpl(p.org), ws: WS, processId: p.w.processId, key });
+const TR_SKIP = ["processo.objetoCompleto"];
+/** Confirma os parâmetros do TR e "emite" o TR com ESTE snapshot (a promoção real grava o digest do marcador `trparams:`). */
+async function fillTrStamped(p: P): Promise<{ typed: string[] }> {
+  const r = await fillTrParams(harnessOf(p), {}, TR_SKIP);
+  await stampTrLineage(conn, harnessOf(p), p.tr.documentId);
+  return r;
+}
+const gen = (p: P) => proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), idempotencyKey: key("gen") } as any) as Promise<any>;
+const draftText = async (p: P) => (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0]?.content as string | undefined;
+
+/** Decisões genuínas do certame (preparação do Edital): digita SÓ o que a tela mostra como pendente, com o plano da tela. */
+async function fillTrueDecisions(p: P): Promise<string[]> {
+  const typed: string[] = [];
+  // PR #288: divulgação do orçamento (Pesquisa de Preços) e regime de participação (Itens) têm ORIGEM própria; o Edital não os pede.
+  { const st0 = await getState(p); if (!st0.budgetDisclosure) await setBudgetDisclosure(harnessOf(p)); if (st0.participationPending) await setItemsParticipation(harnessOf(p)); }
+  for (let round = 1; round <= 8; round++) {
+    const st = await getState(p);
+    const pend = livePendingItems(st, {});
+    if (pend.length === 0) return typed;
+    const edits: Record<string, Record<string, any>> = {};
+    for (const { section, field } of pend) { (edits[section.source] ??= {})[field.path] = toFormValue(field, scenarioValueByName(field.name)); typed.push(field.name); }
+    const plan = buildSavePlan(st, { edits: edits as any });
+    expect(plan.errors).toEqual({});
+    const out = await executeSavePlan(plan.writes, st.revisions, writerFor(p, st), stale);
+    expect(out.failed, JSON.stringify(out.failed)).toBeNull();
+  }
+  throw new Error("decisões não convergiram");
+}
+
+/** Percorre a revisão humana até a emissão (M2) — o mesmo caminho do operador. */
+async function reviewAndIssue(p: P): Promise<{ m1: string; officialId: string }> {
+  const ra = await gen(p);
+  expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  const draft = (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0];
+  const human = draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
+  await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft.content), idempotencyKey: key("edit") });
+  const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+  for (const d of rs.structuralDeviations) {
+    await tpl(p.org, "operator", U_MANAGER).reviews.acknowledgeDeviation({ manifestId: rs.generationManifestId, blockId: d.blockId, kind: d.kind, confirm: true, idempotencyKey: key("ack"), decision: decision({ basisReference: "Revisão" }) });
+  }
+  const promoted: any = await proc(p.org, "manager", U_MANAGER).promoteOfficial({ processId: p.w.processId, kind: "edital", idempotencyKey: key("promo"), expectedContentHash: draftContentHash(human), reason: "Revisado e conferido pelo gestor." } as any);
+  expect(promoted.promoted).toBe(true);
+  const official = (await rows("SELECT id FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido' AND origin = ?", [p.org, p.w.processId]))[0];
+  const m1 = (await rows("SELECT manifest_hash h FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [p.org, ra.generationManifestId]))[0].h;
+  return { m1, officialId: official.id };
+}
+
+
+
+const METRICS: Record<string, unknown> = {};
+const fieldOf = (st: any, name: string) => [...st.sections.flatMap((s: any) => s.fields), ...st.canonicalFields].find((f: any) => f.name === name);
+// Relógio CONTROLADO do fluxo governado (geração M1 e emissão M2 usam o `clock` das ports de composição).
+let clockNow: string | null = null;
+const realPorts = () => createTemplateCompositionPorts();
+
+/** Tenant pronto para compor (tudo registrado nas origens). */
+async function readyTenant(label: string, rev: RevNo = 2): Promise<P> {
+  const p = await prepareOrg(label, rev);
+  await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p)); await fillTrueDecisions(p);
+  return p;
+}
+
+// Muta/instala o reference set GLOBAL da Lei 14.133 (sem organization_id): serializa só entre os arquivos que fazem o mesmo.
+useGlobalFixtureLock("legal_reference");
+
+describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
+  beforeAll(async () => {
+    conn = await mysql.createConnection(DB!);
+    await runMigrations(conn);
+    await validateSchema(conn);
+    await conn.query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
+    configureTemplateWorkflowPorts(createTemplateWorkflowPorts());
+    configureTemplateCompositionPorts({ ...realPorts(), clock: { now: () => clockNow ?? new Date().toISOString() } });
+    if ((await count("SELECT COUNT(*) n FROM legal_reference_sets WHERE status = 'active'")) === 0) {
+      await installGovernedLegalReferenceV1();
+      await approveAndActivateReferenceSet({ version: LEGAL_REFERENCE_V1_META.version, expectedReferenceHash: computeManifestHashes().referenceSetContentHash, actorUserId: 7, actorRole: "platform_admin", approvalSource: "deferred-publication-synthetic" });
+      installedReferenceSet = true;
+    }
+  }, 300_000);
+
+  afterAll(async () => {
+    if (!conn) return;
+    await cleanupOrgs(conn, ORGS).catch(() => {});
+    if (ORGS.length) await conn.query(`DELETE FROM procurement_context_facts WHERE organization_id IN (${ORGS.map(() => "?").join(",")})`, ORGS).catch(() => {});
+    if (installedReferenceSet) for (const t of ["legal_reference_set_events", "legal_value_overrides", "legal_reference_entries", "legal_reference_sets"]) await conn.query(`DELETE FROM ${t}`).catch(() => {});
+    await conn.end();
+    // eslint-disable-next-line no-console
+    console.log("[DEFERRED_PUBLICATION METRICS]", JSON.stringify(METRICS));
+  }, 120_000);
+
+
+  const PUB_VARS = ["processo.numeroPregao", "controle.dataDivulgacaoPrevista", "processo.dataAbertura", "processo.horarioAbertura", "processo.dataInicioRecebimentoPropostas", "processo.dataFimRecebimentoPropostas", "processo.horarioFimRecebimentoPropostas"];
+  const PLACEHOLDER = "A DEFINIR PARA PUBLICAÇÃO";
+  const manifestBody = async (org: number, id: string): Promise<any> => {
+    const r = (await rows("SELECT body_json b, manifest_hash h FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [org, id]))[0];
+    return { body: typeof r.b === "string" ? JSON.parse(r.b) : r.b, hash: r.h as string };
+  };
+  /** Regera o RASCUNHO (nova versão; o anterior permanece no histórico) — fluxo existente de regeneração antes da emissão oficial. */
+  const regen = async (p: P): Promise<any> => {
+    const cur = (await draftText(p))!;
+    return proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), idempotencyKey: key("regen"), confirmReplace: true, expectedContentHash: draftContentHash(cur) } as any);
+  };
+  /** Preenche DEPOIS pelo mecanismo governado da CertameConfig (uma chamada por origem; CAS pela revisão corrente). */
+  async function fillPublication(p: P, names: readonly string[], values: Record<string, unknown> = {}): Promise<{ decisions: any[] }> {
+    const decisions: any[] = [];
+    const bySource: Record<string, Record<string, unknown>> = {};
+    const st0 = await getState(p);
+    for (const n of names) {
+      const f = fieldOf(st0, n);
+      const sec = st0.sections.find((s: any) => s.fields.some((x: any) => x.name === n));
+      // a gravação governada substitui a SEÇÃO inteira (como o plano da tela): preserva os valores correntes e acrescenta os novos
+      bySource[sec.source] ??= Object.fromEntries(sec.fields.filter((x: any) => x.hasValue && x.currentValue !== undefined).map((x: any) => [x.path, x.currentValue]));
+      bySource[sec.source][f.path] = values[n] ?? scenarioValueByName(n);
+    }
+    let revision = st0.revisions.process;
+    for (const [source, fields] of Object.entries(bySource)) {
+      const r: any = await tpl(p.org).governed.recordCertameConfig({ confirm: true, idempotencyKey: key("pub"), decision: decision(), catalogVersion: st0.catalogVersion, processId: p.w.processId, source: source as any, fields, expectedRevision: revision });
+      revision = r.decision.revision; decisions.push(r);
+    }
+    return { decisions };
+  }
+
+  it("P1 — sem número do pregão e sem cronograma: preflight pronto, Edital gerado com 'A DEFINIR PARA PUBLICAÇÃO'; nada inventado; manifest DEFERRED; contadores separados (PUB1–PUB6, PUB9)", async () => {
+    // baseline: Revisão 1 (publicada em produção) continua EXIGINDO os dados — comportamento inalterado
+    const r1 = await prepareOrg("p1r1", 1);
+    await completeProfile(harnessOf(r1)); await fillTrStamped(r1); await setBudgetDisclosure(harnessOf(r1)); await setItemsParticipation(harnessOf(r1));
+    const st1 = await getState(r1);
+    const pend1 = livePendingItems(st1, {}).map((i) => i.field.name);
+    for (const n of ["processo.numeroPregao", "processo.dataAbertura"]) expect(pend1, `Rev1 ${n}`).toContain(n);
+    const before = buildEditalReadiness(st1 as never).counters;
+
+    const p = await readyTenant("p1");
+    const typed = await fillTrueDecisions(p);
+    for (const n of PUB_VARS) expect(typed, n).not.toContain(n);
+    const st = await getState(p);
+    for (const n of PUB_VARS) expect(fieldOf(st, n), n).toMatchObject({ status: "DEFERRED" });
+    expect(st.metrics.DEFERRED_PUBLICATION).toBe(7);
+    expect(st.publication.readiness).toMatchObject({ complete: false, total: 7 });
+    expect(st.publication.readiness.missingVariables).toEqual(expect.arrayContaining(PUB_VARS));
+    const after = buildEditalReadiness(st as never).counters;
+    expect(after.DEFERRED_PUBLICATION_TOTAL).toBe(7);
+    expect(after.PROCESS_DECISIONS_TOTAL).toBe(0);
+    expect(livePendingItems(st, {})).toEqual([]);
+    const pre = await preflight(p);
+    expect(pre.status).toBe("READY_FOR_COMPOSITION");
+    expect(JSON.stringify(pre.issues ?? [])).not.toMatch(/numeroPregao|dataAbertura|horarioAbertura|RecebimentoPropostas|dataDivulgacao/);
+
+    const ra = await gen(p);
+    expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    const text = (await draftText(p))!;
+    expect(text).toContain(PLACEHOLDER);
+    expect(text).not.toMatch(/\[REVISAR[^\]]*(numeroPregao|dataAbertura|horarioAbertura|RecebimentoPropostas|dataDivulgacao)/);
+    expect(text).not.toContain(String(scenarioValueByName("processo.numeroPregao")));
+    const { body } = await manifestBody(p.org, ra.generationManifestId);
+    expect(body.deferredPublication.map((x: any) => x.variable)).toEqual([...PUB_VARS].sort());
+    expect(body.deferredPublication.every((x: any) => x.status === "DEFERRED" && x.valueHash === undefined)).toBe(true);
+    // governança preservada: Edital → revisão humana → M2 emitido, ainda com dados diferidos
+    const issued = await reviewAndIssue(p);
+    expect(issued.officialId).toBeTruthy();
+    METRICS.P1 = {
+      PROCESS_DECISIONS_TOTAL_BEFORE_REV1: before.PROCESS_DECISIONS_TOTAL, PROCESS_DECISIONS_TOTAL_AFTER_REV2: after.PROCESS_DECISIONS_TOTAL,
+      DEFERRED_PUBLICATION_TOTAL: after.DEFERRED_PUBLICATION_TOTAL, REV1_PENDING: pend1,
+    };
+    expect(before.PROCESS_DECISIONS_TOTAL).toBeGreaterThan(after.PROCESS_DECISIONS_TOTAL);
+  }, 300_000);
+
+  it("P2 — preencher DEPOIS (mecanismo governado: ator, revisão, CAS, idempotência) ⇒ readiness completo e NOVA versão do rascunho; a anterior fica preservada e imutável (PUB10–PUB14)", async () => {
+    const p = await readyTenant("p2");
+    await fillTrueDecisions(p);
+    const a = await gen(p);
+    const textA = (await draftText(p))!;
+    const mA = await manifestBody(p.org, a.generationManifestId);
+    expect(textA).toContain(PLACEHOLDER);
+
+    const st = await getState(p);
+    const staleRevision = st.revisions.process;
+    const { decisions } = await fillPublication(p, PUB_VARS);
+    for (const d of decisions) expect(d.decision).toMatchObject({ recordedByUserId: U_MANAGER });
+    // CAS: escrita com a revisão antiga é recusada; replay idempotente devolve a MESMA decisão
+    await expect(tpl(p.org).governed.recordCertameConfig({ confirm: true, idempotencyKey: key("stale"), decision: decision(), catalogVersion: st.catalogVersion, processId: p.w.processId, source: "PROCESS", fields: { numeroPregao: "999" }, expectedRevision: staleRevision })).rejects.toThrow();
+    const act = decisions[0];
+    expect(act.replayed).toBeFalsy();
+    const after = await getState(p);
+    expect(after.publication.readiness).toMatchObject({ complete: true, missing: [] });
+    for (const n of PUB_VARS) expect(fieldOf(after, n), n).toMatchObject({ status: "DECIDED" });
+    expect(after.publication.schedule.numeroPregao).toBe(scenarioValueByName("processo.numeroPregao"));
+    const cfg: any = await proc(p.org).certameConfig({ processId: p.w.processId, ...WS });
+    expect(cfg.numeroPregao).toBe(scenarioValueByName("processo.numeroPregao"));
+
+    // rascunho NÃO é sobrescrito sem regeneração; a revalidação do M1 vigente acusa a mudança de fonte (nada é regenerado sozinho)
+    expect(await draftText(p)).toBe(textA);
+    const revalidation = async () => ((await proc(p.org).editalTemplateReviewState({ processId: p.w.processId })) as any).revalidation;
+    expect((await revalidation()).status).toBe("BLOCKED");
+    // recompor SEM o hash do rascunho visto, ou com hash errado, é recusado; nada é sobrescrito
+    await expect(proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), idempotencyKey: key("noh") } as any)).rejects.toThrow(/já existe rascunho/);
+    await expect(proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), idempotencyKey: key("badh"), confirmReplace: true, expectedContentHash: "0".repeat(64) } as any)).rejects.toThrow(/mudou desde o carregamento/);
+    expect(await draftText(p)).toBe(textA);
+    const b = await regen(p);
+    expect((await revalidation()).status).toBe("PASSED");
+    expect(b.generationManifestId).not.toBe(a.generationManifestId);
+    const textB = (await draftText(p))!;
+    expect(textB).not.toContain(PLACEHOLDER);
+    expect(textB).toContain(String(scenarioValueByName("processo.numeroPregao")));
+    const mB = await manifestBody(p.org, b.generationManifestId);
+    expect(mB.hash).not.toBe(mA.hash);
+    expect(mB.body.deferredPublication.every((x: any) => x.status === "RESOLVED" && /^[0-9a-f]{64}$/.test(x.valueHash))).toBe(true);
+    const mAagain = await manifestBody(p.org, a.generationManifestId);
+    expect(mAagain.hash).toBe(mA.hash);                                      // versão antiga imutável
+    expect(JSON.stringify(mAagain.body)).toBe(JSON.stringify(mA.body));
+    const prev = await rows("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND previous_content = ? AND operation = 'template_compose'", [p.org, p.w.processId, textA]);
+    expect(Number(prev[0].n)).toBe(1);                                          // versão anterior preservada no ledger append-only
+    const replay = await regen(p).catch((e) => e);                              // mesmo conteúdo ⇒ nada muda (hash esperado agora é o novo)
+    expect(replay.generationManifestId ?? mB.hash).toBeTruthy();
+    METRICS.P2 = { previousVersionPreservedInLedger: Number(prev[0].n), hashChanged: mB.hash !== mA.hash };
+  }, 300_000);
+
+  it("P3 — preenchimento PARCIAL: cada dado DEFERRED/RESOLVED individualmente; sem número ⇒ continua permitido (PUB7)", async () => {
+    const p = await readyTenant("p3");
+    await fillTrueDecisions(p);
+    await fillPublication(p, ["processo.dataAbertura", "processo.horarioAbertura"]);
+    const st = await getState(p);
+    expect(st.publication.readiness.complete).toBe(false);
+    expect(st.publication.readiness.missing).toEqual(expect.arrayContaining(["numeroPregao"]));
+    expect(st.publication.readiness.missing).not.toContain("dataSessao");
+    const pf3 = await preflight(p);
+    expect(pf3.status, JSON.stringify(pf3.issues)).toBe("READY_FOR_COMPOSITION");
+    const ra = await gen(p);
+    const { body } = await manifestBody(p.org, ra.generationManifestId);
+    const by = Object.fromEntries(body.deferredPublication.map((x: any) => [x.variable, x.status]));
+    expect(by["processo.dataAbertura"]).toBe("RESOLVED");
+    expect(by["processo.numeroPregao"]).toBe("DEFERRED");
+    expect(await draftText(p)).toContain(PLACEHOLDER);
+  }, 240_000);
+
+  it("P4 — documento oficial EMITIDO com dados diferidos é imutável; regenerar o rascunho depois da emissão exige novo ciclo (PUB15–PUB16)", async () => {
+    const p = await readyTenant("p4");
+    await fillTrueDecisions(p);
+    const issued = await reviewAndIssue(p);
+    const emitted = (await rows("SELECT content_hash h FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, issued.officialId]))[0].h;
+    await fillPublication(p, PUB_VARS);                                       // dados chegam DEPOIS da emissão
+    expect((await rows("SELECT content_hash h FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, issued.officialId]))[0].h).toBe(emitted);
+    await expect(regen(p)).rejects.toThrow(/OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE/);
+    expect((await rows("SELECT content_hash h FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, issued.officialId]))[0].h).toBe(emitted);
+  }, 300_000);
+
+  it("P5 — edição humana no rascunho: recompor exige confirmação explícita; o texto humano fica preservado no histórico", async () => {
+    const p = await readyTenant("p5");
+    await fillTrueDecisions(p);
+    await gen(p);
+    const draft = (await draftText(p))!;
+    const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.") + "\n\nObservação humana sintética.";
+    await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key("edit") });
+    await fillPublication(p, PUB_VARS);
+    const call = (extra: Record<string, unknown>) => proc(p.org).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr), ...extra } as any) as Promise<any>;
+    await expect(call({ idempotencyKey: key("r1"), expectedContentHash: draftContentHash(human) })).rejects.toThrow(/HUMAN_EDIT_WOULD_BE_OVERWRITTEN/);
+    expect(await draftText(p)).toBe(human);
+    await call({ idempotencyKey: key("r2"), expectedContentHash: draftContentHash(human), confirmReplace: true });
+    expect(await draftText(p)).not.toBe(human);
+    expect(Number((await rows("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND previous_content = ?", [p.org, p.w.processId, human]))[0].n)).toBe(1);
+  }, 300_000);
+
+  it("S — SRP: pergunta operacional; sem origem anterior nem heurística textual ⇒ decisão HUMANA; gravação governada (SRP4–SRP7)", async () => {
+    const p = await prepareOrg("srp");
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    const st0 = await getState(p);
+    const f0 = fieldOf(st0, "controle.utilizaSrp");
+    expect(f0).toMatchObject({ description: "Sistema de Registro de Preços (SRP)", question: "Esta contratação utilizará Sistema de Registro de Preços?", status: "PENDING", editable: true });
+    // objeto do processo falando em "registro de preços" NÃO preenche o campo (nenhuma heurística textual)
+    await conn.execute("UPDATE procurement_processes SET object = ? WHERE id = ? AND organization_id = ?", ["Registro de preços para aquisição de material de expediente (sintético)", p.w.processId, p.org]).catch(() => {});
+    expect(fieldOf(await getState(p), "controle.utilizaSrp")).toMatchObject({ status: "PENDING" });
+    expect(livePendingItems(await getState(p), {}).map((i) => i.field.name)).toContain("controle.utilizaSrp");
+    // a pessoa decide pela rota governada; replay idempotente; depois, AUTO/DECIDED
+    const idem = key("srp");
+    const base = { confirm: true as const, idempotencyKey: idem, decision: decision(), catalogVersion: st0.catalogVersion, processId: p.w.processId, source: "PROCESS" as const, fields: { utilizaSrp: false }, expectedRevision: st0.revisions.process };
+    const r1: any = await tpl(p.org).governed.recordCertameConfig(base);
+    const r2: any = await tpl(p.org).governed.recordCertameConfig(base);
+    expect(r2.replayed).toBe(true); expect(r2.decision.id).toBe(r1.decision.id);
+    const f1 = fieldOf(await getState(p), "controle.utilizaSrp");
+    expect(f1).toMatchObject({ status: "DECIDED" });
+    expect(String(f1.displayValue)).toMatch(/^(false|n[ãa]o)$/i);
+    METRICS.S = { question: f0.question, label: f0.description, zeroReentrySourceFound: false };
+  }, 240_000);
+
+  it("L — LEGAL1–LEGAL4: sem módulo jurídico, com módulo ativo sem parecer, com parecer externo ou sem registro de autorização ⇒ a composição NÃO depende deles", async () => {
+    const p = await readyTenant("legal");
+    await fillTrueDecisions(p);
+    // LEGAL1/LEGAL4: órgão sintético sem nenhum registro de parecer/autorização
+    for (const t of ["legal_opinions", "legal_opinion_requests", "legal_opinion_workspaces"]) {
+      const n = await count("SELECT COUNT(*) n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", [t]);
+      if (n) expect(await count(`SELECT COUNT(*) n FROM ${t} WHERE organization_id = ?`, [p.org]).catch(() => 0)).toBe(0);
+    }
+    const pre = await preflight(p);
+    expect(pre.status).toBe("READY_FOR_COMPOSITION");
+    expect(JSON.stringify(pre.issues ?? [])).not.toMatch(/parecer|legal.?opinion|autoriza/i);
+    const ra = await gen(p);                                                    // LEGAL1 + LEGAL4
+    expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    expect(JSON.stringify((await manifestBody(p.org, ra.generationManifestId)).body)).not.toMatch(/legalOpinion|parecerJuridico|authorization/i);
+    // LEGAL2/LEGAL3: parecer externo é só um documento do processo — a regeneração segue permitida
+    const regenerated = await regen(p);
+    expect(regenerated.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    METRICS.L = { LEGAL_OPINION_AS_GENERATION_GATE: false, AUTHORIZATION_AS_GENERATION_GATE: false };
+  }, 300_000);
+});

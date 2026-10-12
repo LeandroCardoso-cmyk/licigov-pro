@@ -18,9 +18,11 @@ import { loadEditalCatalog } from "./editalCatalogLoader";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore";
 import { loadContextReuse } from "./editalContextReuse";
 import { describeVariable } from "./editalPreparationService";
+import { isDeferredPublication } from "../../domain/institutionalTemplates/variableCatalog2";
+import { projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { resolveProcurementContext } from "../canonicalContextService";
 
-export type CertameFieldStatus = "DECIDED" | "ORG_DEFAULT" | "DERIVED" | "PENDING" | "OPTIONAL";
+export type CertameFieldStatus = "DECIDED" | "ORG_DEFAULT" | "DERIVED" | "PENDING" | "OPTIONAL" | "DEFERRED";
 
 export interface CertameConfigField {
   readonly name: string;
@@ -44,6 +46,11 @@ export type CertameConfigState =
     readonly fields: readonly CertameConfigField[];
     /** Número do pregão: persistido UMA vez na configuração e reutilizado por todo documento do certame (nunca gerado sem regra governada). */
     readonly numeroPregao: string | null;
+    /**
+     * PublicationScheduleProjection (cronograma + número do pregão) e PublicationReadiness — leitura ESTÁVEL para consumidores operacionais
+     * (calendário, centro de operações, alertas). `complete=false` NUNCA bloqueia a composição do Edital.
+     */
+    readonly publication: { readonly schedule: PublicationScheduleProjection; readonly readiness: PublicationReadiness };
   };
 
 const FAMILY: readonly AuthorityClass[] = ["CERTAME_CONFIG", "CERTAME_SCHEDULE"];
@@ -59,6 +66,7 @@ export async function getCertameConfigState(deps: BridgeDeps, organizationId: nu
   const reuse = await loadContextReuse({ organizationId, processId, catalog, orgRecord: orgRec, asOf: deps.now().slice(0, 10), processRecord: processRec });
   const fields: CertameConfigField[] = [];
   let numeroPregao: string | null = null;
+  const effective: Record<string, unknown> = {};
   for (const v of catalog.vars) {
     const entry = authorityEntryOf(v.name);
     if (!entry || !(FAMILY.includes(entry.cls) || (entry.cls === "CONDITIONAL" && entry.entry === "CERTAME_CONFIG"))) continue;
@@ -70,10 +78,12 @@ export async function getCertameConfigState(deps: BridgeDeps, organizationId: nu
     if (ru?.kind === "SCHEDULE") fields.push({ ...base, status: "DERIVED", value: ru.value, origin: ru.origin.label });
     else if (stored !== undefined && stored !== null && stored !== "") fields.push({ ...base, status: "DECIDED", value: stored, origin: `Configuração do certame · revisão ${processRec?.revision ?? 0}` });
     else if (ru?.kind === "ORG_DEFAULT") fields.push({ ...base, status: "ORG_DEFAULT", value: ru.value, origin: "Padrão institucional do órgão" });
-    else fields.push({ ...base, status: v.required ? "PENDING" : "OPTIONAL" });
+    else fields.push({ ...base, status: v.required ? "PENDING" : isDeferredPublication(v) ? "DEFERRED" : "OPTIONAL" });
+    const last = fields[fields.length - 1];
+    if (last.value !== undefined && last.status !== "PENDING" && last.status !== "OPTIONAL" && last.status !== "DEFERRED") effective[v.name] = last.value;
     if (v.name === "processo.numeroPregao" && typeof stored === "string" && stored !== "") numeroPregao = stored;
   }
-  return { status: "READY", catalogVersion: catalog.version, revision: processRec?.revision ?? 0, hash: processRec?.hash ?? null, fields, numeroPregao };
+  return { status: "READY", catalogVersion: catalog.version, revision: processRec?.revision ?? 0, hash: processRec?.hash ?? null, fields, numeroPregao, publication: projectPublicationSchedule(effective) };
 }
 
 // ─── Itens: participação e estrutura (origem do regime e da forma de julgamento) ─────────────────────────────────────────

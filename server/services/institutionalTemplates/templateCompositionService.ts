@@ -201,6 +201,8 @@ export interface GenerateTemplatedDocumentParams {
    * quando a revisão referencia documento oficial; ausente ⇒ TEMPLATE_SOURCE_UNAVAILABLE (OFFICIAL_PIN_REQUIRED).
    */
   readonly officialPins?: Partial<Record<DocRefKind2, RequestedOfficialPin>>;
+  /** Recomposição governada do rascunho existente (nova versão do rascunho; ver `TemplateDraftPort.writeDraft`). */
+  readonly recompose?: { readonly expectedContentHash: string; readonly confirmReplace?: boolean };
 }
 
 export interface GenerateTemplatedDocumentResult {
@@ -341,6 +343,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
       id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,
       title: params.title, content: composed.value.content.text, actorUserId: params.actorUserId, correlationId: params.correlationId,
       generationManifestId: m1.id,
+      ...(params.recompose ? { replace: params.recompose } : {}),
     }, tx);
     // M1 ANTES da versão `gerado`: o INSERT é convergente (o mesmo M1 concorrente/repetido ⇒ `created = false`) e só quem o
     // criou gera a versão oficial — repetir ou competir nunca duplica a versão `gerado` (o rascunho/M1 já a representam).

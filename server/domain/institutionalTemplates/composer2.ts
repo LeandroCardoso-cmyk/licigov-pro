@@ -31,14 +31,14 @@ import {
 } from "./composerShared";
 import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
-import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, OfficialDocumentReference } from "./manifest";
+import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, DeferredPublicationRef, OfficialDocumentReference } from "./manifest";
 import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
 import { validateTemplateRevision } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
 import { isOrgId, type OrgId } from "./types";
 import { formatScalar, formatValue2, normalizeValue2 } from "./valueTypes2";
-import { findVariable2, type VariableCatalog2, type VariableDef2, type VariableSource2 } from "./variableCatalog2";
+import { findVariable2, isDeferredPublication, type VariableCatalog2, type VariableDef2, type VariableSource2 } from "./variableCatalog2";
 
 // ─── Resolução de variáveis (catálogo v2) ───────────────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,8 @@ export interface ResolvedVariables2 {
   readonly usedSources: readonly VariableSource2[];
   /** Campos de SISTEMA late-bound (ciclo de vida): não vêm de fonte alguma; o valor só nasce no ato oficial de emissão. */
   readonly lateBound: readonly string[];
+  /** Dados de publicação diferidos consultados (DEFERRED × RESOLVED), em ordem por variável. */
+  readonly deferredPublication: readonly DeferredPublicationRef[];
 }
 
 /**
@@ -86,19 +88,26 @@ export function resolveTemplateVariables2(
   const absent = new Set<string>();
   const used = new Set<VariableSource2>();
   const lateBound: string[] = [];
+  const deferredPublication: DeferredPublicationRef[] = [];
   for (const def of ordered) {
     // Campo de sistema late-bound (ex.: data de emissão): NUNCA lido de fonte — nem exigido, nem fabricado — na composição.
     if (isLateBoundVariable(def)) { lateBound.push(def.name); continue; }
     used.add(def.source);
     const snap = sources[def.source];
     const raw = snap ? readCatalogPath(snap.data, def.path) : undefined;
-    if (isAbsent(raw)) { absent.add(def.name); continue; }
+    if (isAbsent(raw)) {
+      absent.add(def.name);
+      // Dado de publicação DIFERIDO: ausência é legítima (nunca bloqueia, nunca é preenchida por fallback); o manifest registra DEFERRED.
+      if (isDeferredPublication(def)) deferredPublication.push({ variable: def.name, status: "DEFERRED" });
+      continue;
+    }
     const n = normalizeValue2(def, raw);
     if (!n.ok) {
       issues.push({ code: def.type === "table" ? "TABLE_ROWS_INVALID" : "VALUE_TYPE_INVALID", path: `vars.${def.name}`, message: `${n.reason} (catálogo: ${def.type})` });
       continue;
     }
     values[def.name] = n.value;
+    if (isDeferredPublication(def)) deferredPublication.push({ variable: def.name, status: "RESOLVED", valueHash: templateHash(n.value) });
   }
   if (issues.length) return { ok: false, issues };
 
@@ -112,7 +121,7 @@ export function resolveTemplateVariables2(
     }
   }
   if (issues.length) return { ok: false, issues };
-  return { ok: true, value: { values, usedSources: [...used].sort(), lateBound } };
+  return { ok: true, value: { values, usedSources: [...used].sort(), lateBound, deferredPublication } };
 }
 
 // ─── Árvore renderizável (já sem condicionais) ──────────────────────────────────────────────────────────────────────
@@ -623,6 +632,7 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
     aiNarratives: ectx.ai,
     annexes: annexRefs,
     lateBound: [...ectx.lateBoundRefs.values()].sort((a, b) => (a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0)),
+    deferredPublication: resolved.value.deferredPublication,
   }, purpose);
   if (!sealed.ok) return sealed;
 

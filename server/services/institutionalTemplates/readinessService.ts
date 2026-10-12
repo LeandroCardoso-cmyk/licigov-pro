@@ -7,7 +7,7 @@ import { evaluateReadiness, type ReadinessMatrix } from "../../domain/institutio
 import { INTEGRATED_CAPABILITIES } from "../../domain/institutionalTemplates/governance/capabilities";
 import { parseSourceInventory, type SourceInventory } from "../../domain/institutionalTemplates/governance/sourceInventory";
 import { buildSourceInventory } from "../../domain/institutionalTemplates/governance/packageInventory";
-import { getModelPackage } from "./modelPackages";
+import { getModelPackageVersion } from "./modelPackages";
 import { TemplateWorkflowError } from "./errors";
 import { TemplateGovernanceService } from "./governanceService";
 import type { TemplateReadinessPort, TemplateWorkflowPorts, WorkflowContext } from "./ports";
@@ -36,7 +36,7 @@ export class TemplateReadinessService {
     // Modelo registrado a partir de um PACOTE versionado: o inventário é derivado do mapeamento aprovado NO SERVIDOR (nenhum dado do
     // cliente); a matriz o confronta com o SHA-256 gravado na procedência, com o AST real e com as capacidades.
     let derivedFromPackage = false;
-    const pkg = input.inventory === undefined && gov?.provenance ? getModelPackage(gov.provenance.templateKey) : null;
+    const pkg = input.inventory === undefined && gov?.provenance ? getModelPackageVersion(gov.provenance.templateKey, gov.provenance.sourceLogicalVersion) : null;
     if (pkg && gov?.provenance && pkg.provenance.sourceSha256 === gov.provenance.sourceSha256 && pkg.provenance.sourceLogicalVersion === gov.provenance.sourceLogicalVersion) {
       inventory = buildSourceInventory({ mapping: pkg.mapping, catalog: pkg.catalog, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256 });
       derivedFromPackage = true;

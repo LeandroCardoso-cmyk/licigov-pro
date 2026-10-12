@@ -39,7 +39,7 @@ export interface LastDraftEdit {
 }
 
 /** Operações do ledger cujo conteúdo resultante é produzido pelo SISTEMA (IA/template), não por humano. */
-const SYSTEM_AUTHORED_OPERATIONS: ReadonlySet<string> = new Set(["ai_regenerate", "dfd_regenerate", "dfd_ai_draft"]);
+const SYSTEM_AUTHORED_OPERATIONS: ReadonlySet<string> = new Set(["ai_regenerate", "dfd_regenerate", "dfd_ai_draft", "template_compose"]);
 const IMPORT_OPERATIONS: ReadonlySet<string> = new Set(["import_promote", "import_replace"]);
 
 export type DraftHumanReason = "human_edit" | "import" | "untracked_change";
