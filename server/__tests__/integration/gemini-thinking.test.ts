@@ -86,4 +86,16 @@ describe("Gemini · payload de generateContent (thinkingConfig)", () => {
     const cfg = await generateWith("gemini-2.5-flash");
     expect(cfg.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
   });
+
+  it("payload nunca contém temperature/topP/topK (descontinuados pelo Google)", async () => {
+    for (const m of ["gemini-3.8-flash", "gemini-2.5-flash"]) {
+      const cfg = await generateWith(m);
+      for (const k of ["temperature", "topP", "topK"]) expect(cfg.generationConfig).not.toHaveProperty(k);
+    }
+  });
+
+  it("modelo 3.x padrão NÃO recebe thinkingConfig (thinking padrão do modelo)", async () => {
+    const cfg = await generateWith("gemini-3.8-flash");
+    expect(cfg.generationConfig.thinkingConfig).toBeUndefined();
+  });
 });
