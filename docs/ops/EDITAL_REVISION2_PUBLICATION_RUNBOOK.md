@@ -18,13 +18,23 @@
 | Fonte jurídica | SHA-256 `6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904` (a mesma da Revisão 1) | `plan` |
 | Revisão candidata já registrada? | **não** (nenhuma revisão com o hash da candidata) | `snapshot`/`plan` |
 
+### Constantes COMPLETAS (copiar e usar; nunca abreviar)
+```
+PACKAGE_VERSION      = 1.0.2-draft
+REV2_SEMANTIC_HASH   = 33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd
+REV1_SEMANTIC_HASH   = e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d
+SOURCE_SHA256        = 6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904
+CONFIRM_TOKEN        = REGISTER_CANDIDATE_DRAFT:<ORG_ID>:<IDENTITY_ID>:33ee30bc76b7      (12 primeiros hex do REV2_SEMANTIC_HASH)
+```
+Valores que **só o snapshot fornece** (não existem neste documento): `<IDENTITY_ID>`, `<REV1_ID>`, `<BINDING_ID>`, as 5 dimensões do escopo, `<DATABASE_NAME>` (nome do banco realmente conectado).
+
 ## 1. Responsáveis (decisões humanas)
 
 | Decisão | Quem decide | Papel mínimo no sistema | Observação |
 |---|---|---|---|
 | D0 — prosseguir com a Revisão 2 | Owner do produto | — | Autoriza cada etapa **separadamente** |
 | D1 — conteúdo/ato da **evidência jurídica** | Procuradoria/Jurídico do órgão (competência externa ao sistema) | registra: `manager` | Ver §3. O sistema **não valida competência** (`NOT_VALIDATED_POLICY_PENDING`) e **não inventa** parecer, data ou fundamento |
-| D2 — registrar o DRAFT | Operador técnico designado | `operator` + autoridade declarada em arquivo | Ferramenta controlada; só DRAFT + procedência |
+| D2 — registrar o DRAFT | Operador técnico designado, **autenticado pela própria credencial do sistema** | `operator` (membro ATIVO da org) + autoridade declarada em arquivo | Ferramenta controlada; só DRAFT + procedência; o ator registrado é o usuário autenticado |
 | D3 — aprovar | Gestor (≠ operador do D2, recomendado) | `manager` | Decisão distinta de publicar |
 | D4 — publicar | Gestor | `manager` | O servidor recalcula a matriz; qualquer `BLOCKED` recusa |
 | D5 — vincular (troca atômica) | Gestor | `manager` | Único passo com efeito em produção |
@@ -39,7 +49,7 @@ pnpm tsx scripts/register-model-candidate.ts --mode=plan --organization-id=1 --i
   --expect-baseline-hash=e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d \
   --expect-source-sha256=6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904
 ```
-(executar num shell com `DATABASE_URL` de produção e o build implantado; ambos os modos apenas leem.)
+(executar num shell com `DATABASE_URL` e o build implantado; ambos os modos **apenas leem** e não exigem credencial, `--allow-production` nem confirmação.)
 
 **PARE se:** qualquer verificação do plano estiver `FALHA`; a identidade não tiver a Revisão 1 `PUBLISHED` com o hash esperado; houver ≠ 1 vínculo ativo
 para a identidade; já existir revisão com o hash da candidata em estado inesperado; a flag da org 1 estiver desligada; o commit implantado não contiver o merge `73a3d65a`.
@@ -48,7 +58,7 @@ Conferência cruzada opcional (SQL somente leitura, Apêndice A).
 ## 3. Etapa 1 — evidência jurídica (decisão D1; fora do sistema)
 
 A matriz de prontidão (`LEGAL_APPROVAL_EVIDENCE`) exige **correspondência exata** entre (a) a versão lógica e o SHA-256 da procedência e (b) o hash semântico da **revisão exata**.
-Para a candidata: versão lógica `1.0.2-draft`, SHA-256 `6795b2ab…7904`, hash semântico `33ee30bc…63c0cd`.
+Para a candidata: versão lógica `1.0.2-draft`, SHA-256 `6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904`, hash semântico `33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd`.
 
 - A Procuradoria aprovou o Modelo-Mestre `1.0.1-draft` (mesmo SHA-256 da fonte). O rótulo `1.0.2-draft` e a mudança de política de completude (7 dados de publicação deixam de bloquear a
   composição; AST, mapeamento e texto jurídico **idênticos**) **não** têm ato jurídico próprio. **Decisão humana necessária:** (A) a Procuradoria/gestor competente emite novo ato/parecer ou
@@ -58,19 +68,35 @@ Para a candidata: versão lógica `1.0.2-draft`, SHA-256 `6795b2ab…7904`, hash
 
 ## 4. Etapa 2 — registrar o DRAFT (D2, ferramenta controlada)
 
+**Guardas (valem em QUALQUER ambiente — `APP_ENV`/`NODE_ENV` são só rótulos e nunca dispensam nada):** toda execução exige (a) `--allow-production`, (b) `--confirm` exato com os identificadores e (c) `--expect-database` com o nome do banco, conferido contra o banco **realmente conectado** (divergência ⇒ recusa antes de autenticar ou escrever).
+
+**Atribuição:** o ator é o **usuário autenticado** com a credencial do próprio sistema (e-mail + senha por variáveis de ambiente; **nunca por argumento**), membro ATIVO da organização com papel ≥ `operator`. `--actor-user-id` não existe mais. A autoridade declarada em `authority.json` é amarrada a esse usuário (um `decidedByUserId` diferente é recusado). Um id digitado ou o arquivo de autoridade **não** são autenticação.
+
 `authority.json` (preenchido pela pessoa responsável): `{"decidedByName","decidedByRole","decidedAt":"AAAA-MM-DD","basisReference","reason"}`.
 ```
-pnpm tsx scripts/register-model-candidate.ts --mode=execute --organization-id=1 --identity-id=<IDENTITY_ID> --package-version=1.0.2-draft \
-  --expect-semantic-hash=33ee…63c0cd --expect-baseline-hash=e622…da5d --expect-source-sha256=6795…7904 \
-  --actor-user-id=<ID do operador (membro ativo da org 1, ≥ operator)> --authority-file=authority.json \
-  --confirm=REGISTER_CANDIDATE_DRAFT:1:<IDENTITY_ID>:33ee30bc76b7 --allow-production
+CANDIDATE_EXECUTOR_EMAIL='<e-mail do executor>' CANDIDATE_EXECUTOR_PASSWORD='<senha do executor>' \
+pnpm tsx scripts/register-model-candidate.ts --mode=execute \
+  --organization-id=1 --identity-id=<IDENTITY_ID> --package-version=1.0.2-draft \
+  --expect-semantic-hash=33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd \
+  --expect-baseline-hash=e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d \
+  --expect-source-sha256=6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904 \
+  --authority-file=authority.json \
+  --confirm=REGISTER_CANDIDATE_DRAFT:1:<IDENTITY_ID>:33ee30bc76b7 \
+  --expect-database=<DATABASE_NAME> --allow-production
 ```
 Escreve **somente** uma revisão `DRAFT` (#2) + a procedência. Idempotente: repetir não cria segunda revisão; se um DRAFT ficou sem procedência (falha parcial), a repetição só completa a procedência.
-**Verificar:** `snapshot` mostra 2 revisões (Revisão 1 `PUBLISHED` inalterada; candidata `DRAFT`, hash `33ee…`), **1** vínculo ativo ainda fixando `REV1_ID`; UI → Prontidão: `SOURCE_PROVENANCE = PASS`, único `BLOCKED` = `LEGAL_APPROVAL_EVIDENCE`.
-**PARE se:** o hash da candidata divergir; aparecer 2ª revisão candidata; o vínculo ou a Revisão 1 mudarem. **Retorno:** nada a desfazer em produção (DRAFT não tem efeito); opcionalmente deixar o DRAFT parado.
+**Verificar:** `snapshot` mostra 2 revisões (Revisão 1 `PUBLISHED` inalterada; candidata `DRAFT`, hash `33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd`), **1** vínculo ativo ainda fixando `<REV1_ID>`; as decisões de procedência no ledger têm `recorded_by_user_id` = o usuário autenticado e correlation id `cand-reg-…`; UI → Prontidão: `SOURCE_PROVENANCE = PASS`, único `BLOCKED` = `LEGAL_APPROVAL_EVIDENCE`.
+**PARE se:** a ferramenta recusar qualquer guarda ou a autenticação (não insistir com outra credencial sem decisão do Owner); o hash da candidata divergir; aparecer 2ª revisão candidata; o vínculo ou a Revisão 1 mudarem. **Retorno:** nada a desfazer em produção (DRAFT não tem efeito); opcionalmente deixar o DRAFT parado.
+
+### 4.1 Limitações conhecidas da atribuição (decisão do Owner aceitá-las ou exigir mais)
+- A autenticação prova **conhecimento da credencial** do usuário (a mesma do login do sistema); não prova posse de dispositivo nem a identidade física de quem está no terminal — o sistema **não tem MFA**.
+- **Não há limitação de tentativas entre invocações** (o limitador do login é em memória do servidor web); a execução exige acesso de shell/banco à infraestrutura, então o risco é de quem já a tem. Recomenda-se rodar a partir de sessão de infraestrutura já auditada e trocar a senha do executor após o uso.
+- Quem tem escrita direta no banco pode alterar credenciais/ledger fora desta ferramenta; isso está fora do alcance deste controle.
+- O contexto operacional (usuário do SO, host, pid, rótulo de ambiente) vai ao log estruturado como **informação não autenticada**.
+- Este controle autentica quem **registra o DRAFT**. Aprovar, publicar e vincular continuam pela UI/API com a sessão autenticada normal do sistema (papel `manager`), cada uma com sua própria decisão no ledger.
 
 ## 5. Etapa 3 — evidência (D1 executado) → matriz `READY`
-UI `/modelos-institucionais/<IDENTITY_ID>` → Governança (papel `manager`): registrar a evidência com versão lógica `1.0.2-draft` e SHA-256 `6795…7904` + os dados que a pessoa tem.
+UI `/modelos-institucionais/<IDENTITY_ID>` → Governança (papel `manager`): registrar a evidência com versão lógica `1.0.2-draft` e SHA-256 `6795b2abc858660d5658d8ce55afa3633cdbab772e1a7e32fd771cec43997904` + os dados que a pessoa tem.
 **Verificar:** Prontidão → `overall = READY` (0 `BLOCKED`); hash da matriz anotado. **PARE** em qualquer `BLOCKED`. Evidência com versão/SHA diferentes mantém o bloqueio (provado em teste).
 
 ## 6. Etapa 4 — aprovar (D3) e 7. Etapa 5 — publicar (D4)

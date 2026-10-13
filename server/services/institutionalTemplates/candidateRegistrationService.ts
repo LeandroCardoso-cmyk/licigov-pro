@@ -25,18 +25,28 @@ import { BLL_MODEL_KEY } from "./modelPackages";
 
 const log = serviceLogger("CandidateRegistration");
 
-export interface CandidateRegistrationRequest {
+/** Pedido de LEITURA (plano): sem ator e sem autoridade — nada é escrito. */
+export interface CandidatePlanRequest {
   readonly organizationId: number;
   readonly identityId: string;
-  readonly actorUserId: number;
   readonly runId: string;
   readonly modelKey: string;
   readonly packageVersion: string;
   /** Valores que a pessoa responsável conferiu e quer ver confirmados (ids exatos a conferir no momento da execução). */
   readonly expected: { readonly sourceSha256: string; readonly semanticHash: string; readonly baselineSemanticHash: string };
+}
+
+/** Pedido de ESCRITA: o ator é o usuário AUTENTICADO (nunca um id digitado) e a autoridade declarada vem amarrada a ele. */
+export interface CandidateRegistrationRequest extends CandidatePlanRequest {
+  readonly actorUserId: number;
   /** Autoridade DECLARADA por quem executa (nome/cargo/data/base/motivo). Nunca preenchida pela ferramenta. */
   readonly decision: DeclaredAuthority;
+  /** Contexto operacional do executor (informativo, NÃO autenticado; vai só para o log estruturado). */
+  readonly executorContext?: Readonly<Record<string, string | number>>;
 }
+
+// Contexto de LEITURA do plano (a leitura de governança só usa a organização; nenhum ato é registrado com este ator).
+const READ_ONLY_PLAN_ACTOR = 1;
 
 export type CandidateAction = "REGISTER_DRAFT" | "RECORD_PROVENANCE" | "NONE";
 
@@ -58,12 +68,12 @@ export interface CandidatePlan {
 
 const ck = (id: string, ok: boolean, detail: string): PackageCheck => ({ id, ok, detail });
 
-function packages(req: CandidateRegistrationRequest): { candidate: ModelPackage | null; baseline: ModelPackage | null } {
+function packages(req: CandidatePlanRequest): { candidate: ModelPackage | null; baseline: ModelPackage | null } {
   return { candidate: getModelPackageVersion(req.modelKey, req.packageVersion), baseline: getModelPackage(req.modelKey) };
 }
 
 /** SOMENTE LEITURA. */
-export async function planCandidateRegistration(ports: TemplateWorkflowPorts, req: CandidateRegistrationRequest): Promise<CandidatePlan> {
+export async function planCandidateRegistration(ports: TemplateWorkflowPorts, req: CandidatePlanRequest): Promise<CandidatePlan> {
   const { candidate, baseline } = packages(req);
   const checks: PackageCheck[] = [];
   let packageChecks: readonly PackageCheck[] = [];
@@ -86,7 +96,7 @@ export async function planCandidateRegistration(ports: TemplateWorkflowPorts, re
   const existing = revisions.find((r) => r.semanticHash === req.expected.semanticHash) ?? null;
   let provenanceRecorded: boolean | null = null;
   if (existing) {
-    const gov = ports.governance ? await new TemplateGovernanceService(ports).get({ organizationId: req.organizationId, actor: { kind: "human", userId: req.actorUserId }, correlationId: `cand-plan-${req.runId}` }, existing.id) : null;
+    const gov = ports.governance ? await new TemplateGovernanceService(ports).get({ organizationId: req.organizationId, actor: { kind: "human", userId: READ_ONLY_PLAN_ACTOR }, correlationId: `cand-plan-${req.runId}` }, existing.id) : null;
     provenanceRecorded = !!gov?.provenance;
   }
   const bindings = identityOk ? (await ports.repository.listBindings(req.organizationId, { documentKind: "edital", activeOnly: true })).filter((b) => b.identityId === req.identityId) : [];
@@ -128,7 +138,7 @@ export async function registerCandidateDraft(ports: TemplateWorkflowPorts, req: 
   }, plan.action === "RECORD_PROVENANCE" ? { resumeDraftRevisionId: plan.candidateRevisionId! } : {});
   log.info("model_candidate_draft_registered", {
     organizationId: req.organizationId, identityId: req.identityId, revisionId: result.revision.id, packageVersion: req.packageVersion,
-    action: plan.action, provenance: result.provenance.status, actorUserId: req.actorUserId, correlationId: ctx.correlationId,
+    action: plan.action, provenance: result.provenance.status, actorUserId: req.actorUserId, executor: req.executorContext ?? null, correlationId: ctx.correlationId,
   });
   return { plan, performed: plan.action, revisionId: result.revision.id, provenance: result.provenance.status === "RECORDED" ? "RECORDED" : "FAILED" };
 }

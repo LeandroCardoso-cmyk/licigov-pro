@@ -7035,8 +7035,8 @@
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
-    "mtime": 1790881396.2968767,
-    "ast_hash": "719e8a8be6b41574493813a859c98af8",
+    "mtime": 1791860683.6349733,
+    "ast_hash": "87432cfa8ebb90d1c0b091ba6897260f",
     "semantic_hash": ""
   },
   "server/db/platforms.ts": {
@@ -13675,12 +13675,12 @@
     "semantic_hash": ""
   },
   "client/src/lib/institutionalTemplatesView.ts": {
-    "mtime": 1791856654.1214044,
+    "mtime": 1791860589.3819067,
     "ast_hash": "83aaa1c58af09741a2cbc54a7d2fa05e",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplateDetail.tsx": {
-    "mtime": 1791856654.1239607,
+    "mtime": 1791860589.3819067,
     "ast_hash": "76a37a613c58c98e1ea60bfb9658c681",
     "semantic_hash": ""
   },
@@ -14310,7 +14310,7 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/modelRegistrationService.ts": {
-    "mtime": 1791856518.55551,
+    "mtime": 1791860589.6579068,
     "ast_hash": "ebb6dfde5e4bc59b349048240a4d8070",
     "semantic_hash": ""
   },
@@ -14665,8 +14665,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts": {
-    "mtime": 1791856999.8118508,
-    "ast_hash": "eaeff7f524b7e6cfa9466c1c3a9de676",
+    "mtime": 1791861189.0353694,
+    "ast_hash": "52013e17c56cfcad196d90d5f0688524",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-deferred-publication.test.ts": {
@@ -14725,43 +14725,63 @@
     "semantic_hash": ""
   },
   "client/src/components/institutionalTemplates/bindingReplacement.test.ts": {
-    "mtime": 1791856684.6311126,
+    "mtime": 1791860589.3819067,
     "ast_hash": "1cb2c9aed9f17e12ec9e0717a84559f9",
     "semantic_hash": ""
   },
   "scripts/register-model-candidate.ts": {
-    "mtime": 1791856867.356859,
-    "ast_hash": "4581da9f69839dc5841b23789359f452",
+    "mtime": 1791860722.770829,
+    "ast_hash": "e9ab73f2557e95f5bd8c2b9a923d6d64",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-candidate-package.test.ts": {
-    "mtime": 1791856705.49516,
+    "mtime": 1791860589.6539068,
     "ast_hash": "c89cafe10cb18eaf7683fb8ae432fee1",
     "semantic_hash": ""
   },
   "server/__tests__/unit/register-model-candidate-cli.test.ts": {
-    "mtime": 1791857225.2411842,
-    "ast_hash": "6ea735dae849b82eb6222b1ef5d5a5bc",
+    "mtime": 1791860817.7432353,
+    "ast_hash": "4e10e8626c166f29176368d633bcc006",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/candidatePackage.ts": {
-    "mtime": 1791856596.3379133,
+    "mtime": 1791860589.6539068,
     "ast_hash": "8b4695b140f12fe748b8f72c3854a922",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/candidateRegistrationService.ts": {
-    "mtime": 1791857013.1918929,
-    "ast_hash": "0254a400230e0fd1fb07ac236c1296fa",
+    "mtime": 1791860722.7703354,
+    "ast_hash": "a057993642a211b2e5f62ca72f7b8632",
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_PUBLICATION_RUNBOOK.md": {
-    "mtime": 1791856975.1903827,
-    "ast_hash": "c66f0e7a9418b0d03003dca8862b7064",
+    "mtime": 1791860960.0644054,
+    "ast_hash": "15d731b9a5c7670ece12415a48cbbea4",
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_READINESS_DOSSIER.md": {
-    "mtime": 1791856999.8151312,
-    "ast_hash": "f592e22b60ff7e191177eb71ed7f2122",
+    "mtime": 1791860928.0535848,
+    "ast_hash": "119bedf5e198a083de68be58217f55ec",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/candidate-executor-auth.test.ts": {
+    "mtime": 1791860808.0190816,
+    "ast_hash": "f3a7da700c80bd0289210a6ea5a7049f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/edital-revision2-runbook.test.ts": {
+    "mtime": 1791860960.0646455,
+    "ast_hash": "a5e6bc1fa6727939565369a183a83c09",
+    "semantic_hash": ""
+  },
+  "server/domain/institutionalTemplates/candidateExecution.ts": {
+    "mtime": 1791861189.034284,
+    "ast_hash": "576827b0e741aa234acf4f4c9eca593f",
+    "semantic_hash": ""
+  },
+  "server/services/institutionalTemplates/candidateExecutorAuthService.ts": {
+    "mtime": 1791860694.6898437,
+    "ast_hash": "4def9da346a3a426c07670be5c7db664",
     "semantic_hash": ""
   }
 }

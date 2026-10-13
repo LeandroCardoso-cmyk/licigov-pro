@@ -29,7 +29,7 @@ catálogo difere **somente** em `required`/`completionPolicy`/`absentText` das 7
 | Database | sem mudança (mesmas tabelas/ledger); sem migration |
 | Routers | **sem mudança** — nenhuma rota/preset novo; teste garante que o router não referencia o serviço/opção |
 | Frontend | tela de Vínculos: troca de revisão no mesmo escopo = **substituição atômica** (`replacesBindingId`) com aviso; antes só havia "Desativar" + "Criar" (janela sem vínculo ⇒ geração voltaria ao legado) |
-| CLI | `scripts/register-model-candidate.ts` — `snapshot`/`plan` (padrão, leitura) e `execute` (confirmação exata `REGISTER_CANDIDATE_DRAFT:<org>:<identidade>:<hash12>`, `--allow-production`, ator membro ativo ≥ operator, autoridade declarada em arquivo) |
+| CLI | `scripts/register-model-candidate.ts` — `snapshot`/`plan` (padrão, leitura) e `execute`: **em qualquer ambiente** exige `--allow-production`, confirmação exata `REGISTER_CANDIDATE_DRAFT:<org>:<identidade>:<hash12>` e `--expect-database` conferido contra o banco conectado (rótulos `APP_ENV`/`NODE_ENV` nunca dispensam); o ator é o **usuário autenticado** pela credencial do sistema (e-mail+senha por ambiente), membro ativo ≥ operator; `--actor-user-id` removido; autoridade amarrada ao autenticado |
 | Testes | unit (pacote, CLI), SSR/lógica de cliente (troca atômica), MySQL smoke `SEQ`/`SEQ-PROV` |
 | Docs | este dossiê + runbook |
 Preservados: isolamento de tenant (todas as leituras/escritas por organização; identidade de outro tenant ⇒ recusa), CAS e idempotência (chave de procedência determinística; hash de revisão duplicado ⇒ nenhuma revisão nova), lineage (decisões no ledger append-only), observabilidade (`model_candidate_draft_registered`), replay (Revisão 1 e M1 intactos).

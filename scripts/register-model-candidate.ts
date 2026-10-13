@@ -9,27 +9,30 @@
  *     --expect-semantic-hash=<hex64> --expect-baseline-hash=<hex64> --expect-source-sha256=<hex64> [--json]
  *
  *   # EXECUÇÃO — escreve SOMENTE DRAFT + procedência (nunca aprova/publica/vincula, nunca liga flag, nunca compõe documento)
- *   pnpm tsx scripts/register-model-candidate.ts --mode=execute ...(mesmos ids)... --actor-user-id=<id> --authority-file=authority.json \
- *     --confirm=REGISTER_CANDIDATE_DRAFT:<org>:<identity>:<hash12> [--allow-production]
+ *   CANDIDATE_EXECUTOR_EMAIL=... CANDIDATE_EXECUTOR_PASSWORD=... \
+ *   pnpm tsx scripts/register-model-candidate.ts --mode=execute ...(mesmos ids)... --authority-file=authority.json \
+ *     --confirm=REGISTER_CANDIDATE_DRAFT:<org>:<identity>:<hash12> --expect-database=<nome do banco> --allow-production
  *
- * Guardas: em produção a execução exige `--allow-production` E o `--confirm` com os identificadores exatos; o ator precisa ser membro ATIVO
- * da organização com papel de ao menos "operator" (piso de registrar); a autoridade (nome/cargo/data/base/motivo) vem do arquivo, nunca é
- * inventada. Não imprime DATABASE_URL, segredos nem conteúdo do modelo. Ver docs/ops/EDITAL_REVISION2_PUBLICATION_RUNBOOK.md.
+ * Guardas (valem em QUALQUER ambiente; APP_ENV/NODE_ENV são rótulos e nunca dispensam nenhuma): `--allow-production` + `--confirm` exato +
+ * `--expect-database` conferido contra o banco realmente conectado. O ATOR é o usuário AUTENTICADO pela credencial do próprio sistema
+ * (e-mail + senha por variáveis de ambiente, nunca por argumento): precisa ser membro ATIVO da organização com papel ≥ operator; `--actor-user-id`
+ * não existe mais. A autoridade (nome/cargo/data/base/motivo) vem do arquivo e é amarrada ao usuário autenticado; nunca é inventada.
+ * Não imprime DATABASE_URL, senhas, segredos nem conteúdo do modelo. Ver docs/ops/EDITAL_REVISION2_PUBLICATION_RUNBOOK.md.
  */
 import { readFileSync } from "node:fs";
-import { and, eq } from "drizzle-orm";
-import { organizationMembers } from "../drizzle/schema";
+import { hostname, userInfo } from "node:os";
 
 const arg = (name: string): string | undefined => process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const has = (name: string): boolean => process.argv.slice(2).includes(`--${name}`);
 const need = (name: string): string => { const v = arg(name); if (!v) throw new Error(`parâmetro obrigatório ausente: --${name}`); return v; };
 const hex64 = (name: string): string => { const v = need(name); if (!/^[0-9a-f]{64}$/.test(v)) throw new Error(`--${name} inválido (64 hex minúsculos)`); return v; };
 const posInt = (name: string): number => { const n = Number(need(name)); if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`--${name} inválido`); return n; };
-const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, manager: 2, admin: 3, owner: 4 };
 
 export async function main(): Promise<number> {
   const mode = arg("mode") ?? "plan";
   if (mode !== "plan" && mode !== "execute" && mode !== "snapshot") throw new Error("--mode deve ser plan, execute ou snapshot");
+  // O ator NUNCA é digitado: é o usuário autenticado pela credencial do sistema (ver cabeçalho).
+  if (process.argv.slice(2).some((a) => a.startsWith("--actor-user-id"))) throw new Error("--actor-user-id não existe mais: o ator é o usuário autenticado por CANDIDATE_EXECUTOR_EMAIL/CANDIDATE_EXECUTOR_PASSWORD");
   const organizationId = posInt("organization-id");
   if (mode === "snapshot") {
     const { createTemplateWorkflowPorts } = await import("../server/services/institutionalTemplates/integration");
@@ -45,42 +48,54 @@ export async function main(): Promise<number> {
   const identityId = need("identity-id");
   const packageVersion = need("package-version");
   const expected = { semanticHash: hex64("expect-semantic-hash"), baselineSemanticHash: hex64("expect-baseline-hash"), sourceSha256: hex64("expect-source-sha256") };
-  const production = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
+  const envLabel = process.env.APP_ENV ?? process.env.NODE_ENV ?? "(ausente)";      // rótulo informativo — nunca decide nenhuma guarda
 
   const { createTemplateWorkflowPorts } = await import("../server/services/institutionalTemplates/integration");
   const { planCandidateRegistration, registerCandidateDraft } = await import("../server/services/institutionalTemplates/candidateRegistrationService");
   const { BLL_MODEL_KEY } = await import("../server/services/institutionalTemplates/modelPackages");
-  const ports = createTemplateWorkflowPorts();
+  const { bindAuthorityToExecutor, databaseMatches, executionGuardFailures, executorCredentialsFromEnv } = await import("../server/domain/institutionalTemplates/candidateExecution");
   const runId = arg("run-id") ?? String(Date.now());
   const base = { organizationId, identityId, runId, modelKey: BLL_MODEL_KEY, packageVersion, expected };
 
   if (mode === "plan") {
-    const plan = await planCandidateRegistration(ports, { ...base, actorUserId: Number(arg("actor-user-id") ?? 1), decision: { decidedByName: "-", decidedByRole: "-", decidedAt: "1970-01-01", basisReference: "-", reason: "-" } });
-    console.info(has("json") ? JSON.stringify({ mode, production, plan }, null, 2) : formatPlan(plan, production));
+    const ports = createTemplateWorkflowPorts();
+    const plan = await planCandidateRegistration(ports, base);
+    console.info(has("json") ? JSON.stringify({ mode, envLabel, plan }, null, 2) : formatPlan(plan, envLabel));
     return plan.ok ? 0 : 1;
   }
 
-  const actorUserId = posInt("actor-user-id");
-  const confirmWanted = `REGISTER_CANDIDATE_DRAFT:${organizationId}:${identityId}:${expected.semanticHash.slice(0, 12)}`;
-  if (arg("confirm") !== confirmWanted) throw new Error(`--confirm deve ser exatamente: ${confirmWanted}`);
-  if (production && !has("allow-production")) throw new Error("RECUSADO: execução em produção exige --allow-production (decisão humana explícita)");
-  const authority = JSON.parse(readFileSync(need("authority-file"), "utf8")) as Record<string, unknown>;
-  for (const k of ["decidedByName", "decidedByRole", "decidedAt", "basisReference", "reason"]) {
-    if (typeof authority[k] !== "string" || !(authority[k] as string).trim()) throw new Error(`authority-file: campo obrigatório ausente: ${k}`);
-  }
+  // ── EXECUÇÃO: guardas independentes de ambiente → credencial → banco → autoridade → registro ──
+  const confirmExpected = `REGISTER_CANDIDATE_DRAFT:${organizationId}:${identityId}:${expected.semanticHash.slice(0, 12)}`;
+  const failures = executionGuardFailures({ confirm: arg("confirm"), confirmExpected, allowProduction: has("allow-production"), expectDatabase: arg("expect-database"), appEnv: process.env.APP_ENV, nodeEnv: process.env.NODE_ENV });
+  if (failures.length) throw new Error(failures.join(" | "));
+  const creds = executorCredentialsFromEnv(process.env);
+  const authorityRaw = JSON.parse(readFileSync(need("authority-file"), "utf8")) as Record<string, unknown>;
+
   const { getDb } = await import("../server/db/connection");
   const db = await getDb();
   if (!db) throw new Error("banco indisponível");
-  const m = (await db.select().from(organizationMembers).where(and(eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, actorUserId))).limit(1))[0];
-  if (!m || !m.ativo || (ROLE_RANK[m.role] ?? -1) < ROLE_RANK.operator) throw new Error("o ator precisa ser membro ATIVO desta organização com papel de ao menos operator");
+  const { sql } = await import("drizzle-orm");
+  const [rows] = (await db.execute(sql`SELECT DATABASE() AS d`)) as unknown as [Array<{ d: string | null }>];
+  if (!databaseMatches(need("expect-database"), rows?.[0]?.d)) throw new Error("RECUSADO: o banco conectado não é o informado em --expect-database (nada foi alterado)");
 
-  const result = await registerCandidateDraft(ports, { ...base, actorUserId, decision: authority as never });
-  console.info(has("json") ? JSON.stringify({ mode, production, result }, null, 2) : `${formatPlan(result.plan, production)}\nExecutado: ${result.performed} · revisão ${result.revisionId ?? "—"} · procedência ${result.provenance}`);
+  const { authenticateExecutor } = await import("../server/services/institutionalTemplates/candidateExecutorAuthService");
+  const { getUserByEmail } = await import("../server/db/users");
+  const { getActiveMemberRole } = await import("../server/db/organizations");
+  const { verifyPassword } = await import("../server/services/passwordSecurity");
+  const executor = await authenticateExecutor({ getUserByEmail, verifyPassword, getActiveMemberRole }, organizationId, creds);
+  const decision = bindAuthorityToExecutor(authorityRaw, executor.userId);
+
+  const result = await registerCandidateDraft(createTemplateWorkflowPorts(), {
+    ...base, actorUserId: executor.userId, decision,
+    executorContext: { authenticatedUserId: executor.userId, role: executor.role, osUser: userInfo().username, host: hostname(), pid: process.pid, envLabel },
+  });
+  console.info(has("json") ? JSON.stringify({ mode, envLabel, actorUserId: executor.userId, result }, null, 2)
+    : `${formatPlan(result.plan, envLabel)}\nExecutado por usuário autenticado ${executor.userId}: ${result.performed} · revisão ${result.revisionId ?? "—"} · procedência ${result.provenance}`);
   return result.provenance === "FAILED" ? 3 : 0;
 }
 
-function formatPlan(plan: import("../server/services/institutionalTemplates/candidateRegistrationService").CandidatePlan, production: boolean): string {
-  const lines = [`Registro de candidato — org ${plan.organizationId} · identidade ${plan.identityId} · ambiente ${production ? "PRODUÇÃO" : "não-produção"}`];
+function formatPlan(plan: import("../server/services/institutionalTemplates/candidateRegistrationService").CandidatePlan, envLabel: string): string {
+  const lines = [`Registro de candidato — org ${plan.organizationId} · identidade ${plan.identityId} · rótulo de ambiente (informativo): ${envLabel}`];
   for (const c of plan.checks) lines.push(`  [${c.ok ? "OK " : "FALHA"}] ${c.id} — ${c.detail}`);
   lines.push(`Revisões da identidade: ${plan.revisions.map((r) => `#${r.revision} ${r.status} ${r.semanticHash.slice(0, 12)}…`).join(" · ") || "—"}`);
   lines.push(`Vínculos ativos da identidade: ${plan.activeBindings.length}`);

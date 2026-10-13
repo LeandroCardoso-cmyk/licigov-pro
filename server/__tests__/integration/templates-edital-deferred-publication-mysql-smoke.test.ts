@@ -45,6 +45,11 @@ import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/leg
 import { getModelPackageVersion } from "../../services/institutionalTemplates/modelPackages";
 import { revisionSemanticHash } from "../../domain/institutionalTemplates/semanticHash";
 import { planCandidateRegistration, registerCandidateDraft, snapshotOrganizationTemplates } from "../../services/institutionalTemplates/candidateRegistrationService";
+import { hashPassword } from "../../services/passwordSecurity";
+import { main as candidateCli } from "../../../scripts/register-model-candidate";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { MODEL_REGISTRATION_PRESETS } from "../../services/institutionalTemplates/modelRegistrationService";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { buildEditalReadiness } from "../../../client/src/lib/editalReadiness";
@@ -68,6 +73,7 @@ let orgSeq = 0;
 let keySeq = 0;
 const key = (p: string) => `${p}-${RUN}-${++keySeq}-pdf`;
 const ORGS: number[] = [];
+const CLI_USERS: number[] = [];
 const newOrg = () => { const o = BASE_ORG + orgSeq++; ORGS.push(o); return o; };
 
 let conn: mysql.Connection;
@@ -226,6 +232,10 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
   afterAll(async () => {
     if (!conn) return;
     await cleanupOrgs(conn, ORGS).catch(() => {});
+    if (CLI_USERS.length) {
+      await conn.query(`DELETE FROM organization_members WHERE userId IN (${CLI_USERS.map(() => "?").join(",")})`, CLI_USERS).catch(() => {});
+      await conn.query(`DELETE FROM users WHERE id IN (${CLI_USERS.map(() => "?").join(",")})`, CLI_USERS).catch(() => {});
+    }
     if (ORGS.length) await conn.query(`DELETE FROM procurement_context_facts WHERE organization_id IN (${ORGS.map(() => "?").join(",")})`, ORGS).catch(() => {});
     if (installedReferenceSet) for (const t of ["legal_reference_set_events", "legal_value_overrides", "legal_reference_entries", "legal_reference_sets"]) await conn.query(`DELETE FROM ${t}`).catch(() => {});
     await conn.end();
@@ -742,4 +752,83 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "NONE" });
     expect(((await tpl(p.org).readiness.evaluate({ revisionId: draft.id })) as any).matrix.checks.find((c: any) => c.id === "SOURCE_PROVENANCE").status).toBe("PASS");
   }, 240_000);
+
+  // ───────────────────────── CLI de candidato — guardas de execução e autenticação do executor (banco real) ─────────────────────────
+  const dbName = DB ? new URL(DB).pathname.slice(1) : "";
+  const cliUser = async (org: number, role: string, opts: { password?: string; ativo?: boolean; member?: boolean } = {}) => {
+    const email = `cli-${RUN}-${++keySeq}@orgao-sintetico.test`;
+    const pw = opts.password ?? "Senha-Sintetica-1!";
+    const [r] = await conn.execute("INSERT INTO users (openId, name, email, passwordHash, loginMethod) VALUES (?, ?, ?, ?, 'password')", [`cli-${RUN}-${keySeq}`, `Executor ${keySeq}`, email, await hashPassword(pw)]) as any;
+    CLI_USERS.push(r.insertId);
+    if (opts.member !== false) await conn.execute("INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, ?)", [org, r.insertId, role, opts.ativo === false ? 0 : 1]);
+    return { id: r.insertId as number, email, pw };
+  };
+  const authFile = (over: Record<string, unknown> = {}) => {
+    const f = path.join(mkdtempSync(path.join(tmpdir(), "cand-auth-")), "authority.json");
+    writeFileSync(f, JSON.stringify({ decidedByName: "Executor Sintético", decidedByRole: "Operador", decidedAt: "2026-10-13", basisReference: "Execução sintética de teste", reason: "Registro do DRAFT da candidata", ...over }));
+    return f;
+  };
+  const runCli = async (p: P, o: { email?: string; password?: string; env?: [string | undefined, string | undefined]; extra?: string[]; omit?: string[]; authority?: string; database?: string }): Promise<number> => {
+    const savedEnv = { a: process.env.APP_ENV, n: process.env.NODE_ENV, e: process.env.CANDIDATE_EXECUTOR_EMAIL, p: process.env.CANDIDATE_EXECUTOR_PASSWORD, argv: process.argv };
+    const set = (k: string, v: string | undefined) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+    try {
+      if (o.env) { set("APP_ENV", o.env[0]); set("NODE_ENV", o.env[1]); }
+      set("CANDIDATE_EXECUTOR_EMAIL", o.email); set("CANDIDATE_EXECUTOR_PASSWORD", o.password);
+      const args = ["--mode=execute", `--organization-id=${p.org}`, `--identity-id=${p.model!.identityId}`, "--package-version=1.0.2-draft", `--expect-semantic-hash=${R2_HASH}`,
+        `--expect-baseline-hash=${R1_HASH}`, `--expect-source-sha256=${R2.provenance.sourceSha256}`, `--authority-file=${o.authority ?? authFile()}`,
+        `--confirm=REGISTER_CANDIDATE_DRAFT:${p.org}:${p.model!.identityId}:${R2_HASH.slice(0, 12)}`, `--expect-database=${o.database ?? dbName}`, "--allow-production", ...(o.extra ?? [])]
+        .filter((a) => !(o.omit ?? []).some((x) => a.startsWith(x)));
+      process.argv = ["node", "register-model-candidate.ts", ...args];
+      return await candidateCli();
+    } finally { set("APP_ENV", savedEnv.a); set("NODE_ENV", savedEnv.n); set("CANDIDATE_EXECUTOR_EMAIL", savedEnv.e); set("CANDIDATE_EXECUTOR_PASSWORD", savedEnv.p); process.argv = savedEnv.argv; }
+  };
+  const decisionsOf = async (revisionId: string) => rows("SELECT recorded_by_user_id u, decided_by_user_id d, correlation_id c FROM institutional_decisions WHERE subject_id = ?", [revisionId]);
+
+  it("CLI-EXEC — guarda de execução em qualquer ambiente + autenticação do executor: o ator registrado é o usuário AUTENTICADO", async () => {
+    const p = await prepareOrg("cliexec", 1);
+    const other = await prepareOrg("cliexec-b", 1);
+    const op = await cliUser(p.org, "operator");
+    const viewer = await cliUser(p.org, "viewer"); const inactive = await cliUser(p.org, "owner", { ativo: false });
+    const foreign = await cliUser(other.org, "owner", { member: true });                              // membro só do órgão B
+    const noMember = await cliUser(p.org, "owner", { member: false });
+    const revCount = async () => (await revisionsOf(p)).length;
+
+    // G1 — rótulos de ambiente nunca dispensam as guardas (todas as combinações; o banco real está conectado)
+    for (const env of [[undefined, undefined], ["development", "production"], ["production", "development"], ["staging", "test"], ["production", "production"]] as Array<[string | undefined, string | undefined]>) {
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--allow-production"] })).rejects.toThrow(/--allow-production/);
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--expect-database"] })).rejects.toThrow(/--expect-database/);
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--confirm"] })).rejects.toThrow(/--confirm deve ser exatamente/);
+    }
+    expect(await revCount()).toBe(1);
+    // banco conectado ≠ banco esperado ⇒ recusa ANTES de autenticar ou escrever
+    await expect(runCli(p, { email: op.email, password: op.pw, database: "outro_banco" })).rejects.toThrow(/banco conectado não é o informado/);
+    // G2 — ator nunca digitado
+    await expect(runCli(p, { email: op.email, password: op.pw, extra: [`--actor-user-id=${op.id}`] })).rejects.toThrow(/--actor-user-id não existe mais/);
+    // autenticação: tudo recusado com a MESMA mensagem e nada escrito
+    const bad = [["senha errada", { email: op.email, password: "errada" }], ["e-mail desconhecido", { email: "nao-existe@orgao-sintetico.test", password: op.pw }],
+      ["viewer", { email: viewer.email, password: viewer.pw }], ["membership inativa", { email: inactive.email, password: inactive.pw }],
+      ["membro só de OUTRO órgão", { email: foreign.email, password: foreign.pw }], ["sem membership", { email: noMember.email, password: noMember.pw }]] as const;
+    const msgs = new Set<string>();
+    for (const [label, c] of bad) { const e = await runCli(p, c).catch((x) => x); expect(e, label).toBeInstanceOf(Error); msgs.add((e as Error).message); }
+    expect(msgs.size).toBe(1); expect([...msgs][0]).toMatch(/EXECUTOR_AUTH_FAILED/);
+    expect(await revCount()).toBe(1);
+    // autoridade declarada de OUTRA pessoa ⇒ recusa (depois de autenticar, antes de escrever)
+    await expect(runCli(p, { email: op.email, password: op.pw, authority: authFile({ decidedByUserId: op.id + 1000 }) })).rejects.toThrow(/difere do usuário autenticado/);
+    expect(await revCount()).toBe(1);
+
+    // sucesso: ator = usuário autenticado (id verificado no banco); correlation id da execução; autoridade amarrada
+    expect(await runCli(p, { email: op.email, password: op.pw })).toBe(0);
+    const revs = await revisionsOf(p);
+    expect(revs).toHaveLength(2);
+    const cand = revs.find((r) => r.semanticHash === R2_HASH)!;
+    const decs = await decisionsOf(cand.id);
+    expect(decs.length).toBeGreaterThan(0);
+    for (const d of decs) { expect(Number(d.u)).toBe(op.id); expect(Number(d.d)).toBe(op.id); expect(String(d.c)).toMatch(/^cand-reg-/); }
+    // replay (mesma credencial): nada novo; usuário com papel ≥ operator de outro nível também autentica
+    expect(await runCli(p, { email: op.email, password: op.pw })).toBe(0);
+    expect(await revCount()).toBe(2);
+    // Revisão 1 e vínculo intactos
+    expect((await revisionsOf(p)).find((r) => r.semanticHash === R1_HASH)).toMatchObject({ status: "PUBLISHED" });
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([p.model!.revisionId]);
+  }, 300_000);
 });
