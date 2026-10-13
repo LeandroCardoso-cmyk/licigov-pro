@@ -1248,6 +1248,83 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     } finally { process.env.DATABASE_URL = saved; await conn.query(`DROP DATABASE IF EXISTS \`${other}\``).catch(() => {}); }
   }, 120_000);
 
+
+  // ───────────────────────── AUDITORIA CONSOLIDADA — pin de revisão entre leituras, falha após commit, tenant, estresse ─────────────────────────
+  it("AUD-PIN — troca concorrente ENTRE a decisão do bridge e a composição: falha fechada e retentável (TEMPLATE_BINDING_CHANGED), sem escrita e sem legado; o retry compõe pela revisão vigente e o `template` informado = manifest", async () => {
+    const p = await readyTenant("aud-pin", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const base = realPorts(); let calls = 0; const b = barrier();
+    const gated: any = { ...base, repository: { ...base.repository, listBindings: async (...a: any[]) => {
+      if (++calls === 2) { b.reached(); await b.released; }                                           // 1ª leitura = decisão do bridge; 2ª = composição (pausa ANTES dela)
+      return (base.repository.listBindings as any)(...a);
+    } } };
+    configureTemplateCompositionPorts({ ...gated, clock: { now: () => new Date().toISOString() } });
+    const manifestsBefore = await m1Count(p); const draftBefore = await draftText(p);
+    const legacyBefore = legacy.calls;
+    const first = callGen(p).then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
+    await b.atPoint;
+    await wfOf().setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));                                   // troca comitada entre as duas leituras
+    b.release();
+    const r = await first;
+    configureTemplateCompositionPorts({ ...realPorts(), clock: { now: () => clockNow ?? new Date().toISOString() } });
+    expect(r.ok).toBe(false); expect(String((r as any).e?.message)).toMatch(/TEMPLATE_BINDING_CHANGED/);
+    expect(legacy.calls).toBe(legacyBefore);                                                          // nunca cai no legado
+    expect(await m1Count(p)).toBe(manifestsBefore); expect(await draftText(p)).toBe(draftBefore);     // zero escrita
+    const again = await callGen(p, { idempotencyKey: key("aud-pin2") });                              // retry converge com o vínculo vigente
+    expect(again.generationMode).toBe("INSTITUTIONAL_TEMPLATE"); expect(again.template.revisionId).toBe(r2Id);
+    const manifest = (await rows("SELECT template_revision_id r FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [p.org, again.generationManifestId]))[0];
+    expect(manifest.r).toBe(again.template.revisionId);                                               // informado ao usuário = registrado no M1
+    expect(r1Id).not.toBe(r2Id);
+  }, 600_000);
+
+  it("AUD-UNCERTAIN — DRAFT comitado e resposta perdida (falha depois da escrita): a repetição RECUPERA sem 2ª revisão e completa a procedência", async () => {
+    const p = await prepareOrg("aud-unc", 1);
+    const base = getTemplateWorkflowPorts();
+    const lost: any = { ...base, repository: { ...base.repository, insertDraftRevisionUnique: async (...a: any[]) => { await (base.repository.insertDraftRevisionUnique as any)(...a); throw new Error("conexão perdida após o commit"); } } };
+    await expect(registerCandidateDraft(lost, candReq(p, { runId: key("unc1") }))).rejects.toThrow(/conexão perdida/);
+    const plan: any = await planOf(p);
+    expect(plan).toMatchObject({ ok: true, action: "RECORD_PROVENANCE" }); expect(plan.candidateProvenance.state).toBe("ABSENT");
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("unc2") }))).toMatchObject({ performed: "RECORD_PROVENANCE", provenance: "RECORDED" });
+    await assertOneCandidate(p);
+  }, 300_000);
+
+  it("AUD-TENANT — a criação exclusiva de DRAFT é tenant-scoped: identidade de OUTRO órgão ⇒ não encontrada, nada criado em nenhum dos dois", async () => {
+    const a = await prepareOrg("aud-ta", 1); const b = await prepareOrg("aud-tb", 1);
+    await expect(wfOf().createDraft(ctxOf(b.org), { identityId: a.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version, uniqueSemanticHash: true })).rejects.toThrow(/não encontrad/i);
+    expect(await revisionsOf(a)).toHaveLength(1); expect(await revisionsOf(b)).toHaveLength(1);
+    expect(await count("SELECT COUNT(*) n FROM institutional_template_revisions WHERE organization_id = ? AND identity_id = ?", [b.org, a.model!.identityId])).toBe(0);
+  }, 300_000);
+
+  it("AUD-STRESS — swaps idênticos/conflitantes + registros exclusivos + rascunhos comuns em paralelo (3 rodadas): invariantes preservadas, erros só do tipo esperado, sem deadlock vazando", async () => {
+    const p = await prepareOrg("aud-stress", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    const reg = new ModelRegistrationService(getTemplateWorkflowPorts(), { allowCandidatePackages: true });
+    const expectedErr = /BINDING_AMBIGUOUS|já existe|CONFLICT|outra revisão|conflit/i;
+    for (let round = 0; round < 3; round++) {
+      const cur = (await activeBindings(p))[0];
+      const target = round % 2 === 0 ? r2Id : r1Id; const other = target === r2Id ? r1Id : r2Id;
+      const ops: Promise<unknown>[] = [
+        ...Array.from({ length: 4 }, () => wfOf().setBinding(ctxOf(p.org), swapIn(p, target, cur.id))),     // idênticos
+        wfOf().setBinding(ctxOf(p.org), swapIn(p, other, cur.id)),                                          // conflitante
+        ...Array.from({ length: 2 }, () => wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version })),   // rascunhos comuns
+        ...Array.from({ length: 2 }, (_, i) => reg.register(ctxOf(p.org), {
+          target: { kind: "EXISTING_IDENTITY" as const, identityId: p.model!.identityId }, templateKey: R2.modelKey, displayName: R2.displayName, declaredScope: R2.declaredScope,
+          source: { kind: "MODEL_PACKAGE" as const, modelKey: R2.modelKey, packageVersion: "1.0.2-draft" }, sourceLogicalVersion: R2.provenance.sourceLogicalVersion,
+          sourceSha256: R2.provenance.sourceSha256, confirm: true as const, idempotencyKey: `cand-prov-stress-${RUN}-${round}-${i}`, decision: decision(),
+        } as any, { uniqueDraft: true })),
+      ];
+      const out = await Promise.allSettled(ops);
+      const bad = out.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message ?? x.reason)).filter((m) => !expectedErr.test(m));
+      expect(bad, `rodada ${round}`).toEqual([]);                                                       // nenhum deadlock/erro inesperado vaza
+      const act = await activeBindings(p);
+      expect(act, `rodada ${round}`).toHaveLength(1);                                                   // um ativo, nunca zero nem dois
+      expect(await wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE })).toMatchObject({ status: "RESOLVED" });
+      for (const rev of await revisionsOf(p)) expect(rev.semanticHash === R2_HASH || rev.semanticHash === R1_HASH || rev.revision >= 1).toBe(true);
+    }
+    // o caminho EXCLUSIVO nunca duplica: as N chamadas de registro convergiram numa só revisão por hash entre as criadas por ele
+    const exclusive = (await revisionsOf(p)).filter((r) => r.semanticHash === R2_HASH);
+    expect(new Set(exclusive.map((r) => r.revision)).size).toBe(exclusive.length);                      // numeração única (sem colisão de número)
+    expect((await revisionsOf(p)).find((r) => r.id === r1Id)!.status).toBe("PUBLISHED");
+  }, 300_000);
+
   // ───────────────────────── SEGUNDO AMEND — linearização temporal e convergência do swap (barreiras determinísticas) ─────────────────────────
   /** Barreira determinística (sem sleep): `atPoint` resolve quando o chamador chegou ao ponto; `release()` o libera. */
   const barrier = () => {

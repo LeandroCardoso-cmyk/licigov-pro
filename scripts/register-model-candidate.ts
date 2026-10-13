@@ -99,6 +99,7 @@ function formatPlan(plan: import("../server/services/institutionalTemplates/cand
   const lines = [`Registro de candidato — org ${plan.organizationId} · identidade ${plan.identityId} · rótulo de ambiente (informativo): ${envLabel}`];
   for (const c of plan.checks) lines.push(`  [${c.ok ? "OK " : "FALHA"}] ${c.id} — ${c.detail}`);
   lines.push(`Revisões da identidade: ${plan.revisions.map((r) => `#${r.revision} ${r.status} ${r.semanticHash.slice(0, 12)}…`).join(" · ") || "—"}`);
+  if (plan.candidateProvenance) lines.push(`Procedência da candidata: ${plan.candidateProvenance.state} (${plan.candidateProvenance.versions} versão(ões) no ledger)`);
   lines.push(`Vínculos ativos da identidade: ${plan.activeBindings.length}`);
   lines.push(`Ação planejada: ${plan.action}${plan.candidateRevisionId ? ` (candidata já existe: ${plan.candidateStatus})` : ""} · plano ${plan.ok ? "APTO" : "RECUSADO"}`);
   return lines.join("\n");

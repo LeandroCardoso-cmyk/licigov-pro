@@ -103,7 +103,8 @@ export function sameScope(a: BindingScope, b: BindingScope): boolean {
 export type CurrentBindingRequest = Omit<BindingRequest, "asOf">;
 
 /**
- * Resolve o binding vigente num instante EXPLÍCITO (`asOf`): consulta HISTÓRICA / por instante declarado. `bindings`/`revisions` são o que a
+ * Resolve, entre os vínculos ATIVOS, o vigente num instante EXPLÍCITO (`asOf`). NÃO é viagem no tempo: vínculos desativados não entram e o instante de desativação
+ * não é persistido (consulta anterior à vigência do ativo ⇒ NOT_BOUND, fail-closed). O passado oficial é o manifest M1 + ledger. `bindings`/`revisions` são o que a
  * persistência leu para a organização do pedido; qualquer item de outra organização é tratado como violação (nunca ignorado em silêncio).
  * Esta função NÃO é o caminho de composições novas (ver `resolveCurrentTemplateBinding`): comparar um `asOf` capturado antes da leitura com a
  * vigência carimbada por outra transação/réplica abre janelas `NOT_BOUND` espúrias.

@@ -147,7 +147,7 @@ export async function generateEditalRouted<L>(deps: BridgeDeps, p: RoutedGenerat
       // Sem try/catch de fallback: qualquer falha institucional é erro (NUNCA cai para o gerador legado).
       const result = await p.institutional({
         organizationId: p.organizationId, subjectId: p.processId, documentKind: "edital", documentType: "edital",
-        scope: resolution.normalizedScope as BindingScope, title: `Edital — ${p.object}`,
+        scope: resolution.normalizedScope as BindingScope, expectedRevisionId: resolution.template.revisionId, title: `Edital — ${p.object}`,
         actorUserId: p.actorUserId, correlationId: p.correlationId, officialPins: { TR: tr },
       });
       return { mode: "INSTITUTIONAL_TEMPLATE", result, template: resolution.template };

@@ -293,7 +293,7 @@ export default function InstitutionalTemplateDetail() {
                 </p>
               )}
               <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={bindConfirm} onChange={(e) => setBindConfirm(e.target.checked)} /><span>Confirmo que a revisão selecionada passa a ser a aplicada para este tipo e escopo{replaced ? " (substituindo o vínculo ativo acima)" : ""}.</span></label>
-              <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending || (!!replaced && bindRev === replaced.pinnedRevisionId)}
+              <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending || bindings.isLoading || (!!replaced && bindRev === replaced.pinnedRevisionId)}
                 onClick={() => {
                   if (Object.keys(scopeFormProblems(identity.documentKind, bindScope)).length) { setBindShowErrors(true); return; }
                   setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, confirm: true, ...(replaced ? { replacesBindingId: replaced.id } : {}) });

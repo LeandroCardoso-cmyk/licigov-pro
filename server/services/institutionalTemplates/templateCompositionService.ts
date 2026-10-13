@@ -60,6 +60,8 @@ export const TEMPLATE_COMPOSITION_DISABLED = "TEMPLATE_COMPOSITION_DISABLED";
 export const TEMPLATE_NOT_BOUND = "TEMPLATE_NOT_BOUND";
 export const TEMPLATE_BINDING_AMBIGUOUS = "TEMPLATE_BINDING_AMBIGUOUS";
 export const TEMPLATE_BINDING_INVALID = "TEMPLATE_BINDING_INVALID";
+/** O vínculo ativo mudou entre a decisão do chamador e a composição (troca concorrente): falha FECHADA e retentável — nunca compõe com revisão diferente da exibida. */
+export const TEMPLATE_BINDING_CHANGED = "TEMPLATE_BINDING_CHANGED";
 export const TEMPLATE_COMPOSITION_FAILED = "TEMPLATE_COMPOSITION_FAILED";
 export const TEMPLATE_ISSUANCE_BLOCKED = "TEMPLATE_ISSUANCE_BLOCKED";
 
@@ -194,6 +196,12 @@ export interface GenerateTemplatedDocumentParams {
    * numa leitura consistente (o commit da troca é o ponto de linearização); nenhum relógio de aplicação é capturado antes da leitura.
    */
   readonly asOf?: string;
+  /**
+   * PIN da revisão que o chamador JÁ resolveu e exibiu (ex.: o bridge do Edital decide o modelo e depois compõe — duas leituras). Se, na composição, o vínculo
+   * ativo fixar OUTRA revisão (troca concorrente), a geração falha com `TEMPLATE_BINDING_CHANGED` sem escrever nada: o `template` informado ao usuário e o
+   * manifest M1 nunca divergem (revision pinning/explicabilidade). Ausente ⇒ vale o vínculo lido na composição.
+   */
+  readonly expectedRevisionId?: string;
   readonly title: string;
   readonly actorUserId: number;
   readonly correlationId: string;
@@ -256,6 +264,9 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
     throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_AMBIGUOUS}: mais de um vínculo vigente (${resolution.bindingIds.join(", ")}) — nenhum é escolhido automaticamente` });
   }
   if (resolution.status === "INVALID") throw preconditionFailed(TEMPLATE_BINDING_INVALID, codesOf(resolution.issues));
+  if (params.expectedRevisionId !== undefined && resolution.revision.id !== params.expectedRevisionId) {
+    throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_CHANGED}: o modelo vinculado mudou durante a operação (troca concorrente de vínculo); nada foi gerado — repita para usar o modelo vigente` });
+  }
 
   // 2. Revisão EXATA (relida pelo id fixado) + catálogo da revisão.
   const t = await loadExactTemplate(ports, params.organizationId, resolution.binding.identityId, resolution.binding.pinnedRevisionId!);

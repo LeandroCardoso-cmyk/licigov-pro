@@ -131,6 +131,7 @@ describe("generateEditalRouted — o servidor decide o motor; institucional nunc
     expect(t.institutional).toHaveBeenCalledWith(expect.objectContaining({
       organizationId: ORG, subjectId: "p1", documentKind: "edital", documentType: "edital", scope: { modality: "pregao", form: "eletronica", platform: "bll" },
       actorUserId: 5, correlationId: "c1", officialPins: { TR }, title: "Edital — Aquisição",
+      expectedRevisionId: "tr1",                                  // PIN da revisão exibida: a composição falha se uma troca concorrente mudar o vínculo
     }));
     // contrato de linearização: nenhum instante é capturado antes da leitura dos vínculos (a geração resolve o vínculo ATIVO lido de forma consistente)
     expect((t.institutional.mock.calls[0] as unknown[])[0]).not.toHaveProperty("asOf");
