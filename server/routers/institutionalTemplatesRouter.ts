@@ -248,7 +248,8 @@ export const institutionalTemplatesRouter = router({
       .query(({ ctx, input }) => guarded(() => ctx.wf.listBindings(ctx.wctx, input))),
     set: templatesProcedure("bind")
       .input(z.object({
-        documentKind: z.enum(KINDS), scope, identityId: id, pinnedRevisionId: id, effectiveFrom: iso,
+        // SEM `effectiveFrom`: a vigência é do SERVIDOR (relógio do navegador nunca define o instante da troca; a rota estrita recusa o campo)
+        documentKind: z.enum(KINDS), scope, identityId: id, pinnedRevisionId: id,
         confirm: z.boolean(), replacesBindingId: id.optional(),
       }).strict())
       .mutation(({ ctx, input }) => guarded(() => ctx.wf.setBinding(ctx.wctx, input))),

@@ -417,10 +417,18 @@ export class InstitutionalTemplatesWorkflow {
     return [...(await this.ports.repository.listBindings(ctx.organizationId, filter))];
   }
 
-  /** Vincula (documentKind, escopo) a UMA revisão PUBLISHED exata. Nunca "última"; ambiguidade ⇒ recusa. */
+  /**
+   * Vincula (documentKind, escopo) a UMA revisão PUBLISHED exata. Nunca "última"; ambiguidade ⇒ recusa.
+   *
+   * AUTORIDADE TEMPORAL: o instante de vigência é o do SERVIDOR (`ports.clock`, o mesmo relógio que a geração usa como `asOf` na resolução). Numa
+   * SUBSTITUIÇÃO (`replacesBindingId`) o valor do cliente é IGNORADO: um relógio de navegador adiantado desativaria o vínculo antigo com o novo ainda
+   * não vigente (⇒ `NOT_BOUND` e fallback ao legado) e um atrasado retroagiria a vigência. Fora de substituição, `effectiveFrom` só é aceito de
+   * chamadores internos (a rota pública não o expõe); ausente ⇒ agora (servidor).
+   * CONVERGÊNCIA: repetir a mesma troca (resultado incerto/concorrência) devolve o vínculo ativo equivalente (mesmo escopo, identidade e revisão).
+   */
   async setBinding(
     ctx: WorkflowContext,
-    input: { documentKind: TemplateDocumentKind; scope: BindingScope; identityId: string; pinnedRevisionId: string; effectiveFrom: string; confirm: boolean; replacesBindingId?: string },
+    input: { documentKind: TemplateDocumentKind; scope: BindingScope; identityId: string; pinnedRevisionId: string; effectiveFrom?: string; confirm: boolean; replacesBindingId?: string },
   ): Promise<TemplateBinding> {
     assertHumanActor(ctx.actor);
     if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para vincular (nada foi alterado)");
@@ -442,14 +450,32 @@ export class InstitutionalTemplatesWorkflow {
     if (!revision || revision.identityId !== identity.id) throw notFound("revisão");
     if (revision.status !== "PUBLISHED") throw new TemplateWorkflowError("BINDING_NOT_PUBLISHED", `a revisão está ${revision.status}; só uma revisão PUBLISHED pode ser vinculada`);
 
+    const serverNow = this.ports.clock.now();
+    if (input.effectiveFrom !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(input.effectiveFrom)) throw validationFailed("effectiveFrom deve ser ISO-8601 UTC", []);
+    const effectiveFrom = input.replacesBindingId !== undefined ? serverNow : (input.effectiveFrom ?? serverNow);
+    if (input.replacesBindingId !== undefined && input.effectiveFrom !== undefined && input.effectiveFrom !== effectiveFrom) {
+      log.info("template_binding_client_time_ignored", { organizationId: ctx.organizationId, identityId: identity.id, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+    }
+    // Troca já realizada (retry após resultado incerto): o vínculo antigo está inativo e há ativo equivalente ⇒ converge para ele.
+    const equivalentActive = async (): Promise<TemplateBinding | null> => {
+      const active = await this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
+      return active.find((b) => b.identityId === identity.id && b.pinnedRevisionId === revision.id && sameScope(b.scope, input.scope)) ?? null;
+    };
+    if (input.replacesBindingId !== undefined) {
+      const prior = await this.ports.repository.getBinding(ctx.organizationId, input.replacesBindingId);
+      if (prior && !prior.active && prior.documentKind === input.documentKind && sameScope(prior.scope, input.scope)) {
+        const done = await equivalentActive();
+        if (done) return done;
+      }
+    }
     const binding: TemplateBinding = {
       id: this.ports.ids.newId("tb"), organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope,
-      identityId: identity.id, pinnedRevisionId: revision.id, active: true, effectiveFrom: input.effectiveFrom,
+      identityId: identity.id, pinnedRevisionId: revision.id, active: true, effectiveFrom,
     };
     const ambiguityProbe = await this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
     const remaining = ambiguityProbe.filter((b) => b.id !== input.replacesBindingId);
     const trial = resolveTemplateBinding(
-      { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope, asOf: input.effectiveFrom },
+      { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope, asOf: effectiveFrom },
       [...remaining, binding], await this.revisionsFor(ctx, [...remaining, binding]),
     );
     if (trial.status === "INVALID") throw validationFailed("binding inválido", trial.issues);
@@ -461,7 +487,16 @@ export class InstitutionalTemplatesWorkflow {
       if (!old || old.documentKind !== input.documentKind || !sameScope(old.scope, input.scope)) throw notFound("binding a substituir");
     }
     // Substituição ATÔMICA: desativar o anterior e criar o novo acontecem na mesma transação (nunca zero nem dois ativos).
-    await this.ports.repository.insertBinding(binding, pctx(ctx), input.replacesBindingId);
+    try {
+      await this.ports.repository.insertBinding(binding, pctx(ctx), input.replacesBindingId);
+    } catch (err) {
+      // Troca concorrente idêntica (outra transação venceu): converge para o vínculo ativo equivalente; conflito real ⇒ erro explícito.
+      if (input.replacesBindingId !== undefined) {
+        const done = await equivalentActive();
+        if (done) return done;
+      }
+      throw err;
+    }
     log.info("template_binding_set", { organizationId: ctx.organizationId, bindingId: binding.id, scope: scopeHeadline(input.scope), revisionId: revision.id, replaced: input.replacesBindingId ?? null, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return binding;
   }

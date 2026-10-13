@@ -11,6 +11,7 @@
  */
 import { canonicalJson, sha256Hex } from "../canonicalJson";
 import { revisionSemanticHash } from "./semanticHash";
+import { DEFERRED_PUBLICATION_TEXT } from "./variableCatalog2";
 import { validateVariableCatalog2, type VariableCatalog2, type VariableDef2 } from "./variableCatalog2";
 import type { TemplateAST2 } from "./ast2";
 
@@ -35,7 +36,25 @@ export interface CandidateExpectations {
   readonly baselineSemanticHash: string;
   /** Variáveis que devem ser as ÚNICAS com `DEFERRED_PUBLICATION` (conjunto exato). */
   readonly deferredVariables: readonly string[];
+  /**
+   * SHA-256 do CONTEÚDO canônico do catálogo (o hash semântico da revisão cobre a AST e só a VERSÃO do catálogo, não o conteúdo dele: sozinho,
+   * não detecta um catálogo adulterado). Pinos congelados no código; o operador não os informa.
+   */
+  readonly catalogSha256: string;
+  readonly baselineCatalogSha256: string;
 }
+
+/** Contrato EXATO das variáveis de publicação diferida: renderizável ⇒ `absentText` governado; controle (renderable=false) ⇒ sem `absentText`. */
+export interface DeferredFieldContract { readonly renderable: boolean; readonly absentText: string | null }
+export const DEFERRED_FIELD_CONTRACT: Readonly<Record<string, DeferredFieldContract>> = Object.freeze({
+  "processo.numeroPregao": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+  "controle.dataDivulgacaoPrevista": { renderable: false, absentText: null },      // controle: a regra de catálogo proíbe absentText em variável não renderizável
+  "processo.dataAbertura": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+  "processo.horarioAbertura": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+  "processo.dataInicioRecebimentoPropostas": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+  "processo.dataFimRecebimentoPropostas": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+  "processo.horarioFimRecebimentoPropostas": { renderable: true, absentText: DEFERRED_PUBLICATION_TEXT },
+});
 
 export interface PackageCheck { readonly id: string; readonly ok: boolean; readonly detail: string }
 
@@ -81,6 +100,27 @@ export function verifyCandidatePackage(candidate: CandidatePackageLike, baseline
     if (outside.length) structural.push(`${v.name}: altera ${outside.join(", ")}`);
   }
   out.push(check("CATALOG_ONLY_COMPLETION_POLICY", structural.length === 0, structural.length ? structural.join("; ") : `${changed.length} variável(is) alteradas, só na política de completude`));
+
+  // Conteúdo EFETIVO do catálogo (não confiar no hash declarado): pino de SHA-256 do catálogo canônico + contrato campo a campo das variáveis diferidas.
+  const candCatalogSha = sha256Hex(canonicalJson(candidate.catalog as never));
+  out.push(check("CATALOG_CONTENT_SHA256", candCatalogSha === exp.catalogSha256, `conteúdo canônico do catálogo ${candCatalogSha.slice(0, 12)}…`));
+  const baseCatalogSha = sha256Hex(canonicalJson(baseline.catalog as never));
+  out.push(check("BASELINE_CATALOG_SHA256", baseCatalogSha === exp.baselineCatalogSha256, `conteúdo canônico do catálogo da base ${baseCatalogSha.slice(0, 12)}…`));
+  const byName = new Map<string, VariableDef2>(candidate.catalog.vars.map((v) => [v.name, v]));
+  for (const name of exp.deferredVariables) {
+    const want = DEFERRED_FIELD_CONTRACT[name];
+    const v = byName.get(name);
+    const problems: string[] = [];
+    if (!want) problems.push("variável sem contrato");
+    else if (!v) problems.push("variável ausente do catálogo");
+    else {
+      if (v.required !== false) problems.push(`required deve ser false (é ${String(v.required)})`);
+      if (v.completionPolicy !== "DEFERRED_PUBLICATION") problems.push(`completionPolicy deve ser DEFERRED_PUBLICATION (é ${String(v.completionPolicy)})`);
+      if (v.renderable !== want.renderable) problems.push(`renderable deve ser ${want.renderable}`);
+      if ((v.absentText ?? null) !== want.absentText) problems.push(want.absentText === null ? "absentText não é permitido em variável de controle" : `absentText deve ser exatamente "${want.absentText}"`);
+    }
+    out.push(check(`DEFERRED_FIELD:${name}`, problems.length === 0, problems.length ? problems.join("; ") : "contrato exato da variável diferida"));
+  }
 
   const deferred = candidate.catalog.vars.filter((v) => v.completionPolicy === "DEFERRED_PUBLICATION").map((v) => v.name).sort();
   const wanted = [...exp.deferredVariables].sort();

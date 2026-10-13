@@ -29,6 +29,14 @@ describe("tela de vínculos", () => {
     expect(SRC).toContain('data-testid="binding-replace-notice"');
     expect(SRC).toContain("SUBSTITUÍDO numa única operação atômica");
   });
+  it("a tela NÃO envia horário do navegador: o instante da troca é do servidor (a rota estrita recusa effectiveFrom)", () => {
+    const call = SRC.slice(SRC.indexOf("setBinding.mutate("), SRC.indexOf("}}>Criar vínculo"));
+    expect(call).not.toMatch(/effectiveFrom|new Date\(/);
+    const router = readFileSync(path.resolve("server/routers/institutionalTemplatesRouter.ts"), "utf8");
+    const setInput = router.slice(router.indexOf("set: templatesProcedure(\"bind\")"), router.indexOf("deactivate: templatesProcedure"));
+    expect(setInput).not.toMatch(/effectiveFrom:\s*iso/);
+    expect(setInput).toContain(".strict()");
+  });
   it("não permite 'substituir' pela própria revisão já vinculada", () => {
     expect(SRC).toContain("bindRev === replaced.pinnedRevisionId");
   });

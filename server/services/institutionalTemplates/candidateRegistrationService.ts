@@ -19,7 +19,9 @@ import { TemplateGovernanceService, type DeclaredAuthority } from "./governanceS
 import { ModelRegistrationService } from "./modelRegistrationService";
 import { getModelPackage, getModelPackageVersion, type ModelPackage } from "./modelPackages";
 import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
+import { createHash } from "node:crypto";
 import { verifyCandidatePackage, type PackageCheck } from "../../domain/institutionalTemplates/candidatePackage";
+import { withDedicatedAdvisoryLock } from "../../db/advisoryLock";
 import { PUBLICATION_VARIABLES } from "../../domain/institutionalTemplates/publicationSchedule";
 import { BLL_MODEL_KEY } from "./modelPackages";
 
@@ -68,6 +70,24 @@ export interface CandidatePlan {
 
 const ck = (id: string, ok: boolean, detail: string): PackageCheck => ({ id, ok, detail });
 
+/**
+ * Pinos CONGELADOS do conteúdo canônico dos catálogos (SHA-256 de `canonicalJson(catalog)`): o hash semântico da revisão cobre a AST e só a versão do
+ * catálogo; estes pinos fecham a brecha de um catálogo com conteúdo diferente sob a mesma versão. Alterar o catálogo exige novo pacote/versão.
+ */
+export const CANDIDATE_CATALOG_PINS: Readonly<Record<string, { readonly catalogSha256: string; readonly baselineCatalogSha256: string }>> = Object.freeze({
+  [`${BLL_MODEL_KEY}@1.0.2-draft`]: {
+    catalogSha256: "2192916c61327fdd22905b85f672666973b804298ce75ec4ce1b3054809a0b88",
+    baselineCatalogSha256: "793c02815da5d12ab8c2b872a188fb1fa292adf3144a76c3ca470047a4220510",
+  },
+});
+
+/** Lock de registro por (organização, identidade): escopo EXATO, nome ≤ 64 caracteres, nunca global entre tenants independentes. */
+export function candidateRegistrationLockName(organizationId: number, identityId: string): string {
+  return `licigov_candreg_${createHash("sha256").update(`${organizationId}:${identityId}`).digest("hex").slice(0, 32)}`;
+}
+const LOCK_TIMEOUT_SECONDS = 60;
+const PROVENANCE_ATTEMPTS = 3;
+
 function packages(req: CandidatePlanRequest): { candidate: ModelPackage | null; baseline: ModelPackage | null } {
   return { candidate: getModelPackageVersion(req.modelKey, req.packageVersion), baseline: getModelPackage(req.modelKey) };
 }
@@ -80,12 +100,19 @@ export async function planCandidateRegistration(ports: TemplateWorkflowPorts, re
   if (req.modelKey !== BLL_MODEL_KEY) checks.push(ck("MODEL_SUPPORTED", false, `modelKey ${req.modelKey} fora do escopo desta ferramenta`));
   if (!candidate || !baseline) checks.push(ck("PACKAGES_RESOLVED", false, "pacote candidato ou linha de base não encontrado no servidor"));
   else {
-    packageChecks = verifyCandidatePackage(candidate, baseline, {
-      modelKey: req.modelKey, sourceLogicalVersion: req.packageVersion, sourceSha256: req.expected.sourceSha256,
-      semanticHash: req.expected.semanticHash, baselineSemanticHash: req.expected.baselineSemanticHash, deferredVariables: PUBLICATION_VARIABLES,
-    });
-    checks.push(...packageChecks);
+    const pins = CANDIDATE_CATALOG_PINS[`${req.modelKey}@${req.packageVersion}`];
+    if (!pins) checks.push(ck("CATALOG_PINS", false, "sem pino de conteúdo de catálogo para este pacote (versão não autorizada para registro)"));
+    else {
+      packageChecks = verifyCandidatePackage(candidate, baseline, {
+        modelKey: req.modelKey, sourceLogicalVersion: req.packageVersion, sourceSha256: req.expected.sourceSha256,
+        semanticHash: req.expected.semanticHash, baselineSemanticHash: req.expected.baselineSemanticHash, deferredVariables: PUBLICATION_VARIABLES, ...pins,
+      });
+      checks.push(...packageChecks);
+    }
   }
+  // flag institucional da organização EXATA (informativo no plano — leitura; a escrita a exige e relê)
+  const flagOn = await ports.flag.isEnabled(req.organizationId);
+  checks.push(ck("FLAG_ENABLED", flagOn, flagOn ? "FF_INSTITUTIONAL_TEMPLATES_V1 ligada para esta organização" : "FF_INSTITUTIONAL_TEMPLATES_V1 desligada para esta organização (o registro é recusado; plan/snapshot seguem somente leitura)"));
 
   const identity = await ports.repository.getIdentity(req.organizationId, req.identityId);
   const identityOk = !!identity && identity.organizationId === req.organizationId && identity.documentKind === "edital";
@@ -93,7 +120,12 @@ export async function planCandidateRegistration(ports: TemplateWorkflowPorts, re
   const revisions = identityOk ? [...(await ports.repository.listRevisions(req.organizationId, req.identityId))] : [];
   const baselineRev = revisions.find((r) => r.status === "PUBLISHED" && r.semanticHash === req.expected.baselineSemanticHash) ?? null;
   checks.push(ck("BASELINE_PUBLISHED", !!baselineRev, baselineRev ? `Revisão 1 PUBLICADA com o hash esperado (${baselineRev.id})` : "a identidade não contém a revisão de linha de base PUBLICADA com o hash esperado"));
-  const existing = revisions.find((r) => r.semanticHash === req.expected.semanticHash) ?? null;
+  const sameHash = revisions.filter((r) => r.semanticHash === req.expected.semanticHash);
+  const existing = sameHash[0] ?? null;
+  checks.push(ck("CANDIDATE_UNIQUE", sameHash.length <= 1, sameHash.length <= 1 ? "no máximo uma revisão com o hash da candidata nesta identidade" : `${sameHash.length} revisões com o hash da candidata (${sameHash.map((r) => `#${r.revision}`).join(", ")}): resolução humana necessária, nada será escrito`));
+  const candidateCatalog = candidate?.catalog.version;
+  const conflicting = candidateCatalog ? revisions.filter((r) => r.variableCatalogVersion === candidateCatalog && r.semanticHash !== req.expected.semanticHash) : [];
+  checks.push(ck("NO_CONFLICTING_REVISION", conflicting.length === 0, conflicting.length === 0 ? "nenhuma revisão conflitante com o catálogo da candidata" : `revisão(ões) ${conflicting.map((r) => `#${r.revision}`).join(", ")} usam o catálogo da candidata com outro hash semântico`));
   let provenanceRecorded: boolean | null = null;
   if (existing) {
     const gov = ports.governance ? await new TemplateGovernanceService(ports).get({ organizationId: req.organizationId, actor: { kind: "human", userId: READ_ONLY_PLAN_ACTOR }, correlationId: `cand-plan-${req.runId}` }, existing.id) : null;
@@ -119,28 +151,53 @@ export interface CandidateRegistrationResult {
   readonly provenance: "RECORDED" | "ALREADY_RECORDED" | "FAILED" | "NOT_APPLICABLE";
 }
 
-/** Escreve SOMENTE o que o plano diz (DRAFT + procedência). Idempotente. */
+/**
+ * Escreve SOMENTE o que o plano diz (DRAFT + procedência). Idempotente e CONVERGENTE sob concorrência:
+ *  - serializado por lock nomeado no escopo (organização, identidade) — outros escopos seguem em paralelo;
+ *  - a flag é exigida e relida DENTRO do lock, antes da primeira escrita; o plano é refeito DENTRO do lock (a leitura prévia nunca é a proteção);
+ *  - DRAFT já existente com o hash da candidata é reaproveitado; procedência ausente é completada (retry limitado, mesma chave de idempotência);
+ *  - mais de uma revisão com o hash, ou revisão conflitante ⇒ recusa explícita sem escrever.
+ * Revisões são imutáveis/append-only (não há como "apagar" um DRAFT): a recuperação de falha parcial é por convergência, nunca por rollback.
+ */
 export async function registerCandidateDraft(ports: TemplateWorkflowPorts, req: CandidateRegistrationRequest): Promise<CandidateRegistrationResult> {
-  const plan = await planCandidateRegistration(ports, req);
-  if (!plan.ok) {
-    throw new TemplateWorkflowError("VALIDATION_FAILED", `registro do candidato recusado: ${plan.checks.filter((c) => !c.ok).map((c) => c.id).join(", ")} (nada foi criado)`,
-      plan.checks.filter((c) => !c.ok).map((c) => ({ code: c.id, path: c.id, message: c.detail })));
-  }
-  if (plan.action === "NONE") return { plan, performed: "NONE", revisionId: plan.candidateRevisionId, provenance: plan.candidateProvenanceRecorded ? "ALREADY_RECORDED" : "NOT_APPLICABLE" };
-  const { candidate } = packages(req);
-  const pkg = candidate!;
   const ctx: WorkflowContext = { organizationId: req.organizationId, actor: { kind: "human", userId: req.actorUserId }, correlationId: `cand-reg-${req.runId}` };
-  const key = `cand-prov-${req.organizationId}-${req.identityId}-${req.expected.semanticHash.slice(0, 16)}`;
-  const result = await new ModelRegistrationService(ports, { allowCandidatePackages: true }).register(ctx, {
-    target: { kind: "EXISTING_IDENTITY", identityId: req.identityId }, templateKey: pkg.modelKey, displayName: pkg.displayName, declaredScope: pkg.declaredScope,
-    source: { kind: "MODEL_PACKAGE", modelKey: pkg.modelKey, packageVersion: req.packageVersion }, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion,
-    sourceSha256: pkg.provenance.sourceSha256, confirm: true, idempotencyKey: key, decision: req.decision,
-  }, plan.action === "RECORD_PROVENANCE" ? { resumeDraftRevisionId: plan.candidateRevisionId! } : {});
-  log.info("model_candidate_draft_registered", {
-    organizationId: req.organizationId, identityId: req.identityId, revisionId: result.revision.id, packageVersion: req.packageVersion,
-    action: plan.action, provenance: result.provenance.status, actorUserId: req.actorUserId, executor: req.executorContext ?? null, correlationId: ctx.correlationId,
+  return withDedicatedAdvisoryLock(candidateRegistrationLockName(req.organizationId, req.identityId), LOCK_TIMEOUT_SECONDS, async () => {
+    if (!(await ports.flag.isEnabled(req.organizationId))) {
+      log.warn("model_candidate_registration_refused_flag_off", { organizationId: req.organizationId, identityId: req.identityId, actorUserId: req.actorUserId, correlationId: ctx.correlationId });
+      throw new TemplateWorkflowError("MODULE_DISABLED", "o módulo de Modelos Institucionais está desligado para esta organização (FF_INSTITUTIONAL_TEMPLATES_V1); nada foi criado");
+    }
+    let plan = await planCandidateRegistration(ports, req);
+    if (!plan.ok) {
+      throw new TemplateWorkflowError("VALIDATION_FAILED", `registro do candidato recusado: ${plan.checks.filter((c) => !c.ok).map((c) => c.id).join(", ")} (nada foi criado)`,
+        plan.checks.filter((c) => !c.ok).map((c) => ({ code: c.id, path: c.id, message: c.detail })));
+    }
+    if (plan.action === "NONE") return { plan, performed: "NONE" as CandidateAction, revisionId: plan.candidateRevisionId, provenance: plan.candidateProvenanceRecorded ? ("ALREADY_RECORDED" as const) : ("NOT_APPLICABLE" as const) };
+
+    const pkg = packages(req).candidate!;
+    const key = `cand-prov-${req.organizationId}-${req.identityId}-${req.expected.semanticHash.slice(0, 16)}`;
+    const registration = new ModelRegistrationService(ports, { allowCandidatePackages: true });
+    const input = {
+      target: { kind: "EXISTING_IDENTITY" as const, identityId: req.identityId }, templateKey: pkg.modelKey, displayName: pkg.displayName, declaredScope: pkg.declaredScope,
+      source: { kind: "MODEL_PACKAGE" as const, modelKey: pkg.modelKey, packageVersion: req.packageVersion }, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion,
+      sourceSha256: pkg.provenance.sourceSha256, confirm: true as const, idempotencyKey: key, decision: req.decision,
+    };
+    const performed = plan.action;
+    let result = await registration.register(ctx, input, performed === "RECORD_PROVENANCE" ? { resumeDraftRevisionId: plan.candidateRevisionId! } : {});
+    // procedência que falhou depois do DRAFT persistido: retoma o MESMO DRAFT (retry limitado; chave de idempotência determinística)
+    for (let attempt = 2; result.provenance.status !== "RECORDED" && attempt <= PROVENANCE_ATTEMPTS; attempt++) {
+      log.warn("model_candidate_provenance_retry", { organizationId: req.organizationId, identityId: req.identityId, revisionId: result.revision.id, attempt, correlationId: ctx.correlationId });
+      result = await registration.register(ctx, input, { resumeDraftRevisionId: result.revision.id });
+    }
+    // pós-condição: exatamente UMA revisão com o hash da candidata (o defeito antigo criava #2 e #3)
+    plan = await planCandidateRegistration(ports, req);
+    const copies = plan.revisions.filter((r) => r.semanticHash === req.expected.semanticHash);
+    if (copies.length !== 1) throw new TemplateWorkflowError("CONFLICT", `integridade: ${copies.length} revisões com o hash da candidata após o registro (esperado 1); resolução humana necessária`);
+    log.info("model_candidate_draft_registered", {
+      organizationId: req.organizationId, identityId: req.identityId, revisionId: result.revision.id, semanticHash: req.expected.semanticHash, packageVersion: req.packageVersion,
+      action: performed, provenance: result.provenance.status, actorUserId: req.actorUserId, executor: req.executorContext ?? null, correlationId: ctx.correlationId,
+    });
+    return { plan, performed, revisionId: result.revision.id, provenance: result.provenance.status === "RECORDED" ? ("RECORDED" as const) : ("FAILED" as const) };
   });
-  return { plan, performed: plan.action, revisionId: result.revision.id, provenance: result.provenance.status === "RECORDED" ? "RECORDED" : "FAILED" };
 }
 
 // ─── Snapshot SOMENTE LEITURA de uma organização (preparação da execução; nada é gravado) ─────────────────────────────

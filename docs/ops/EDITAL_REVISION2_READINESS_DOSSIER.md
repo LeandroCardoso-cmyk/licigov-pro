@@ -51,3 +51,7 @@ DRAFT sem procedência ⇒ retomado sem 2ª revisão.
 2. Decisão D1: evidência jurídica da candidata (§5) — inclusive se o rótulo `1.0.2-draft` deve permanecer.
 3. Revisão/aprovação e merge do PR de preparação (ferramenta + tela de troca atômica) **antes** de usá-lo em produção (o CLI só existe depois do merge e do deploy desse PR).
 4. Autorização separada para cada etapa do runbook (registrar → aprovar → publicar → vincular). Impacto do vínculo sobre processos em andamento (inclusive `2026/253`) a decidir pelo Owner (runbook §8).
+
+## 8. Amend corretivo P1/P2 (registro concorrente, swap sem `NOT_BOUND`, flag, integridade do catálogo)
+Ver runbook §11. Resumo: registro serializado por (organização, identidade) com reaproveitamento por hash e recusa de duplicata/conflito; vigência do vínculo carimbada pelo servidor e troca convergente; flag exigida antes da primeira escrita (plan/snapshot seguem leitura);
+`absentText` e demais campos das 7 variáveis diferidas validados pelo conteúdo efetivo + pino de SHA-256 do catálogo. Sem migration; Revisão 1 inalterada.

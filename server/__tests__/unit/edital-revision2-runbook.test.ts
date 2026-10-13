@@ -58,6 +58,7 @@ describe("runbook — constantes e comandos", () => {
     expect(DOC).toContain("não tem MFA");
     expect(DOC).toContain("Não há limitação de tentativas");
     expect(DOC).toMatch(/rótulo `1\.0\.2-draft`[\s\S]{0,200}\*\*não\*\* têm ato jurídico próprio/);
+    for (const t of ["CANDIDATE_UNIQUE", "NO_CONFLICTING_REVISION", "FLAG_ENABLED", "MODULE_DISABLED", "ignorado", "pino de SHA-256", "Riscos residuais"]) expect(DOC).toContain(t);
     for (const d of ["D0", "D1", "D2", "D3", "D4", "D5", "D6"]) expect(DOC).toContain(`${d} —`);
   });
 });

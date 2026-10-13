@@ -296,7 +296,7 @@ export default function InstitutionalTemplateDetail() {
               <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending || (!!replaced && bindRev === replaced.pinnedRevisionId)}
                 onClick={() => {
                   if (Object.keys(scopeFormProblems(identity.documentKind, bindScope)).length) { setBindShowErrors(true); return; }
-                  setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, effectiveFrom: new Date().toISOString(), confirm: true, ...(replaced ? { replacesBindingId: replaced.id } : {}) });
+                  setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, confirm: true, ...(replaced ? { replacesBindingId: replaced.id } : {}) });
                 }}>Criar vínculo</Button>
             </CardContent></Card>
           ) : <p className="text-sm text-muted-foreground">Gerenciar vínculos exige papel de gestor ou superior.</p>}

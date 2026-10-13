@@ -716,7 +716,7 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     const swapped = await bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id);
     const nowActive = await activeBindings(p);
     expect(nowActive.map((b) => b.pinnedRevisionId)).toEqual([r2Id]); expect(nowActive[0].id).toBe(swapped.id);   // exatamente UM ativo (nunca zero nem dois)
-    await expect(bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id)).rejects.toThrow();                  // replay da troca com o vínculo antigo já inativo é recusado
+    expect((await bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id)).id).toBe(swapped.id);          // replay da troca (resultado incerto) CONVERGE para o mesmo vínculo
     expect(await activeBindings(p)).toHaveLength(1);
 
     // COMPOSIÇÃO pela Revisão 2 (sem número/cronograma) e Revisão 1 intacta para replay
@@ -830,5 +830,196 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     // Revisão 1 e vínculo intactos
     expect((await revisionsOf(p)).find((r) => r.semanticHash === R1_HASH)).toMatchObject({ status: "PUBLISHED" });
     expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([p.model!.revisionId]);
+  }, 300_000);
+
+  // ───────────────────────── Amend corretivo P1/P2 — concorrência, swap sem NOT_BOUND, flag, integridade ─────────────────────────
+  const failingGovernance = (healthyAfter: number | null) => {
+    const real = getTemplateWorkflowPorts();
+    let calls = 0;
+    return {
+      ...real,
+      governance: { ...real.governance!, recordGovernanceDecision: async (r: any) => { calls++; if (healthyAfter === null || calls <= healthyAfter) throw new Error("falha injetada na procedência"); return real.governance!.recordGovernanceDecision(r); } },
+    } as any;
+  };
+  const candidates = async (p: P) => (await revisionsOf(p)).filter((r) => r.semanticHash === R2_HASH);
+  const provenanceOf = async (p: P, revisionId: string) => (await govOf().get(ctxOf(p.org), revisionId)).provenance;
+  const publishCandidate = async (p: P): Promise<string> => {
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    const id = done.revisionId!;
+    await wfOf().approve(ctxOf(p.org), lifecycle(p, id, "DRAFT", "capp"));
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: id, expectedVersion: 0, confirm: true, idempotencyKey: key("cev"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256 } });
+    await wfOf().publish(ctxOf(p.org), lifecycle(p, id, "APPROVED", "cpub"));
+    return id;
+  };
+
+  it("P1-CONC — execuções concorrentes da MESMA candidata convergem para UMA revisão com procedência correta (sem duplicata nem DRAFT órfão)", async () => {
+    const p = await prepareOrg("conc", 1);
+    const results = await Promise.allSettled(Array.from({ length: 6 }, () => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("cr") }))));
+    expect(results.filter((r) => r.status === "rejected").map((r: any) => String(r.reason?.message))).toEqual([]);
+    const cands = await candidates(p);
+    expect(cands).toHaveLength(1);                                                                     // exatamente UMA revisão com o hash da candidata
+    expect((await revisionsOf(p)).map((r) => r.revision).sort()).toEqual([1, 2]);                     // sem #3
+    expect((await provenanceOf(p, cands[0].id))).toMatchObject({ sourceLogicalVersion: "1.0.2-draft", revisionSemanticHash: R2_HASH });
+    const ids = new Set(results.map((r: any) => r.value.revisionId));
+    expect([...ids]).toEqual([cands[0].id]);                                                          // todas convergem para a mesma revisão
+    expect(results.filter((r: any) => r.value.performed === "REGISTER_DRAFT")).toHaveLength(1);       // só UMA escreveu
+    // nenhuma revisão do órgão sem procedência
+    for (const r of await revisionsOf(p)) expect(await provenanceOf(p, r.id), r.id).not.toBeNull();
+  }, 300_000);
+
+  it("P1-CONC — órgãos distintos registram em paralelo sem interferência (lock por organização+identidade, nunca global)", async () => {
+    const a = await prepareOrg("conc-a", 1); const b = await prepareOrg("conc-b", 1);
+    const { candidateRegistrationLockName } = await import("../../services/institutionalTemplates/candidateRegistrationService");
+    expect(candidateRegistrationLockName(a.org, a.model!.identityId)).not.toBe(candidateRegistrationLockName(b.org, b.model!.identityId));
+    expect(candidateRegistrationLockName(a.org, a.model!.identityId).length).toBeLessThanOrEqual(64);
+    const out = await Promise.all([a, b].flatMap((p) => [0, 1, 2].map(() => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("cx") })))));
+    expect(out).toHaveLength(6);
+    for (const p of [a, b]) { expect(await candidates(p)).toHaveLength(1); expect((await revisionsOf(p)).length).toBe(2); }
+  }, 300_000);
+
+  it("P1-CONC — falha parcial: procedência que falha é refeita (retry limitado); persistente ⇒ DRAFT sem procedência é RETOMADO sem 2ª revisão", async () => {
+    const p = await prepareOrg("partial", 1);
+    // falha transitória (1ª tentativa): o próprio comando recupera dentro do lock
+    const ok = await registerCandidateDraft(failingGovernance(1), candReq(p));
+    expect(ok).toMatchObject({ provenance: "RECORDED" });
+    expect(await candidates(p)).toHaveLength(1);
+    expect(await provenanceOf(p, (await candidates(p))[0].id)).not.toBeNull();
+    // falha persistente em OUTRO órgão: fica o DRAFT sem procedência e o resultado é FAILED (explícito)
+    const q = await prepareOrg("partial2", 1);
+    const bad = await registerCandidateDraft(failingGovernance(null), candReq(q));
+    expect(bad.provenance).toBe("FAILED");
+    expect(await candidates(q)).toHaveLength(1);
+    expect(await provenanceOf(q, (await candidates(q))[0].id)).toBeNull();
+    // retry com ports saudáveis, concorrente: completa a procedência SEM criar revisão
+    await Promise.all([0, 1, 2].map(() => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(q, { runId: key("rt") }))));
+    expect(await candidates(q)).toHaveLength(1);
+    expect(await provenanceOf(q, (await candidates(q))[0].id)).not.toBeNull();
+    expect((await revisionsOf(q)).length).toBe(2);
+  }, 300_000);
+
+  it("P1-CONC — revisão CONFLITANTE (mesma versão de catálogo, AST diferente) ou DUPLICADA ⇒ recusa explícita, sem escrita", async () => {
+    // CONFLITANTE: DRAFT com o catálogo da candidata mas conteúdo (AST) diferente ⇒ hash semântico diferente
+    const c = await prepareOrg("conflict", 1);
+    const altered = JSON.parse(JSON.stringify(R2.ast));
+    let touched = false;
+    const walk = (n: any): void => { if (touched || n === null || typeof n !== "object") return; for (const k of Object.keys(n)) { if (!touched && n.t === "text" && k === "v" && typeof n[k] === "string" && n[k].length > 8) { n[k] = `${n[k]} (alterado)`; touched = true; } else walk(n[k]); } };
+    walk(altered);
+    expect(touched).toBe(true);
+    const odd = await wfOf().createDraft(ctxOf(c.org), { identityId: c.model!.identityId, ast: altered, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    expect(odd.semanticHash).not.toBe(R2_HASH);
+    const beforeC = (await revisionsOf(c)).length;
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(c))).checks.find((x) => x.id === "NO_CONFLICTING_REVISION")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(c))).rejects.toThrow(/NO_CONFLICTING_REVISION/);
+    expect((await revisionsOf(c)).length).toBe(beforeC);
+    // DUPLICADA: duas revisões com o hash da candidata (como o defeito antigo produzia) ⇒ a ferramenta recusa e não escreve
+    const p = await prepareOrg("dup", 1);
+    for (let i = 0; i < 2; i++) await wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    const before = (await revisionsOf(p)).length;
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p))).checks.find((x) => x.id === "CANDIDATE_UNIQUE")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).rejects.toThrow(/CANDIDATE_UNIQUE/);
+    expect((await revisionsOf(p)).length).toBe(before);
+  }, 300_000);
+
+  it("P2-FLAG — registro exige a flag LIGADA para a organização exata, antes de qualquer escrita; plan/snapshot seguem somente leitura", async () => {
+    const on = await prepareOrg("flag-on", 1); const off = await prepareOrg("flag-off", 1);
+    await conn.execute("INSERT INTO tenant_feature_flags (organizationId, flagName, enabled, percentage) VALUES (?, 'FF_INSTITUTIONAL_TEMPLATES_V1', 0, 100) ON DUPLICATE KEY UPDATE enabled = 0, percentage = 100", [off.org]);
+    const { invalidateFlagCache } = await import("../../services/featureFlagService");
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", off.org);
+    const counts = async (p: P) => ({ revs: (await revisionsOf(p)).length, decisions: Number((await rows("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [p.org]))[0].n),
+      events: Number((await rows("SELECT COUNT(*) n FROM institutional_template_events WHERE organization_id = ?", [p.org]))[0].n), bindings: (await activeBindings(p)).map((b) => b.id) });
+    const before = await counts(off);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off))).rejects.toThrow(/MODULE_DISABLED/);
+    expect(await counts(off)).toEqual(before);                                                         // zero writes na recusa
+    // plan/snapshot: leitura (não escrevem) e mostram a flag desligada
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(off));
+    expect(plan.ok).toBe(false); expect(plan.checks.find((c) => c.id === "FLAG_ENABLED")!.ok).toBe(false);
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), off.org, { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH }, false)).flag.enabled).toBe(false);
+    expect(await counts(off)).toEqual(before);
+    // tenant divergente: o órgão LIGADO não habilita o desligado, e a identidade de um não vale no outro
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off, { identityId: on.model!.identityId }))).rejects.toThrow(/MODULE_DISABLED/);
+    expect(await counts(off)).toEqual(before);
+    // tenant habilitado registra; ligar a flag depois habilita o desligado
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(on))).toMatchObject({ performed: "REGISTER_DRAFT" });
+    await conn.execute("UPDATE tenant_feature_flags SET enabled = 1 WHERE organizationId = ? AND flagName = 'FF_INSTITUTIONAL_TEMPLATES_V1'", [off.org]);
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", off.org);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off))).toMatchObject({ performed: "REGISTER_DRAFT" });
+    // desligar DEPOIS do plano e antes da escrita (corrida de flag): a escrita relê a flag e recusa
+    const late = await prepareOrg("flag-late", 1);
+    await conn.execute("INSERT INTO tenant_feature_flags (organizationId, flagName, enabled, percentage) VALUES (?, 'FF_INSTITUTIONAL_TEMPLATES_V1', 0, 100) ON DUPLICATE KEY UPDATE enabled = 0", [late.org]);
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", late.org);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(late))).rejects.toThrow(/MODULE_DISABLED/);
+    expect((await revisionsOf(late)).length).toBe(1);
+  }, 300_000);
+
+  it("P1-BIND — o instante efetivo do swap é do SERVIDOR: relógio do navegador adiantado/atrasado nunca abre janela NOT_BOUND", async () => {
+    const p = await prepareOrg("bind", 1);
+    const r1Id = p.model!.revisionId;
+    const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const resolve = () => wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE });
+    const swap = (rev: string, replaces: string, clientTime?: string) => wfOf().setBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: rev, confirm: true, replacesBindingId: replaces, ...(clientTime ? { effectiveFrom: clientTime } : {}) });
+    // relógio ADIANTADO (ano 2099): antes ⇒ NOT_BOUND; agora o servidor ignora o valor do cliente
+    const t0 = Date.now();
+    const swapped = await swap(r2Id, old.id, "2099-01-01T00:00:00.000Z");
+    expect(Date.parse(swapped.effectiveFrom)).toBeGreaterThanOrEqual(t0 - 5);
+    expect(Date.parse(swapped.effectiveFrom)).toBeLessThanOrEqual(Date.now());
+    const r = await resolve();
+    expect(r.status).toBe("RESOLVED"); expect((r as any).binding.id).toBe(swapped.id); expect((r as any).revision.id).toBe(r2Id);
+    // relógio ATRASADO (ano 2000): também não retroage a vigência
+    const back = await swap(r1Id, swapped.id, "2000-01-01T00:00:00.000Z");
+    expect(Date.parse(back.effectiveFrom)).toBeGreaterThanOrEqual(t0 - 5);
+    expect(((await resolve()) as any).revision.id).toBe(r1Id);
+    // retry após resultado incerto (mesma troca repetida): converge para o MESMO vínculo, sem segundo ativo
+    const again = await swap(r1Id, swapped.id, "2099-01-01T00:00:00.000Z");
+    expect(again.id).toBe(back.id);
+    expect(await activeBindings(p)).toHaveLength(1);
+    // observação CONTÍNUA durante trocas sucessivas: nenhuma leitura vê NOT_BOUND
+    const seen: string[] = []; let stop = false;
+    const poll = (async () => { while (!stop) { seen.push((await resolve()).status); } })();
+    let cur = back;
+    for (const [rev, skew] of [[r2Id, "2099-12-31T23:59:59.000Z"], [r1Id, "1999-01-01T00:00:00.000Z"], [r2Id, "2099-01-01T00:00:00.000Z"], [r1Id, undefined]] as const) cur = await swap(rev, cur.id, skew);
+    stop = true; await poll;
+    expect(seen.length).toBeGreaterThan(8);
+    expect([...new Set(seen)]).toEqual(["RESOLVED"]);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);                 // retorno atômico à Revisão 1
+    // Revisão 1 e Revisão 2 seguem PUBLICADAS (replay)
+    expect((await revisionsOf(p)).map((x) => x.status).sort()).toEqual(["PUBLISHED", "PUBLISHED"]);
+  }, 300_000);
+
+  it("P1-BIND — swaps CONCORRENTES: idênticos convergem; conflitantes ⇒ exatamente um vence (um único ativo), o outro é recusado; tenant alheio não substitui", async () => {
+    const p = await prepareOrg("bindc", 1); const other = await prepareOrg("bindc-b", 1);
+    const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const swap = (rev: string, replaces: string, org = p.org) => wfOf().setBinding(ctxOf(org), { documentKind: "edital", scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: rev, confirm: true, replacesBindingId: replaces });
+    // tenant alheio não toca o vínculo de p
+    await expect(swap(r2Id, old.id, other.org)).rejects.toThrow(/não encontrad/i);
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual([old.id]);
+    // idênticos em paralelo
+    const same = await Promise.allSettled([swap(r2Id, old.id), swap(r2Id, old.id), swap(r2Id, old.id)]);
+    expect(same.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message))).toEqual([]);
+    expect(new Set(same.map((x: any) => x.value.id)).size).toBe(1);
+    let active = await activeBindings(p); expect(active).toHaveLength(1); expect(active[0].pinnedRevisionId).toBe(r2Id);
+    // conflitantes em paralelo (R2 → R1 × R2 → R2'): um vence
+    const cur = active[0];
+    const conflict = await Promise.allSettled([swap(r1Id, cur.id), swap(r2Id, cur.id)]);
+    active = await activeBindings(p);
+    expect(active).toHaveLength(1);
+    expect(conflict.filter((x) => x.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
+    expect(["fulfilled", "rejected"]).toEqual(expect.arrayContaining(conflict.map((x) => x.status)));
+    // com a Revisão 2 ainda vinculada, ou voltou à 1: nunca zero nem dois ativos, e o escopo resolve
+    expect((await wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE })).status).toBe("RESOLVED");
+  }, 300_000);
+
+  it("P1-BIND — a API não aceita effectiveFrom do cliente (rota estrita); a tela não envia horário do navegador", async () => {
+    const p = await prepareOrg("bindapi", 1);
+    const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const base = { documentKind: "edital" as const, scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: r2Id, confirm: true, replacesBindingId: old.id };
+    await expect(tpl(p.org).bindings.set({ ...base, effectiveFrom: "2099-01-01T00:00:00.000Z" } as any)).rejects.toThrow();
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual([old.id]);
+    const ok: any = await tpl(p.org).bindings.set(base as any);
+    expect(Date.parse(ok.effectiveFrom)).toBeLessThanOrEqual(Date.now());
+    expect(((await tpl(p.org).bindings.resolve({ documentKind: "edital", scope: R2_SCOPE })) as any).status).toBe("RESOLVED");
   }, 300_000);
 });

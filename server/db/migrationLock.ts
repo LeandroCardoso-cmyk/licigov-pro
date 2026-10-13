@@ -15,15 +15,34 @@ import type { RowDataPacket } from "mysql2";
 export const MIGRATION_LOCK_NAME = "licigov_pro_migrate_release";
 export const MIGRATION_LOCK_TIMEOUT_SECONDS = 120;
 
-/** Executa `fn` sob o advisory lock de migração (liberação garantida). Lança se o lock não for obtido no prazo. */
-export async function withMigrationLock<T>(connection: mysql.Connection, fn: () => Promise<T>): Promise<T> {
-  const [rows] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK(?, ?) AS ok", [MIGRATION_LOCK_NAME, MIGRATION_LOCK_TIMEOUT_SECONDS]);
-  if (Number((rows[0] as { ok: number | null }).ok) !== 1) {
-    throw new Error(`Não foi possível obter o lock de migração '${MIGRATION_LOCK_NAME}' em ${MIGRATION_LOCK_TIMEOUT_SECONDS}s. Nenhuma migration foi aplicada.`);
+/**
+ * Executa `fn` sob um advisory lock NOMEADO do MySQL (`GET_LOCK`, por sessão, válido entre processos), com liberação garantida.
+ * Lança `AdvisoryLockTimeoutError` se o lock não for obtido no prazo (falha fechada: `fn` não roda). Genérico: o lock de migração e o de registro de
+ * candidato por (organização, identidade) usam a mesma primitiva.
+ */
+export class AdvisoryLockTimeoutError extends Error {
+  constructor(readonly lockName: string, readonly timeoutSeconds: number) {
+    super(`Não foi possível obter o lock '${lockName}' em ${timeoutSeconds}s. Nenhuma alteração foi feita.`);
+    this.name = "AdvisoryLockTimeoutError";
   }
+}
+
+export async function withAdvisoryLock<T>(connection: mysql.Connection, name: string, timeoutSeconds: number, fn: () => Promise<T>): Promise<T> {
+  const [rows] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK(?, ?) AS ok", [name, timeoutSeconds]);
+  if (Number((rows[0] as { ok: number | null }).ok) !== 1) throw new AdvisoryLockTimeoutError(name, timeoutSeconds);
   try {
     return await fn();
   } finally {
-    await connection.query("SELECT RELEASE_LOCK(?) AS released", [MIGRATION_LOCK_NAME]);
+    await connection.query("SELECT RELEASE_LOCK(?) AS released", [name]);
+  }
+}
+
+/** Executa `fn` sob o advisory lock de migração (liberação garantida). Lança se o lock não for obtido no prazo. */
+export async function withMigrationLock<T>(connection: mysql.Connection, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await withAdvisoryLock(connection, MIGRATION_LOCK_NAME, MIGRATION_LOCK_TIMEOUT_SECONDS, fn);
+  } catch (err) {
+    if (err instanceof AdvisoryLockTimeoutError) throw new Error(`Não foi possível obter o lock de migração '${MIGRATION_LOCK_NAME}' em ${MIGRATION_LOCK_TIMEOUT_SECONDS}s. Nenhuma migration foi aplicada.`);
+    throw err;
   }
 }
