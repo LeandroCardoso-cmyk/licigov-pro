@@ -10,6 +10,8 @@
  *    `provenance.status = "FAILED"` (a matriz de prontidão a mostra BLOCKED) e o registro pode ser repetido pela mesma rota.
  */
 import { isAstV2, isCatalogV2, validateAnyTemplateAst, validateTemplateAst, type TemplateDocumentKind, type TemplateIdentity, type TemplateRevision } from "../../domain/institutionalTemplates";
+import type { TemplateAST2 } from "../../domain/institutionalTemplates/ast2";
+import { revisionSemanticHash } from "../../domain/institutionalTemplates/semanticHash";
 import { isSha256 } from "../../domain/institutionalTemplates/types";
 import type { ImportProvenance } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { readScope, validateExplicitScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
@@ -79,7 +81,12 @@ export interface ModelRegistrationOptions {
 export class ModelRegistrationService {
   constructor(private readonly ports: TemplateWorkflowPorts, private readonly options: ModelRegistrationOptions = {}) {}
 
-  async register(ctx: WorkflowContext, input: RegisterModelInput): Promise<RegisterModelResult> {
+  /**
+   * `resumeDraftRevisionId` (uso interno da ferramenta controlada de candidatos): COMPLETA a procedência de um DRAFT já criado por este mesmo
+   * registro (a falha de procedência deixa o DRAFT sem ela). Nenhuma revisão nova é criada; o DRAFT precisa pertencer à identidade de destino,
+   * estar em DRAFT e ter exatamente o hash semântico do pacote.
+   */
+  async register(ctx: WorkflowContext, input: RegisterModelInput, internal: { readonly resumeDraftRevisionId?: string } = {}): Promise<RegisterModelResult> {
     assertHumanActor(ctx.actor);
     if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para registrar o modelo (nada foi criado)");
     if (!isSha256(input.sourceSha256)) throw new TemplateWorkflowError("VALIDATION_FAILED", "SHA-256 da fonte inválido (64 hex minúsculos)");
@@ -122,7 +129,17 @@ export class ModelRegistrationService {
     const identity = input.target.kind === "NEW_IDENTITY"
       ? await wf.createIdentity(ctx, { documentKind: input.target.documentKind, slug: input.target.slug, displayName: input.displayName })
       : await this.requireIdentity(ctx, input.target.identityId);
-    const revision = await wf.createDraft(ctx, { identityId: identity.id, ast, sourceFormat, ...(catalogVersion ? { catalogVersion } : {}) });
+    let revision: TemplateRevision;
+    if (internal.resumeDraftRevisionId !== undefined) {
+      if (input.target.kind !== "EXISTING_IDENTITY") throw new TemplateWorkflowError("VALIDATION_FAILED", "a retomada exige a identidade existente (nada foi criado)");
+      const existing = await this.ports.repository.getRevision(ctx.organizationId, internal.resumeDraftRevisionId);
+      if (!existing || existing.organizationId !== ctx.organizationId || existing.identityId !== identity.id) throw new TemplateWorkflowError("NOT_FOUND", "revisão DRAFT não encontrada nesta identidade");
+      const expectedHash = revisionSemanticHash({ ast: ast as TemplateAST2, variableCatalogVersion: catalogVersion ?? "" });
+      if (existing.status !== "DRAFT" || existing.semanticHash !== expectedHash) throw new TemplateWorkflowError("VALIDATION_FAILED", "a revisão a retomar não é o DRAFT deste pacote (status/hash divergem; nada foi alterado)");
+      revision = existing;
+    } else {
+      revision = await wf.createDraft(ctx, { identityId: identity.id, ast, sourceFormat, ...(catalogVersion ? { catalogVersion } : {}) });
+    }
     if (revision.status !== "DRAFT") throw new TemplateWorkflowError("TRANSITION_INVALID", "invariante violada: a revisão importada deve nascer DRAFT");
 
     let provenance: RegisterModelResult["provenance"];

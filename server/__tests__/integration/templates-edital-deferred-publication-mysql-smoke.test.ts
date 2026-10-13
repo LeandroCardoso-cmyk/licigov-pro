@@ -10,6 +10,8 @@
  *  P3   (PUB7, PUB15–PUB16) preenchimento parcial; emissão oficial com dados diferidos; documento emitido imutável / regeneração exige novo ciclo
  *  S    (SRP4–SRP7) pergunta operacional, decisão humana (sem origem anterior, sem heurística textual), gravação governada
  *  L    (LEGAL1–LEGAL4) composição NÃO consulta módulo/parecer/autorização jurídica
+ *  SEQ  sequência de publicação da Revisão 2 em tenant SINTÉTICO: ferramenta controlada (plano/registro DRAFT/replay/retomada de procedência) → evidência →
+ *       matriz READY → aprovação → publicação → substituição atômica do vínculo → composição → retorno à Revisão 1 (falha fechada, tenant cruzado, replay)
  * Só roda com DATABASE_URL. Nenhum dado real, nenhum processo 2026/253, nenhum modelo de produção.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -42,6 +44,8 @@ import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from 
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { getModelPackageVersion } from "../../services/institutionalTemplates/modelPackages";
 import { revisionSemanticHash } from "../../domain/institutionalTemplates/semanticHash";
+import { planCandidateRegistration, registerCandidateDraft, snapshotOrganizationTemplates } from "../../services/institutionalTemplates/candidateRegistrationService";
+import { MODEL_REGISTRATION_PRESETS } from "../../services/institutionalTemplates/modelRegistrationService";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { buildEditalReadiness } from "../../../client/src/lib/editalReadiness";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
@@ -50,7 +54,7 @@ import {
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
+  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const R2 = getModelPackageVersion(BLL.modelKey, "1.0.2-draft")!;
@@ -110,6 +114,13 @@ async function prepareOrg(label: string, rev: RevNo = 2): Promise<P> {
   const tr = await seedOfficialTr(conn, w, 1, "TERMO DE REFERÊNCIA — conteúdo sintético v1", TR_META);
   return { org, w, tr, model: await publishBll(org, rev) };
 }
+/** Segundo processo do MESMO órgão (outro nº, itens e TR próprios). */
+async function addProcess(base: P, label: string, seq: number): Promise<P> {
+  const w = await seedExtraProcess(base.org, label, seq);
+  const tr = await seedOfficialTr(conn, w, 1, `TERMO DE REFERÊNCIA — ${label}`, TR_META);
+  return { ...base, w, tr };
+}
+
 /** Estado de preparação; por padrão com o TR EXATO selecionado (como a tela faz); `pinned=false` ⇒ ainda sem seleção do TR. */
 const getState = async (p: P, pinned = true): Promise<PreparationStateView> =>
   (await proc(p.org).editalTemplatePreparation({ processId: p.w.processId, ...WS, ...(pinned ? { officialPins: pin(p.tr) } : {}) })) as any;
@@ -596,4 +607,139 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
       expect(out.revision.semanticHash).toBe(revisionSemanticHash({ ast: pkg.ast as never, variableCatalogVersion: pkg.catalog.version }));
     }
   }, 180_000);
+
+  // ───────────────────────── Sequência de publicação da Revisão 2 (ferramenta controlada → vínculo → retorno) ─────────────────────────
+  const R1_HASH = "e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d";
+  const R2_HASH = "33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd";
+  const wfOf = () => new InstitutionalTemplatesWorkflow(getTemplateWorkflowPorts());
+  const govOf = () => new TemplateGovernanceService(getTemplateWorkflowPorts());
+  const candReq = (p: P, over: Record<string, unknown> = {}): any => ({
+    organizationId: p.org, identityId: p.model!.identityId, actorUserId: U_MANAGER, runId: key("run"), modelKey: BLL.modelKey, packageVersion: "1.0.2-draft",
+    expected: { sourceSha256: R2.provenance.sourceSha256, semanticHash: R2_HASH, baselineSemanticHash: R1_HASH }, decision: decision({ basisReference: "Execução sintética de teste" }), ...over,
+  });
+  const revisionsOf = async (p: P) => [...(await getTemplateWorkflowPorts().repository.listRevisions(p.org, p.model!.identityId))];
+  const activeBindings = async (p: P) => (await wfOf().listBindings(ctxOf(p.org), { documentKind: "edital", activeOnly: true })).filter((b) => b.identityId === p.model!.identityId);
+  const lifecycle = (p: P, revisionId: string, expectedStatus: string, k: string) => ({ revisionId, expectedStatus: expectedStatus as any, confirm: true as const, idempotencyKey: key(k), decision: decision({ basisReference: "Ato sintético de teste" }) });
+  const R2_SCOPE = { ...BLL.declaredScope } as any;
+
+  it("SEQ — Revisão 2 no tenant sintético: ferramenta controlada → DRAFT → evidência → matriz READY → aprovação → publicação → substituição atômica → retorno à Revisão 1", async () => {
+    const p = await prepareOrg("seq", 1);                                                           // Revisão 1 PUBLICADA e vinculada (como em produção)
+    const r1Id = p.model!.revisionId;
+    const r1Before = await getTemplateWorkflowPorts().repository.getRevision(p.org, r1Id);
+    expect(r1Before!.semanticHash).toBe(R1_HASH); expect(r1Before!.status).toBe("PUBLISHED");
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    await fillTrueDecisions(p);
+    const d1 = await callGen(p);                                                                    // M1 da Revisão 1 (para replay depois)
+    expect(d1.template.revisionId).toBe(r1Id);
+    const draftR1 = (await draftText(p))!;
+    const bindingsBefore = await activeBindings(p);
+    expect(bindingsBefore).toHaveLength(1); expect(bindingsBefore[0].pinnedRevisionId).toBe(r1Id);
+
+    // PLANO (somente leitura) — nada muda
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p));
+    expect(plan.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(plan).toMatchObject({ ok: true, action: "REGISTER_DRAFT", baselineRevisionId: r1Id, candidateRevisionId: null });
+    expect(await revisionsOf(p)).toHaveLength(1);
+    const other = await prepareOrg("seq-b", 1);
+    const snapExp = { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH };
+    const snap0 = await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, snapExp, true);
+    expect(snap0.identities).toHaveLength(1);
+    expect(snap0.identities[0]).toMatchObject({ id: p.model!.identityId, hasBaselinePublished: true, candidateRegistered: false });
+    expect(snap0.identities[0].activeBindings).toHaveLength(1);
+    expect(JSON.stringify(snap0)).not.toMatch(/"ast"|content|numeroPregao/);                          // sem conteúdo de modelo nem dados de processo
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), other.org, snapExp, true)).identities.map((i) => i.id)).not.toContain(p.model!.identityId);   // isolamento de tenant
+
+    // FALHA FECHADA: hash esperado errado / identidade de OUTRO tenant / pacote vigente como candidato ⇒ nada criado
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { expected: { sourceSha256: R2.provenance.sourceSha256, semanticHash: "0".repeat(64), baselineSemanticHash: R1_HASH } }))).rejects.toThrow(/recusado/);
+    const cross = candReq(other, { identityId: p.model!.identityId });                              // órgão B apontando para a identidade do órgão A
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), cross)).checks.find((c) => c.id === "IDENTITY_IN_TENANT")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), cross)).rejects.toThrow(/recusado/);
+    expect(await revisionsOf(p)).toHaveLength(1); expect(await revisionsOf(other)).toHaveLength(1);
+    // a API pública/serviço padrão NUNCA registra candidato, e o candidato não está nos presets
+    await expect(new ModelRegistrationService(getTemplateWorkflowPorts()).register(ctxOf(p.org), {
+      target: { kind: "EXISTING_IDENTITY", identityId: p.model!.identityId }, templateKey: BLL.modelKey, displayName: BLL.displayName, declaredScope: R2_SCOPE,
+      source: { kind: "MODEL_PACKAGE", modelKey: BLL.modelKey, packageVersion: "1.0.2-draft" }, sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256,
+      confirm: true, idempotencyKey: key("nope"), decision: decision(),
+    })).rejects.toThrow(/candidato/);
+    expect(MODEL_REGISTRATION_PRESETS.map((x) => x.presetId)).toEqual([BLL.modelKey]);
+    expect(await revisionsOf(p)).toHaveLength(1);
+
+    // EXECUÇÃO: só DRAFT + procedência; replay converge
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(done).toMatchObject({ performed: "REGISTER_DRAFT", provenance: "RECORDED" });
+    const r2Id = done.revisionId!;
+    const revs = await revisionsOf(p);
+    expect(revs).toHaveLength(2);
+    expect(revs.find((r) => r.id === r2Id)).toMatchObject({ status: "DRAFT", semanticHash: R2_HASH, revision: 2 });
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, snapExp, true)).identities[0]).toMatchObject({ candidateRegistered: true });
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual(bindingsBefore.map((b) => b.id));          // nenhum vínculo tocado
+    const again = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(again).toMatchObject({ performed: "NONE", revisionId: r2Id }); expect(await revisionsOf(p)).toHaveLength(2);
+
+    // MATRIZ: sem evidência ⇒ só a evidência bloqueia; aprovar não publica; publicar é recusado (fail closed)
+    const matrix = async () => ((await tpl(p.org).readiness.evaluate({ revisionId: r2Id })) as any).matrix;
+    expect((await matrix()).checks.filter((c: any) => c.status === "BLOCKED").map((c: any) => c.id)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    await wfOf().approve(ctxOf(p.org), lifecycle(p, r2Id, "DRAFT", "ap"));
+    await expect(wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb0"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
+    expect((await revisionsOf(p)).find((r) => r.id === r2Id)!.status).toBe("APPROVED");
+    // evidência que NÃO cobre a versão lógica da candidata (a da Revisão 1) ⇒ continua bloqueado
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: r2Id, expectedVersion: 0, confirm: true, idempotencyKey: key("ev0"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: BLL.provenance.sourceLogicalVersion, sourceSha256: BLL.provenance.sourceSha256 } });
+    expect((await matrix()).checks.find((c: any) => c.id === "LEGAL_APPROVAL_EVIDENCE").status).toBe("BLOCKED");
+    await expect(wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb1"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
+    // evidência correspondente (versão lógica + SHA + hash semântico da revisão exata) ⇒ READY
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: r2Id, expectedVersion: 1, confirm: true, idempotencyKey: key("ev1"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256 } });
+    expect((await matrix()).overall).toBe("READY");
+    await wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb2"));
+    const afterPub = await revisionsOf(p);
+    expect(afterPub.find((r) => r.id === r2Id)!.status).toBe("PUBLISHED");
+    expect(afterPub.find((r) => r.id === r1Id)!.status).toBe("PUBLISHED");                          // publicar NÃO deprecia a Revisão 1
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);              // publicar NÃO troca o vínculo
+
+    // VÍNCULO: sem substituição explícita ⇒ ambíguo (nada muda); tenant cruzado ⇒ não encontrado; com replacesBindingId ⇒ troca ATÔMICA
+    const bind = (org: number, identityId: string, rev: string, replaces?: string) => wfOf().setBinding(ctxOf(org), { documentKind: "edital", scope: R2_SCOPE, identityId, pinnedRevisionId: rev, effectiveFrom: "2026-10-13T00:00:00Z", confirm: true, ...(replaces ? { replacesBindingId: replaces } : {}) });
+    await expect(bind(p.org, p.model!.identityId, r2Id)).rejects.toThrow(/BINDING_AMBIGUOUS|binding ativo/i);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);
+    await expect(bind(other.org, p.model!.identityId, r2Id)).rejects.toThrow(/não encontrad/i);
+    expect(await activeBindings(other)).toHaveLength(1);
+    const swapped = await bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id);
+    const nowActive = await activeBindings(p);
+    expect(nowActive.map((b) => b.pinnedRevisionId)).toEqual([r2Id]); expect(nowActive[0].id).toBe(swapped.id);   // exatamente UM ativo (nunca zero nem dois)
+    await expect(bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id)).rejects.toThrow();                  // replay da troca com o vínculo antigo já inativo é recusado
+    expect(await activeBindings(p)).toHaveLength(1);
+
+    // COMPOSIÇÃO pela Revisão 2 (sem número/cronograma) e Revisão 1 intacta para replay
+    const p2 = await addProcess(p, "seq2", 2);
+    await fillTrStamped(p2); await setBudgetDisclosure(harnessOf(p2)); await setItemsParticipation(harnessOf(p2)); await fillTrueDecisions(p2);
+    const g2 = await callGen(p2);
+    expect(g2.template.revisionId).toBe(r2Id);
+    expect((await draftText(p2))!).toContain(PLACEHOLDER);
+    expect(await draftText(p)).toBe(draftR1);                                                       // rascunho/M1 da Revisão 1 inalterados
+    expect(((await proc(p.org).editalTemplateReviewState({ processId: p.w.processId })) as any).revalidation.status).toBe("PASSED");
+
+    // RETORNO à Revisão 1 (mesma troca atômica); Revisão 2 continua publicada, sem vínculo
+    await bind(p.org, p.model!.identityId, r1Id, swapped.id);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);
+    expect((await revisionsOf(p)).find((r) => r.id === r2Id)!.status).toBe("PUBLISHED");
+    const stP2 = await getState(p2);
+    expect(stP2.capabilities).toEqual({ governedDraftRecomposition: false });                        // voltou a semântica da Revisão 1 (sem recomposição)
+    const r1After = await getTemplateWorkflowPorts().repository.getRevision(p.org, r1Id);
+    expect(r1After!.semanticHash).toBe(R1_HASH); expect(r1After!.status).toBe("PUBLISHED");
+    expect(JSON.stringify(r1After!.ast)).toBe(JSON.stringify(r1Before!.ast));
+    METRICS.SEQ = { r1Hash: R1_HASH, r2Hash: R2_HASH, steps: "plan>register>replay>matrix>approve>blocked>evidence>READY>publish>replace>compose>return" };
+  }, 600_000);
+
+  it("SEQ-PROV — DRAFT do candidato sem procedência (falha parcial) é COMPLETADO sem criar nova revisão", async () => {
+    const p = await prepareOrg("seqprov", 1);
+    // DRAFT criado sem procedência (o estado que uma falha parcial deixaria)
+    const draft = await wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p));
+    expect(plan).toMatchObject({ ok: true, action: "RECORD_PROVENANCE", candidateRevisionId: draft.id, candidateProvenanceRecorded: false });
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(done).toMatchObject({ performed: "RECORD_PROVENANCE", provenance: "RECORDED", revisionId: draft.id });
+    expect(await revisionsOf(p)).toHaveLength(2);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "NONE" });
+    expect(((await tpl(p.org).readiness.evaluate({ revisionId: draft.id })) as any).matrix.checks.find((c: any) => c.id === "SOURCE_PROVENANCE").status).toBe("PASS");
+  }, 240_000);
 });
