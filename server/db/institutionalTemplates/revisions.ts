@@ -10,9 +10,9 @@
  *  - o hash semântico é SEMPRE recalculado a partir do AST persistido (escrita e leitura): divergência ⇒ falha fechada;
  *  - tenant-scoped em toda consulta; ids comparados byte a byte após a leitura (a colação é case-insensitive).
  */
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import {
-  documentCompositionManifestsTable, institutionalTemplateBindingsTable, institutionalTemplateRevisionsTable,
+  documentCompositionManifestsTable, institutionalTemplateBindingsTable, institutionalTemplateIdentitiesTable, institutionalTemplateRevisionsTable,
   type InstitutionalTemplateRevisionRow,
 } from "../../../drizzle/schema";
 import {
@@ -129,6 +129,28 @@ export async function insertDraftRevision(tx: TemplatesTx, ctx: TemplatesContext
   const stored = await lockRevisionForShare(tx, ctx.organizationId, revision.id);
   if (!stored) throw corrupt("revisão não encontrada após a inserção");
   return { revision: stored, created: true };
+}
+
+/**
+ * Insere uma revisão DRAFT EXCLUSIVA por hash semântico na identidade — a garantia de integridade do registro CONTROLADO de candidata, que NÃO depende de
+ * nenhum lock externo à transação: a linha da identidade é travada FOR UPDATE (o lock vive e morre com ESTA transação; se a conexão cair, nada foi comitado
+ * e o lock some junto), e a checagem "já existe revisão com este hash?" e o INSERT acontecem na MESMA transação sob esse lock.
+ *  - já existe revisão com o hash na identidade ⇒ devolve a existente (`created: false`), sem inserir;
+ *  - senão numera como (maior número + 1) LIDO sob o lock (o número do chamador é descartado) e insere.
+ * Dois executores concorrentes (inclusive com o advisory lock perdido) ⇒ exatamente UMA revisão com o hash; o outro converge para ela.
+ */
+export async function insertDraftRevisionUnique(tx: TemplatesTx, ctx: TemplatesContext, revision: TemplateRevision): Promise<PersistedRevision> {
+  const idRows = await tx.select().from(institutionalTemplateIdentitiesTable).where(and(
+    eq(institutionalTemplateIdentitiesTable.organizationId, ctx.organizationId), eq(institutionalTemplateIdentitiesTable.id, revision.identityId))).limit(1).for("update");
+  if (idRows.length !== 1 || idRows[0].id !== revision.identityId) throw new TemplatePersistenceError("NOT_FOUND", "identidade de modelo inexistente neste tenant");
+  const sameHash = await tx.select().from(institutionalTemplateRevisionsTable).where(and(
+    eq(institutionalTemplateRevisionsTable.organizationId, ctx.organizationId), eq(institutionalTemplateRevisionsTable.identityId, revision.identityId),
+    eq(institutionalTemplateRevisionsTable.semanticHash, revision.semanticHash))).orderBy(asc(institutionalTemplateRevisionsTable.revision)).for("update");
+  if (sameHash.length > 0) return { revision: rowToRevision(sameHash[0]), created: false };
+  const last = await tx.select({ n: institutionalTemplateRevisionsTable.revision }).from(institutionalTemplateRevisionsTable).where(and(
+    eq(institutionalTemplateRevisionsTable.organizationId, ctx.organizationId), eq(institutionalTemplateRevisionsTable.identityId, revision.identityId)))
+    .orderBy(desc(institutionalTemplateRevisionsTable.revision)).limit(1).for("update");
+  return insertDraftRevision(tx, ctx, { ...revision, revision: (last[0]?.n ?? 0) + 1 });
 }
 
 /**

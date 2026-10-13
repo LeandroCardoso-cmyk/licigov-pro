@@ -62,7 +62,7 @@ describe("RBAC por ação (piso técnico de papel)", () => {
       v.revisions.approve(life(draft.id, "DRAFT", "v1")),
       v.revisions.publish(life(draft.id, "APPROVED", "v2")),
       v.revisions.deprecate(life(draft.id, "PUBLISHED", "v3")),
-      v.bindings.set({ documentKind: "tr", scope: {}, identityId: identity.id, pinnedRevisionId: draft.id, effectiveFrom: "2026-10-01T00:00:00Z", confirm: true }),
+      v.bindings.set({ documentKind: "tr", scope: {}, identityId: identity.id, pinnedRevisionId: draft.id, confirm: true }),
       v.bindings.deactivate({ bindingId: "x", confirm: true }),
     ];
     for (const p of denied) expect((await trpcErr(p))?.code).toBe("FORBIDDEN");
@@ -78,7 +78,7 @@ describe("RBAC por ação (piso técnico de papel)", () => {
       o.revisions.approve(life(draft.id, "DRAFT", "o1")),
       o.revisions.publish(life(draft.id, "APPROVED", "o2")),
       o.revisions.deprecate(life(draft.id, "PUBLISHED", "o3")),
-      o.bindings.set({ documentKind: "tr", scope: {}, identityId: identity.id, pinnedRevisionId: draft.id, effectiveFrom: "2026-10-01T00:00:00Z", confirm: true }),
+      o.bindings.set({ documentKind: "tr", scope: {}, identityId: identity.id, pinnedRevisionId: draft.id, confirm: true }),
     ]) expect((await trpcErr(p))?.code).toBe("FORBIDDEN");
   });
 
@@ -87,7 +87,7 @@ describe("RBAC por ação (piso técnico de papel)", () => {
     const m = as("manager");
     expect((await m.revisions.approve(life(draft.id, "DRAFT", "m1"))).revision.status).toBe("APPROVED");
     expect((await m.revisions.publish(life(draft.id, "APPROVED", "m2"))).revision.status).toBe("PUBLISHED");
-    const b = await m.bindings.set({ documentKind: "tr", scope: { modality: "pregao" }, identityId: identity.id, pinnedRevisionId: draft.id, effectiveFrom: "2026-10-01T00:00:00Z", confirm: true });
+    const b = await m.bindings.set({ documentKind: "tr", scope: { modality: "pregao" }, identityId: identity.id, pinnedRevisionId: draft.id, confirm: true });
     expect(b.pinnedRevisionId).toBe(draft.id);
     await m.bindings.deactivate({ bindingId: b.id, confirm: true });
     expect((await m.revisions.deprecate(life(draft.id, "PUBLISHED", "m3"))).revision.status).toBe("DEPRECATED");

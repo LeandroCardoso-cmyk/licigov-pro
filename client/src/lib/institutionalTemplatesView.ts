@@ -378,3 +378,16 @@ export function validateRegisterForm(f: RegisterFormState, hasDocx: boolean): { 
 
 /** Payload de `source` do registro: pacote do servidor envia SÓ o `modelKey` (nenhum conteúdo jurídico trafega no browser). */
 export const packageSourceOf = (f: Pick<RegisterFormState, "templateKey">) => ({ kind: "MODEL_PACKAGE" as const, modelKey: f.templateKey });
+
+/**
+ * Vínculo ATIVO que o novo vínculo substituiria: mesmo tipo documental e escopo EXATAMENTE igual (5 dimensões; ausente ≡ vazio).
+ * A troca de revisão num escopo já vinculado deve ser ATÔMICA (`replacesBindingId`): desativar e criar em dois passos deixaria o escopo sem
+ * vínculo (e a geração voltaria ao legado). `null` = nenhum vínculo ativo para substituir.
+ */
+export interface BindingLike { readonly id: string; readonly active: boolean; readonly documentKind: string; readonly pinnedRevisionId?: string | null; readonly scope: ScopeLike }
+export function replaceableBinding<B extends BindingLike>(bindings: readonly B[], documentKind: string, scope: ScopeLike): B | null {
+  const dims = ["modality", "form", "platform", "regime", "criterion"] as const;
+  const norm = (s: ScopeLike, k: (typeof dims)[number]) => (s as Record<string, string | null | undefined>)[k] ?? "";
+  const hits = bindings.filter((b) => b.active && b.documentKind === documentKind && dims.every((k) => norm(b.scope, k) === norm(scope, k)));
+  return hits.length === 1 ? hits[0] : null;
+}

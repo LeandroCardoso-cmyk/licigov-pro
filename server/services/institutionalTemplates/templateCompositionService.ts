@@ -25,7 +25,7 @@ import {
 import { conditionVariables } from "../../domain/institutionalTemplates/conditionalDsl2";
 import type { ModelRules } from "../../domain/institutionalTemplates/modelRules";
 import { getModelRulesForCatalog } from "./modelPackages";
-import { resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
+import { resolveCurrentTemplateBinding, resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
 import {
   composeTemplate,
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
@@ -60,6 +60,8 @@ export const TEMPLATE_COMPOSITION_DISABLED = "TEMPLATE_COMPOSITION_DISABLED";
 export const TEMPLATE_NOT_BOUND = "TEMPLATE_NOT_BOUND";
 export const TEMPLATE_BINDING_AMBIGUOUS = "TEMPLATE_BINDING_AMBIGUOUS";
 export const TEMPLATE_BINDING_INVALID = "TEMPLATE_BINDING_INVALID";
+/** O vínculo ativo mudou entre a decisão do chamador e a composição (troca concorrente): falha FECHADA e retentável — nunca compõe com revisão diferente da exibida. */
+export const TEMPLATE_BINDING_CHANGED = "TEMPLATE_BINDING_CHANGED";
 export const TEMPLATE_COMPOSITION_FAILED = "TEMPLATE_COMPOSITION_FAILED";
 export const TEMPLATE_ISSUANCE_BLOCKED = "TEMPLATE_ISSUANCE_BLOCKED";
 
@@ -189,8 +191,17 @@ export interface GenerateTemplatedDocumentParams {
   readonly documentKind: TemplateDocumentKind;
   readonly documentType: OfficialDocumentType;
   readonly scope: BindingScope;
-  /** Instante de referência EXPLÍCITO para a vigência do binding (ISO-8601 UTC). */
-  readonly asOf: string;
+  /**
+   * Instante EXPLÍCITO para uma resolução HISTÓRICA/por instante declarado (ISO-8601 UTC). AUSENTE ⇒ resolução OPERACIONAL: o vínculo ATIVO lido
+   * numa leitura consistente (o commit da troca é o ponto de linearização); nenhum relógio de aplicação é capturado antes da leitura.
+   */
+  readonly asOf?: string;
+  /**
+   * PIN da revisão que o chamador JÁ resolveu e exibiu (ex.: o bridge do Edital decide o modelo e depois compõe — duas leituras). Se, na composição, o vínculo
+   * ativo fixar OUTRA revisão (troca concorrente), a geração falha com `TEMPLATE_BINDING_CHANGED` sem escrever nada: o `template` informado ao usuário e o
+   * manifest M1 nunca divergem (revision pinning/explicabilidade). Ausente ⇒ vale o vínculo lido na composição.
+   */
+  readonly expectedRevisionId?: string;
   readonly title: string;
   readonly actorUserId: number;
   readonly correlationId: string;
@@ -221,14 +232,17 @@ export interface GenerateTemplatedDocumentResult {
  * qualquer leitura de "qual modelo se aplica" (ex.: o bridge do workspace do Edital): nenhum resolvedor paralelo.
  */
 export async function resolveBindingForGeneration(
-  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf: string,
+  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf?: string,
 ) {
   const bindings = await ports.repository.listBindings(organizationId, { documentKind, activeOnly: true });
   const revisions: TemplateRevision[] = [];
   for (const identityId of [...new Set(bindings.map((b) => b.identityId))].sort()) {
     revisions.push(...(await ports.repository.listRevisions(organizationId, identityId)));
   }
-  return resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
+  // `asOf` explícito ⇒ consulta histórica (vigência comparada ao instante); ausente ⇒ vínculo ATIVO lido agora (estado corrente, sem janela NOT_BOUND).
+  return asOf === undefined
+    ? resolveCurrentTemplateBinding({ organizationId, documentKind, scope }, bindings, revisions)
+    : resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
 }
 
 interface PreparedComposition {
@@ -250,6 +264,9 @@ async function prepareComposition(params: GenerateTemplatedDocumentParams, ports
     throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_AMBIGUOUS}: mais de um vínculo vigente (${resolution.bindingIds.join(", ")}) — nenhum é escolhido automaticamente` });
   }
   if (resolution.status === "INVALID") throw preconditionFailed(TEMPLATE_BINDING_INVALID, codesOf(resolution.issues));
+  if (params.expectedRevisionId !== undefined && resolution.revision.id !== params.expectedRevisionId) {
+    throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_BINDING_CHANGED}: o modelo vinculado mudou durante a operação (troca concorrente de vínculo); nada foi gerado — repita para usar o modelo vigente` });
+  }
 
   // 2. Revisão EXATA (relida pelo id fixado) + catálogo da revisão.
   const t = await loadExactTemplate(ports, params.organizationId, resolution.binding.identityId, resolution.binding.pinnedRevisionId!);

@@ -783,7 +783,7 @@ export const procurementProcessRouter = router({
       if (resolution.status !== "BOUND" || !deps.ports) return { status: "NOT_APPLICABLE" as const, resolution: resolution.status };
       const result = await preflightTemplatedDocument({
         organizationId: orgId, subjectId: input.processId, documentKind: "edital", documentType: "edital",
-        scope: resolution.normalizedScope, asOf: deps.now(), title: "Edital (preflight)", actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+        scope: resolution.normalizedScope, title: "Edital (preflight)", actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
         officialPins: input.officialPins?.TR ? { TR: input.officialPins.TR } : {},
       }, deps.ports);
       if (result.status === "READY_FOR_COMPOSITION") return { ...result, pendingDecisions: 0, resolution: resolution.status };

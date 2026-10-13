@@ -246,3 +246,12 @@ export async function getUserOrganizations(userId: number) {
       eq(organizations.ativo, true),
     ));
 }
+
+/** Papel da membership ATIVA do usuário NESTA organização (tenant-scoped, somente leitura); sem membership ativa ⇒ `null`. */
+export async function getActiveMemberRole(organizationId: number, userId: number): Promise<OrgRole | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ role: organizationMembers.role }).from(organizationMembers).where(and(
+    eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, userId), eq(organizationMembers.ativo, true))).limit(1);
+  return rows[0]?.role ?? null;
+}

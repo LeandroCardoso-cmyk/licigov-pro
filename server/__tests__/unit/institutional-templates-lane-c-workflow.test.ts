@@ -235,10 +235,18 @@ describe("Lane C — binding por revisão EXATA (nunca 'última')", () => {
     const writes = repo.writes;
     await expectCode(wf.setBinding(ctxOf(), bindInput(identity.id, r2.id)), "BINDING_AMBIGUOUS");
     expect(repo.writes).toBe(writes);
-    const second = await wf.setBinding(ctxOf(), bindInput(identity.id, r2.id, { replacesBindingId: first.id }));
+    // AUTORIDADE TEMPORAL: na substituição o instante é o do SERVIDOR (relógio do workflow); o valor do cliente (aqui no futuro) é ignorado
+    const second = await wf.setBinding(ctxOf(), bindInput(identity.id, r2.id, { replacesBindingId: first.id, effectiveFrom: "2099-01-01T00:00:00Z" }));
+    expect(second.effectiveFrom).toBe("2026-10-06T12:00:00.000Z");
     expect(repo.bindings.get(first.id)!.active).toBe(false);
-    const res = await wf.resolveBinding(ctxOf(), { documentKind: "tr", scope: { modality: "pregao" }, asOf: "2026-10-06T00:00:00Z" });
+    const res = await wf.resolveBinding(ctxOf(), { documentKind: "tr", scope: { modality: "pregao" }, asOf: "2026-10-06T12:00:00Z" });
     expect(res.status === "RESOLVED" && res.binding.id).toBe(second.id);
+    // retry da mesma troca (resultado incerto): converge para o vínculo ativo equivalente, sem escrita nem segundo ativo
+    const w2 = repo.writes;
+    const again = await wf.setBinding(ctxOf(), bindInput(identity.id, r2.id, { replacesBindingId: first.id }));
+    expect(again.id).toBe(second.id);
+    expect(repo.writes).toBe(w2);
+    expect([...repo.bindings.values()].filter((b) => b.active)).toHaveLength(1);
   });
 
   it("estado corrompido na persistência: dois bindings ativos ⇒ AMBIGUOUS (fail-closed, sem prévia); binding sem pin ⇒ INVALID; nenhum ⇒ NOT_BOUND", async () => {

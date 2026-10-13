@@ -9,7 +9,7 @@
  *   4. INSERT da decisão (ledger append-only) + `transitionRevisionStatus` (CAS + evento) — qualquer falha ⇒ ROLLBACK TOTAL.
  */
 import {
-  deactivateBinding, getBinding, getIdentity, getRevision, insertBinding, insertDraftRevision, insertIdentity, listBindings,
+  deactivateBinding, getBinding, getIdentity, getRevision, insertBinding, insertDraftRevision, insertDraftRevisionUnique, insertIdentity, listBindings,
   listIdentities, listRevisions, countRevisionReferences, findIdentityBySlug, transitionRevisionStatus, updateDraftContent,
   withTemplatesTransaction, TemplatePersistenceError, type TemplatesContext,
 } from "../../../db/institutionalTemplates";
@@ -49,6 +49,13 @@ export function createTemplateRepositoryAdapter(): TemplateRepositoryPort {
         if (err instanceof TemplatePersistenceError && err.code === "CONFLICT") throw new DuplicateTemplateRevisionError();
         return translatePersistenceError(err);
       }
+    },
+    async insertDraftRevisionUnique(revision, p) {
+      const ctx = tctx(revision.organizationId, p);
+      try {
+        const r = await withTemplatesTransaction("template.revision.insert_unique", ctx, (tx) => insertDraftRevisionUnique(tx, ctx, revision));
+        return { revision: r.revision, created: r.created };
+      } catch (err) { return translatePersistenceError(err); }
     },
     async updateDraftContent(org, before, after, p) {
       const ctx = tctx(org, p);

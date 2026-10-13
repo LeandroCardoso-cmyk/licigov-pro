@@ -10,6 +10,8 @@
  *    `provenance.status = "FAILED"` (a matriz de prontidão a mostra BLOCKED) e o registro pode ser repetido pela mesma rota.
  */
 import { isAstV2, isCatalogV2, validateAnyTemplateAst, validateTemplateAst, type TemplateDocumentKind, type TemplateIdentity, type TemplateRevision } from "../../domain/institutionalTemplates";
+import type { TemplateAST2 } from "../../domain/institutionalTemplates/ast2";
+import { revisionSemanticHash } from "../../domain/institutionalTemplates/semanticHash";
 import { isSha256 } from "../../domain/institutionalTemplates/types";
 import type { ImportProvenance } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { readScope, validateExplicitScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
@@ -36,6 +38,15 @@ export const MODEL_REGISTRATION_PRESETS = Object.freeze(MODEL_PACKAGES.filter((p
   sourceKind: "MODEL_PACKAGE" as const,
   sourceLogicalVersion: p.provenance.sourceLogicalVersion, sourceSha256: p.provenance.sourceSha256,
 })));
+
+/** Formato de fonte gravado na procedência de um pacote de modelo versionado (o pacote é AST nativa). Uma só definição para registro e validação. */
+export const PACKAGE_SOURCE_FORMAT = "NATIVE" as const;
+
+/** Resumo do inventário derivado do PACOTE aprovado (hash + contagens): a MESMA derivação do registro e da validação da procedência do candidato. */
+export function summarizePackageInventory(pkg: ModelPackage): { sha256: string; inputsTotal: number; controlOnlyInputs: number; conditionTypes: number } {
+  const built = buildSourceInventory({ mapping: pkg.mapping, catalog: pkg.catalog, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256 });
+  return { sha256: inventoryHash(built), ...inventoryCounts(built) };
+}
 
 export type RegistrationSource =
   | { readonly kind: "AST"; readonly ast: unknown; /** Obrigatório para `tpl-ast/2`: versão do catálogo tpl-catalog/2 (registrado em código) do modelo. */ readonly catalogVersion?: string }
@@ -79,7 +90,12 @@ export interface ModelRegistrationOptions {
 export class ModelRegistrationService {
   constructor(private readonly ports: TemplateWorkflowPorts, private readonly options: ModelRegistrationOptions = {}) {}
 
-  async register(ctx: WorkflowContext, input: RegisterModelInput): Promise<RegisterModelResult> {
+  /**
+   * `resumeDraftRevisionId` (uso interno da ferramenta controlada de candidatos): COMPLETA a procedência de um DRAFT já criado por este mesmo
+   * registro (a falha de procedência deixa o DRAFT sem ela). Nenhuma revisão nova é criada; o DRAFT precisa pertencer à identidade de destino,
+   * estar em DRAFT e ter exatamente o hash semântico do pacote.
+   */
+  async register(ctx: WorkflowContext, input: RegisterModelInput, internal: { readonly resumeDraftRevisionId?: string; /** DRAFT exclusivo por hash, atômico no banco (registro controlado de candidata). */ readonly uniqueDraft?: boolean } = {}): Promise<RegisterModelResult> {
     assertHumanActor(ctx.actor);
     if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para registrar o modelo (nada foi criado)");
     if (!isSha256(input.sourceSha256)) throw new TemplateWorkflowError("VALIDATION_FAILED", "SHA-256 da fonte inválido (64 hex minúsculos)");
@@ -106,7 +122,7 @@ export class ModelRegistrationService {
       if (input.inventory !== undefined && inventoryHash(parseSourceInventory(input.inventory).ok ? (input.inventory as never) : built) !== inventoryHash(built)) {
         throw new TemplateWorkflowError("VALIDATION_FAILED", "o inventário informado difere do derivado do pacote aprovado");
       }
-      inventorySummary = { sha256: inventoryHash(built), ...inventoryCounts(built) };
+      inventorySummary = summarizePackageInventory(pkg);
     } else if (input.inventory !== undefined) {
       const parsed = parseSourceInventory(input.inventory);
       if (!parsed.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "inventário da fonte inválido", parsed.issues.map((m) => ({ code: "INVENTORY_INVALID", path: "inventory", message: m })));
@@ -122,7 +138,17 @@ export class ModelRegistrationService {
     const identity = input.target.kind === "NEW_IDENTITY"
       ? await wf.createIdentity(ctx, { documentKind: input.target.documentKind, slug: input.target.slug, displayName: input.displayName })
       : await this.requireIdentity(ctx, input.target.identityId);
-    const revision = await wf.createDraft(ctx, { identityId: identity.id, ast, sourceFormat, ...(catalogVersion ? { catalogVersion } : {}) });
+    let revision: TemplateRevision;
+    if (internal.resumeDraftRevisionId !== undefined) {
+      if (input.target.kind !== "EXISTING_IDENTITY") throw new TemplateWorkflowError("VALIDATION_FAILED", "a retomada exige a identidade existente (nada foi criado)");
+      const existing = await this.ports.repository.getRevision(ctx.organizationId, internal.resumeDraftRevisionId);
+      if (!existing || existing.organizationId !== ctx.organizationId || existing.identityId !== identity.id) throw new TemplateWorkflowError("NOT_FOUND", "revisão DRAFT não encontrada nesta identidade");
+      const expectedHash = revisionSemanticHash({ ast: ast as TemplateAST2, variableCatalogVersion: catalogVersion ?? "" });
+      if (existing.status !== "DRAFT" || existing.semanticHash !== expectedHash) throw new TemplateWorkflowError("VALIDATION_FAILED", "a revisão a retomar não é o DRAFT deste pacote (status/hash divergem; nada foi alterado)");
+      revision = existing;
+    } else {
+      revision = await wf.createDraft(ctx, { identityId: identity.id, ast, sourceFormat, ...(catalogVersion ? { catalogVersion } : {}), ...(internal.uniqueDraft ? { uniqueSemanticHash: true } : {}) });
+    }
     if (revision.status !== "DRAFT") throw new TemplateWorkflowError("TRANSITION_INVALID", "invariante violada: a revisão importada deve nascer DRAFT");
 
     let provenance: RegisterModelResult["provenance"];
@@ -157,7 +183,7 @@ export class ModelRegistrationService {
 
   private async resolveSource(source: RegistrationSource, pkg: ModelPackage | null): Promise<{ ast: unknown; sourceFormat: "NATIVE" | "MARKDOWN_IMPORT" | "DOCX_IMPORT"; catalogVersion?: string }> {
     const catalog = this.ports.catalog.current();
-    if (source.kind === "MODEL_PACKAGE") return { ast: pkg!.ast, sourceFormat: "NATIVE", catalogVersion: pkg!.catalog.version };
+    if (source.kind === "MODEL_PACKAGE") return { ast: pkg!.ast, sourceFormat: PACKAGE_SOURCE_FORMAT, catalogVersion: pkg!.catalog.version };
     if (source.kind === "AST" && isAstV2(source.ast)) {
       if (!source.catalogVersion) throw new TemplateWorkflowError("VALIDATION_FAILED", "tpl-ast/2 exige catalogVersion (catálogo tpl-catalog/2 do modelo)");
       const c2 = this.ports.catalog.byVersion(source.catalogVersion);

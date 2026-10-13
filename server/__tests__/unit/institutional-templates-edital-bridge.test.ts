@@ -56,6 +56,20 @@ function depsOf(opts: { enabled?: boolean; bindings?: any[]; revisions?: any[]; 
 }
 const WS = { modality: "pregao", form: "eletronico", platform: "bll" } as const;
 
+describe("resolveEditalTemplate — linearização temporal (resolução OPERACIONAL)", () => {
+  it("vínculo ATIVO cuja vigência carimbada está À FRENTE do relógio do leitor (swap de outra réplica/instante posterior) continua BOUND — nunca NOT_BOUND/legado", async () => {
+    for (const effectiveFrom of ["2026-10-09T12:00:00.001Z", "2026-10-09T12:00:00.700Z", "2099-01-01T00:00:00Z"]) {
+      const r: any = await resolveEditalTemplate(depsOf({ bindings: [binding({ effectiveFrom })] }), ORG, WS);
+      expect(r.status, effectiveFrom).toBe("BOUND");
+    }
+  });
+  it("o relógio do leitor não é consultado para decidir o vínculo", async () => {
+    const deps = depsOf(); const now = vi.fn(() => NOW);
+    await resolveEditalTemplate({ ...deps, now }, ORG, WS);
+    expect(now).not.toHaveBeenCalled();
+  });
+});
+
 describe("resolveEditalTemplate — estados autoritativos", () => {
   it("BLL resolve SOMENTE pregao+eletronica+bll (igualdade exata, sem aproximação)", async () => {
     const r: any = await resolveEditalTemplate(depsOf(), ORG, WS);
@@ -109,15 +123,18 @@ describe("generateEditalRouted — o servidor decide o motor; institucional nunc
       expect(t.legacy).toHaveBeenCalledTimes(1); expect(t.institutional).not.toHaveBeenCalled();
     }
   });
-  it("C) BOUND ⇒ institucional, escopo NORMALIZADO, asOf do servidor e TR exato; legado NÃO chamado", async () => {
+  it("C) BOUND ⇒ institucional, escopo NORMALIZADO, resolução OPERACIONAL (sem asOf pré-capturado) e TR exato; legado NÃO chamado", async () => {
     const t = run(depsOf());
     const r: any = await t.result;
     expect(r.mode).toBe("INSTITUTIONAL_TEMPLATE");
     expect(t.legacy).not.toHaveBeenCalled();
     expect(t.institutional).toHaveBeenCalledWith(expect.objectContaining({
       organizationId: ORG, subjectId: "p1", documentKind: "edital", documentType: "edital", scope: { modality: "pregao", form: "eletronica", platform: "bll" },
-      asOf: NOW, actorUserId: 5, correlationId: "c1", officialPins: { TR }, title: "Edital — Aquisição",
+      actorUserId: 5, correlationId: "c1", officialPins: { TR }, title: "Edital — Aquisição",
+      expectedRevisionId: "tr1",                                  // PIN da revisão exibida: a composição falha se uma troca concorrente mudar o vínculo
     }));
+    // contrato de linearização: nenhum instante é capturado antes da leitura dos vínculos (a geração resolve o vínculo ATIVO lido de forma consistente)
+    expect((t.institutional.mock.calls[0] as unknown[])[0]).not.toHaveProperty("asOf");
     expect(r.template).toMatchObject({ revisionId: "tr1", identityId: "ti1" });
   });
   it("D) BOUND + falha institucional ⇒ ERRO; legado NÃO é chamado (sem fallback silencioso)", async () => {

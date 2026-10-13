@@ -24,7 +24,7 @@ import { RevisionStatusBadge } from "@/components/institutionalTemplates/Revisio
 import { RevisionTable, type RevisionRow } from "@/components/institutionalTemplates/RevisionTable";
 import {
   ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyDecisionForm, emptyLegalEvidenceForm, emptyScopeForm, formatIssues, hasRoleAtLeast,
-  legalEvidencePayload, makeIdempotencyKey, revisionLabel, sampleValuesFromText, scopeFormProblems, scopeFromForm, scopeLabel, STATUS_EXPLANATION,
+  legalEvidencePayload, makeIdempotencyKey, replaceableBinding, revisionLabel, sampleValuesFromText, scopeFormProblems, scopeFromForm, scopeLabel, STATUS_EXPLANATION,
   validateDecisionForm, validateLegalEvidenceForm,
   type DecisionFormState, type LegalEvidenceFormState, type LifecycleAction, type ReadinessMatrixView, type RevisionStatus, type ResolutionView, type ScopeFormState,
 } from "@/lib/institutionalTemplatesView";
@@ -151,6 +151,8 @@ export default function InstitutionalTemplateDetail() {
   const scopeInput = scopeFromForm(bindScope);
   // A resolução é do escopo INFORMADO no formulário: escopo incompleto não é "conclusão global" (não consulta nem anuncia NOT_BOUND).
   const scopeComplete = Object.keys(scopeFormProblems(detail.data?.identity.documentKind ?? "tr", bindScope)).length === 0;
+  // Escopo já vinculado ⇒ a troca de revisão é ATÔMICA (replacesBindingId): nunca fica sem vínculo entre "desativar" e "criar".
+  const replaced = detail.data && scopeComplete ? replaceableBinding(bindings.data ?? [], detail.data.identity.documentKind, scopeInput) : null;
   const resolve = trpc.institutionalTemplates.bindings.resolve.useQuery({ documentKind: detail.data?.identity.documentKind ?? "tr", scope: scopeInput }, { enabled: enabled && !!detail.data && scopeComplete });
   const catalogRows = trpc.institutionalTemplates.catalog.list.useQuery({ documentKind: detail.data?.identity.documentKind }, { enabled: enabled && !!detail.data });
   const catalogRow = (catalogRows.data ?? []).find((r) => r.identityId === identityId);
@@ -284,11 +286,17 @@ export default function InstitutionalTemplateDetail() {
                 </select></div>
               <ScopeFields idPrefix="bind-scope" documentKind={identity.documentKind} value={bindScope} onChange={setBindScope} suggestions={scopeSuggestions}
                 persistedDimensions={persistedDims} showErrors={bindShowErrors} />
-              <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={bindConfirm} onChange={(e) => setBindConfirm(e.target.checked)} /><span>Confirmo que a revisão selecionada passa a ser a aplicada para este tipo e escopo.</span></label>
-              <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending}
+              {replaced && (
+                <p role="status" className="rounded-md border border-amber-500/40 p-2 text-xs" data-testid="binding-replace-notice">
+                  Este escopo já tem vínculo ativo ({(() => { const cur = revisions.find((x) => x.id === replaced.pinnedRevisionId); return cur ? revisionLabel(cur) : `revisão ${replaced.pinnedRevisionId ?? "—"}`; })()}).
+                  {bindRev === replaced.pinnedRevisionId ? " A revisão selecionada já é a vinculada: nada a trocar." : " Ao criar, o vínculo atual será SUBSTITUÍDO numa única operação atômica (o escopo nunca fica sem vínculo); a revisão anterior continua publicada e disponível para replay e retorno."}
+                </p>
+              )}
+              <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={bindConfirm} onChange={(e) => setBindConfirm(e.target.checked)} /><span>Confirmo que a revisão selecionada passa a ser a aplicada para este tipo e escopo{replaced ? " (substituindo o vínculo ativo acima)" : ""}.</span></label>
+              <Button size="sm" disabled={!bindRev || !bindConfirm || setBinding.isPending || bindings.isLoading || (!!replaced && bindRev === replaced.pinnedRevisionId)}
                 onClick={() => {
                   if (Object.keys(scopeFormProblems(identity.documentKind, bindScope)).length) { setBindShowErrors(true); return; }
-                  setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, effectiveFrom: new Date().toISOString(), confirm: true });
+                  setBinding.mutate({ documentKind: identity.documentKind, scope: scopeInput, identityId: identity.id, pinnedRevisionId: bindRev, confirm: true, ...(replaced ? { replacesBindingId: replaced.id } : {}) });
                 }}>Criar vínculo</Button>
             </CardContent></Card>
           ) : <p className="text-sm text-muted-foreground">Gerenciar vínculos exige papel de gestor ou superior.</p>}

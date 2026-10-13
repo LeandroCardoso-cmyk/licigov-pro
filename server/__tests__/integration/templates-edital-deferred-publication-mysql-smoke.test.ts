@@ -10,6 +10,8 @@
  *  P3   (PUB7, PUB15–PUB16) preenchimento parcial; emissão oficial com dados diferidos; documento emitido imutável / regeneração exige novo ciclo
  *  S    (SRP4–SRP7) pergunta operacional, decisão humana (sem origem anterior, sem heurística textual), gravação governada
  *  L    (LEGAL1–LEGAL4) composição NÃO consulta módulo/parecer/autorização jurídica
+ *  SEQ  sequência de publicação da Revisão 2 em tenant SINTÉTICO: ferramenta controlada (plano/registro DRAFT/replay/retomada de procedência) → evidência →
+ *       matriz READY → aprovação → publicação → substituição atômica do vínculo → composição → retorno à Revisão 1 (falha fechada, tenant cruzado, replay)
  * Só roda com DATABASE_URL. Nenhum dado real, nenhum processo 2026/253, nenhum modelo de produção.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -42,6 +44,23 @@ import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from 
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { getModelPackageVersion } from "../../services/institutionalTemplates/modelPackages";
 import { revisionSemanticHash } from "../../domain/institutionalTemplates/semanticHash";
+import { planCandidateRegistration, registerCandidateDraft, snapshotOrganizationTemplates } from "../../services/institutionalTemplates/candidateRegistrationService";
+import { hashPassword } from "../../services/passwordSecurity";
+import { buildSourceInventory } from "../../domain/institutionalTemplates/governance/packageInventory";
+import { inventoryCounts, inventoryHash } from "../../domain/institutionalTemplates/governance/sourceInventory";
+import { encodeImportProvenance, IMPORT_PROVENANCE_DECISION_TYPE, IMPORT_PROVENANCE_OUTCOME, IMPORT_PROVENANCE_SUBJECT } from "../../domain/institutionalTemplates/governance/importProvenance";
+import { readScope } from "../../domain/institutionalTemplates/governance/scopeDimensions";
+import { AdvisoryLockLostError, MAX_LOGICAL_LOCK_NAME, namespacedLockName, withDedicatedAdvisoryLock } from "../../db/advisoryLock";
+import { AdvisoryLockTimeoutError } from "../../db/migrationLock";
+import { candidateRegistrationLockName } from "../../services/institutionalTemplates/candidateRegistrationService";
+import { resolveEditalTemplate } from "../../services/institutionalTemplates/editalBridgeService";
+import { TemplateWorkflowError } from "../../services/institutionalTemplates/errors";
+import { deactivateBinding as dbDeactivateBinding, insertBinding as dbInsertBinding, withTemplatesTransaction } from "../../db/institutionalTemplates";
+import { main as candidateCli } from "../../../scripts/register-model-candidate";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { MODEL_REGISTRATION_PRESETS } from "../../services/institutionalTemplates/modelRegistrationService";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { buildEditalReadiness } from "../../../client/src/lib/editalReadiness";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
@@ -50,7 +69,7 @@ import {
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
+  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const R2 = getModelPackageVersion(BLL.modelKey, "1.0.2-draft")!;
@@ -64,6 +83,7 @@ let orgSeq = 0;
 let keySeq = 0;
 const key = (p: string) => `${p}-${RUN}-${++keySeq}-pdf`;
 const ORGS: number[] = [];
+const CLI_USERS: number[] = [];
 const newOrg = () => { const o = BASE_ORG + orgSeq++; ORGS.push(o); return o; };
 
 let conn: mysql.Connection;
@@ -110,6 +130,13 @@ async function prepareOrg(label: string, rev: RevNo = 2): Promise<P> {
   const tr = await seedOfficialTr(conn, w, 1, "TERMO DE REFERÊNCIA — conteúdo sintético v1", TR_META);
   return { org, w, tr, model: await publishBll(org, rev) };
 }
+/** Segundo processo do MESMO órgão (outro nº, itens e TR próprios). */
+async function addProcess(base: P, label: string, seq: number): Promise<P> {
+  const w = await seedExtraProcess(base.org, label, seq);
+  const tr = await seedOfficialTr(conn, w, 1, `TERMO DE REFERÊNCIA — ${label}`, TR_META);
+  return { ...base, w, tr };
+}
+
 /** Estado de preparação; por padrão com o TR EXATO selecionado (como a tela faz); `pinned=false` ⇒ ainda sem seleção do TR. */
 const getState = async (p: P, pinned = true): Promise<PreparationStateView> =>
   (await proc(p.org).editalTemplatePreparation({ processId: p.w.processId, ...WS, ...(pinned ? { officialPins: pin(p.tr) } : {}) })) as any;
@@ -215,6 +242,10 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
   afterAll(async () => {
     if (!conn) return;
     await cleanupOrgs(conn, ORGS).catch(() => {});
+    if (CLI_USERS.length) {
+      await conn.query(`DELETE FROM organization_members WHERE userId IN (${CLI_USERS.map(() => "?").join(",")})`, CLI_USERS).catch(() => {});
+      await conn.query(`DELETE FROM users WHERE id IN (${CLI_USERS.map(() => "?").join(",")})`, CLI_USERS).catch(() => {});
+    }
     if (ORGS.length) await conn.query(`DELETE FROM procurement_context_facts WHERE organization_id IN (${ORGS.map(() => "?").join(",")})`, ORGS).catch(() => {});
     if (installedReferenceSet) for (const t of ["legal_reference_set_events", "legal_value_overrides", "legal_reference_entries", "legal_reference_sets"]) await conn.query(`DELETE FROM ${t}`).catch(() => {});
     await conn.end();
@@ -596,4 +627,882 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
       expect(out.revision.semanticHash).toBe(revisionSemanticHash({ ast: pkg.ast as never, variableCatalogVersion: pkg.catalog.version }));
     }
   }, 180_000);
+
+  // ───────────────────────── Sequência de publicação da Revisão 2 (ferramenta controlada → vínculo → retorno) ─────────────────────────
+  const R1_HASH = "e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d";
+  const R2_HASH = "33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd";
+  const wfOf = () => new InstitutionalTemplatesWorkflow(getTemplateWorkflowPorts());
+  const govOf = () => new TemplateGovernanceService(getTemplateWorkflowPorts());
+  const candReq = (p: P, over: Record<string, unknown> = {}): any => ({
+    organizationId: p.org, identityId: p.model!.identityId, actorUserId: U_MANAGER, runId: key("run"), modelKey: BLL.modelKey, packageVersion: "1.0.2-draft",
+    expected: { sourceSha256: R2.provenance.sourceSha256, semanticHash: R2_HASH, baselineSemanticHash: R1_HASH }, decision: decision({ basisReference: "Execução sintética de teste" }), ...over,
+  });
+  const revisionsOf = async (p: P) => [...(await getTemplateWorkflowPorts().repository.listRevisions(p.org, p.model!.identityId))];
+  const activeBindings = async (p: P) => (await wfOf().listBindings(ctxOf(p.org), { documentKind: "edital", activeOnly: true })).filter((b) => b.identityId === p.model!.identityId);
+  const lifecycle = (p: P, revisionId: string, expectedStatus: string, k: string) => ({ revisionId, expectedStatus: expectedStatus as any, confirm: true as const, idempotencyKey: key(k), decision: decision({ basisReference: "Ato sintético de teste" }) });
+  const R2_SCOPE = { ...BLL.declaredScope } as any;
+
+  it("SEQ — Revisão 2 no tenant sintético: ferramenta controlada → DRAFT → evidência → matriz READY → aprovação → publicação → substituição atômica → retorno à Revisão 1", async () => {
+    const p = await prepareOrg("seq", 1);                                                           // Revisão 1 PUBLICADA e vinculada (como em produção)
+    const r1Id = p.model!.revisionId;
+    const r1Before = await getTemplateWorkflowPorts().repository.getRevision(p.org, r1Id);
+    expect(r1Before!.semanticHash).toBe(R1_HASH); expect(r1Before!.status).toBe("PUBLISHED");
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    await fillTrueDecisions(p);
+    const d1 = await callGen(p);                                                                    // M1 da Revisão 1 (para replay depois)
+    expect(d1.template.revisionId).toBe(r1Id);
+    const draftR1 = (await draftText(p))!;
+    const bindingsBefore = await activeBindings(p);
+    expect(bindingsBefore).toHaveLength(1); expect(bindingsBefore[0].pinnedRevisionId).toBe(r1Id);
+
+    // PLANO (somente leitura) — nada muda
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p));
+    expect(plan.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(plan).toMatchObject({ ok: true, action: "REGISTER_DRAFT", baselineRevisionId: r1Id, candidateRevisionId: null });
+    expect(await revisionsOf(p)).toHaveLength(1);
+    const other = await prepareOrg("seq-b", 1);
+    const snapExp = { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH };
+    const snap0 = await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, snapExp, true);
+    expect(snap0.identities).toHaveLength(1);
+    expect(snap0.identities[0]).toMatchObject({ id: p.model!.identityId, hasBaselinePublished: true, candidateRegistered: false });
+    expect(snap0.identities[0].activeBindings).toHaveLength(1);
+    expect(JSON.stringify(snap0)).not.toMatch(/"ast"|content|numeroPregao/);                          // sem conteúdo de modelo nem dados de processo
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), other.org, snapExp, true)).identities.map((i) => i.id)).not.toContain(p.model!.identityId);   // isolamento de tenant
+
+    // FALHA FECHADA: hash esperado errado / identidade de OUTRO tenant / pacote vigente como candidato ⇒ nada criado
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { expected: { sourceSha256: R2.provenance.sourceSha256, semanticHash: "0".repeat(64), baselineSemanticHash: R1_HASH } }))).rejects.toThrow(/recusado/);
+    const cross = candReq(other, { identityId: p.model!.identityId });                              // órgão B apontando para a identidade do órgão A
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), cross)).checks.find((c) => c.id === "IDENTITY_IN_TENANT")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), cross)).rejects.toThrow(/recusado/);
+    expect(await revisionsOf(p)).toHaveLength(1); expect(await revisionsOf(other)).toHaveLength(1);
+    // a API pública/serviço padrão NUNCA registra candidato, e o candidato não está nos presets
+    await expect(new ModelRegistrationService(getTemplateWorkflowPorts()).register(ctxOf(p.org), {
+      target: { kind: "EXISTING_IDENTITY", identityId: p.model!.identityId }, templateKey: BLL.modelKey, displayName: BLL.displayName, declaredScope: R2_SCOPE,
+      source: { kind: "MODEL_PACKAGE", modelKey: BLL.modelKey, packageVersion: "1.0.2-draft" }, sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256,
+      confirm: true, idempotencyKey: key("nope"), decision: decision(),
+    })).rejects.toThrow(/candidato/);
+    expect(MODEL_REGISTRATION_PRESETS.map((x) => x.presetId)).toEqual([BLL.modelKey]);
+    expect(await revisionsOf(p)).toHaveLength(1);
+
+    // EXECUÇÃO: só DRAFT + procedência; replay converge
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(done).toMatchObject({ performed: "REGISTER_DRAFT", provenance: "RECORDED" });
+    const r2Id = done.revisionId!;
+    const revs = await revisionsOf(p);
+    expect(revs).toHaveLength(2);
+    expect(revs.find((r) => r.id === r2Id)).toMatchObject({ status: "DRAFT", semanticHash: R2_HASH, revision: 2 });
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, snapExp, true)).identities[0]).toMatchObject({ candidateRegistered: true });
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual(bindingsBefore.map((b) => b.id));          // nenhum vínculo tocado
+    const again = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(again).toMatchObject({ performed: "NONE", revisionId: r2Id }); expect(await revisionsOf(p)).toHaveLength(2);
+
+    // MATRIZ: sem evidência ⇒ só a evidência bloqueia; aprovar não publica; publicar é recusado (fail closed)
+    const matrix = async () => ((await tpl(p.org).readiness.evaluate({ revisionId: r2Id })) as any).matrix;
+    expect((await matrix()).checks.filter((c: any) => c.status === "BLOCKED").map((c: any) => c.id)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    await wfOf().approve(ctxOf(p.org), lifecycle(p, r2Id, "DRAFT", "ap"));
+    await expect(wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb0"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
+    expect((await revisionsOf(p)).find((r) => r.id === r2Id)!.status).toBe("APPROVED");
+    // evidência que NÃO cobre a versão lógica da candidata (a da Revisão 1) ⇒ continua bloqueado
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: r2Id, expectedVersion: 0, confirm: true, idempotencyKey: key("ev0"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: BLL.provenance.sourceLogicalVersion, sourceSha256: BLL.provenance.sourceSha256 } });
+    expect((await matrix()).checks.find((c: any) => c.id === "LEGAL_APPROVAL_EVIDENCE").status).toBe("BLOCKED");
+    await expect(wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb1"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
+    // evidência correspondente (versão lógica + SHA + hash semântico da revisão exata) ⇒ READY
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: r2Id, expectedVersion: 1, confirm: true, idempotencyKey: key("ev1"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256 } });
+    expect((await matrix()).overall).toBe("READY");
+    await wfOf().publish(ctxOf(p.org), lifecycle(p, r2Id, "APPROVED", "pb2"));
+    const afterPub = await revisionsOf(p);
+    expect(afterPub.find((r) => r.id === r2Id)!.status).toBe("PUBLISHED");
+    expect(afterPub.find((r) => r.id === r1Id)!.status).toBe("PUBLISHED");                          // publicar NÃO deprecia a Revisão 1
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);              // publicar NÃO troca o vínculo
+
+    // VÍNCULO: sem substituição explícita ⇒ ambíguo (nada muda); tenant cruzado ⇒ não encontrado; com replacesBindingId ⇒ troca ATÔMICA
+    const bind = (org: number, identityId: string, rev: string, replaces?: string) => wfOf().setBinding(ctxOf(org), { documentKind: "edital", scope: R2_SCOPE, identityId, pinnedRevisionId: rev, effectiveFrom: "2026-10-13T00:00:00Z", confirm: true, ...(replaces ? { replacesBindingId: replaces } : {}) });
+    await expect(bind(p.org, p.model!.identityId, r2Id)).rejects.toThrow(/BINDING_AMBIGUOUS|binding ativo/i);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);
+    await expect(bind(other.org, p.model!.identityId, r2Id)).rejects.toThrow(/não encontrad/i);
+    expect(await activeBindings(other)).toHaveLength(1);
+    const swapped = await bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id);
+    const nowActive = await activeBindings(p);
+    expect(nowActive.map((b) => b.pinnedRevisionId)).toEqual([r2Id]); expect(nowActive[0].id).toBe(swapped.id);   // exatamente UM ativo (nunca zero nem dois)
+    expect((await bind(p.org, p.model!.identityId, r2Id, bindingsBefore[0].id)).id).toBe(swapped.id);          // replay da troca (resultado incerto) CONVERGE para o mesmo vínculo
+    expect(await activeBindings(p)).toHaveLength(1);
+
+    // COMPOSIÇÃO pela Revisão 2 (sem número/cronograma) e Revisão 1 intacta para replay
+    const p2 = await addProcess(p, "seq2", 2);
+    await fillTrStamped(p2); await setBudgetDisclosure(harnessOf(p2)); await setItemsParticipation(harnessOf(p2)); await fillTrueDecisions(p2);
+    const g2 = await callGen(p2);
+    expect(g2.template.revisionId).toBe(r2Id);
+    expect((await draftText(p2))!).toContain(PLACEHOLDER);
+    expect(await draftText(p)).toBe(draftR1);                                                       // rascunho/M1 da Revisão 1 inalterados
+    expect(((await proc(p.org).editalTemplateReviewState({ processId: p.w.processId })) as any).revalidation.status).toBe("PASSED");
+
+    // RETORNO à Revisão 1 (mesma troca atômica); Revisão 2 continua publicada, sem vínculo
+    await bind(p.org, p.model!.identityId, r1Id, swapped.id);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);
+    expect((await revisionsOf(p)).find((r) => r.id === r2Id)!.status).toBe("PUBLISHED");
+    const stP2 = await getState(p2);
+    expect(stP2.capabilities).toEqual({ governedDraftRecomposition: false });                        // voltou a semântica da Revisão 1 (sem recomposição)
+    const r1After = await getTemplateWorkflowPorts().repository.getRevision(p.org, r1Id);
+    expect(r1After!.semanticHash).toBe(R1_HASH); expect(r1After!.status).toBe("PUBLISHED");
+    expect(JSON.stringify(r1After!.ast)).toBe(JSON.stringify(r1Before!.ast));
+    METRICS.SEQ = { r1Hash: R1_HASH, r2Hash: R2_HASH, steps: "plan>register>replay>matrix>approve>blocked>evidence>READY>publish>replace>compose>return" };
+  }, 600_000);
+
+  it("SEQ-PROV — DRAFT do candidato sem procedência (falha parcial) é COMPLETADO sem criar nova revisão", async () => {
+    const p = await prepareOrg("seqprov", 1);
+    // DRAFT criado sem procedência (o estado que uma falha parcial deixaria)
+    const draft = await wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p));
+    expect(plan).toMatchObject({ ok: true, action: "RECORD_PROVENANCE", candidateRevisionId: draft.id, candidateProvenanceRecorded: false });
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    expect(done).toMatchObject({ performed: "RECORD_PROVENANCE", provenance: "RECORDED", revisionId: draft.id });
+    expect(await revisionsOf(p)).toHaveLength(2);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "NONE" });
+    expect(((await tpl(p.org).readiness.evaluate({ revisionId: draft.id })) as any).matrix.checks.find((c: any) => c.id === "SOURCE_PROVENANCE").status).toBe("PASS");
+  }, 240_000);
+
+  // ───────────────────────── CLI de candidato — guardas de execução e autenticação do executor (banco real) ─────────────────────────
+  const dbName = DB ? new URL(DB).pathname.slice(1) : "";
+  const cliUser = async (org: number, role: string, opts: { password?: string; ativo?: boolean; member?: boolean } = {}) => {
+    const email = `cli-${RUN}-${++keySeq}@orgao-sintetico.test`;
+    const pw = opts.password ?? "Senha-Sintetica-1!";
+    const [r] = await conn.execute("INSERT INTO users (openId, name, email, passwordHash, loginMethod) VALUES (?, ?, ?, ?, 'password')", [`cli-${RUN}-${keySeq}`, `Executor ${keySeq}`, email, await hashPassword(pw)]) as any;
+    CLI_USERS.push(r.insertId);
+    if (opts.member !== false) await conn.execute("INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, ?, ?)", [org, r.insertId, role, opts.ativo === false ? 0 : 1]);
+    return { id: r.insertId as number, email, pw };
+  };
+  const authFile = (over: Record<string, unknown> = {}) => {
+    const f = path.join(mkdtempSync(path.join(tmpdir(), "cand-auth-")), "authority.json");
+    writeFileSync(f, JSON.stringify({ decidedByName: "Executor Sintético", decidedByRole: "Operador", decidedAt: "2026-10-13", basisReference: "Execução sintética de teste", reason: "Registro do DRAFT da candidata", ...over }));
+    return f;
+  };
+  const runCli = async (p: P, o: { email?: string; password?: string; env?: [string | undefined, string | undefined]; extra?: string[]; omit?: string[]; authority?: string; database?: string }): Promise<number> => {
+    const savedEnv = { a: process.env.APP_ENV, n: process.env.NODE_ENV, e: process.env.CANDIDATE_EXECUTOR_EMAIL, p: process.env.CANDIDATE_EXECUTOR_PASSWORD, argv: process.argv };
+    const set = (k: string, v: string | undefined) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+    try {
+      if (o.env) { set("APP_ENV", o.env[0]); set("NODE_ENV", o.env[1]); }
+      set("CANDIDATE_EXECUTOR_EMAIL", o.email); set("CANDIDATE_EXECUTOR_PASSWORD", o.password);
+      const args = ["--mode=execute", `--organization-id=${p.org}`, `--identity-id=${p.model!.identityId}`, "--package-version=1.0.2-draft", `--expect-semantic-hash=${R2_HASH}`,
+        `--expect-baseline-hash=${R1_HASH}`, `--expect-source-sha256=${R2.provenance.sourceSha256}`, `--authority-file=${o.authority ?? authFile()}`,
+        `--confirm=REGISTER_CANDIDATE_DRAFT:${p.org}:${p.model!.identityId}:${R2_HASH.slice(0, 12)}`, `--expect-database=${o.database ?? dbName}`, "--allow-production", ...(o.extra ?? [])]
+        .filter((a) => !(o.omit ?? []).some((x) => a.startsWith(x)));
+      process.argv = ["node", "register-model-candidate.ts", ...args];
+      return await candidateCli();
+    } finally { set("APP_ENV", savedEnv.a); set("NODE_ENV", savedEnv.n); set("CANDIDATE_EXECUTOR_EMAIL", savedEnv.e); set("CANDIDATE_EXECUTOR_PASSWORD", savedEnv.p); process.argv = savedEnv.argv; }
+  };
+  const decisionsOf = async (revisionId: string) => rows("SELECT recorded_by_user_id u, decided_by_user_id d, correlation_id c FROM institutional_decisions WHERE subject_id = ?", [revisionId]);
+
+  it("CLI-EXEC — guarda de execução em qualquer ambiente + autenticação do executor: o ator registrado é o usuário AUTENTICADO", async () => {
+    const p = await prepareOrg("cliexec", 1);
+    const other = await prepareOrg("cliexec-b", 1);
+    const op = await cliUser(p.org, "operator");
+    const viewer = await cliUser(p.org, "viewer"); const inactive = await cliUser(p.org, "owner", { ativo: false });
+    const foreign = await cliUser(other.org, "owner", { member: true });                              // membro só do órgão B
+    const noMember = await cliUser(p.org, "owner", { member: false });
+    const revCount = async () => (await revisionsOf(p)).length;
+
+    // G1 — rótulos de ambiente nunca dispensam as guardas (todas as combinações; o banco real está conectado)
+    for (const env of [[undefined, undefined], ["development", "production"], ["production", "development"], ["staging", "test"], ["production", "production"]] as Array<[string | undefined, string | undefined]>) {
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--allow-production"] })).rejects.toThrow(/--allow-production/);
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--expect-database"] })).rejects.toThrow(/--expect-database/);
+      await expect(runCli(p, { email: op.email, password: op.pw, env, omit: ["--confirm"] })).rejects.toThrow(/--confirm deve ser exatamente/);
+    }
+    expect(await revCount()).toBe(1);
+    // banco conectado ≠ banco esperado ⇒ recusa ANTES de autenticar ou escrever
+    await expect(runCli(p, { email: op.email, password: op.pw, database: "outro_banco" })).rejects.toThrow(/banco conectado não é o informado/);
+    // G2 — ator nunca digitado
+    await expect(runCli(p, { email: op.email, password: op.pw, extra: [`--actor-user-id=${op.id}`] })).rejects.toThrow(/--actor-user-id não existe mais/);
+    // autenticação: tudo recusado com a MESMA mensagem e nada escrito
+    const bad = [["senha errada", { email: op.email, password: "errada" }], ["e-mail desconhecido", { email: "nao-existe@orgao-sintetico.test", password: op.pw }],
+      ["viewer", { email: viewer.email, password: viewer.pw }], ["membership inativa", { email: inactive.email, password: inactive.pw }],
+      ["membro só de OUTRO órgão", { email: foreign.email, password: foreign.pw }], ["sem membership", { email: noMember.email, password: noMember.pw }]] as const;
+    const msgs = new Set<string>();
+    for (const [label, c] of bad) { const e = await runCli(p, c).catch((x) => x); expect(e, label).toBeInstanceOf(Error); msgs.add((e as Error).message); }
+    expect(msgs.size).toBe(1); expect([...msgs][0]).toMatch(/EXECUTOR_AUTH_FAILED/);
+    expect(await revCount()).toBe(1);
+    // autoridade declarada de OUTRA pessoa ⇒ recusa (depois de autenticar, antes de escrever)
+    await expect(runCli(p, { email: op.email, password: op.pw, authority: authFile({ decidedByUserId: op.id + 1000 }) })).rejects.toThrow(/difere do usuário autenticado/);
+    expect(await revCount()).toBe(1);
+
+    // sucesso: ator = usuário autenticado (id verificado no banco); correlation id da execução; autoridade amarrada
+    expect(await runCli(p, { email: op.email, password: op.pw })).toBe(0);
+    const revs = await revisionsOf(p);
+    expect(revs).toHaveLength(2);
+    const cand = revs.find((r) => r.semanticHash === R2_HASH)!;
+    const decs = await decisionsOf(cand.id);
+    expect(decs.length).toBeGreaterThan(0);
+    for (const d of decs) { expect(Number(d.u)).toBe(op.id); expect(Number(d.d)).toBe(op.id); expect(String(d.c)).toMatch(/^cand-reg-/); }
+    // replay (mesma credencial): nada novo; usuário com papel ≥ operator de outro nível também autentica
+    expect(await runCli(p, { email: op.email, password: op.pw })).toBe(0);
+    expect(await revCount()).toBe(2);
+    // Revisão 1 e vínculo intactos
+    expect((await revisionsOf(p)).find((r) => r.semanticHash === R1_HASH)).toMatchObject({ status: "PUBLISHED" });
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([p.model!.revisionId]);
+  }, 300_000);
+
+  // ───────────────────────── Amend corretivo P1/P2 — concorrência, swap sem NOT_BOUND, flag, integridade ─────────────────────────
+  const failingGovernance = (healthyAfter: number | null) => {
+    const real = getTemplateWorkflowPorts();
+    let calls = 0;
+    return {
+      ...real,
+      governance: { ...real.governance!, recordGovernanceDecision: async (r: any) => { calls++; if (healthyAfter === null || calls <= healthyAfter) throw new Error("falha injetada na procedência"); return real.governance!.recordGovernanceDecision(r); } },
+    } as any;
+  };
+  const candidates = async (p: P) => (await revisionsOf(p)).filter((r) => r.semanticHash === R2_HASH);
+  const provenanceOf = async (p: P, revisionId: string) => (await govOf().get(ctxOf(p.org), revisionId)).provenance;
+  const publishCandidate = async (p: P): Promise<string> => {
+    const done = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
+    const id = done.revisionId!;
+    await wfOf().approve(ctxOf(p.org), lifecycle(p, id, "DRAFT", "capp"));
+    await govOf().recordLegalEvidence(ctxOf(p.org), { revisionId: id, expectedVersion: 0, confirm: true, idempotencyKey: key("cev"), decision: decision({ basisReference: "Evidência sintética de teste" }),
+      evidence: { sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256 } });
+    await wfOf().publish(ctxOf(p.org), lifecycle(p, id, "APPROVED", "cpub"));
+    return id;
+  };
+
+  it("P1-CONC — execuções concorrentes da MESMA candidata convergem para UMA revisão com procedência correta (sem duplicata nem DRAFT órfão)", async () => {
+    const p = await prepareOrg("conc", 1);
+    const results = await Promise.allSettled(Array.from({ length: 6 }, () => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("cr") }))));
+    expect(results.filter((r) => r.status === "rejected").map((r: any) => String(r.reason?.message))).toEqual([]);
+    const cands = await candidates(p);
+    expect(cands).toHaveLength(1);                                                                     // exatamente UMA revisão com o hash da candidata
+    expect((await revisionsOf(p)).map((r) => r.revision).sort()).toEqual([1, 2]);                     // sem #3
+    expect((await provenanceOf(p, cands[0].id))).toMatchObject({ sourceLogicalVersion: "1.0.2-draft", revisionSemanticHash: R2_HASH });
+    const ids = new Set(results.map((r: any) => r.value.revisionId));
+    expect([...ids]).toEqual([cands[0].id]);                                                          // todas convergem para a mesma revisão
+    expect(results.filter((r: any) => r.value.performed === "REGISTER_DRAFT")).toHaveLength(1);       // só UMA escreveu
+    // nenhuma revisão do órgão sem procedência
+    for (const r of await revisionsOf(p)) expect(await provenanceOf(p, r.id), r.id).not.toBeNull();
+  }, 300_000);
+
+  it("P1-CONC — órgãos distintos registram em paralelo sem interferência (lock por organização+identidade, nunca global)", async () => {
+    const a = await prepareOrg("conc-a", 1); const b = await prepareOrg("conc-b", 1);
+    const { candidateRegistrationLockName } = await import("../../services/institutionalTemplates/candidateRegistrationService");
+    expect(candidateRegistrationLockName(a.org, a.model!.identityId)).not.toBe(candidateRegistrationLockName(b.org, b.model!.identityId));
+    expect(candidateRegistrationLockName(a.org, a.model!.identityId).length).toBeLessThanOrEqual(64);
+    const out = await Promise.all([a, b].flatMap((p) => [0, 1, 2].map(() => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("cx") })))));
+    expect(out).toHaveLength(6);
+    for (const p of [a, b]) { expect(await candidates(p)).toHaveLength(1); expect((await revisionsOf(p)).length).toBe(2); }
+  }, 300_000);
+
+  it("P1-CONC — falha parcial: procedência que falha é refeita (retry limitado); persistente ⇒ DRAFT sem procedência é RETOMADO sem 2ª revisão", async () => {
+    const p = await prepareOrg("partial", 1);
+    // falha transitória (1ª tentativa): o próprio comando recupera dentro do lock
+    const ok = await registerCandidateDraft(failingGovernance(1), candReq(p));
+    expect(ok).toMatchObject({ provenance: "RECORDED" });
+    expect(await candidates(p)).toHaveLength(1);
+    expect(await provenanceOf(p, (await candidates(p))[0].id)).not.toBeNull();
+    // falha persistente em OUTRO órgão: fica o DRAFT sem procedência e o resultado é FAILED (explícito)
+    const q = await prepareOrg("partial2", 1);
+    const bad = await registerCandidateDraft(failingGovernance(null), candReq(q));
+    expect(bad.provenance).toBe("FAILED");
+    expect(await candidates(q)).toHaveLength(1);
+    expect(await provenanceOf(q, (await candidates(q))[0].id)).toBeNull();
+    // retry com ports saudáveis, concorrente: completa a procedência SEM criar revisão
+    await Promise.all([0, 1, 2].map(() => registerCandidateDraft(getTemplateWorkflowPorts(), candReq(q, { runId: key("rt") }))));
+    expect(await candidates(q)).toHaveLength(1);
+    expect(await provenanceOf(q, (await candidates(q))[0].id)).not.toBeNull();
+    expect((await revisionsOf(q)).length).toBe(2);
+  }, 300_000);
+
+  it("P1-CONC — revisão CONFLITANTE (mesma versão de catálogo, AST diferente) ou DUPLICADA ⇒ recusa explícita, sem escrita", async () => {
+    // CONFLITANTE: DRAFT com o catálogo da candidata mas conteúdo (AST) diferente ⇒ hash semântico diferente
+    const c = await prepareOrg("conflict", 1);
+    const altered = JSON.parse(JSON.stringify(R2.ast));
+    let touched = false;
+    const walk = (n: any): void => { if (touched || n === null || typeof n !== "object") return; for (const k of Object.keys(n)) { if (!touched && n.t === "text" && k === "v" && typeof n[k] === "string" && n[k].length > 8) { n[k] = `${n[k]} (alterado)`; touched = true; } else walk(n[k]); } };
+    walk(altered);
+    expect(touched).toBe(true);
+    const odd = await wfOf().createDraft(ctxOf(c.org), { identityId: c.model!.identityId, ast: altered, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    expect(odd.semanticHash).not.toBe(R2_HASH);
+    const beforeC = (await revisionsOf(c)).length;
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(c))).checks.find((x) => x.id === "NO_CONFLICTING_REVISION")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(c))).rejects.toThrow(/NO_CONFLICTING_REVISION/);
+    expect((await revisionsOf(c)).length).toBe(beforeC);
+    // DUPLICADA: duas revisões com o hash da candidata (como o defeito antigo produzia) ⇒ a ferramenta recusa e não escreve
+    const p = await prepareOrg("dup", 1);
+    for (let i = 0; i < 2; i++) await wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version });
+    const before = (await revisionsOf(p)).length;
+    expect((await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p))).checks.find((x) => x.id === "CANDIDATE_UNIQUE")!.ok).toBe(false);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).rejects.toThrow(/CANDIDATE_UNIQUE/);
+    expect((await revisionsOf(p)).length).toBe(before);
+  }, 300_000);
+
+  it("P2-FLAG — registro exige a flag LIGADA para a organização exata, antes de qualquer escrita; plan/snapshot seguem somente leitura", async () => {
+    const on = await prepareOrg("flag-on", 1); const off = await prepareOrg("flag-off", 1);
+    await conn.execute("INSERT INTO tenant_feature_flags (organizationId, flagName, enabled, percentage) VALUES (?, 'FF_INSTITUTIONAL_TEMPLATES_V1', 0, 100) ON DUPLICATE KEY UPDATE enabled = 0, percentage = 100", [off.org]);
+    const { invalidateFlagCache } = await import("../../services/featureFlagService");
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", off.org);
+    const counts = async (p: P) => ({ revs: (await revisionsOf(p)).length, decisions: Number((await rows("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [p.org]))[0].n),
+      events: Number((await rows("SELECT COUNT(*) n FROM institutional_template_events WHERE organization_id = ?", [p.org]))[0].n), bindings: (await activeBindings(p)).map((b) => b.id) });
+    const before = await counts(off);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off))).rejects.toThrow(/MODULE_DISABLED/);
+    expect(await counts(off)).toEqual(before);                                                         // zero writes na recusa
+    // plan/snapshot: leitura (não escrevem) e mostram a flag desligada
+    const plan = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(off));
+    expect(plan.ok).toBe(false); expect(plan.checks.find((c) => c.id === "FLAG_ENABLED")!.ok).toBe(false);
+    expect((await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), off.org, { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH }, false)).flag.enabled).toBe(false);
+    expect(await counts(off)).toEqual(before);
+    // tenant divergente: o órgão LIGADO não habilita o desligado, e a identidade de um não vale no outro
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off, { identityId: on.model!.identityId }))).rejects.toThrow(/MODULE_DISABLED/);
+    expect(await counts(off)).toEqual(before);
+    // tenant habilitado registra; ligar a flag depois habilita o desligado
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(on))).toMatchObject({ performed: "REGISTER_DRAFT" });
+    await conn.execute("UPDATE tenant_feature_flags SET enabled = 1 WHERE organizationId = ? AND flagName = 'FF_INSTITUTIONAL_TEMPLATES_V1'", [off.org]);
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", off.org);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(off))).toMatchObject({ performed: "REGISTER_DRAFT" });
+    // desligar DEPOIS do plano e antes da escrita (corrida de flag): a escrita relê a flag e recusa
+    const late = await prepareOrg("flag-late", 1);
+    await conn.execute("INSERT INTO tenant_feature_flags (organizationId, flagName, enabled, percentage) VALUES (?, 'FF_INSTITUTIONAL_TEMPLATES_V1', 0, 100) ON DUPLICATE KEY UPDATE enabled = 0", [late.org]);
+    invalidateFlagCache("FF_INSTITUTIONAL_TEMPLATES_V1", late.org);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(late))).rejects.toThrow(/MODULE_DISABLED/);
+    expect((await revisionsOf(late)).length).toBe(1);
+  }, 300_000);
+
+  it("P1-BIND — o instante efetivo do swap é do SERVIDOR: relógio do navegador adiantado/atrasado nunca abre janela NOT_BOUND", async () => {
+    const p = await prepareOrg("bind", 1);
+    const r1Id = p.model!.revisionId;
+    const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const resolve = () => wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE });
+    const swap = (rev: string, replaces: string, clientTime?: string) => wfOf().setBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: rev, confirm: true, replacesBindingId: replaces, ...(clientTime ? { effectiveFrom: clientTime } : {}) });
+    // relógio ADIANTADO (ano 2099): antes ⇒ NOT_BOUND; agora o servidor ignora o valor do cliente
+    const t0 = Date.now();
+    const swapped = await swap(r2Id, old.id, "2099-01-01T00:00:00.000Z");
+    expect(Date.parse(swapped.effectiveFrom)).toBeGreaterThanOrEqual(t0 - 5);
+    expect(Date.parse(swapped.effectiveFrom)).toBeLessThanOrEqual(Date.now());
+    const r = await resolve();
+    expect(r.status).toBe("RESOLVED"); expect((r as any).binding.id).toBe(swapped.id); expect((r as any).revision.id).toBe(r2Id);
+    // relógio ATRASADO (ano 2000): também não retroage a vigência
+    const back = await swap(r1Id, swapped.id, "2000-01-01T00:00:00.000Z");
+    expect(Date.parse(back.effectiveFrom)).toBeGreaterThanOrEqual(t0 - 5);
+    expect(((await resolve()) as any).revision.id).toBe(r1Id);
+    // retry após resultado incerto (mesma troca repetida): converge para o MESMO vínculo, sem segundo ativo
+    const again = await swap(r1Id, swapped.id, "2099-01-01T00:00:00.000Z");
+    expect(again.id).toBe(back.id);
+    expect(await activeBindings(p)).toHaveLength(1);
+    // observação CONTÍNUA durante trocas sucessivas: nenhuma leitura vê NOT_BOUND
+    const seen: string[] = []; let stop = false;
+    const poll = (async () => { while (!stop) { seen.push((await resolve()).status); } })();
+    let cur = back;
+    for (const [rev, skew] of [[r2Id, "2099-12-31T23:59:59.000Z"], [r1Id, "1999-01-01T00:00:00.000Z"], [r2Id, "2099-01-01T00:00:00.000Z"], [r1Id, undefined]] as const) cur = await swap(rev, cur.id, skew);
+    stop = true; await poll;
+    expect(seen.length).toBeGreaterThan(8);
+    expect([...new Set(seen)]).toEqual(["RESOLVED"]);
+    expect((await activeBindings(p)).map((b) => b.pinnedRevisionId)).toEqual([r1Id]);                 // retorno atômico à Revisão 1
+    // Revisão 1 e Revisão 2 seguem PUBLICADAS (replay)
+    expect((await revisionsOf(p)).map((x) => x.status).sort()).toEqual(["PUBLISHED", "PUBLISHED"]);
+  }, 300_000);
+
+  it("P1-BIND — swaps CONCORRENTES: idênticos convergem; conflitantes ⇒ exatamente um vence (um único ativo), o outro é recusado; tenant alheio não substitui", async () => {
+    const p = await prepareOrg("bindc", 1); const other = await prepareOrg("bindc-b", 1);
+    const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const swap = (rev: string, replaces: string, org = p.org) => wfOf().setBinding(ctxOf(org), { documentKind: "edital", scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: rev, confirm: true, replacesBindingId: replaces });
+    // tenant alheio não toca o vínculo de p
+    await expect(swap(r2Id, old.id, other.org)).rejects.toThrow(/não encontrad/i);
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual([old.id]);
+    // idênticos em paralelo
+    const same = await Promise.allSettled([swap(r2Id, old.id), swap(r2Id, old.id), swap(r2Id, old.id)]);
+    expect(same.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message))).toEqual([]);
+    expect(new Set(same.map((x: any) => x.value.id)).size).toBe(1);
+    let active = await activeBindings(p); expect(active).toHaveLength(1); expect(active[0].pinnedRevisionId).toBe(r2Id);
+    // conflitantes em paralelo (R2 → R1 × R2 → R2'): um vence
+    const cur = active[0];
+    const conflict = await Promise.allSettled([swap(r1Id, cur.id), swap(r2Id, cur.id)]);
+    active = await activeBindings(p);
+    expect(active).toHaveLength(1);
+    expect(conflict.filter((x) => x.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
+    expect(["fulfilled", "rejected"]).toEqual(expect.arrayContaining(conflict.map((x) => x.status)));
+    // com a Revisão 2 ainda vinculada, ou voltou à 1: nunca zero nem dois ativos, e o escopo resolve
+    expect((await wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE })).status).toBe("RESOLVED");
+  }, 300_000);
+
+  it("P1-BIND — a API não aceita effectiveFrom do cliente (rota estrita); a tela não envia horário do navegador", async () => {
+    const p = await prepareOrg("bindapi", 1);
+    const r2Id = await publishCandidate(p);
+    const old = (await activeBindings(p))[0];
+    const base = { documentKind: "edital" as const, scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: r2Id, confirm: true, replacesBindingId: old.id };
+    await expect(tpl(p.org).bindings.set({ ...base, effectiveFrom: "2099-01-01T00:00:00.000Z" } as any)).rejects.toThrow();
+    expect((await activeBindings(p)).map((b) => b.id)).toEqual([old.id]);
+    const ok: any = await tpl(p.org).bindings.set(base as any);
+    expect(Date.parse(ok.effectiveFrom)).toBeLessThanOrEqual(Date.now());
+    expect(((await tpl(p.org).bindings.resolve({ documentKind: "edital", scope: R2_SCOPE })) as any).status).toBe("RESOLVED");
+  }, 300_000);
+
+
+  // ───────────────────────── SEGUNDO AMEND — validação INTEGRAL da procedência do candidato (plan / snapshot / register) ─────────────────────────
+  const builtInv = buildSourceInventory({ mapping: R2.mapping, catalog: R2.catalog, sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256 });
+  const goodProv = () => ({
+    templateKey: BLL.modelKey, displayName: R2.displayName, sourceLogicalVersion: R2.provenance.sourceLogicalVersion, sourceSha256: R2.provenance.sourceSha256, sourceFormat: "NATIVE",
+    scope: readScope(R2.declaredScope), inventory: { sha256: inventoryHash(builtInv), ...inventoryCounts(builtInv) },
+  });
+  /** DRAFT do candidato criado SEM procedência (como uma falha parcial deixaria). */
+  const bareDraft = async (p: P): Promise<string> => (await wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version })).id;
+  const recordProv = (p: P, revisionId: string, over: Record<string, unknown> = {}, expectedVersion = 0) => govOf().recordImportProvenance(ctxOf(p.org), {
+    revisionId, expectedVersion, confirm: true, idempotencyKey: key("pv"), decision: decision({ basisReference: "Procedência sintética de teste" }), provenance: { ...goodProv(), ...over } as any });
+  /** Decisão de procedência CRUA (conteúdo arbitrário no ledger), para simular registros que o serviço nunca produziria. */
+  const rawProv = (p: P, revisionId: string, evidence: string[], expectedRevision = 0) => getTemplateWorkflowPorts().governance!.recordGovernanceDecision({
+    organizationId: p.org, subjectType: IMPORT_PROVENANCE_SUBJECT, subjectId: revisionId, decisionType: IMPORT_PROVENANCE_DECISION_TYPE, outcome: IMPORT_PROVENANCE_OUTCOME,
+    decidedByName: "Maria Souza", decidedByRole: "Procuradora-Geral", decidedByUserId: null, decidedAt: "2026-10-06", basisReference: "Portaria 12/2026", reason: "teste", evidence,
+    recordedByUserId: U_MANAGER, expectedRevision, idempotencyKey: key("raw"), correlationId: "corr-raw-prov",
+  } as any);
+  const provDecisions = (p: P, revisionId: string) => count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND subject_id = ?", [p.org, revisionId]);
+  const planOf = (p: P) => planCandidateRegistration(getTemplateWorkflowPorts(), candReq(p));
+  const refused = async (p: P, revisionId: string, checkId: string, field?: string) => {
+    const before = await provDecisions(p, revisionId); const revs = (await revisionsOf(p)).length;
+    const plan: any = await planOf(p);
+    expect(plan.ok, JSON.stringify(plan.checks.filter((c: any) => !c.ok))).toBe(false);
+    expect(plan.action).toBe("NONE");
+    const failed = plan.checks.find((c: any) => c.id === checkId);
+    expect(failed?.ok, `check ${checkId}`).toBe(false);
+    if (field) expect(failed.detail).toContain(field);
+    await expect(registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("pr") }))).rejects.toThrow(/recusado/);
+    expect(await provDecisions(p, revisionId)).toBe(before);                                           // nenhum evento novo (nada sobrescrito, nada "corrigido" em silêncio)
+    expect((await revisionsOf(p)).length).toBe(revs);
+    return plan;
+  };
+
+  it("PROV-OK — procedência CORRETA (gravada à mão) ⇒ converge sem nenhuma escrita; snapshot informa CORRECT", async () => {
+    const p = await prepareOrg("prov-ok", 1); const id = await bareDraft(p); await recordProv(p, id);
+    const plan: any = await planOf(p);
+    expect(plan).toMatchObject({ ok: true, action: "NONE", candidateRevisionId: id, candidateProvenanceRecorded: true });
+    expect(plan.candidateProvenance).toMatchObject({ state: "CORRECT", versions: 1, diffs: [] });
+    const before = await provDecisions(p, id);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "NONE", revisionId: id, provenance: "ALREADY_RECORDED" });
+    expect(await provDecisions(p, id)).toBe(before);
+    const snap = await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH }, true, { modelKey: BLL.modelKey, packageVersion: "1.0.2-draft" });
+    expect(snap.identities[0]).toMatchObject({ candidateRegistered: true, candidateProvenance: "CORRECT" });
+  }, 240_000);
+
+  it("PROV-ABSENT — sem procedência ⇒ recuperação idempotente governada (uma escrita, mesma revisão)", async () => {
+    const p = await prepareOrg("prov-abs", 1); const id = await bareDraft(p);
+    const plan: any = await planOf(p);
+    expect(plan).toMatchObject({ ok: true, action: "RECORD_PROVENANCE" }); expect(plan.candidateProvenance).toMatchObject({ state: "ABSENT", versions: 0 });
+    const snap = await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH }, true, { modelKey: BLL.modelKey, packageVersion: "1.0.2-draft" });
+    expect(snap.identities[0]).toMatchObject({ candidateProvenance: "ABSENT" });
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "RECORD_PROVENANCE", provenance: "RECORDED", revisionId: id });
+    expect(await provDecisions(p, id)).toBe(1);
+  }, 240_000);
+
+  const DIVERGENCES: readonly [string, Record<string, unknown>, string][] = [
+    ["templateKey", { templateKey: "OUTRO_MODELO_SINTETICO" }, "templateKey"],
+    ["modelKey/displayName", { displayName: "Outro modelo" }, "displayName"],
+    ["versão lógica", { sourceLogicalVersion: "1.0.1" }, "sourceLogicalVersion"],
+    ["SHA-256 da fonte", { sourceSha256: "a".repeat(64) }, "sourceSha256"],
+    ["formato da fonte", { sourceFormat: "MARKDOWN" }, "sourceFormat"],
+    ["escopo (plataforma)", { scope: { ...readScope(R2.declaredScope), platform: "licitanet" } }, "scope.platform"],
+    ["escopo (modalidade ausente)", { scope: { form: "eletronica", platform: "bll" } }, "scope.modality"],
+    ["inventário (hash)", { inventory: { ...goodProv().inventory, sha256: "b".repeat(64) } }, "inventory.sha256"],
+    ["inventário (contagens)", { inventory: { ...goodProv().inventory, inputsTotal: goodProv().inventory.inputsTotal + 1 } }, "inventory.inputsTotal"],
+    ["inventário ausente", { inventory: undefined }, "inventory"],
+  ];
+  it.each(DIVERGENCES)("PROV-DIVERGENT — %s divergente ⇒ recusa explícita ANTES de qualquer evento novo (sem sobrescrever, sem corrigir em silêncio)", async (_name, over, field) => {
+    const p = await prepareOrg(`prov-d${++keySeq}`, 1); const id = await bareDraft(p); await recordProv(p, id, over);
+    const plan = await refused(p, id, "PROVENANCE_DIVERGENT", field);
+    expect(plan.candidateProvenance).toMatchObject({ state: "DIVERGENT" }); expect(plan.candidateProvenanceRecorded).toBe(false);
+    expect(plan.candidateProvenance.diffs.map((d: any) => d.field)).toContain(field);
+    const snap = await snapshotOrganizationTemplates(getTemplateWorkflowPorts(), p.org, { baselineSemanticHash: R1_HASH, semanticHash: R2_HASH }, true, { modelKey: BLL.modelKey, packageVersion: "1.0.2-draft" });
+    expect(snap.identities[0]).toMatchObject({ candidateProvenance: "DIVERGENT" });
+  }, 240_000);
+
+  it("PROV-DIVERGENT — hash semântico da procedência ≠ candidata (procedência de OUTRO conteúdo, p.ex. da Revisão 1) ⇒ recusa; inconsistência exige regularização humana", async () => {
+    const p = await prepareOrg("prov-prior", 1); const id = await bareDraft(p);
+    await rawProv(p, id, encodeImportProvenance(goodProv() as any, { revisionSemanticHash: R1_HASH, recordedAt: "2026-10-13T10:00:00.000Z" }));
+    await refused(p, id, "PROVENANCE_DIVERGENT", "revisionSemanticHash");
+  }, 240_000);
+
+  it("PROV-MALFORMED — registro ilegível ⇒ falha governada e observável (nada é escrito; não é tratado como 'ausente')", async () => {
+    const p = await prepareOrg("prov-mal", 1); const id = await bareDraft(p);
+    await rawProv(p, id, ["templateKey=EDITAL_PREGAO_ELETRONICO_BLL", "lixo=sem-os-demais-campos"]);
+    const plan = await refused(p, id, "PROVENANCE_MALFORMED");
+    expect(plan.candidateProvenance).toMatchObject({ state: "MALFORMED" });
+  }, 240_000);
+
+  it("PROV-REGULARIZE — divergência corrigida por NOVA versão humana (ledger append-only) ⇒ estado CORRECT; histórico preservado", async () => {
+    const p = await prepareOrg("prov-reg", 1); const id = await bareDraft(p);
+    await recordProv(p, id, { sourceSha256: "c".repeat(64) });
+    await refused(p, id, "PROVENANCE_DIVERGENT", "sourceSha256");
+    await recordProv(p, id, {}, 1);                                                                    // regularização humana: v2 correta (v1 permanece no ledger)
+    const plan: any = await planOf(p);
+    expect(plan).toMatchObject({ ok: true, action: "NONE" }); expect(plan.candidateProvenance).toMatchObject({ state: "CORRECT", versions: 2 });
+    expect(await provDecisions(p, id)).toBe(2);
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p))).toMatchObject({ performed: "NONE" });
+  }, 240_000);
+
+  it("PROV-STATE — candidata já APROVADA sem procedência não é retomável (DRAFT-only) ⇒ recusa; tenant alheio não vê a procedência", async () => {
+    const p = await prepareOrg("prov-st", 1); const other = await prepareOrg("prov-st2", 1); const id = await bareDraft(p);
+    await wfOf().approve(ctxOf(p.org), lifecycle(p, id, "DRAFT", "pst"));
+    await refused(p, id, "PROVENANCE_NOT_RESUMABLE");
+    const cross: any = await planCandidateRegistration(getTemplateWorkflowPorts(), candReq(other, { identityId: p.model!.identityId }));
+    expect(cross.ok).toBe(false); expect(cross.candidateRevisionId).toBeNull(); expect(cross.candidateProvenance ?? null).toBeNull();
+    expect(await provDecisions(other, id)).toBe(0);
+  }, 240_000);
+
+
+  // ───────────────────────── SEGUNDO AMEND — perda da sessão do advisory lock (MySQL real; sessão do lock MORTA com KILL) ─────────────────────────
+  const effectiveLockName = (p: P) => namespacedLockName(dbName, candidateRegistrationLockName(p.org, p.model!.identityId));
+  const lockHolder = async (name: string): Promise<number | null> => { const r = (await rows("SELECT IS_USED_LOCK(?) AS h", [name]))[0]; return r.h === null ? null : Number(r.h); };
+  /** Portas do executor 1: pára (barreira) na PRIMEIRA leitura de vínculos (dentro do plano, dentro do lock) — ponto determinístico, sem sleep. */
+  const pausedPorts = (b: ReturnType<typeof barrier>): any => {
+    const base = getTemplateWorkflowPorts(); let once = true;
+    return { ...base, repository: { ...base.repository, listBindings: async (...a: any[]) => { if (once) { once = false; b.reached(); await b.released; } return (base.repository.listBindings as any)(...a); } } };
+  };
+  const assertOneCandidate = async (p: P) => {
+    const cands = await candidates(p);
+    expect(cands).toHaveLength(1);                                                                     // exatamente UMA revisão com o hash da candidata
+    expect((await revisionsOf(p)).map((r) => r.revision).sort()).toEqual([1, 2]);
+    expect(await provDecisions(p, cands[0].id)).toBe(1);                                              // procedência consistente: uma versão
+    expect((await planOf(p) as any).candidateProvenance.state).toBe("CORRECT");
+    return cands[0];
+  };
+
+  it("LOCK-LOSS-1 — a sessão que SEGURA o lock é morta (KILL) no meio do callback; outro executor assume; o primeiro NÃO escreve (AdvisoryLockLostError); uma candidata, procedência consistente", async () => {
+    const p = await prepareOrg("lock1", 1);
+    const name = effectiveLockName(p);
+    const b = barrier();
+    const ex1 = registerCandidateDraft(pausedPorts(b), candReq(p, { runId: key("lk1") }));
+    const ex1Settled = ex1.then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
+    await b.atPoint;                                                                                  // executor 1 está DENTRO do lock, após o plano, antes de escrever
+    const holder = await lockHolder(name);
+    expect(holder).not.toBeNull();
+    await conn.query(`KILL ${Number(holder)}`);                                                      // a sessão dedicada do lock morre (como rede/failover)
+    for (let i = 0; i < 100 && (await lockHolder(name)) !== null; i++) await new Promise((r) => setTimeout(r, 20));   // o servidor libera o lock com a sessão
+    expect(await lockHolder(name)).toBeNull();
+    const ex2 = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("lk1b") }));   // outro executor adquire o lock livre e registra
+    expect(ex2).toMatchObject({ performed: "REGISTER_DRAFT", provenance: "RECORDED" });
+    b.release();                                                                                      // executor 1 retoma com o plano obsoleto
+    const r1 = await ex1Settled;
+    expect(r1.ok).toBe(false); expect(String((r1 as any).e)).toMatch(/perdido|AdvisoryLockLostError/);   // fail-closed: não escreveu
+    expect((r1 as any).e).toBeInstanceOf(AdvisoryLockLostError);
+    const cand = await assertOneCandidate(p);
+    expect(cand.id).toBe(ex2.revisionId);
+    // retry converge (idempotente); nenhum efeito em outro órgão
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("lk1c") }))).toMatchObject({ performed: "NONE", revisionId: cand.id });
+  }, 300_000);
+
+  it("LOCK-LOSS-2 — a sessão morre DEPOIS de assertHeld passar (janela inevitável): a escrita transacional exclusiva impede a 2ª revisão; o executor 1 CONVERGE para a mesma", async () => {
+    const p = await prepareOrg("lock2", 1);
+    const name = effectiveLockName(p);
+    const b = barrier(); const base = getTemplateWorkflowPorts(); let calls = 0;
+    // Fluxo do executor 1: plano (listRevisions #1) → assertHeld → register → createDraft (listRevisions #2 = leitura da numeração). Pausa ANTES da leitura #2:
+    // o lock ainda era dele em assertHeld, e a numeração será lida só DEPOIS de o outro executor comitar.
+    const ports1: any = { ...base, repository: { ...base.repository, listRevisions: async (...a: any[]) => {
+      if (++calls === 2) { b.reached(); await b.released; }
+      return (base.repository.listRevisions as any)(...a);
+    } } };
+    const settled = registerCandidateDraft(ports1, candReq(p, { runId: key("lk2") })).then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
+    await b.atPoint;
+    const holder = await lockHolder(name); expect(holder).not.toBeNull();
+    await conn.query(`KILL ${Number(holder)}`);
+    for (let i = 0; i < 100 && (await lockHolder(name)) !== null; i++) await new Promise((r) => setTimeout(r, 20));
+    const ex2 = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("lk2b") }));
+    expect(ex2).toMatchObject({ performed: "REGISTER_DRAFT" });
+    b.release();
+    const r1 = await settled;
+    const cand = await assertOneCandidate(p);                                                         // INDEPENDENTE do desfecho do executor 1: uma única candidata
+    expect(cand.id).toBe(ex2.revisionId);
+    expect(r1.ok, r1.ok ? "" : String((r1 as any).e)).toBe(true);                                      // a escrita exclusiva faz o executor 1 CONVERGIR (nunca criar a 2ª)
+    expect((r1 as any).v.revisionId).toBe(cand.id);
+  }, 300_000);
+
+  it("LOCK-LOSS-3 — sem NENHUM advisory lock: execuções concorrentes do registro (escrita transacional exclusiva) ⇒ exatamente UMA revisão por hash e UMA procedência", async () => {
+    const p = await prepareOrg("lock3", 1);
+    const reg = new ModelRegistrationService(getTemplateWorkflowPorts(), { allowCandidatePackages: true });
+    const input = (i: number) => ({
+      target: { kind: "EXISTING_IDENTITY" as const, identityId: p.model!.identityId }, templateKey: R2.modelKey, displayName: R2.displayName, declaredScope: R2.declaredScope,
+      source: { kind: "MODEL_PACKAGE" as const, modelKey: R2.modelKey, packageVersion: "1.0.2-draft" }, sourceLogicalVersion: R2.provenance.sourceLogicalVersion,
+      sourceSha256: R2.provenance.sourceSha256, confirm: true as const, idempotencyKey: `cand-prov-lock3-${RUN}`, decision: decision({ basisReference: `exec ${i}` }),
+    });
+    const out = await Promise.allSettled(Array.from({ length: 6 }, (_, i) => reg.register(ctxOf(p.org), input(i) as any, { uniqueDraft: true })));
+    expect(out.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message))).toEqual([]);
+    expect(new Set(out.map((x: any) => x.value.revision.id)).size).toBe(1);
+    expect((await candidates(p))).toHaveLength(1);
+    expect((await revisionsOf(p)).map((r) => r.revision).sort()).toEqual([1, 2]);
+  }, 300_000);
+
+  it("LOCK-NS — o nome do lock inclui a identidade do BANCO: o mesmo nome lógico em bancos distintos não disputa; no mesmo banco exclui; nome ≤ 64", async () => {
+    const other = `${dbName}_ns`;
+    await conn.query(`CREATE DATABASE IF NOT EXISTS \`${other}\``);
+    const saved = process.env.DATABASE_URL;
+    try {
+      const url = (db: string) => { const u = new URL(DB!); u.pathname = `/${db}`; return u.toString(); };
+      const logical = candidateRegistrationLockName(BASE_ORG, "ti-sintetico");
+      expect(logical.length).toBeLessThanOrEqual(MAX_LOGICAL_LOCK_NAME);
+      expect(namespacedLockName(dbName, logical).length).toBeLessThanOrEqual(64);
+      expect(namespacedLockName(dbName, logical)).not.toBe(namespacedLockName(other, logical));
+      const gate = barrier(); const inside = barrier();
+      process.env.DATABASE_URL = url(dbName);
+      const holderRun = withDedicatedAdvisoryLock(logical, 5, async () => { inside.reached(); await gate.released; return "a"; });
+      await inside.atPoint;
+      process.env.DATABASE_URL = url(other);
+      expect(await withDedicatedAdvisoryLock(logical, 1, async () => "b")).toBe("b");                 // outro banco: não espera
+      process.env.DATABASE_URL = url(dbName);
+      await expect(withDedicatedAdvisoryLock(logical, 1, async () => "c")).rejects.toBeInstanceOf(AdvisoryLockTimeoutError);   // mesmo banco: exclui
+      gate.release(); expect(await holderRun).toBe("a");
+      expect(await withDedicatedAdvisoryLock(logical, 1, async () => "d")).toBe("d");                 // liberado
+      await expect(withDedicatedAdvisoryLock("x".repeat(MAX_LOGICAL_LOCK_NAME + 1), 1, async () => 1)).rejects.toThrow(/nome de lock inválido/);
+    } finally { process.env.DATABASE_URL = saved; await conn.query(`DROP DATABASE IF EXISTS \`${other}\``).catch(() => {}); }
+  }, 120_000);
+
+
+  // ───────────────────────── AUDITORIA CONSOLIDADA — pin de revisão entre leituras, falha após commit, tenant, estresse ─────────────────────────
+  it("AUD-PIN — troca concorrente ENTRE a decisão do bridge e a composição: falha fechada e retentável (TEMPLATE_BINDING_CHANGED), sem escrita e sem legado; o retry compõe pela revisão vigente e o `template` informado = manifest", async () => {
+    const p = await readyTenant("aud-pin", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const base = realPorts(); let calls = 0; const b = barrier();
+    const gated: any = { ...base, repository: { ...base.repository, listBindings: async (...a: any[]) => {
+      if (++calls === 2) { b.reached(); await b.released; }                                           // 1ª leitura = decisão do bridge; 2ª = composição (pausa ANTES dela)
+      return (base.repository.listBindings as any)(...a);
+    } } };
+    configureTemplateCompositionPorts({ ...gated, clock: { now: () => new Date().toISOString() } });
+    const manifestsBefore = await m1Count(p); const draftBefore = await draftText(p);
+    const legacyBefore = legacy.calls;
+    const first = callGen(p).then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
+    await b.atPoint;
+    await wfOf().setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));                                   // troca comitada entre as duas leituras
+    b.release();
+    const r = await first;
+    configureTemplateCompositionPorts({ ...realPorts(), clock: { now: () => clockNow ?? new Date().toISOString() } });
+    expect(r.ok).toBe(false); expect(String((r as any).e?.message)).toMatch(/TEMPLATE_BINDING_CHANGED/);
+    expect(legacy.calls).toBe(legacyBefore);                                                          // nunca cai no legado
+    expect(await m1Count(p)).toBe(manifestsBefore); expect(await draftText(p)).toBe(draftBefore);     // zero escrita
+    const again = await callGen(p, { idempotencyKey: key("aud-pin2") });                              // retry converge com o vínculo vigente
+    expect(again.generationMode).toBe("INSTITUTIONAL_TEMPLATE"); expect(again.template.revisionId).toBe(r2Id);
+    const manifest = (await rows("SELECT template_revision_id r FROM document_composition_manifests WHERE organization_id = ? AND id = ?", [p.org, again.generationManifestId]))[0];
+    expect(manifest.r).toBe(again.template.revisionId);                                               // informado ao usuário = registrado no M1
+    expect(r1Id).not.toBe(r2Id);
+  }, 600_000);
+
+  it("AUD-UNCERTAIN — DRAFT comitado e resposta perdida (falha depois da escrita): a repetição RECUPERA sem 2ª revisão e completa a procedência", async () => {
+    const p = await prepareOrg("aud-unc", 1);
+    const base = getTemplateWorkflowPorts();
+    const lost: any = { ...base, repository: { ...base.repository, insertDraftRevisionUnique: async (...a: any[]) => { await (base.repository.insertDraftRevisionUnique as any)(...a); throw new Error("conexão perdida após o commit"); } } };
+    await expect(registerCandidateDraft(lost, candReq(p, { runId: key("unc1") }))).rejects.toThrow(/conexão perdida/);
+    const plan: any = await planOf(p);
+    expect(plan).toMatchObject({ ok: true, action: "RECORD_PROVENANCE" }); expect(plan.candidateProvenance.state).toBe("ABSENT");
+    expect(await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p, { runId: key("unc2") }))).toMatchObject({ performed: "RECORD_PROVENANCE", provenance: "RECORDED" });
+    await assertOneCandidate(p);
+  }, 300_000);
+
+  it("AUD-TENANT — a criação exclusiva de DRAFT é tenant-scoped: identidade de OUTRO órgão ⇒ não encontrada, nada criado em nenhum dos dois", async () => {
+    const a = await prepareOrg("aud-ta", 1); const b = await prepareOrg("aud-tb", 1);
+    await expect(wfOf().createDraft(ctxOf(b.org), { identityId: a.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version, uniqueSemanticHash: true })).rejects.toThrow(/não encontrad/i);
+    expect(await revisionsOf(a)).toHaveLength(1); expect(await revisionsOf(b)).toHaveLength(1);
+    expect(await count("SELECT COUNT(*) n FROM institutional_template_revisions WHERE organization_id = ? AND identity_id = ?", [b.org, a.model!.identityId])).toBe(0);
+  }, 300_000);
+
+  it("AUD-STRESS — swaps idênticos/conflitantes + registros exclusivos + rascunhos comuns em paralelo (3 rodadas): invariantes preservadas, erros só do tipo esperado, sem deadlock vazando", async () => {
+    const p = await prepareOrg("aud-stress", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    const reg = new ModelRegistrationService(getTemplateWorkflowPorts(), { allowCandidatePackages: true });
+    const expectedErr = /BINDING_AMBIGUOUS|já existe|CONFLICT|outra revisão|conflit/i;
+    for (let round = 0; round < 3; round++) {
+      const cur = (await activeBindings(p))[0];
+      const target = round % 2 === 0 ? r2Id : r1Id; const other = target === r2Id ? r1Id : r2Id;
+      const ops: Promise<unknown>[] = [
+        ...Array.from({ length: 4 }, () => wfOf().setBinding(ctxOf(p.org), swapIn(p, target, cur.id))),     // idênticos
+        wfOf().setBinding(ctxOf(p.org), swapIn(p, other, cur.id)),                                          // conflitante
+        ...Array.from({ length: 2 }, () => wfOf().createDraft(ctxOf(p.org), { identityId: p.model!.identityId, ast: R2.ast, sourceFormat: "NATIVE", catalogVersion: R2.catalog.version })),   // rascunhos comuns
+        ...Array.from({ length: 2 }, (_, i) => reg.register(ctxOf(p.org), {
+          target: { kind: "EXISTING_IDENTITY" as const, identityId: p.model!.identityId }, templateKey: R2.modelKey, displayName: R2.displayName, declaredScope: R2.declaredScope,
+          source: { kind: "MODEL_PACKAGE" as const, modelKey: R2.modelKey, packageVersion: "1.0.2-draft" }, sourceLogicalVersion: R2.provenance.sourceLogicalVersion,
+          sourceSha256: R2.provenance.sourceSha256, confirm: true as const, idempotencyKey: `cand-prov-stress-${RUN}-${round}-${i}`, decision: decision(),
+        } as any, { uniqueDraft: true })),
+      ];
+      const out = await Promise.allSettled(ops);
+      const bad = out.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message ?? x.reason)).filter((m) => !expectedErr.test(m));
+      expect(bad, `rodada ${round}`).toEqual([]);                                                       // nenhum deadlock/erro inesperado vaza
+      const act = await activeBindings(p);
+      expect(act, `rodada ${round}`).toHaveLength(1);                                                   // um ativo, nunca zero nem dois
+      expect(await wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE })).toMatchObject({ status: "RESOLVED" });
+      for (const rev of await revisionsOf(p)) expect(rev.semanticHash === R2_HASH || rev.semanticHash === R1_HASH || rev.revision >= 1).toBe(true);
+    }
+    // o caminho EXCLUSIVO nunca duplica: as N chamadas de registro convergiram numa só revisão por hash entre as criadas por ele
+    const exclusive = (await revisionsOf(p)).filter((r) => r.semanticHash === R2_HASH);
+    expect(new Set(exclusive.map((r) => r.revision)).size).toBe(exclusive.length);                      // numeração única (sem colisão de número)
+    expect((await revisionsOf(p)).find((r) => r.id === r1Id)!.status).toBe("PUBLISHED");
+  }, 300_000);
+
+  // ───────────────────────── SEGUNDO AMEND — linearização temporal e convergência do swap (barreiras determinísticas) ─────────────────────────
+  /** Barreira determinística (sem sleep): `atPoint` resolve quando o chamador chegou ao ponto; `release()` o libera. */
+  const barrier = () => {
+    let release!: () => void; let reached!: () => void;
+    const released = new Promise<void>((r) => { release = r; });
+    const atPoint = new Promise<void>((r) => { reached = r; });
+    return { release, reached, released, atPoint };
+  };
+  /** Workflow cujo relógio de SERVIDOR é fixo (réplica independente com seu próprio relógio). */
+  const wfAt = (nowIso: string) => new InstitutionalTemplatesWorkflow({ ...getTemplateWorkflowPorts(), clock: { now: () => nowIso } } as any);
+  const swapIn = (p: P, rev: string, replaces: string) => ({ documentKind: "edital" as const, scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: rev, confirm: true as const, replacesBindingId: replaces });
+  /** Portas de composição cuja leitura de bindings pára numa barreira ANTES (`before`) ou DEPOIS (`after`) de a leitura real acontecer. */
+  const gatedBindingRead = (when: "before" | "after", b: ReturnType<typeof barrier>): any => {
+    const base = realPorts(); let once = true;
+    return { ...base, repository: { ...base.repository, listBindings: async (...a: any[]) => {
+      if (when === "before" && once) { once = false; b.reached(); await b.released; }
+      const out = await (base.repository.listBindings as any)(...a);
+      if (when === "after" && once) { once = false; b.reached(); await b.released; }
+      return out;
+    } } };
+  };
+  const bindingEvents = async (org: number, type: string) => count("SELECT COUNT(*) n FROM institutional_template_events WHERE organization_id = ? AND event_type = ?", [org, type]);
+
+  it("LIN-A — asOf capturado ANTES da leitura; swap carimba vigência logo DEPOIS e comita; leitura retomada ⇒ continua vinculado (nunca NOT_BOUND/legado)", async () => {
+    const p = await prepareOrg("lin-a", 1); const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const T0 = "2026-10-13T12:00:00.000Z";
+    const b = barrier();
+    const reader = resolveEditalTemplate({ ports: gatedBindingRead("before", b), now: () => T0 }, p.org, WS);
+    await b.atPoint;                                                                                  // o leitor capturou o instante e vai ler os vínculos
+    const swapped = await wfAt("2026-10-13T12:00:00.001Z").setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));   // vigência 1 ms DEPOIS do asOf do leitor; comita antes da leitura
+    expect(swapped.effectiveFrom).toBe("2026-10-13T12:00:00.001Z");
+    b.release();
+    const res: any = await reader;
+    expect(res.status, JSON.stringify(res)).toBe("BOUND");
+    expect(res.template.revisionId).toBe(r2Id);
+    expect(await activeBindings(p)).toHaveLength(1);
+  }, 300_000);
+
+  it("LIN-A2 — geração completa (rota real) logo após um swap com vigência à frente do relógio do leitor: INSTITUCIONAL pela nova revisão, nunca o gerador legado", async () => {
+    const p = await readyTenant("lin-gen", 1); const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    await wfAt(new Date(Date.now() + 3_600_000).toISOString()).setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));      // réplica com relógio 1 h adiantado
+    expect(((await preflight(p)) as any).status).not.toBe("NOT_APPLICABLE");                         // o preflight também resolve o vínculo ativo (nunca "sem modelo")
+    const before = legacy.calls;
+    const g = await callGen(p);
+    expect(legacy.calls).toBe(before);
+    expect(g.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    expect(g.template.revisionId).toBe(r2Id);
+  }, 600_000);
+
+  it("LIN-B — leitura consistente é UM ponto de linearização: swap pausado com a transação aberta ⇒ leitor vê o antigo; após o commit ⇒ vê o novo; leitura em curso durante o commit é coerente", async () => {
+    const p = await prepareOrg("lin-b", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const read = () => resolveEditalTemplate({ ports: realPorts(), now: () => new Date().toISOString() }, p.org, WS) as Promise<any>;
+    const wports = getTemplateWorkflowPorts();
+    const tctx = { organizationId: p.org, actorUserId: U_MANAGER, correlationId: "corr-lin-b" };
+    const hold = barrier(); const resume = barrier();
+    const nb = { id: wports.ids.newId("tb"), organizationId: p.org, documentKind: "edital" as const, scope: R2_SCOPE, identityId: p.model!.identityId, pinnedRevisionId: r2Id, active: true, effectiveFrom: new Date(Date.now() + 60_000).toISOString() };
+    const swapTx = withTemplatesTransaction("test.lin-b.swap", tctx, async (tx) => {
+      await dbDeactivateBinding(tx, tctx, old.id); await dbInsertBinding(tx, tctx, nb);
+      hold.reached(); await resume.released;                                                          // transação do swap ABERTA (não comitada)
+    });
+    await hold.atPoint;
+    const during: any = await read();
+    expect(during.status).toBe("BOUND"); expect(during.template.revisionId).toBe(r1Id);               // ainda o antigo: nada não comitado é visível
+    resume.release(); await swapTx;
+    const after: any = await read();
+    expect(after.status, JSON.stringify(after)).toBe("BOUND"); expect(after.template.revisionId).toBe(r2Id);   // vigência 1 min à frente NÃO abre janela
+    // leitura que JÁ terminou (viu o antigo) enquanto o swap comita: coerente com o ponto de linearização dela
+    const b = barrier();
+    const slow = resolveEditalTemplate({ ports: gatedBindingRead("after", b), now: () => new Date().toISOString() }, p.org, WS);
+    await b.atPoint;
+    await wfAt(new Date(Date.now() + 60_000).toISOString()).setBinding(ctxOf(p.org), swapIn(p, r1Id, nb.id));
+    b.release();
+    const coherent: any = await slow;
+    expect(coherent.status).toBe("BOUND"); expect(coherent.template.revisionId).toBe(r2Id);          // linearizada antes do swap
+    expect(((await read()) as any).template.revisionId).toBe(r1Id);                                    // a próxima leitura vê o resultado do swap
+  }, 300_000);
+
+  it("LIN-C — swaps R1→R2→R1 com gerações concorrentes: nenhum leitor vê NOT_BOUND; um único ativo ao final", async () => {
+    const p = await prepareOrg("lin-c", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    let cur = (await activeBindings(p))[0];
+    const seen: string[] = [];
+    for (const [i, rev] of ([r2Id, r1Id, r2Id, r1Id] as const).entries()) {
+      const b = barrier();
+      const reader = resolveEditalTemplate({ ports: gatedBindingRead("before", b), now: () => "2026-10-13T12:00:00.000Z" }, p.org, WS);
+      await b.atPoint;
+      cur = await wfAt(new Date(Date.parse("2026-10-13T12:00:00.000Z") + (i + 1) * 250).toISOString()).setBinding(ctxOf(p.org), swapIn(p, rev, cur.id));
+      b.release();
+      const r: any = await reader; seen.push(`${r.status}:${r.template?.revisionId === rev}`);
+    }
+    expect(seen).toEqual(Array(4).fill("BOUND:true"));
+    expect(await activeBindings(p)).toHaveLength(1);
+  }, 300_000);
+
+  it("LIN-D — relógios independentes com desvio ≥ 500 ms (réplica do swap à frente e atrás da réplica do leitor) não afetam a resolução operacional", async () => {
+    const p = await prepareOrg("lin-d", 1); const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p);
+    const readerNow = () => "2026-10-13T12:00:00.000Z";
+    let cur = (await activeBindings(p))[0];
+    for (const [skew, rev] of [[+700, r2Id], [-700, r1Id], [+5_000, r2Id], [-5_000, r1Id]] as const) {
+      cur = await wfAt(new Date(Date.parse("2026-10-13T12:00:00.000Z") + skew).toISOString()).setBinding(ctxOf(p.org), swapIn(p, rev, cur.id));
+      const r: any = await resolveEditalTemplate({ ports: realPorts(), now: readerNow }, p.org, WS);
+      expect(r.status, `skew ${skew}`).toBe("BOUND"); expect(r.template.revisionId).toBe(rev);
+    }
+  }, 300_000);
+
+  it("LIN-E — consulta HISTÓRICA com asOf explícito mantém a semântica histórica (não vira estado corrente); replay oficial usa manifest/revisão exata", async () => {
+    const p = await prepareOrg("lin-e", 1); const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const swapped = await wfAt("2026-10-13T12:00:00.500Z").setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));
+    const at = (asOf: string) => wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE, asOf });
+    expect((await at("2026-10-13T12:00:00.499Z")).status).toBe("NOT_BOUND");                           // antes da vigência do novo vínculo: NÃO retroage
+    const sameInstant: any = await at("2026-10-13T12:00:00.500Z");
+    expect(sameInstant.status).toBe("RESOLVED"); expect(sameInstant.binding.id).toBe(swapped.id);
+    expect(((await at("2099-01-01T00:00:00.000Z")) as any).revision.id).toBe(r2Id);
+    // sem asOf (operacional): o vínculo ativo, sem depender de instante
+    expect(((await wfOf().resolveBinding(ctxOf(p.org), { documentKind: "edital", scope: R2_SCOPE })) as any).revision.id).toBe(r2Id);
+    // as revisões continuam exatas e imutáveis
+    expect((await revisionsOf(p)).every((r) => r.status === "PUBLISHED")).toBe(true);
+  }, 300_000);
+
+  it("SWAP-CONV — A lê o antigo, B comita a MESMA troca, A retoma ⇒ ambos obtêm o mesmo vínculo; um ativo; sem eventos duplicados", async () => {
+    const p = await prepareOrg("swp", 1); const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const created0 = await bindingEvents(p.org, "BINDING_CREATED"); const deact0 = await bindingEvents(p.org, "BINDING_DEACTIVATED");
+    const base = getTemplateWorkflowPorts(); const b = barrier(); let once = true;
+    const SAME_CLOCK = "2026-10-13T12:00:00.000Z";                                                   // A e B carimbam o MESMO instante (réplicas com relógios iguais/equivalentes)
+    const pausedA = new InstitutionalTemplatesWorkflow({ ...base, clock: { now: () => SAME_CLOCK }, repository: { ...base.repository, getBinding: async (org: number, id: string) => {
+      const r = await base.repository.getBinding(org, id);
+      if (once) { once = false; b.reached(); await b.released; }
+      return r;
+    } } } as any);
+    const aP = pausedA.setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));
+    await b.atPoint;                                                                                  // A já leu o vínculo antigo (ativo)
+    const bRes = await wfAt(SAME_CLOCK).setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));            // B conclui a mesma troca (comita)
+    b.release();
+    const aRes = await aP;                                                                            // antes: BINDING_AMBIGUOUS
+    expect(aRes.id).toBe(bRes.id);
+    const act = await activeBindings(p);
+    expect(act.map((x) => x.id)).toEqual([bRes.id]); expect(act[0].pinnedRevisionId).toBe(r2Id);
+    expect(await bindingEvents(p.org, "BINDING_CREATED")).toBe(created0 + 1);                         // exatamente UMA criação nova
+    expect(await bindingEvents(p.org, "BINDING_DEACTIVATED")).toBe(deact0 + 1);                       // e UMA desativação (do antigo)
+    expect((await getTemplateWorkflowPorts().repository.getBinding(p.org, old.id))!.active).toBe(false);
+  }, 300_000);
+
+  it("SWAP-CONV — pedido CONFLITANTE (outra revisão) retomado depois do commit de B é RECUSADO; o resultado de B permanece; tenant alheio não consulta nem substitui", async () => {
+    const p = await prepareOrg("swp-c", 1); const other = await prepareOrg("swp-c2", 1);
+    const r1Id = p.model!.revisionId; const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const base = getTemplateWorkflowPorts(); const b = barrier(); let once = true;
+    const SAME_CLOCK = "2026-10-13T12:00:00.000Z";                                                   // A e B carimbam o MESMO instante (réplicas com relógios iguais/equivalentes)
+    const pausedA = new InstitutionalTemplatesWorkflow({ ...base, clock: { now: () => SAME_CLOCK }, repository: { ...base.repository, getBinding: async (org: number, id: string) => {
+      const r = await base.repository.getBinding(org, id);
+      if (once) { once = false; b.reached(); await b.released; }
+      return r;
+    } } } as any);
+    const aP = pausedA.setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));                             // A quer a Revisão 2
+    await b.atPoint;
+    const bRes = await wfAt(SAME_CLOCK).setBinding(ctxOf(p.org), swapIn(p, r1Id, old.id));            // B comita OUTRO alvo (Revisão 1, novo vínculo)
+    b.release();
+    await expect(aP).rejects.toThrow(/BINDING_AMBIGUOUS|já existe|CONFLICT|conflit/i);                // não vira sucesso idempotente
+    expect((await activeBindings(p)).map((x) => x.id)).toEqual([bRes.id]);
+    expect((await activeBindings(p))[0].pinnedRevisionId).toBe(r1Id);
+    // outro tenant: nem enxerga nem substitui
+    await expect(wfOf().setBinding(ctxOf(other.org), swapIn(p, r2Id, bRes.id))).rejects.toThrow(/não encontrad/i);
+    await expect(wfOf().setBinding(ctxOf(other.org), { ...swapIn(other, other.model!.revisionId, bRes.id) })).rejects.toThrow(/não encontrad/i);
+    expect((await wfOf().listBindings(ctxOf(other.org), { documentKind: "edital", activeOnly: true })).some((x) => x.id === bRes.id)).toBe(false);
+    expect((await activeBindings(p)).map((x) => x.id)).toEqual([bRes.id]);
+  }, 300_000);
+
+  it("SWAP-CONV — resultado INCERTO (commit feito, resposta perdida) reconcilia para o vínculo persistido; erros de autorização/tenant/validação NUNCA viram sucesso", async () => {
+    const p = await prepareOrg("swp-u", 1); const r2Id = await publishCandidate(p); const old = (await activeBindings(p))[0];
+    const base = getTemplateWorkflowPorts();
+    const lost = new InstitutionalTemplatesWorkflow({ ...base, repository: { ...base.repository, insertBinding: async (...a: any[]) => { await (base.repository.insertBinding as any)(...a); throw new Error("conexão perdida após o commit"); } } } as any);
+    const res = await lost.setBinding(ctxOf(p.org), swapIn(p, r2Id, old.id));
+    expect((await activeBindings(p)).map((x) => x.id)).toEqual([res.id]);
+    // erro de tenant/autorização NÃO é convertido em convergência, MESMO havendo vínculo equivalente ativo (outro executor comita a troca entre o preflight e a escrita)
+    const q = await prepareOrg("swp-u2", 1); const q2 = await publishCandidate(q); const qOld = (await activeBindings(q))[0];
+    const denied = new InstitutionalTemplatesWorkflow({ ...base, repository: { ...base.repository, insertBinding: async () => {
+      await wfOf().setBinding(ctxOf(q.org), swapIn(q, q2, qOld.id));                                  // a troca equivalente é comitada por OUTRO executor
+      throw new TemplateWorkflowError("NOT_FOUND", "recurso não encontrado nesta organização");
+    } } } as any);
+    await expect(denied.setBinding(ctxOf(q.org), swapIn(q, q2, qOld.id))).rejects.toThrow(/não encontrad/i);
+    expect((await activeBindings(q)).map((x) => x.pinnedRevisionId)).toEqual([q2]);                   // o vínculo de B permanece, a recusa não foi mascarada
+  }, 300_000);
 });

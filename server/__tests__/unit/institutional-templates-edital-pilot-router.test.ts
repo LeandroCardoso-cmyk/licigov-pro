@@ -196,7 +196,7 @@ describe("binding de escopo explícito e gate de prontidão na publicação", ()
     const { reg } = await publishedModel();
     const pub = await as("manager").revisions.publish(life(reg.revision.id, "APPROVED", { inventory: INV }));
     expect(pub.revision.status).toBe("PUBLISHED");
-    const input = (scope: Record<string, string>) => ({ documentKind: "edital" as const, scope, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, effectiveFrom: "2026-10-01T00:00:00.000Z", confirm: true });
+    const input = (scope: Record<string, string>) => ({ documentKind: "edital" as const, scope, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, confirm: true });
     expect((await trpcErr(as("manager").bindings.set(input({ modality: "pregao" }))))?.message).toMatch(/SCOPE_INVALID/);
     const b = await as("manager").bindings.set(input(FULL));
     expect(b).toMatchObject({ pinnedRevisionId: reg.revision.id, scope: FULL });
