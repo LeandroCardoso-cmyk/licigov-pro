@@ -97,16 +97,47 @@ export function sameScope(a: BindingScope, b: BindingScope): boolean {
 }
 
 /**
- * Resolve o binding vigente. `bindings`/`revisions` são o que a persistência leu para a organização do pedido;
- * qualquer item de outra organização é tratado como violação (nunca ignorado em silêncio).
+ * Pedido de resolução OPERACIONAL (estado corrente): sem instante. O binding em vigor é o ATIVO, lido num único ponto de linearização (uma leitura
+ * consistente dos vínculos); nenhum relógio de aplicação é comparado com a vigência. Use `BindingRequest` (com `asOf` explícito) para consultas históricas.
+ */
+export type CurrentBindingRequest = Omit<BindingRequest, "asOf">;
+
+/**
+ * Resolve o binding vigente num instante EXPLÍCITO (`asOf`): consulta HISTÓRICA / por instante declarado. `bindings`/`revisions` são o que a
+ * persistência leu para a organização do pedido; qualquer item de outra organização é tratado como violação (nunca ignorado em silêncio).
+ * Esta função NÃO é o caminho de composições novas (ver `resolveCurrentTemplateBinding`): comparar um `asOf` capturado antes da leitura com a
+ * vigência carimbada por outra transação/réplica abre janelas `NOT_BOUND` espúrias.
  */
 export function resolveTemplateBinding(
   request: BindingRequest,
   bindings: readonly TemplateBinding[],
   revisions: readonly TemplateRevision[],
 ): BindingResolution {
+  return resolveWithVigencia(request, request.asOf, bindings, revisions);
+}
+
+/**
+ * Resolve o binding em vigor AGORA (composições novas, preflight, pré-visualização operacional): o conjunto de vínculos ATIVOS lido de forma
+ * consistente É o estado vigente — o commit da troca atômica é o ponto de linearização. `effectiveFrom` é carimbo informativo/histórico e NÃO filtra
+ * aqui (a troca comitada vale imediatamente, qualquer que seja o relógio de quem leu ou de quem carimbou). Demais regras idênticas a `resolveTemplateBinding`:
+ * tenant exato, escopo exato, pin exato, revisão PUBLISHED, ambíguo ⇒ fail-closed (a unicidade do ativo por escopo é garantida pelo banco).
+ */
+export function resolveCurrentTemplateBinding(
+  request: CurrentBindingRequest,
+  bindings: readonly TemplateBinding[],
+  revisions: readonly TemplateRevision[],
+): BindingResolution {
+  return resolveWithVigencia(request, null, bindings, revisions);
+}
+
+function resolveWithVigencia(
+  request: CurrentBindingRequest & { readonly asOf?: string },
+  asOfIso: string | null,
+  bindings: readonly TemplateBinding[],
+  revisions: readonly TemplateRevision[],
+): BindingResolution {
   const requestIssues = organizationIssues(request, "request.organizationId");
-  if (!ISO_UTC_RE.test(request.asOf)) requestIssues.push(issue("BINDING_INVALID", "request.asOf", "asOf deve ser ISO-8601 UTC explícito"));
+  if (asOfIso !== null && !ISO_UTC_RE.test(asOfIso)) requestIssues.push(issue("BINDING_INVALID", "request.asOf", "asOf deve ser ISO-8601 UTC explícito"));
   requestIssues.push(...scopeIssues(request.scope, "request.scope"));
   if (requestIssues.length) return { status: "INVALID", issues: requestIssues };
 
@@ -119,9 +150,9 @@ export function resolveTemplateBinding(
   const malformed = bindings.flatMap((b, i) => (ISO_UTC_RE.test(b.effectiveFrom) ? [] : [issue("BINDING_INVALID", `bindings[${i}].effectiveFrom`, "effectiveFrom deve ser ISO-8601 UTC")]));
   if (malformed.length) return { status: "INVALID", issues: malformed };
 
-  const asOf = Date.parse(request.asOf);
+  const asOf = asOfIso === null ? null : Date.parse(asOfIso);
   const candidates = bindings
-    .filter((b) => b.active && b.documentKind === request.documentKind && sameScope(b.scope, request.scope) && Date.parse(b.effectiveFrom) <= asOf)
+    .filter((b) => b.active && b.documentKind === request.documentKind && sameScope(b.scope, request.scope) && (asOf === null || Date.parse(b.effectiveFrom) <= asOf))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   if (candidates.length === 0) return { status: "NOT_BOUND" };
   if (candidates.length > 1) return { status: "AMBIGUOUS", bindingIds: candidates.map((b) => b.id) };

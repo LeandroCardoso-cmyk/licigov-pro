@@ -55,3 +55,8 @@ DRAFT sem procedência ⇒ retomado sem 2ª revisão.
 ## 8. Amend corretivo P1/P2 (registro concorrente, swap sem `NOT_BOUND`, flag, integridade do catálogo)
 Ver runbook §11. Resumo: registro serializado por (organização, identidade) com reaproveitamento por hash e recusa de duplicata/conflito; vigência do vínculo carimbada pelo servidor e troca convergente; flag exigida antes da primeira escrita (plan/snapshot seguem leitura);
 `absentText` e demais campos das 7 variáveis diferidas validados pelo conteúdo efetivo + pino de SHA-256 do catálogo. Sem migration; Revisão 1 inalterada.
+
+## 9. Segundo amend corretivo (linearização temporal, convergência, procedência, resiliência do lock)
+Ver runbook §12. Resumo: resolução **operacional** do vínculo sem relógio pré-capturado (o commit da troca é o ponto de linearização; consulta com `asOf` explícito segue histórica); troca convergente também no preflight;
+procedência do candidato validada campo a campo contra o pacote e a revisão exata (ausente/correta/divergente/ilegível); criação do DRAFT por escrita transacional exclusiva por hash (o advisory lock deixou de ser a garantia
+de integridade) + `assertHeld` + namespace do banco. Sem migration; Revisão 1 e hashes congelados inalterados.

@@ -16,7 +16,7 @@ import {
   type DecisionRequest, type InstitutionalDecision,
 } from "../../domain/institutionalDecision";
 import {
-  createDraftRevision, resolveTemplateBinding, REVISION_STATUSES, revisionSemanticHash, revisionUpdateIssues, sameScope,
+  createDraftRevision, resolveCurrentTemplateBinding, resolveTemplateBinding, REVISION_STATUSES, revisionSemanticHash, revisionUpdateIssues, sameScope,
   TEMPLATE_DOCUMENT_KINDS, transitionRevision, validateTemplateIdentity,
   type BindingRequest, type BindingResolution, type BindingScope, type ComposeOutcome, type OrgId, type RevisionSourceFormat,
   type RevisionStatus, type TemplateBinding, type TemplateDocumentKind, type TemplateIdentity,
@@ -50,6 +50,11 @@ function validationFailed(message: string, issues: readonly TemplateIssue[]): Te
   return new TemplateWorkflowError("VALIDATION_FAILED", message, toIssues(issues));
 }
 
+/** Erros de `insertBinding` que PODEM significar "a troca equivalente já foi concluída": conflito de ativo/CAS ou falha de transporte (resultado incerto). */
+function isConvergibleBindingError(err: unknown): boolean {
+  if (err instanceof TemplateWorkflowError) return err.code === "BINDING_AMBIGUOUS" || err.code === "CONFLICT";
+  return (err as { code?: unknown } | null)?.code !== "PERSISTED_RECORD_CORRUPT";
+}
 const pctx = (ctx: WorkflowContext): PersistenceContext => ({ actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
 
 function notFound(what: string): TemplateWorkflowError {
@@ -192,7 +197,11 @@ export class InstitutionalTemplatesWorkflow {
    */
   async createDraft(
     ctx: WorkflowContext,
-    input: { identityId: string; ast?: unknown; fromRevisionId?: string; sourceFormat?: RevisionSourceFormat; catalogVersion?: string },
+    input: {
+      identityId: string; ast?: unknown; fromRevisionId?: string; sourceFormat?: RevisionSourceFormat; catalogVersion?: string;
+      /** INTERNO (registro controlado de candidata): DRAFT exclusivo por hash semântico, atômico no banco (ver `insertDraftRevisionUnique`). */
+      uniqueSemanticHash?: boolean;
+    },
   ): Promise<TemplateRevision> {
     assertHumanActor(ctx.actor);
     const identity = await this.requireIdentity(ctx, input.identityId);
@@ -217,6 +226,19 @@ export class InstitutionalTemplatesWorkflow {
       id: this.ports.ids.newId("tr"), identity, revision: next, ast: astCheck.value, catalog, sourceFormat,
     });
     if (!created.ok) throw validationFailed("a revisão é inválida", created.issues);
+    if (input.uniqueSemanticHash === true) {
+      if (!this.ports.repository.insertDraftRevisionUnique) throw new TemplateWorkflowError("PORTS_NOT_CONFIGURED", "criação exclusiva de rascunho não suportada por este repositório (falha fechada)");
+      const persisted = await this.ports.repository.insertDraftRevisionUnique(created.value, pctx(ctx));
+      if (!persisted.created) {
+        if (persisted.revision.status !== "DRAFT") {
+          throw new TemplateWorkflowError("CONFLICT", `já existe revisão com este conteúdo na identidade (${persisted.revision.status}); nenhum rascunho novo foi criado`);
+        }
+        log.info("template_draft_reused", { organizationId: ctx.organizationId, identityId: identity.id, revisionId: persisted.revision.id, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+        return persisted.revision;
+      }
+      log.info("template_draft_created", { organizationId: ctx.organizationId, identityId: identity.id, revisionId: persisted.revision.id, revision: persisted.revision.revision, sourceFormat, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+      return persisted.revision;
+    }
     try {
       await this.ports.repository.insertDraftRevision(created.value, pctx(ctx));
     } catch (err) {
@@ -420,11 +442,14 @@ export class InstitutionalTemplatesWorkflow {
   /**
    * Vincula (documentKind, escopo) a UMA revisão PUBLISHED exata. Nunca "última"; ambiguidade ⇒ recusa.
    *
-   * AUTORIDADE TEMPORAL: o instante de vigência é o do SERVIDOR (`ports.clock`, o mesmo relógio que a geração usa como `asOf` na resolução). Numa
-   * SUBSTITUIÇÃO (`replacesBindingId`) o valor do cliente é IGNORADO: um relógio de navegador adiantado desativaria o vínculo antigo com o novo ainda
-   * não vigente (⇒ `NOT_BOUND` e fallback ao legado) e um atrasado retroagiria a vigência. Fora de substituição, `effectiveFrom` só é aceito de
-   * chamadores internos (a rota pública não o expõe); ausente ⇒ agora (servidor).
-   * CONVERGÊNCIA: repetir a mesma troca (resultado incerto/concorrência) devolve o vínculo ativo equivalente (mesmo escopo, identidade e revisão).
+   * CONTRATO DE LINEARIZAÇÃO (ver runbook §12): a autoridade do ESTADO do vínculo é o banco — exatamente um vínculo ativo por escopo (`uq_itb_active_scope`) e a
+   * troca é UMA transação (desativar + criar); o COMMIT é o ponto de linearização. A resolução OPERACIONAL (composições novas, preflight) lê o conjunto ativo de
+   * forma consistente e NÃO compara relógios; `effectiveFrom` é carimbo informativo e filtra só em consulta histórica com `asOf` explícito.
+   * O carimbo é do SERVIDOR (`ports.clock`): numa SUBSTITUIÇÃO o valor do cliente é IGNORADO; fora de substituição só se aceita valor ≤ agora (vigência futura não é
+   * suportada: prometeria um agendamento que a resolução operacional não cumpre).
+   * CONVERGÊNCIA: se outro executor já concluiu a MESMA troca (vínculo ativo com mesma organização, tipo, escopo exato, identidade e revisão exata no lugar do
+   * substituído), devolve esse vínculo — no preflight, ou após conflito/resultado incerto na escrita. Pedido conflitante é recusado; erros de tenant/autorização/
+   * validação nunca viram sucesso idempotente.
    */
   async setBinding(
     ctx: WorkflowContext,
@@ -456,44 +481,57 @@ export class InstitutionalTemplatesWorkflow {
     if (input.replacesBindingId !== undefined && input.effectiveFrom !== undefined && input.effectiveFrom !== effectiveFrom) {
       log.info("template_binding_client_time_ignored", { organizationId: ctx.organizationId, identityId: identity.id, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     }
-    // Troca já realizada (retry após resultado incerto): o vínculo antigo está inativo e há ativo equivalente ⇒ converge para ele.
-    const equivalentActive = async (): Promise<TemplateBinding | null> => {
-      const active = await this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
-      return active.find((b) => b.identityId === identity.id && b.pinnedRevisionId === revision.id && sameScope(b.scope, input.scope)) ?? null;
+    // Vigência futura NÃO é suportada: a resolução operacional trata o vínculo ATIVO comitado como em vigor (sem comparar relógios); aceitar uma data futura
+    // seria prometer um agendamento que a resolução não cumpre.
+    if (input.replacesBindingId === undefined && Date.parse(effectiveFrom) > Date.parse(serverNow)) {
+      throw validationFailed("vigência futura não é suportada: o vínculo vale a partir do commit (o instante é do servidor)", []);
+    }
+
+    // Convergência ESTRITA: um vínculo ativo é equivalente ao pedido se tiver a MESMA organização, tipo documental, escopo exato, identidade do modelo e
+    // revisão exata fixada (a vigência é carimbada pelo servidor e não participa). Só vale numa SUBSTITUIÇÃO, e nunca para o próprio vínculo substituído.
+    const isEquivalent = (b: TemplateBinding): boolean =>
+      b.organizationId === ctx.organizationId && b.documentKind === input.documentKind && b.identityId === identity.id
+      && b.pinnedRevisionId === revision.id && sameScope(b.scope, input.scope);
+    const readActive = (): Promise<readonly TemplateBinding[]> => this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
+    const convergedTo = (active: readonly TemplateBinding[]): TemplateBinding | null =>
+      input.replacesBindingId === undefined ? null : (active.find((b) => b.id !== input.replacesBindingId && isEquivalent(b)) ?? null);
+    const converge = (done: TemplateBinding, phase: "preflight" | "insert"): TemplateBinding => {
+      log.info("template_binding_swap_converged", { organizationId: ctx.organizationId, bindingId: done.id, replaced: input.replacesBindingId ?? null, revisionId: revision.id, phase, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+      return done;
     };
+
     if (input.replacesBindingId !== undefined) {
-      const prior = await this.ports.repository.getBinding(ctx.organizationId, input.replacesBindingId);
-      if (prior && !prior.active && prior.documentKind === input.documentKind && sameScope(prior.scope, input.scope)) {
-        const done = await equivalentActive();
-        if (done) return done;
-      }
+      // O vínculo a substituir é lido PRIMEIRO, por organização (outro tenant ⇒ "não encontrado", sem sinal de conflito nem de existência).
+      const old = await this.ports.repository.getBinding(ctx.organizationId, input.replacesBindingId);
+      if (!old || old.documentKind !== input.documentKind || !sameScope(old.scope, input.scope)) throw notFound("binding a substituir");
     }
     const binding: TemplateBinding = {
       id: this.ports.ids.newId("tb"), organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope,
       identityId: identity.id, pinnedRevisionId: revision.id, active: true, effectiveFrom,
     };
-    const ambiguityProbe = await this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
-    const remaining = ambiguityProbe.filter((b) => b.id !== input.replacesBindingId);
-    const trial = resolveTemplateBinding(
-      { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope, asOf: effectiveFrom },
+    // Leitura ÚNICA e fresca dos ativos (ponto de decisão do preflight). Se outro executor já concluiu a MESMA troca (vínculo equivalente ativo no lugar do
+    // substituído), converge para ele ANTES de montar o conjunto de ambiguidade — nunca soma o próprio candidato a um equivalente já comitado.
+    const active = await readActive();
+    const alreadyDone = convergedTo(active);
+    if (alreadyDone) return converge(alreadyDone, "preflight");
+    const remaining = active.filter((b) => b.id !== input.replacesBindingId);
+    const trial = resolveCurrentTemplateBinding(
+      { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope },
       [...remaining, binding], await this.revisionsFor(ctx, [...remaining, binding]),
     );
     if (trial.status === "INVALID") throw validationFailed("binding inválido", trial.issues);
     if (trial.status === "AMBIGUOUS") {
       throw new TemplateWorkflowError("BINDING_AMBIGUOUS", `já existe binding ativo para este tipo e escopo (${trial.bindingIds.length} candidatos); informe qual substituir ou desative o anterior`);
     }
-    if (input.replacesBindingId !== undefined) {
-      const old = await this.ports.repository.getBinding(ctx.organizationId, input.replacesBindingId);
-      if (!old || old.documentKind !== input.documentKind || !sameScope(old.scope, input.scope)) throw notFound("binding a substituir");
-    }
     // Substituição ATÔMICA: desativar o anterior e criar o novo acontecem na mesma transação (nunca zero nem dois ativos).
     try {
       await this.ports.repository.insertBinding(binding, pctx(ctx), input.replacesBindingId);
     } catch (err) {
-      // Troca concorrente idêntica (outra transação venceu): converge para o vínculo ativo equivalente; conflito real ⇒ erro explícito.
-      if (input.replacesBindingId !== undefined) {
-        const done = await equivalentActive();
-        if (done) return done;
+      // Concorrência/resultado INCERTO (commit feito e resposta perdida, ou outra transação venceu): relê e converge SÓ para o vínculo equivalente. Erros de
+      // autorização/tenant/validação/estado (TemplateWorkflowError diferente de ambiguidade/conflito) e corrupção persistida NUNCA viram sucesso idempotente.
+      if (input.replacesBindingId !== undefined && isConvergibleBindingError(err)) {
+        const done = convergedTo(await readActive());
+        if (done) return converge(done, "insert");
       }
       throw err;
     }
@@ -511,9 +549,17 @@ export class InstitutionalTemplatesWorkflow {
     log.info("template_binding_deactivated", { organizationId: ctx.organizationId, bindingId: binding.id, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
   }
 
-  /** Resolução EXATA (composição por port; padrão = domínio). `asOf` explícito. Ambíguo/sem pin ⇒ falha fechada. */
+  /**
+   * Resolução EXATA (composição por port; padrão = domínio). Fail-closed em ambíguo/sem pin.
+   *  - COM `asOf` explícito: consulta HISTÓRICA (vigência comparada ao instante declarado; nunca vira estado corrente);
+   *  - SEM `asOf`: resolução OPERACIONAL — o vínculo ATIVO numa leitura consistente (o commit da troca é o ponto de linearização), sem relógio de aplicação.
+   */
   async resolveBinding(ctx: WorkflowContext, input: { documentKind: TemplateDocumentKind; scope: BindingScope; asOf?: string }): Promise<BindingResolution> {
-    const request: BindingRequest = { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope, asOf: input.asOf ?? this.ports.clock.now() };
+    if (input.asOf === undefined) {
+      const bindings = await this.ports.repository.listBindings(ctx.organizationId, { documentKind: input.documentKind, activeOnly: true });
+      return resolveCurrentTemplateBinding({ organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope }, bindings, await this.revisionsFor(ctx, bindings));
+    }
+    const request: BindingRequest = { organizationId: ctx.organizationId, documentKind: input.documentKind, scope: input.scope, asOf: input.asOf };
     if (this.ports.composition.resolveExactBinding) {
       const resolved = await this.ports.composition.resolveExactBinding(request);
       this.assertResolutionTenant(ctx, resolved);

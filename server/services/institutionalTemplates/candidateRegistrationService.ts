@@ -15,13 +15,16 @@
  */
 import { serviceLogger } from "../observabilityService";
 import { TemplateWorkflowError } from "./errors";
-import { TemplateGovernanceService, type DeclaredAuthority } from "./governanceService";
-import { ModelRegistrationService } from "./modelRegistrationService";
+import type { DeclaredAuthority } from "./governanceService";
+import { ModelRegistrationService, PACKAGE_SOURCE_FORMAT, summarizePackageInventory } from "./modelRegistrationService";
 import { getModelPackage, getModelPackageVersion, type ModelPackage } from "./modelPackages";
 import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
 import { createHash } from "node:crypto";
 import { verifyCandidatePackage, type PackageCheck } from "../../domain/institutionalTemplates/candidatePackage";
 import { withDedicatedAdvisoryLock } from "../../db/advisoryLock";
+import { IMPORT_PROVENANCE_SUBJECT } from "../../domain/institutionalTemplates/governance/importProvenance";
+import { evaluateCandidateProvenance, type CandidateProvenanceReport, type CandidateProvenanceState, type ExpectedCandidateProvenance } from "../../domain/institutionalTemplates/governance/candidateProvenance";
+import { readScope } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { PUBLICATION_VARIABLES } from "../../domain/institutionalTemplates/publicationSchedule";
 import { BLL_MODEL_KEY } from "./modelPackages";
 
@@ -47,9 +50,6 @@ export interface CandidateRegistrationRequest extends CandidatePlanRequest {
   readonly executorContext?: Readonly<Record<string, string | number>>;
 }
 
-// Contexto de LEITURA do plano (a leitura de governança só usa a organização; nenhum ato é registrado com este ator).
-const READ_ONLY_PLAN_ACTOR = 1;
-
 export type CandidateAction = "REGISTER_DRAFT" | "RECORD_PROVENANCE" | "NONE";
 
 export interface CandidatePlan {
@@ -64,7 +64,10 @@ export interface CandidatePlan {
   readonly baselineRevisionId: string | null;
   readonly candidateRevisionId: string | null;
   readonly candidateStatus: string | null;
+  /** `true` somente quando a procedência corrente CONFERE com o pacote e a revisão exata (não basta existir). `null` ⇒ sem candidata registrada. */
   readonly candidateProvenanceRecorded: boolean | null;
+  /** Relatório da validação INTEGRAL da procedência (estado, versões do ledger, divergências campo a campo). `null` ⇒ sem candidata registrada. */
+  readonly candidateProvenance: CandidateProvenanceReport | null;
   readonly activeBindings: readonly { readonly id: string; readonly pinnedRevisionId: string | null; readonly scope: unknown; readonly effectiveFrom: string }[];
 }
 
@@ -87,6 +90,26 @@ export function candidateRegistrationLockName(organizationId: number, identityId
 }
 const LOCK_TIMEOUT_SECONDS = 60;
 const PROVENANCE_ATTEMPTS = 3;
+
+/**
+ * Projeção ESPERADA da procedência da candidata: derivada do pacote versionado (mesmas funções do registro — nenhum segundo formato) e da revisão exata.
+ * A procedência persistida é CONFRONTADA com ela (ver `evaluateCandidateProvenance`); existir não basta.
+ */
+export function expectedCandidateProvenance(pkg: ModelPackage, revisionId: string, revisionSemanticHash: string): ExpectedCandidateProvenance {
+  return {
+    revisionId, revisionSemanticHash,
+    input: {
+      templateKey: pkg.modelKey, displayName: pkg.displayName, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256,
+      sourceFormat: PACKAGE_SOURCE_FORMAT, scope: readScope(pkg.declaredScope), inventory: summarizePackageInventory(pkg),
+    },
+  };
+}
+
+async function candidateProvenanceOf(ports: Pick<TemplateWorkflowPorts, "governance">, organizationId: number, pkg: ModelPackage, revisionId: string, revisionSemanticHash: string): Promise<CandidateProvenanceReport | null> {
+  if (!ports.governance) return null;
+  const decisions = await ports.governance.listGovernanceDecisions(organizationId, IMPORT_PROVENANCE_SUBJECT, revisionId);
+  return evaluateCandidateProvenance(expectedCandidateProvenance(pkg, revisionId, revisionSemanticHash), decisions, organizationId);
+}
 
 function packages(req: CandidatePlanRequest): { candidate: ModelPackage | null; baseline: ModelPackage | null } {
   return { candidate: getModelPackageVersion(req.modelKey, req.packageVersion), baseline: getModelPackage(req.modelKey) };
@@ -126,20 +149,28 @@ export async function planCandidateRegistration(ports: TemplateWorkflowPorts, re
   const candidateCatalog = candidate?.catalog.version;
   const conflicting = candidateCatalog ? revisions.filter((r) => r.variableCatalogVersion === candidateCatalog && r.semanticHash !== req.expected.semanticHash) : [];
   checks.push(ck("NO_CONFLICTING_REVISION", conflicting.length === 0, conflicting.length === 0 ? "nenhuma revisão conflitante com o catálogo da candidata" : `revisão(ões) ${conflicting.map((r) => `#${r.revision}`).join(", ")} usam o catálogo da candidata com outro hash semântico`));
-  let provenanceRecorded: boolean | null = null;
+  let provenance: CandidateProvenanceReport | null = null;
   if (existing) {
-    const gov = ports.governance ? await new TemplateGovernanceService(ports).get({ organizationId: req.organizationId, actor: { kind: "human", userId: READ_ONLY_PLAN_ACTOR }, correlationId: `cand-plan-${req.runId}` }, existing.id) : null;
-    provenanceRecorded = !!gov?.provenance;
+    provenance = candidate ? await candidateProvenanceOf(ports, req.organizationId, candidate, existing.id, existing.semanticHash) : null;
+    const p = provenance;
+    checks.push(ck("PROVENANCE_VERIFIABLE", p !== null, p ? "procedência verificável (ledger de governança disponível)" : "a procedência não pôde ser verificada (registro de governança ou pacote indisponível): nada será escrito"));
+    if (p) {
+      checks.push(ck("PROVENANCE_DIVERGENT", p.state !== "DIVERGENT", p.state === "DIVERGENT" ? `${p.detail}. Nada será escrito nem sobrescrito: regularização HUMANA (nova versão do ledger) é necessária` : "procedência sem divergência"));
+      checks.push(ck("PROVENANCE_MALFORMED", p.state !== "MALFORMED", p.state === "MALFORMED" ? `${p.detail}. Nada será escrito: resolução humana necessária` : "procedência legível"));
+      const notResumable = p.state === "ABSENT" && existing.status !== "DRAFT";
+      checks.push(ck("PROVENANCE_NOT_RESUMABLE", !notResumable, notResumable ? `a revisão está ${existing.status} sem procedência: só DRAFT é retomável; regularização humana necessária` : "procedência ausente só é recuperada em DRAFT"));
+    }
   }
   const bindings = identityOk ? (await ports.repository.listBindings(req.organizationId, { documentKind: "edital", activeOnly: true })).filter((b) => b.identityId === req.identityId) : [];
 
   const ok = checks.every((c) => c.ok);
-  const action: CandidateAction = !ok ? "NONE" : !existing ? "REGISTER_DRAFT" : existing.status === "DRAFT" && provenanceRecorded === false ? "RECORD_PROVENANCE" : "NONE";
+  const action: CandidateAction = !ok ? "NONE" : !existing ? "REGISTER_DRAFT" : existing.status === "DRAFT" && provenance?.state === "ABSENT" ? "RECORD_PROVENANCE" : "NONE";
   return {
     organizationId: req.organizationId, identityId: req.identityId, packageChecks, checks, ok, action,
     identity: identity ? { documentKind: identity.documentKind, slug: (identity as { slug?: string }).slug ?? null } : null,
     revisions: revisions.map((r) => ({ id: r.id, revision: r.revision, status: r.status, semanticHash: r.semanticHash, catalogVersion: r.variableCatalogVersion })),
-    baselineRevisionId: baselineRev?.id ?? null, candidateRevisionId: existing?.id ?? null, candidateStatus: existing?.status ?? null, candidateProvenanceRecorded: provenanceRecorded,
+    baselineRevisionId: baselineRev?.id ?? null, candidateRevisionId: existing?.id ?? null, candidateStatus: existing?.status ?? null,
+    candidateProvenanceRecorded: provenance ? provenance.state === "CORRECT" : null, candidateProvenance: provenance,
     activeBindings: bindings.map((b) => ({ id: b.id, pinnedRevisionId: b.pinnedRevisionId ?? null, scope: b.scope, effectiveFrom: b.effectiveFrom })),
   };
 }
@@ -161,7 +192,7 @@ export interface CandidateRegistrationResult {
  */
 export async function registerCandidateDraft(ports: TemplateWorkflowPorts, req: CandidateRegistrationRequest): Promise<CandidateRegistrationResult> {
   const ctx: WorkflowContext = { organizationId: req.organizationId, actor: { kind: "human", userId: req.actorUserId }, correlationId: `cand-reg-${req.runId}` };
-  return withDedicatedAdvisoryLock(candidateRegistrationLockName(req.organizationId, req.identityId), LOCK_TIMEOUT_SECONDS, async () => {
+  return withDedicatedAdvisoryLock(candidateRegistrationLockName(req.organizationId, req.identityId), LOCK_TIMEOUT_SECONDS, async (held) => {
     if (!(await ports.flag.isEnabled(req.organizationId))) {
       log.warn("model_candidate_registration_refused_flag_off", { organizationId: req.organizationId, identityId: req.identityId, actorUserId: req.actorUserId, correlationId: ctx.correlationId });
       throw new TemplateWorkflowError("MODULE_DISABLED", "o módulo de Modelos Institucionais está desligado para esta organização (FF_INSTITUTIONAL_TEMPLATES_V1); nada foi criado");
@@ -182,10 +213,14 @@ export async function registerCandidateDraft(ports: TemplateWorkflowPorts, req: 
       sourceSha256: pkg.provenance.sourceSha256, confirm: true as const, idempotencyKey: key, decision: req.decision,
     };
     const performed = plan.action;
-    let result = await registration.register(ctx, input, performed === "RECORD_PROVENANCE" ? { resumeDraftRevisionId: plan.candidateRevisionId! } : {});
+    // A integridade NÃO depende do lock (a sessão dele pode morrer): o DRAFT é criado por escrita transacional exclusiva por hash (`uniqueDraft`) e a procedência
+    // tem chave de idempotência + CAS. `assertHeld` só interrompe cedo (fail-closed) quando a sessão do lock foi perdida, antes de cada fase de escrita.
+    await held.assertHeld();
+    let result = await registration.register(ctx, input, performed === "RECORD_PROVENANCE" ? { resumeDraftRevisionId: plan.candidateRevisionId! } : { uniqueDraft: true });
     // procedência que falhou depois do DRAFT persistido: retoma o MESMO DRAFT (retry limitado; chave de idempotência determinística)
     for (let attempt = 2; result.provenance.status !== "RECORDED" && attempt <= PROVENANCE_ATTEMPTS; attempt++) {
       log.warn("model_candidate_provenance_retry", { organizationId: req.organizationId, identityId: req.identityId, revisionId: result.revision.id, attempt, correlationId: ctx.correlationId });
+      await held.assertHeld();
       result = await registration.register(ctx, input, { resumeDraftRevisionId: result.revision.id });
     }
     // pós-condição: exatamente UMA revisão com o hash da candidata (o defeito antigo criava #2 e #3)
@@ -197,6 +232,9 @@ export async function registerCandidateDraft(ports: TemplateWorkflowPorts, req: 
       action: performed, provenance: result.provenance.status, actorUserId: req.actorUserId, executor: req.executorContext ?? null, correlationId: ctx.correlationId,
     });
     return { plan, performed, revisionId: result.revision.id, provenance: result.provenance.status === "RECORDED" ? ("RECORDED" as const) : ("FAILED" as const) };
+  }, {
+    onLockLost: (i) => log.error("model_candidate_lock_lost", { organizationId: req.organizationId, identityId: req.identityId, lockName: i.lockName, reason: i.reason, actorUserId: req.actorUserId, correlationId: ctx.correlationId }),
+    onReleaseFailed: (err) => log.warn("model_candidate_lock_release_failed", { organizationId: req.organizationId, identityId: req.identityId, message: err instanceof Error ? err.message : String(err), correlationId: ctx.correlationId }),
   });
 }
 
@@ -211,18 +249,24 @@ export interface OrganizationTemplateSnapshot {
     readonly activeBindings: readonly { readonly id: string; readonly pinnedRevisionId: string | null; readonly scope: Readonly<Record<"modality" | "form" | "platform" | "regime" | "criterion", string | null>>; readonly effectiveFrom: string }[];
     readonly hasBaselinePublished: boolean;
     readonly candidateRegistered: boolean;
+    /** Estado da validação integral da procedência da candidata (somente se o chamador informar o pacote); `null` ⇒ sem candidata ou não verificável. */
+    readonly candidateProvenance: CandidateProvenanceState | null;
   }[];
 }
 
 /** Lê identidades de Edital, revisões, vínculos ativos e a flag da organização. Não expõe conteúdo de modelo nem dados de processo. */
 export async function snapshotOrganizationTemplates(
   ports: TemplateWorkflowPorts, organizationId: number, expected: { readonly baselineSemanticHash: string; readonly semanticHash: string }, flagEnabled: boolean,
+  candidate?: { readonly modelKey: string; readonly packageVersion: string },
 ): Promise<OrganizationTemplateSnapshot> {
+  const pkg = candidate ? getModelPackageVersion(candidate.modelKey, candidate.packageVersion) : null;
   const identities = await ports.repository.listIdentities(organizationId, { documentKind: "edital" });
   const bindings = await ports.repository.listBindings(organizationId, { documentKind: "edital", activeOnly: true });
   const out: OrganizationTemplateSnapshot["identities"][number][] = [];
   for (const id of [...identities].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     const revisions = [...(await ports.repository.listRevisions(organizationId, id.id))];
+    const candidateRev = revisions.find((r) => r.semanticHash === expected.semanticHash);
+    const candidateProvenance = candidateRev && pkg ? ((await candidateProvenanceOf(ports, organizationId, pkg, candidateRev.id, candidateRev.semanticHash))?.state ?? null) : null;
     out.push({
       id: id.id, slug: id.slug, documentKind: id.documentKind, displayName: id.displayName ?? null,
       revisions: revisions.map((r) => ({ id: r.id, revision: r.revision, status: r.status, semanticHash: r.semanticHash, catalogVersion: r.variableCatalogVersion })),
@@ -231,7 +275,7 @@ export async function snapshotOrganizationTemplates(
         scope: { modality: b.scope.modality ?? null, form: b.scope.form ?? null, platform: b.scope.platform ?? null, regime: b.scope.regime ?? null, criterion: b.scope.criterion ?? null },
       })),
       hasBaselinePublished: revisions.some((r) => r.status === "PUBLISHED" && r.semanticHash === expected.baselineSemanticHash),
-      candidateRegistered: revisions.some((r) => r.semanticHash === expected.semanticHash),
+      candidateRegistered: !!candidateRev, candidateProvenance,
     });
   }
   return { organizationId, flag: { name: "FF_INSTITUTIONAL_TEMPLATES_V1", enabled: flagEnabled }, identities: out };

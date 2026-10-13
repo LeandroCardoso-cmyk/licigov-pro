@@ -27,14 +27,24 @@ export class AdvisoryLockTimeoutError extends Error {
   }
 }
 
-export async function withAdvisoryLock<T>(connection: mysql.Connection, name: string, timeoutSeconds: number, fn: () => Promise<T>): Promise<T> {
+export async function withAdvisoryLock<T>(
+  connection: mysql.Connection, name: string, timeoutSeconds: number, fn: () => Promise<T>,
+  /** Chamado se o RELEASE_LOCK falhar (conexão perdida): o lock da sessão morta já foi liberado pelo servidor; o resultado de `fn` NÃO é mascarado. */
+  onReleaseFailed?: (err: unknown) => void,
+): Promise<T> {
   const [rows] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK(?, ?) AS ok", [name, timeoutSeconds]);
   if (Number((rows[0] as { ok: number | null }).ok) !== 1) throw new AdvisoryLockTimeoutError(name, timeoutSeconds);
+  let result: T;
   try {
-    return await fn();
-  } finally {
-    await connection.query("SELECT RELEASE_LOCK(?) AS released", [name]);
+    result = await fn();
+  } catch (err) {
+    // erro de `fn` sempre prevalece: falha de liberação nunca o substitui
+    await connection.query("SELECT RELEASE_LOCK(?) AS released", [name]).catch((e: unknown) => onReleaseFailed?.(e));
+    throw err;
   }
+  // `fn` já concluiu (e possivelmente comitou): uma falha ao liberar NÃO pode virar erro do chamador (resultado incerto falso). O servidor libera o lock com a sessão.
+  await connection.query("SELECT RELEASE_LOCK(?) AS released", [name]).catch((e: unknown) => onReleaseFailed?.(e));
+  return result;
 }
 
 /** Executa `fn` sob o advisory lock de migração (liberação garantida). Lança se o lock não for obtido no prazo. */

@@ -50,6 +50,7 @@ export type EditalTemplateResolution =
 export interface BridgeDeps {
   /** Ports da composição, ou `null` quando o módulo não está integrado nesta instalação (⇒ feature OFF). */
   readonly ports: TemplatePorts | null;
+  /** Relógio de aplicação (observabilidade/compatibilidade). NÃO participa da resolução do vínculo (ver `resolveEditalTemplate`). */
   readonly now: () => string;
 }
 
@@ -61,7 +62,9 @@ export async function resolveEditalTemplate(deps: BridgeDeps, organizationId: Or
   if (!adapted.ok) {
     return { status: "NOT_BOUND", reason: adapted.reason === "PARAMETERS_INCOMPLETE" ? "PARAMETERS_INCOMPLETE" : "UNMAPPED_SCOPE", detail: adapted.detail };
   }
-  const resolution = await resolveBindingForGeneration(deps.ports, organizationId, "edital", adapted.scope, deps.now());
+  // Resolução OPERACIONAL (sem `asOf` pré-capturado): o vínculo ATIVO numa leitura consistente. Capturar `deps.now()` antes da leitura e compará-lo com a vigência
+  // carimbada por uma troca concorrente (outra transação/réplica, relógio adiantado) fazia o novo vínculo parecer "ainda não vigente" ⇒ NOT_BOUND ⇒ legado indevido.
+  const resolution = await resolveBindingForGeneration(deps.ports, organizationId, "edital", adapted.scope);
   switch (resolution.status) {
     case "NOT_BOUND": return { status: "NOT_BOUND", reason: "NO_BINDING" };
     case "AMBIGUOUS": return { status: "CONFLICT", bindingIds: [...resolution.bindingIds] };
@@ -144,7 +147,7 @@ export async function generateEditalRouted<L>(deps: BridgeDeps, p: RoutedGenerat
       // Sem try/catch de fallback: qualquer falha institucional é erro (NUNCA cai para o gerador legado).
       const result = await p.institutional({
         organizationId: p.organizationId, subjectId: p.processId, documentKind: "edital", documentType: "edital",
-        scope: resolution.normalizedScope as BindingScope, asOf: deps.now(), title: `Edital — ${p.object}`,
+        scope: resolution.normalizedScope as BindingScope, title: `Edital — ${p.object}`,
         actorUserId: p.actorUserId, correlationId: p.correlationId, officialPins: { TR: tr },
       });
       return { mode: "INSTITUTIONAL_TEMPLATE", result, template: resolution.template };

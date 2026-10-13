@@ -107,6 +107,12 @@ export interface TemplateRepositoryPort {
   getRevision(organizationId: OrgId, revisionId: string): Promise<TemplateRevision | null>;
   /** Insere SEMPRE em DRAFT. Lança `DuplicateTemplateRevisionError` se (identidade, nº da revisão) já existe. */
   insertDraftRevision(revision: TemplateRevision, ctx: PersistenceContext): Promise<void>;
+  /**
+   * Insere um DRAFT EXCLUSIVO por hash semântico na identidade, atomicamente (linha da identidade FOR UPDATE + checagem + INSERT na mesma transação):
+   * já existe revisão com o hash ⇒ devolve a existente (`created: false`); o número é atribuído sob o lock (o do chamador é ignorado). Opcional: ports sem ele
+   * não suportam o registro controlado de candidata (falha fechada).
+   */
+  insertDraftRevisionUnique?(revision: TemplateRevision, ctx: PersistenceContext): Promise<{ readonly revision: TemplateRevision; readonly created: boolean }>;
   /** CAS pelo `semanticHash` anterior; só atua em DRAFT. `false` = conflito (outro editor ganhou) ou não-DRAFT. */
   updateDraftContent(organizationId: OrgId, before: TemplateRevision, after: TemplateRevision, ctx: PersistenceContext): Promise<boolean>;
   /** Decisão + transição + evento ATÔMICOS (mesma transação local). Replay idempotente pela chave da decisão. */

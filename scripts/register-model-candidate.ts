@@ -38,10 +38,11 @@ export async function main(): Promise<number> {
     const { createTemplateWorkflowPorts } = await import("../server/services/institutionalTemplates/integration");
     const { snapshotOrganizationTemplates } = await import("../server/services/institutionalTemplates/candidateRegistrationService");
     const { isFeatureEnabled } = await import("../server/services/featureFlagService");
+    const { BLL_MODEL_KEY } = await import("../server/services/institutionalTemplates/modelPackages");
     const snap = await snapshotOrganizationTemplates(createTemplateWorkflowPorts(), organizationId, {
       baselineSemanticHash: arg("expect-baseline-hash") ?? "e62297e16e4d3c2e0bbef5d288f1a0e675675c4d741f6b2afe1d5c265431da5d",
       semanticHash: arg("expect-semantic-hash") ?? "33ee30bc76b79fa92dfe7952e5e6fbce1c5e830d8da9227d3333bac68a63c0cd",
-    }, await isFeatureEnabled("FF_INSTITUTIONAL_TEMPLATES_V1", organizationId));
+    }, await isFeatureEnabled("FF_INSTITUTIONAL_TEMPLATES_V1", organizationId), { modelKey: BLL_MODEL_KEY, packageVersion: arg("package-version") ?? "1.0.2-draft" });
     console.info(JSON.stringify(snap, null, has("json") ? 2 : 0));
     return 0;
   }

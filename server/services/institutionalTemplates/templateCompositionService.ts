@@ -25,7 +25,7 @@ import {
 import { conditionVariables } from "../../domain/institutionalTemplates/conditionalDsl2";
 import type { ModelRules } from "../../domain/institutionalTemplates/modelRules";
 import { getModelRulesForCatalog } from "./modelPackages";
-import { resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
+import { resolveCurrentTemplateBinding, resolveTemplateBinding, type BindingScope } from "../../domain/institutionalTemplates/binding";
 import {
   composeTemplate,
   type AiNarrativeOutput, type ComposedDocument, type ComposeResult, type TemplateComposeRequest,
@@ -189,8 +189,11 @@ export interface GenerateTemplatedDocumentParams {
   readonly documentKind: TemplateDocumentKind;
   readonly documentType: OfficialDocumentType;
   readonly scope: BindingScope;
-  /** Instante de referência EXPLÍCITO para a vigência do binding (ISO-8601 UTC). */
-  readonly asOf: string;
+  /**
+   * Instante EXPLÍCITO para uma resolução HISTÓRICA/por instante declarado (ISO-8601 UTC). AUSENTE ⇒ resolução OPERACIONAL: o vínculo ATIVO lido
+   * numa leitura consistente (o commit da troca é o ponto de linearização); nenhum relógio de aplicação é capturado antes da leitura.
+   */
+  readonly asOf?: string;
   readonly title: string;
   readonly actorUserId: number;
   readonly correlationId: string;
@@ -221,14 +224,17 @@ export interface GenerateTemplatedDocumentResult {
  * qualquer leitura de "qual modelo se aplica" (ex.: o bridge do workspace do Edital): nenhum resolvedor paralelo.
  */
 export async function resolveBindingForGeneration(
-  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf: string,
+  ports: Pick<TemplatePorts, "repository">, organizationId: OrgId, documentKind: TemplateDocumentKind, scope: BindingScope, asOf?: string,
 ) {
   const bindings = await ports.repository.listBindings(organizationId, { documentKind, activeOnly: true });
   const revisions: TemplateRevision[] = [];
   for (const identityId of [...new Set(bindings.map((b) => b.identityId))].sort()) {
     revisions.push(...(await ports.repository.listRevisions(organizationId, identityId)));
   }
-  return resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
+  // `asOf` explícito ⇒ consulta histórica (vigência comparada ao instante); ausente ⇒ vínculo ATIVO lido agora (estado corrente, sem janela NOT_BOUND).
+  return asOf === undefined
+    ? resolveCurrentTemplateBinding({ organizationId, documentKind, scope }, bindings, revisions)
+    : resolveTemplateBinding({ organizationId, documentKind, scope, asOf }, bindings, revisions);
 }
 
 interface PreparedComposition {

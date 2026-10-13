@@ -141,7 +141,7 @@ const budgetInput = z.object({ processId: z.string().min(1).max(20), disclosure:
 
 const generateInput = z.object({
   processId: z.string().min(1).max(20), documentKind: z.enum(KINDS), documentType: z.enum(["dfd", "etp", "tr", "edital"]),
-  scope, asOf: iso, title: z.string().min(1).max(500),
+  scope, asOf: iso.optional(), title: z.string().min(1).max(500),
   /** Narrativas de IA entram SÓ por id de execução auditável (o texto nunca vem do cliente). */
   aiExecutionIds: z.array(z.string().min(1).max(20)).max(20).optional(),
   /** Documento(s) oficial(is) EXATO(S) (id + versão + hash) escolhido(s) por pessoa para cada docRef — nunca "o último". */
@@ -376,7 +376,7 @@ export const institutionalTemplatesRouter = router({
         }
         const result = await generateTemplatedDocument({
           organizationId: ctx.wctx.organizationId, subjectId: input.processId, documentKind: input.documentKind, documentType: input.documentType,
-          scope: input.scope, asOf: input.asOf, title: input.title, actorUserId: ctx.wctx.actor.userId, correlationId: ctx.wctx.correlationId,
+          scope: input.scope, ...(input.asOf ? { asOf: input.asOf } : {}), title: input.title, actorUserId: ctx.wctx.actor.userId, correlationId: ctx.wctx.correlationId,
           aiNarratives: outputs, ...(input.officialPins ? { officialPins: input.officialPins } : {}),
         }, ports);
         return {
