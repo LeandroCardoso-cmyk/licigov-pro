@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { classifyDraftHumanState } from "../../domain/draftRegeneration";
+import { classifyDraftHumanState, classifyTemplateDraftHumanState } from "../../domain/draftRegeneration";
 import { draftContentHash } from "../../domain/generatedDocument";
 import {
   createDraftRevision, transitionRevision, validateVariableCatalog2, validateManifest,
@@ -24,7 +24,7 @@ import { revisionSemanticHash } from "../../domain/institutionalTemplates/semant
 import {
   PUBLICATION_FIELDS, PUBLICATION_VARIABLES, projectPublicationSchedule,
 } from "../../domain/institutionalTemplates/publicationSchedule";
-import { DEFERRED_PUBLICATION_TEXT, isDeferredPublication } from "../../domain/institutionalTemplates/variableCatalog2";
+import { DEFERRED_PUBLICATION_TEXT, isDeferredPublication, supportsGovernedDraftRecomposition } from "../../domain/institutionalTemplates/variableCatalog2";
 import { MODEL_PACKAGES, getModelPackage, getModelPackageVersion, BLL_MODEL_KEY } from "../../services/institutionalTemplates/modelPackages";
 import { MODEL_REGISTRATION_PRESETS } from "../../services/institutionalTemplates/modelRegistrationService";
 import { createVariableCatalogPort } from "../../services/institutionalTemplates/catalogRegistry";
@@ -300,14 +300,29 @@ describe("LEGAL — a composição não depende de parecer/autorização jurídi
   });
 });
 
-describe("RECOMPOSIÇÃO — classificação do rascunho composto por modelo", () => {
+describe("RECOMPOSIÇÃO — capability derivada da SEMÂNTICA do catálogo + classificação do rascunho composto", () => {
+  it("CAP — Revisão 1 (sem completionPolicy) NÃO tem a capability; Revisão 2 (DEFERRED_PUBLICATION) TEM; nunca por número/versão", () => {
+    expect(supportsGovernedDraftRecomposition(bllCatalog)).toBe(false);
+    expect(supportsGovernedDraftRecomposition(r2Catalog)).toBe(true);
+    expect(supportsGovernedDraftRecomposition({ vars: [] })).toBe(false);
+    // derivada SÓ do metadado: remover o metadado de uma cópia do catálogo da Revisão 2 desliga a capability, e adicioná-lo à Revisão 1 liga
+    const stripped = { ...r2Catalog, vars: r2Catalog.vars.map((v) => { const { completionPolicy: _c, ...rest } = v as Record<string, unknown>; return rest; }) };
+    expect(supportsGovernedDraftRecomposition(stripped as never)).toBe(false);
+    expect(supportsGovernedDraftRecomposition({ ...bllCatalog, vars: [...bllCatalog.vars, { completionPolicy: "DEFERRED_PUBLICATION" }] } as never)).toBe(true);
+  });
+  it("CAP — o código da capability não referencia número de revisão nem versão lógica", () => {
+    const src = ["server/domain/institutionalTemplates/variableCatalog2.ts", "server/services/institutionalTemplates/templateCompositionService.ts"]
+      .map((f) => readFileSync(path.resolve(f), "utf8")).join("\n");
+    expect(src).not.toMatch(/1\.0\.2-draft|revisionNumber\s*===|revision\.revision\s*===\s*2|\.c3/);
+  });
   const doc = { content: "texto composto", sources: ["origem:template", "tpl-m1:m1"] };
   const edit = (operation: string, content = doc.content) => ({ operation, actorUserId: 1, newContentHash: draftContentHash(content), createdAt: "2026-10-12T00:00:00Z" });
-  it("composição do sistema (template_compose) com hash igual ao último do ledger NÃO é conteúdo humano", () => {
-    expect(classifyDraftHumanState(doc, edit("template_compose")).human).toBe(false);
+  it("composição do sistema (template_compose) com hash igual ao último do ledger NÃO é conteúdo humano — só no classificador de modelo", () => {
+    expect(classifyTemplateDraftHumanState(doc, edit("template_compose")).human).toBe(false);
+    expect(classifyDraftHumanState(doc, edit("template_compose")).human).toBe(true);        // classificador legado INALTERADO
   });
   it("edição humana posterior, ou conteúdo divergente do ledger, é conteúdo humano (nunca sobrescrever em silêncio)", () => {
-    expect(classifyDraftHumanState(doc, edit("human_edit")).human).toBe(true);
-    expect(classifyDraftHumanState({ ...doc, content: "outro texto" }, edit("template_compose")).human).toBe(true);
+    expect(classifyTemplateDraftHumanState(doc, edit("human_edit")).human).toBe(true);
+    expect(classifyTemplateDraftHumanState({ ...doc, content: "outro texto" }, edit("template_compose")).human).toBe(true);
   });
 });

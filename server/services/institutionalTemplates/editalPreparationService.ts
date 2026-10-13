@@ -23,7 +23,7 @@ import {
   AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES, type GovernedParticipation, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
-import { isDeferredPublication, type VariableDef2, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import { isDeferredPublication, supportsGovernedDraftRecomposition, type VariableDef2, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { PUBLICATION_VARIABLES, projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { presentationOf } from "../../domain/institutionalTemplates/editalPresentation";
 import { resolveProcurementContext } from "../canonicalContextService";
@@ -224,6 +224,11 @@ export type EditalPreparationState =
       readonly schedule: PublicationScheduleProjection;
       readonly readiness: PublicationReadiness;
     };
+    /**
+     * Capabilities DERIVADAS do catálogo da revisão vinculada (informativo para a tela; o SERVIDOR reaplica o gate na composição).
+     * `governedDraftRecomposition` = a revisão declara dados de publicação diferidos ⇒ preencher depois recompõe o rascunho (nova versão).
+     */
+    readonly capabilities: { readonly governedDraftRecomposition: boolean };
   };
 
 /** Descritor serializável da variável (a tela não tem segunda cópia do catálogo). */
@@ -617,6 +622,7 @@ export async function getEditalPreparationState(
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
     upstream: { trDigest: reuse.trDigest, trPending, profilePending, sourcePending },
     summary: { groups, reusedAutomatically, pendingDecisions },
+    capabilities: { governedDraftRecomposition: supportsGovernedDraftRecomposition(catalog) },
     ...(hasPublicationVars ? (() => { const p = projectPublicationSchedule(publicationValues); return { publication: { deferredPolicy, schedule: p.schedule, readiness: p.readiness } }; })() : {}),
     metrics: {
       TOTAL_TEMPLATE_FIELDS: catalog.vars.length, AUTO_RESOLVED: m.AUTO, ORG_REUSED: m.ORG, TR_PROJECTED: m.TRP, DECIDED: m.DEC,

@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/mysql2/migrator";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import type { RowDataPacket } from "mysql2";
 import { APP_ENV, ENV_TAG, validateRequiredEnv } from "./config/env";
+import { withMigrationLock } from "./db/migrationLock";
 import { collectForeignKeyContractProblems } from "./db/schemaForeignKeyGuard";
 import { APP_CONFIG } from "./config/app";
 import { AWS_CONFIG } from "./config/aws";
@@ -25,11 +26,12 @@ function log(module: string, msg: string): void {
 
 // Exportada para os smokes MySQL que constroem o schema num banco real (migrate() já é
 // suficiente desde a Fase B — a 0297 fechou o schema; não há mais reconciliação em runtime).
-// O boot usa `migrateWithAdvisoryLock` (com lock); esta variante sem lock atende aos testes.
+// Usada SÓ pelos smokes (o boot não migra). Roda sob o MESMO advisory lock do release (`migrationLock.ts`): arquivos de teste concorrentes sobre um
+// banco ainda não migrado não executam `CREATE TABLE` ao mesmo tempo (`ER_TABLE_EXISTS_ERROR`); com o banco já migrado o lock é instantâneo.
 export async function runMigrations(connection: mysql.Connection): Promise<void> {
   log("DB", `Executando migrações de: ${MIGRATIONS_FOLDER}`);
   const db = drizzle(connection);
-  await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  await withMigrationLock(connection, () => migrate(db, { migrationsFolder: MIGRATIONS_FOLDER }));
   log("DB", "✓ Migrações aplicadas");
 }
 

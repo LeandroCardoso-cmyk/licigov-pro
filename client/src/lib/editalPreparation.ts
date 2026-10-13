@@ -99,6 +99,8 @@ export interface PreparationStateView {
   metrics: PreparationMetrics;
   /** PublicationReadiness + projeção do cronograma (não bloqueiam a geração). Ausente quando o modelo não tem dados de publicação. */
   publication?: PublicationView;
+  /** Derivadas do catálogo da revisão vinculada (o servidor reaplica o gate). Ausente ⇒ sem capability. */
+  capabilities?: { governedDraftRecomposition: boolean };
 }
 
 export const DURATION_UNIT_LABEL: Record<string, string> = {

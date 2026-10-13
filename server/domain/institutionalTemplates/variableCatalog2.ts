@@ -204,3 +204,11 @@ export function findVariable2(catalog: VariableCatalog2, name: string): Variable
 
 /** O valor desta variável pode faltar na composição porque pertence à preparação da publicação. */
 export const isDeferredPublication = (def: Pick<VariableDef2, "completionPolicy">): boolean => def.completionPolicy === "DEFERRED_PUBLICATION";
+
+/**
+ * CAPABILITY derivada da SEMÂNTICA do catálogo da revisão efetivamente composta (nunca de número/versão/string de revisão):
+ * a revisão que declara dados de publicação como `DEFERRED_PUBLICATION` suporta a recomposição governada do rascunho (preencher depois →
+ * nova versão do rascunho). Catálogo sem esse metadado (ex.: Revisão 1, catálogos v1) NÃO tem a capability: comportamento legado intacto.
+ */
+export const supportsGovernedDraftRecomposition = (catalog: { readonly vars: readonly object[] }): boolean =>
+  catalog.vars.some((v) => (v as { completionPolicy?: unknown }).completionPolicy === "DEFERRED_PUBLICATION");

@@ -17,7 +17,7 @@ import { getDb } from "../../../db/connection";
 import { applyDraftContentMutationTx, type ProcurementExecutor } from "../../../db/procurement";
 import { TemplatePersistenceError } from "../../../db/institutionalTemplates";
 import { draftContentHash, type DocumentKind, type GeneratedDocument } from "../../../domain/generatedDocument";
-import { classifyDraftHumanState, humanEditRefusalMessage, officialRegenerationBlock, officialRegenerationRefusalMessage } from "../../../domain/draftRegeneration";
+import { classifyTemplateDraftHumanState, humanEditRefusalMessage, officialRegenerationBlock, officialRegenerationRefusalMessage } from "../../../domain/draftRegeneration";
 import { getLatestOfficialPromotion, type PromotionExecutor } from "../../../db/officialDocumentPromotions";
 import type { TemplateDraftPort } from "../ports";
 
@@ -99,7 +99,7 @@ async function recomposeExisting(
   }).from(generatedDocumentEditsTable).where(and(
     eq(generatedDocumentEditsTable.organizationId, draft.organizationId), eq(generatedDocumentEditsTable.processId, draft.subjectId), eq(generatedDocumentEditsTable.kind, kind)))
     .orderBy(desc(generatedDocumentEditsTable.id)).limit(1))[0];
-  const refusal = humanEditRefusalMessage(kindLabel, classifyDraftHumanState({ content, sources }, last ? { ...last, createdAt: String(last.createdAt) } : null), replace.confirmReplace);
+  const refusal = humanEditRefusalMessage(kindLabel, classifyTemplateDraftHumanState({ content, sources }, last ? { ...last, createdAt: String(last.createdAt) } : null), replace.confirmReplace);
   if (refusal) throw new TRPCError({ code: "CONFLICT", message: refusal });
   const now = new Date().toISOString();
   const doc: GeneratedDocument = {

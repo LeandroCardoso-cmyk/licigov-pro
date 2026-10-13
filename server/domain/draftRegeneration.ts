@@ -39,7 +39,7 @@ export interface LastDraftEdit {
 }
 
 /** Operações do ledger cujo conteúdo resultante é produzido pelo SISTEMA (IA/template), não por humano. */
-const SYSTEM_AUTHORED_OPERATIONS: ReadonlySet<string> = new Set(["ai_regenerate", "dfd_regenerate", "dfd_ai_draft", "template_compose"]);
+const SYSTEM_AUTHORED_OPERATIONS: ReadonlySet<string> = new Set(["ai_regenerate", "dfd_regenerate", "dfd_ai_draft"]);
 const IMPORT_OPERATIONS: ReadonlySet<string> = new Set(["import_promote", "import_replace"]);
 
 export type DraftHumanReason = "human_edit" | "import" | "untracked_change";
@@ -80,6 +80,18 @@ export function classifyDraftHumanState(
     return { human: true, reason: "human_edit", operation: null, actorUserId: null, at: null };
   }
   return { human: false };
+}
+
+/**
+ * Estado humano de um rascunho composto por MODELO institucional: a composição do sistema (`template_compose`) com hash coincidente não é
+ * trabalho humano. Classificador SEPARADO (não altera `classifyDraftHumanState`, usado pelo fluxo legado): só a recomposição governada o usa.
+ */
+export function classifyTemplateDraftHumanState(
+  draft: { readonly content: string; readonly sources?: readonly string[] | null },
+  lastEdit: LastDraftEdit | null | undefined,
+): DraftHumanState {
+  const asSystem = lastEdit?.operation === "template_compose" ? { ...lastEdit, operation: "ai_regenerate" } : lastEdit;
+  return classifyDraftHumanState(draft, asSystem);
 }
 
 const KIND_LABELS: Record<"etp" | "tr" | "edital", string> = { etp: "ETP", tr: "TR", edital: "Edital" };

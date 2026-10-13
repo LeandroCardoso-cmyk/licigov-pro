@@ -26,6 +26,12 @@ Bloco recolhido **"Dados para publicação"** na preparação. A gravação usa 
   o conteúdo anterior fica no ledger append-only (`generated_document_edits`), o M1 anterior permanece imutável, o novo M1 tem novo hash.
   Recusa: documento aprovado/oficial (`OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE`); edição humana sem `confirmReplace` (`HUMAN_EDIT_WOULD_BE_OVERWRITTEN`); hash desatualizado.
   Sem o hash, rascunho existente com outro conteúdo continua ⇒ CONFLICT (nunca sobrescreve).
+- **Capability-gate (servidor é a autoridade):** a recomposição só existe quando o catálogo da revisão EXATA composta declara `DEFERRED_PUBLICATION`
+  (`supportsGovernedDraftRecomposition(catalog)`, derivada da semântica — nunca de número/versão de revisão). Sem a capability (Revisão 1),
+  `expectedContentHash`/`confirmReplace` são **ignorados** e o comportamento legado permanece (rascunho diferente ⇒ CONFLICT, nada sobrescrito, nenhum
+  `template_compose` novo). A preparação expõe `capabilities.governedDraftRecomposition` (informativo; a tela só envia o hash quando verdadeiro).
+- **O texto do rascunho nunca é autoridade:** "A DEFINIR PARA PUBLICAÇÃO" (ou uma data digitada no lugar) não altera `PublicationReadiness`, a projeção,
+  a CertameConfig nem o `deferredPublication` do manifest. Só a fonte estruturada governada resolve o campo; a próxima composição a usa.
 
 ## Downstream
 Não há consumidor existente que leia a CertameConfig (calendário/Centro de Operações usam `operation_records`/`operational_events`); o outbox existente não tem

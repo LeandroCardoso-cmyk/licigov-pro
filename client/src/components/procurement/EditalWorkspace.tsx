@@ -217,6 +217,7 @@ export default function EditalWorkspace({
     },
   });
 
+  const recomposeHash = preparationState?.capabilities?.governedDraftRecomposition ? draft?.contentHash : undefined;
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
     if (bound) {
@@ -226,10 +227,11 @@ export default function EditalWorkspace({
         processId, object: object.trim(),
         modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
         officialPins: { TR: trPin }, idempotencyKey: editalKey,
-        // Rascunho já composto: o hash que a pessoa viu habilita a RECOMPOSIÇÃO governada (nova versão; o anterior fica no histórico).
-        // Edição humana no rascunho ⇒ o servidor recusa e a tela pede a confirmação explícita (confirmReplace).
-        ...(draft?.contentHash ? { expectedContentHash: draft.contentHash } : {}),
-        ...(confirmed && draft?.contentHash ? { confirmReplace: true } : {}),
+        // Rascunho já composto E revisão com a capability (derivada do catálogo): o hash que a pessoa viu habilita a RECOMPOSIÇÃO governada
+        // (nova versão; o anterior fica no histórico). Edição humana ⇒ o servidor recusa e a tela pede confirmação (confirmReplace).
+        // O SERVIDOR é a autoridade: sem a capability ele ignora estes campos (comportamento legado).
+        ...(recomposeHash ? { expectedContentHash: recomposeHash } : {}),
+        ...(confirmed && recomposeHash ? { confirmReplace: true } : {}),
       });
       return;
     }

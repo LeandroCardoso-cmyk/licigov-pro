@@ -4,6 +4,8 @@
  * e ficam num bloco recolhido; o SRP é perguntado em linguagem operacional (Sim/Não).
  */
 import { beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -122,5 +124,21 @@ describe("SSR — bloco 'Dados para publicação' e SRP", () => {
     const st = deferredState();
     expect(livePendingItems(st, {}).map((i) => i.field.name)).toEqual(["controle.utilizaSrp"]);
     expect(srpField().completionPolicy).toBeUndefined();
+  });
+});
+
+describe("CAP — a tela só envia o hash de recomposição quando a revisão vinculada declara a capability (o servidor reaplica o gate)", () => {
+  const SRC = readFileSync(path.resolve("client/src/components/procurement/EditalWorkspace.tsx"), "utf8");
+  it("expectedContentHash/confirmReplace do ramo institucional dependem de preparationState.capabilities.governedDraftRecomposition", () => {
+    expect(SRC).toContain("preparationState?.capabilities?.governedDraftRecomposition");
+    const branch = SRC.slice(SRC.indexOf("if (bound) {"), SRC.indexOf("// Decisão PURA antes de qualquer chamada"));
+    expect(branch).toContain("recomposeHash");
+    expect(branch).not.toMatch(/expectedContentHash:\s*draft\?\.contentHash/);
+  });
+  it("sem a capability (ou sem estado de preparação) o hash não é enviado", () => {
+    const recompose = (caps: { governedDraftRecomposition: boolean } | undefined, hash: string | undefined) => (caps?.governedDraftRecomposition ? hash : undefined);
+    expect(recompose(undefined, "h")).toBeUndefined();
+    expect(recompose({ governedDraftRecomposition: false }, "h")).toBeUndefined();
+    expect(recompose({ governedDraftRecomposition: true }, "h")).toBe("h");
   });
 });

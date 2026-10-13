@@ -100,14 +100,17 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
   return { manifest, officialDocumentId: row.officialDocumentId ?? null, correlationId: row.correlationId };
 }
 
-async function loadRefs(db: TemplatesReader, organizationId: number, manifestId: string): Promise<DocumentCompositionReferenceRow[]> {
-  return db.select().from(documentCompositionReferencesTable).where(and(
+async function loadRefs(db: TemplatesReader, organizationId: number, manifestId: string, locking = false): Promise<DocumentCompositionReferenceRow[]> {
+  const q = db.select().from(documentCompositionReferencesTable).where(and(
     eq(documentCompositionReferencesTable.organizationId, organizationId), eq(documentCompositionReferencesTable.manifestId, manifestId)))
     .orderBy(asc(documentCompositionReferencesTable.refOrder));
+  // `locking`: leitura ATUAL (FOR SHARE) — enxerga as referências que a transação concorrente vencedora acabou de confirmar (REPEATABLE READ
+  // devolveria o snapshot antigo e o manifest reconstruído não provaria o próprio hash).
+  return locking ? q.for("share") : q;
 }
 
-async function hydrate(db: TemplatesReader, row: DocumentCompositionManifestRow): Promise<StoredManifest> {
-  return rowsToManifest(row, await loadRefs(db, row.organizationId, row.id));
+async function hydrate(db: TemplatesReader, row: DocumentCompositionManifestRow, locking = false): Promise<StoredManifest> {
+  return rowsToManifest(row, await loadRefs(db, row.organizationId, row.id, locking));
 }
 
 export async function getManifest(organizationId: number, id: string, executor?: TemplatesReader): Promise<StoredManifest | null> {
@@ -248,7 +251,7 @@ async function persistManifest(
       if ((byHash.officialDocumentId ?? null) !== officialDocumentId) {
         throw new TemplatePersistenceError("ISSUANCE_MANIFEST_CONFLICT", "o mesmo conteúdo já está registrado para outra versão oficial");
       }
-      return { ...(await hydrate(tx, byHash)), created: false };
+      return { ...(await hydrate(tx, byHash, true)), created: false };
     }
     if (await lockManifestRow(tx, ctx.organizationId, "id", manifest.id)) {
       throw new TemplatePersistenceError("MANIFEST_ID_CONFLICT", "o id do manifest já existe com outro conteúdo semântico");
@@ -271,7 +274,7 @@ async function persistManifest(
   }
   const row = await lockManifestRow(tx, ctx.organizationId, "id", manifest.id);
   if (!row) throw corrupt("manifest não encontrado após a inserção");
-  return { ...(await hydrate(tx, row)), created: true };
+  return { ...(await hydrate(tx, row, true)), created: true };
 }
 
 /** M1 — manifest da geração (rascunho composto). */

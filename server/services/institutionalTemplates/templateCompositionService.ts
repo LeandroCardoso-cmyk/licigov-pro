@@ -37,7 +37,7 @@ import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTempla
 import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
-import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import { supportsGovernedDraftRecomposition, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { sha256Hex } from "../../domain/canonicalJson";
 import { generateOfficialDocument } from "../documentEngineService";
 import { serviceLogger } from "../observabilityService";
@@ -329,6 +329,13 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
   const { composed, generatedDocumentId } = prep;
   if (!composed.ok) throw preconditionFailed(TEMPLATE_COMPOSITION_FAILED, codesOf(composed.issues));
   const m1 = composed.value.manifest;
+  // CAPABILITY-GATE (servidor é a autoridade): a recomposição governada só existe se a revisão EXATA que acabou de ser composta declara a
+  // capability no próprio catálogo (DEFERRED_PUBLICATION). Sem ela (ex.: Revisão 1), `expectedContentHash`/`confirmReplace` são IGNORADOS e o
+  // comportamento legado permanece: rascunho existente com outro conteúdo ⇒ CONFLICT, nada sobrescrito.
+  const recompose = params.recompose && supportsGovernedDraftRecomposition(prep.template.catalog) ? params.recompose : undefined;
+  if (params.recompose && !recompose) {
+    log.warn("template_recomposition_capability_absent", { organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, correlationId: params.correlationId });
+  }
 
   // 5. Escrita atômica (rascunho + versão `gerado` + M1), repetida inteira em deadlock.
   const written = await ports.transactions.run("template.compose", params.organizationId, params.correlationId, async (tx: TemplateTxExecutor) => {
@@ -343,7 +350,7 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
       id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,
       title: params.title, content: composed.value.content.text, actorUserId: params.actorUserId, correlationId: params.correlationId,
       generationManifestId: m1.id,
-      ...(params.recompose ? { replace: params.recompose } : {}),
+      ...(recompose ? { replace: recompose } : {}),
     }, tx);
     // M1 ANTES da versão `gerado`: o INSERT é convergente (o mesmo M1 concorrente/repetido ⇒ `created = false`) e só quem o
     // criou gera a versão oficial — repetir ou competir nunca duplica a versão `gerado` (o rascunho/M1 já a representam).
