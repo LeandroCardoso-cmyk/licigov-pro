@@ -248,6 +248,13 @@ export interface TemplateDraftPort {
     readonly id: string; readonly organizationId: OrgId; readonly subjectId: string; readonly documentType: string;
     readonly title: string; readonly content: string; readonly actorUserId: number; readonly correlationId: string;
     readonly generationManifestId: string;
+    /**
+     * RECOMPOSIÇÃO governada (ex.: dados de publicação preenchidos depois): substitui o rascunho EXISTENTE de origem `template` por uma
+     * nova composição, sob lock, SÓ se o hash atual é o esperado, o documento não é aprovado/oficial e não há edição humana (ou há
+     * `confirmReplace`). O conteúdo anterior fica no ledger append-only; o M1 anterior permanece imutável. Sem isto, rascunho existente
+     * com outro conteúdo ⇒ CONFLICT (nunca sobrescreve).
+     */
+    readonly replace?: { readonly expectedContentHash: string; readonly confirmReplace?: boolean };
   }, executor: TemplateTxExecutor): Promise<void>;
 }
 

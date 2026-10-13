@@ -88,6 +88,19 @@ export interface CanonicalRevalidationRecord {
 import type { LateBoundRef, LifecycleBinding } from "./lifecycleLateBound";
 import { LATE_BOUND_PENDING, LATE_BOUND_VARIABLES } from "./lifecycleLateBound";
 
+/**
+ * Dado de PUBLICAÇÃO diferido (catálogo: `completionPolicy = DEFERRED_PUBLICATION`) consultado pela composição.
+ *  - `DEFERRED`: ainda sem valor — o documento traz o texto governado "A DEFINIR PARA PUBLICAÇÃO"; nenhum valor foi inventado;
+ *  - `RESOLVED`: valor real usado (o `valueHash` identifica o valor canônico sem duplicá-lo; a revisão da fonte está no digest de `sources`).
+ * Ausente no manifest quando o catálogo não declara nenhum (os hashes de manifests anteriores permanecem idênticos).
+ */
+export type DeferredPublicationStatus = "DEFERRED" | "RESOLVED";
+export interface DeferredPublicationRef {
+  readonly variable: string;
+  readonly status: DeferredPublicationStatus;
+  readonly valueHash?: Sha256;
+}
+
 interface ManifestCore {
   readonly id: string;
   readonly organizationId: OrgId;
@@ -107,6 +120,8 @@ interface ManifestCore {
    * Ausente quando não há nenhum (os hashes de manifests anteriores permanecem idênticos).
    */
   readonly lateBound?: readonly LateBoundRef[];
+  /** Registro explícito dos dados de publicação (DEFERRED × RESOLVED), em ordem determinística por variável. Ausente quando não há nenhum. */
+  readonly deferredPublication?: readonly DeferredPublicationRef[];
   /** = `official_document_artifacts.identity_fingerprint`. */
   readonly identityFingerprint: string;
   readonly composedOutputHash: Sha256;
@@ -228,6 +243,16 @@ export function validateManifest(m: CompositionManifest): TemplateResult<Composi
   });
   m.annexes.forEach((a, i) => {
     if (!a.id || !isSha256(a.contentHash)) issues.push(issue("MANIFEST_INVALID", `annexes[${i}]`, "anexo exige id e contentHash"));
+  });
+  const seenDeferred = new Set<string>();
+  (m.deferredPublication ?? []).forEach((r, i) => {
+    const p = `deferredPublication[${i}]`;
+    if (!r.variable || seenDeferred.has(r.variable)) issues.push(issue("MANIFEST_INVALID", `${p}.variable`, "variável diferida ausente ou repetida"));
+    seenDeferred.add(r.variable);
+    if (r.status === "RESOLVED" ? !isSha256(r.valueHash) : r.status === "DEFERRED" ? r.valueHash !== undefined : true) {
+      issues.push(issue("MANIFEST_INVALID", p, "dado diferido: RESOLVED exige valueHash; DEFERRED não tem valor (nada é inventado)"));
+    }
+    if (i > 0 && (m.deferredPublication![i - 1].variable >= r.variable)) issues.push(issue("MANIFEST_INVALID", p, "dados diferidos devem estar em ordem determinística por variável"));
   });
   (m.lateBound ?? []).forEach((r, i) => {
     if (!LATE_BOUND_VARIABLES[r.variable] || r.authority !== "LIFECYCLE_SYSTEM" || r.status !== LATE_BOUND_PENDING) {

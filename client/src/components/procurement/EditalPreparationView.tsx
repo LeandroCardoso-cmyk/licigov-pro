@@ -46,6 +46,8 @@ export interface PreparationViewProps {
   initialOpenOriginGroups?: readonly string[];
   /** Disclosure dos campos ADICIONAIS do perfil já aberto (padrão: recolhido). */
   initialAdditionalProfileOpen?: boolean;
+  /** Bloco "Dados para publicação" já aberto (padrão: recolhido enquanto vazio). */
+  initialPublicationOpen?: boolean;
 }
 
 function FixButton({ action, onOpenStage }: { action: FixAction; onOpenStage?: (s: StageTarget) => void }) {
@@ -130,6 +132,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const { state } = p;
   const [userChoice, setUserChoice] = useState<boolean | null>(p.initialDecisionsOpen ?? null);
   const [additionalOpen, setAdditionalOpen] = useState(p.initialAdditionalProfileOpen ?? false);
+  const [publicationOpen, setPublicationOpen] = useState(p.initialPublicationOpen ?? false);
   const readiness = buildEditalReadiness(state, p.edits);
   const { counters, details } = readiness;
   const decisionsOpen = isDecisionsOpen(readiness, userChoice);
@@ -137,8 +140,12 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const scheduleBlock = decisions.filter((i) => i.field.authority === "CERTAME_SCHEDULE");
   const decisionBlock = decisions.filter((i) => i.field.authority !== "CERTAME_SCHEDULE");
   const allFields = state.sections.flatMap((s2) => s2.fields.map((field) => ({ section: s2, field })));
-  const derivedSchedule = allFields.filter(({ field }) => field.authority === "CERTAME_SCHEDULE" && field.status === "AUTO");
-  const awaitingSchedule = allFields.filter(({ field }) => field.authority === "CERTAME_SCHEDULE" && field.status === "AWAITING");
+  // Dados de PUBLICAÇÃO (completionPolicy) têm bloco próprio: nunca se misturam ao cronograma das decisões deste certame.
+  const derivedSchedule = allFields.filter(({ field }) => field.authority === "CERTAME_SCHEDULE" && field.status === "AUTO" && !field.completionPolicy);
+  const awaitingSchedule = allFields.filter(({ field }) => field.authority === "CERTAME_SCHEDULE" && field.status === "AWAITING" && !field.completionPolicy);
+  const publicationFields = allFields.filter(({ field }) => field.completionPolicy === "DEFERRED_PUBLICATION");
+  const publicationEditable = publicationFields.filter(({ field }) => field.status === "DEFERRED" || (field.status === "DECIDED" && field.editable));
+  const publicationReadOnly = publicationFields.filter(({ field }) => field.status === "AUTO" || field.status === "AWAITING" || field.status === "ORG_DEFAULT");
   const autoFields = allFields.filter(({ field }) => (["AUTO", "ORG_REUSED", "UPSTREAM", "ORG_DEFAULT"] as string[]).includes(field.status));
   const decidedFields = allFields.filter(({ field }) => field.status === "DECIDED");
   const autoCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority !== "LIFECYCLE_SYSTEM");
@@ -289,6 +296,24 @@ export default function EditalPreparationView(p: PreparationViewProps) {
               <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões opcionais (ativam campos adicionais) — {p.optional.length}</summary>
               <div className="px-3 pb-3"><FieldBlock items={p.optional} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} /></div>
             </details>
+          )}
+        </Disclosure>
+      )}
+      {/* Dados para publicação — NÃO impedem a elaboração do Edital; informados quando o certame estiver pronto para publicação. */}
+      {publicationFields.length > 0 && (
+        <Disclosure
+          id="edital-publicacao" open={publicationOpen} onToggle={setPublicationOpen}
+          title={`Dados para publicação — ${counters.DEFERRED_PUBLICATION_TOTAL > 0 ? `${counters.DEFERRED_PUBLICATION_TOTAL} a preencher depois` : "preenchidos"}`}
+          hint={counters.DEFERRED_PUBLICATION_TOTAL > 0 ? "Estes dados não impedem a elaboração do Edital. Informe-os quando o certame estiver pronto para publicação." : undefined}
+        >
+          <p className="text-xs text-muted-foreground" data-publication-note="true">Estes dados não impedem a elaboração do Edital. Informe-os quando o certame estiver pronto para publicação.</p>
+          {publicationEditable.length > 0 && <FieldBlock items={publicationEditable} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />}
+          {publicationReadOnly.length > 0 && (
+            <ul className="space-y-1 text-xs" aria-label="Dados para publicação derivados">
+              {publicationReadOnly.map(({ field }) => (
+                <li key={field.name}><span className="text-foreground">{field.description || field.name}:</span> {field.status === "AWAITING" ? <em className="text-muted-foreground">{field.origin?.label ?? "aguarda a data independente que o determina"} (somente leitura)</em> : <>{formatDisplay(field.type, field.displayValue)} <em className="text-muted-foreground">— derivado automaticamente (somente leitura)</em></>}</li>
+              ))}
+            </ul>
           )}
         </Disclosure>
       )}

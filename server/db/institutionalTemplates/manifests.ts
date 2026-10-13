@@ -21,7 +21,7 @@ import {
 import {
   TEMPLATE_HASH_VERSION, TEMPLATE_ID_RE, manifestRevisionIssues, templateCanonicalJson, validateManifest,
   type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef,
-  type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
+  type DeferredPublicationRef, type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
 import { isDuplicateKey, isForeignKeyViolation, requireReader, type TemplatesContext, type TemplatesReader, type TemplatesTx } from "./executor";
@@ -38,6 +38,7 @@ interface ManifestBody {
   readonly humanEditRefs?: readonly HumanEditRef[];
   readonly canonicalRevalidation?: CanonicalRevalidationRecord;
   readonly lateBound?: readonly LateBoundRef[];
+  readonly deferredPublication?: readonly DeferredPublicationRef[];
   readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
@@ -56,6 +57,7 @@ function bodyOf(m: CompositionManifest): ManifestBody {
   const common = {
     sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
+    ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
   };
   return m.stage === "ISSUANCE"
     ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation, ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}) }
@@ -76,6 +78,7 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
     hashVersion: row.hashVersion as HashVersion, catalogVersion: row.catalogVersion, sources: body.sources, officialDocRefs,
     conditionalDecisions: body.conditionalDecisions, aiNarratives: body.aiNarratives, annexes: body.annexes,
     ...(body.lateBound && body.lateBound.length > 0 ? { lateBound: body.lateBound } : {}),
+    ...(body.deferredPublication && body.deferredPublication.length > 0 ? { deferredPublication: body.deferredPublication } : {}),
     identityFingerprint: row.identityFingerprint, composedOutputHash: row.composedOutputHash, manifestHash: row.manifestHash,
     createdAt: row.manifestCreatedAtIso,
   };
@@ -97,14 +100,17 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
   return { manifest, officialDocumentId: row.officialDocumentId ?? null, correlationId: row.correlationId };
 }
 
-async function loadRefs(db: TemplatesReader, organizationId: number, manifestId: string): Promise<DocumentCompositionReferenceRow[]> {
-  return db.select().from(documentCompositionReferencesTable).where(and(
+async function loadRefs(db: TemplatesReader, organizationId: number, manifestId: string, locking = false): Promise<DocumentCompositionReferenceRow[]> {
+  const q = db.select().from(documentCompositionReferencesTable).where(and(
     eq(documentCompositionReferencesTable.organizationId, organizationId), eq(documentCompositionReferencesTable.manifestId, manifestId)))
     .orderBy(asc(documentCompositionReferencesTable.refOrder));
+  // `locking`: leitura ATUAL (FOR SHARE) — enxerga as referências que a transação concorrente vencedora acabou de confirmar (REPEATABLE READ
+  // devolveria o snapshot antigo e o manifest reconstruído não provaria o próprio hash).
+  return locking ? q.for("share") : q;
 }
 
-async function hydrate(db: TemplatesReader, row: DocumentCompositionManifestRow): Promise<StoredManifest> {
-  return rowsToManifest(row, await loadRefs(db, row.organizationId, row.id));
+async function hydrate(db: TemplatesReader, row: DocumentCompositionManifestRow, locking = false): Promise<StoredManifest> {
+  return rowsToManifest(row, await loadRefs(db, row.organizationId, row.id, locking));
 }
 
 export async function getManifest(organizationId: number, id: string, executor?: TemplatesReader): Promise<StoredManifest | null> {
@@ -173,6 +179,7 @@ function inheritedPart(m: CompositionManifest): string {
     aiNarratives: m.aiNarratives.map((n) => ({ slotKey: n.slotKey, executionId: n.executionId, outputHash: n.outputHash })),
     annexes: m.annexes, identityFingerprint: m.identityFingerprint, composedOutputHash: m.composedOutputHash,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
+    ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
   });
 }
 
@@ -244,7 +251,7 @@ async function persistManifest(
       if ((byHash.officialDocumentId ?? null) !== officialDocumentId) {
         throw new TemplatePersistenceError("ISSUANCE_MANIFEST_CONFLICT", "o mesmo conteúdo já está registrado para outra versão oficial");
       }
-      return { ...(await hydrate(tx, byHash)), created: false };
+      return { ...(await hydrate(tx, byHash, true)), created: false };
     }
     if (await lockManifestRow(tx, ctx.organizationId, "id", manifest.id)) {
       throw new TemplatePersistenceError("MANIFEST_ID_CONFLICT", "o id do manifest já existe com outro conteúdo semântico");
@@ -267,7 +274,7 @@ async function persistManifest(
   }
   const row = await lockManifestRow(tx, ctx.organizationId, "id", manifest.id);
   if (!row) throw corrupt("manifest não encontrado após a inserção");
-  return { ...(await hydrate(tx, row)), created: true };
+  return { ...(await hydrate(tx, row, true)), created: true };
 }
 
 /** M1 — manifest da geração (rascunho composto). */

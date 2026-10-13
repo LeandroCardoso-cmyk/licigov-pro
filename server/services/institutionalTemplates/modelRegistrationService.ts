@@ -19,7 +19,7 @@ import { assertHumanActor } from "./authority";
 import { TemplateWorkflowError } from "./errors";
 import { TemplateGovernanceService, type DeclaredAuthority } from "./governanceService";
 import { runImportPipeline } from "./importPipeline";
-import { MODEL_PACKAGES, getModelPackage, type ModelPackage } from "./modelPackages";
+import { MODEL_PACKAGES, getModelPackage, getModelPackageVersion, type ModelPackage } from "./modelPackages";
 import { buildSourceInventory } from "../../domain/institutionalTemplates/governance/packageInventory";
 import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
 import { InstitutionalTemplatesWorkflow } from "./workflowService";
@@ -30,7 +30,7 @@ const log = serviceLogger("templateRegistration");
  * Presets de registro: rótulos, escopo declarado e a PROCEDÊNCIA do pacote (versão lógica + SHA-256 da fonte aprovada), todos derivados do
  * pacote versionado no servidor. Nenhum conteúdo jurídico (AST/Markdown/DOCX/inventário) é exposto. O registro por pacote envia só `modelKey`.
  */
-export const MODEL_REGISTRATION_PRESETS = Object.freeze(MODEL_PACKAGES.map((p) => Object.freeze({
+export const MODEL_REGISTRATION_PRESETS = Object.freeze(MODEL_PACKAGES.filter((p) => !p.candidate).map((p) => Object.freeze({
   presetId: p.modelKey, templateKey: p.modelKey, documentKind: p.documentKind as TemplateDocumentKind,
   slug: p.slug, displayName: p.displayName, scope: Object.freeze({ ...p.declaredScope }) as ScopeView,
   sourceKind: "MODEL_PACKAGE" as const,
@@ -40,7 +40,11 @@ export const MODEL_REGISTRATION_PRESETS = Object.freeze(MODEL_PACKAGES.map((p) =
 export type RegistrationSource =
   | { readonly kind: "AST"; readonly ast: unknown; /** Obrigatório para `tpl-ast/2`: versão do catálogo tpl-catalog/2 (registrado em código) do modelo. */ readonly catalogVersion?: string }
   /** Pacote de modelo VERSIONADO no repositório (AST v2 + catálogo v2 + mapeamento compilados do mestre aprovado). Resolvido NO SERVIDOR. */
-  | { readonly kind: "MODEL_PACKAGE"; readonly modelKey: string }
+  | {
+    readonly kind: "MODEL_PACKAGE"; readonly modelKey: string;
+    /** Versão lógica do pacote (somente para um pacote CANDIDATO; o serviço recusa candidatos sem autorização explícita). */
+    readonly packageVersion?: string;
+  }
   | { readonly kind: "MARKDOWN"; readonly markdown: string; readonly filename?: string }
   | { readonly kind: "DOCX"; readonly docx: Buffer; readonly filename?: string };
 
@@ -67,8 +71,13 @@ export interface RegisterModelResult {
   readonly notices: readonly string[];
 }
 
+export interface ModelRegistrationOptions {
+  /** Libera o registro (DRAFT) de pacotes CANDIDATOS. Padrão `false`: a API pública nunca registra candidato. */
+  readonly allowCandidatePackages?: boolean;
+}
+
 export class ModelRegistrationService {
-  constructor(private readonly ports: TemplateWorkflowPorts) {}
+  constructor(private readonly ports: TemplateWorkflowPorts, private readonly options: ModelRegistrationOptions = {}) {}
 
   async register(ctx: WorkflowContext, input: RegisterModelInput): Promise<RegisterModelResult> {
     assertHumanActor(ctx.actor);
@@ -81,9 +90,14 @@ export class ModelRegistrationService {
     if (scopeIssues.length) throw new TemplateWorkflowError("SCOPE_INVALID", "aplicabilidade declarada incompleta ou inválida", scopeIssues.map((i) => ({ code: i.code, path: i.dimension, message: i.message })));
     let inventorySummary: { sha256: string; inputsTotal: number; controlOnlyInputs: number; conditionTypes: number } | undefined;
     // Pacote de modelo: fonte, versão lógica, SHA-256 e inventário são os do pacote APROVADO versionado (resolvidos no servidor).
-    const pkg: ModelPackage | null = input.source.kind === "MODEL_PACKAGE" ? getModelPackage(input.source.modelKey) : null;
+    const pkg: ModelPackage | null = input.source.kind === "MODEL_PACKAGE"
+      ? (input.source.packageVersion ? getModelPackageVersion(input.source.modelKey, input.source.packageVersion) : getModelPackage(input.source.modelKey))
+      : null;
     if (input.source.kind === "MODEL_PACKAGE") {
       if (!pkg) throw new TemplateWorkflowError("VALIDATION_FAILED", `pacote de modelo desconhecido: ${input.source.modelKey}`);
+      if (pkg.candidate && !this.options.allowCandidatePackages) {
+        throw new TemplateWorkflowError("VALIDATION_FAILED", "pacote candidato: o registro exige autorização explícita do Owner (nada foi criado)");
+      }
       if (input.templateKey !== pkg.modelKey || input.sourceLogicalVersion !== pkg.provenance.sourceLogicalVersion || input.sourceSha256 !== pkg.provenance.sourceSha256) {
         throw new TemplateWorkflowError("VALIDATION_FAILED", "templateKey/versão lógica/SHA-256 não correspondem à fonte aprovada do pacote (nada foi criado)");
       }

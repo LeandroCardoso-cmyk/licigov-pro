@@ -642,7 +642,11 @@ export const procurementProcessRouter = router({
         organizationId: orgId, processId: input.processId, object: input.object, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
         params: await editalBoundaryParams(orgId, input.processId, { modality: input.modality, form: input.form, platform: input.platform }),
         ...(input.officialPins?.TR ? { officialPins: { TR: input.officialPins.TR } } : {}),
-        institutional: (p) => generateTemplatedDocument(p, getTemplateCompositionPorts()),
+        institutional: (p) => generateTemplatedDocument(
+          // RECOMPOSIÇÃO governada (nova versão do rascunho): só com o hash do rascunho que a pessoa viu (+ confirmação se houver edição humana).
+          { ...p, ...(input.expectedContentHash ? { recompose: { expectedContentHash: input.expectedContentHash, ...(input.confirmReplace ? { confirmReplace: true } : {}) } } : {}) },
+          getTemplateCompositionPorts(),
+        ),
         legacy: () => generateNotice({
           organizationId: orgId, processId: input.processId, object: input.object,
           modality: input.modality, form: input.form, platform: input.platform,

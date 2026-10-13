@@ -23,7 +23,9 @@ import {
   AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES, type GovernedParticipation, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
-import type { VariableDef2, VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import { isDeferredPublication, supportsGovernedDraftRecomposition, type VariableDef2, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
+import { PUBLICATION_VARIABLES, projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
+import { presentationOf } from "../../domain/institutionalTemplates/editalPresentation";
 import { resolveProcurementContext } from "../canonicalContextService";
 import { snapshotInstitutionalIdentity } from "../institutionalIdentityService";
 import { PROJECTION_BY_VARIABLE, isCanonicalProjection } from "../../domain/institutionalTemplates/canonicalProjectionPolicy";
@@ -43,6 +45,7 @@ export type FieldStatus =
   | "DECIDED"              // decisão humana já registrada para este processo
   | "PENDING"              // precisa de você (obrigatório e aplicável, ainda sem valor)
   | "OPTIONAL"             // opcional, sem valor (decisões que ativam campos adicionais ficam aqui)
+  | "DEFERRED"             // dado de PUBLICAÇÃO (catálogo: DEFERRED_PUBLICATION) ainda sem valor: NÃO bloqueia a composição nem é decisão pendente
   | "AWAITING"             // depende de outra decisão ainda não registrada (ex.: divulgação do orçamento)
   | "UPSTREAM"             // valor vindo dos Parâmetros estruturados do TR (informado uma vez, no TR)
   | "ORG_DEFAULT"          // padrão institucional EXPLÍCITO aplicado (pode ser alterado neste processo)
@@ -69,6 +72,10 @@ export interface PreparationField {
   /** `true` quando a obrigatoriedade depende de outra decisão (informativo; a autoridade é o servidor). */
   readonly conditional: boolean;
   readonly requiredWhenVariables: readonly string[];
+  /** Política de completude do catálogo (dado de publicação diferido). Ausente = comportamento comum. */
+  readonly completionPolicy?: "DEFERRED_PUBLICATION";
+  /** Pergunta operacional ao servidor público (camada de apresentação; a semântica do catálogo não muda). */
+  readonly question?: string;
   /** Condição (DSL v2) que torna o campo obrigatório: permite à tela mostrar/ocultar ao vivo; a autoridade final é o composer. */
   readonly requiredWhen?: Cond2;
   readonly enumValues?: readonly string[];
@@ -172,6 +179,8 @@ export interface PreparationMetrics {
   readonly TRUE_NEW_DECISIONS_VISIBLE: number;
   /** Pendências cuja resolução é NA ORIGEM (plataforma, itens, orçamento, cadastro), não no Edital. */
   readonly PENDING_IN_SOURCE: number;
+  /** Dados de PUBLICAÇÃO diferidos ainda sem valor: fora das decisões pendentes e de qualquer bloqueio de composição. */
+  readonly DEFERRED_PUBLICATION: number;
   readonly BY_AUTHORITY: Readonly<Record<AuthorityClass, number>>;
   readonly BY_CLASS: Readonly<Record<PreparationClass, number>>;
 }
@@ -206,13 +215,30 @@ export type EditalPreparationState =
     };
     readonly summary: { readonly groups: readonly SummaryGroup[]; readonly reusedAutomatically: number; readonly pendingDecisions: number };
     readonly metrics: PreparationMetrics;
+    /**
+     * PublicationReadiness + projeção estável do cronograma (derivadas do estado; NÃO bloqueiam a composição). `deferredPolicy` = o catálogo
+     * da revisão vinculada declara os dados de publicação como DEFERRED_PUBLICATION. Ausente quando o catálogo não tem nenhum deles.
+     */
+    readonly publication?: {
+      readonly deferredPolicy: boolean;
+      readonly schedule: PublicationScheduleProjection;
+      readonly readiness: PublicationReadiness;
+    };
+    /**
+     * Capabilities DERIVADAS do catálogo da revisão vinculada (informativo para a tela; o SERVIDOR reaplica o gate na composição).
+     * `governedDraftRecomposition` = a revisão declara dados de publicação diferidos ⇒ preencher depois recompõe o rascunho (nova versão).
+     */
+    readonly capabilities: { readonly governedDraftRecomposition: boolean };
   };
 
 /** Descritor serializável da variável (a tela não tem segunda cópia do catálogo). */
 export function describeVariable(v: VariableDef2) {
   const requiredWhenVariables = v.requiredWhen ? [...new Set(conditionVariables(v.requiredWhen))].sort() : [];
+  // Rótulo/pergunta OPERACIONAIS por variável (apresentação; o catálogo publicado não é alterado — o texto técnico fica nos detalhes).
+  const presentation = presentationOf(v.name);
   return {
-    name: v.name, source: v.source, path: v.path, type: v.type, description: (v.description ?? "").replace(/\s*\[[^\]]*\]\s*$/, ""),
+    name: v.name, source: v.source, path: v.path, type: v.type, description: presentation?.label ?? (v.description ?? "").replace(/\s*\[[^\]]*\]\s*$/, ""),
+    ...(presentation?.question ? { question: presentation.question } : {}), ...(v.completionPolicy ? { completionPolicy: v.completionPolicy } : {}),
     required: v.required, conditional: !!v.requiredWhen, requiredWhenVariables, ...(v.requiredWhen ? { requiredWhen: v.requiredWhen } : {}),
     ...(v.enumValues ? { enumValues: v.enumValues } : {}), ...(v.itemType ? { itemType: v.itemType } : {}),
     ...(v.columns ? { columns: v.columns.map((col) => ({ key: col.key, type: col.type, label: col.label, required: col.required !== false })) } : {}),
@@ -379,11 +405,14 @@ export async function getEditalPreparationState(
     a[k]++;
     groupAcc.set(g, a);
   };
-  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0, PLAT: 0, PRICE: 0, ITEMS: 0, CFG: 0, SCHED: 0, LIFE: 0, SRC_PEND: 0 };
+  const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0, PLAT: 0, PRICE: 0, ITEMS: 0, CFG: 0, SCHED: 0, LIFE: 0, SRC_PEND: 0, DEFER: 0 };
   const sourcePending: Array<{ name: string; description: string; reason: string; fix: EntryPoint }> = [];
   const byAuthority = Object.fromEntries(AUTHORITY_CLASSES.map((k) => [k, 0])) as Record<AuthorityClass, number>;
   const trPending: Array<{ name: string; description: string; reason?: string }> = [];
   const profilePending: Array<{ name: string; description: string; reason: string; role?: string }> = [];
+  /** Valor EFETIVO (decidido/derivado/padrão) por variável de publicação, para a PublicationReadiness (nunca inventado). */
+  const publicationValues: Record<string, unknown> = {};
+  let hasPublicationVars = false; let deferredPolicy = false;
   const byClass = Object.fromEntries((["CANONICAL", "ORG_PROFILE", "TR_PROJECTION", "PROCESS_DECISION", "CONDITIONAL", "POST_AWARD"] as const).map((k) => [k, 0])) as Record<PreparationClass, number>;
 
   for (const v of catalog.vars) {
@@ -531,6 +560,11 @@ export async function getEditalPreparationState(
         if (c.authority === "CERTAME_CONFIG" || c.authority === "CERTAME_SCHEDULE") m.CFG++;
         origin = { label: "Configuração do certame (registrada neste processo)", ref: { revision: processRec?.revision ?? 0 } };
       }
+    } else if (isDeferredPublication(v)) {
+      // Dado de PUBLICAÇÃO diferido (catálogo): sem valor NÃO é decisão pendente nem bloqueio — a composição segue (o documento traz
+      // "A DEFINIR PARA PUBLICAÇÃO"); com valor, o valor real é usado (ramo "DECIDED" acima). A autoridade (CertameConfig/Cronograma) não muda.
+      status = "DEFERRED"; m.DEFER++;
+      origin = { label: "Dado para publicação — informe quando o certame estiver pronto para publicação" };
     } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
       status = "PENDING"; m.MAN++;
     } else { status = "OPTIONAL"; m.OH++; }
@@ -539,7 +573,7 @@ export async function getEditalPreparationState(
     if (!fieldReason) { const pbAny = reuse.problems.get(v.name); if (pbAny && pbAny.code === "DEFAULT_INCOMPATIBLE") fieldReason = `Padrão institucional não aplicado: ${pbAny.reason}`; }
 
     // Denominador do resumo: aplicáveis (não ocultos) que são obrigatórios/condicionais ativos ou já têm valor.
-    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "AWAITING", "CANONICAL_UNRESOLVED", "PENDING_TR", "PROFILE_INCOMPLETE"] as FieldStatus[]).includes(status);
+    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "DEFERRED", "AWAITING", "CANONICAL_UNRESOLVED", "PENDING_TR", "PROFILE_INCOMPLETE"] as FieldStatus[]).includes(status);
     if (status === "CANONICAL_UNRESOLVED" || status === "PENDING_TR" || status === "PROFILE_INCOMPLETE") { bump(group, "total"); bump(group, "blocked"); }
     if (applicable) {
       bump(group, "total");
@@ -547,6 +581,10 @@ export async function getEditalPreparationState(
       else { bump(group, "resolved"); if (status === "AUTO" || status === "ORG_REUSED" || status === "UPSTREAM" || status === "ORG_DEFAULT") bump(group, "reused"); }
     }
 
+    if (PUBLICATION_VARIABLES.includes(v.name)) {
+      hasPublicationVars = true; deferredPolicy = deferredPolicy || isDeferredPublication(v);
+      if (status === "DECIDED" || status === "AUTO" || status === "ORG_DEFAULT") publicationValues[v.name] = displayValue ?? stored;
+    }
     const field: PreparationField = {
       ...descriptor, hasValue, ...(hasValue ? { currentValue: stored } : {}), class: c.class, rule: c.rule, authority: c.authority, entry: c.entry, status, editable,
       ...(fieldReason ? { reason: fieldReason } : {}), ...(canOverrideDefault ? { canOverrideDefault: true } : {}), ...(isDefaultEligible(v.name) ? { defaultEligible: true } : {}),
@@ -584,12 +622,14 @@ export async function getEditalPreparationState(
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
     upstream: { trDigest: reuse.trDigest, trPending, profilePending, sourcePending },
     summary: { groups, reusedAutomatically, pendingDecisions },
+    capabilities: { governedDraftRecomposition: supportsGovernedDraftRecomposition(catalog) },
+    ...(hasPublicationVars ? (() => { const p = projectPublicationSchedule(publicationValues); return { publication: { deferredPolicy, schedule: p.schedule, readiness: p.readiness } }; })() : {}),
     metrics: {
       TOTAL_TEMPLATE_FIELDS: catalog.vars.length, AUTO_RESOLVED: m.AUTO, ORG_REUSED: m.ORG, TR_PROJECTED: m.TRP, DECIDED: m.DEC,
       CONDITIONAL_HIDDEN: m.CH, POST_AWARD_HIDDEN: m.PH, OPTIONAL_HIDDEN: m.OH, MANUAL_DECISIONS_VISIBLE: m.MAN, LEGACY_SHADOWED: m.LS, BY_CLASS: byClass,
       UPSTREAM_TR_REUSED: m.UTR, TR_PENDING: m.TRP_PEND, PROFILE_INCOMPLETE: m.PROF_PEND, ORG_ROLES_REUSED: m.ROLES, ORG_POLICIES_REUSED: m.POLS, ORG_DEFAULTS_APPLIED: m.DEFS,
       AUTO_FROM_PLATFORM: m.PLAT, AUTO_FROM_PRICE_RESEARCH: m.PRICE, AUTO_FROM_ITEMS: m.ITEMS, AUTO_FROM_CERTAME_CONFIG: m.CFG, AUTO_FROM_SCHEDULE: m.SCHED, AUTO_FROM_LIFECYCLE: m.LIFE,
-      TRUE_NEW_DECISIONS_VISIBLE: m.MAN, PENDING_IN_SOURCE: m.SRC_PEND, BY_AUTHORITY: byAuthority,
+      TRUE_NEW_DECISIONS_VISIBLE: m.MAN, PENDING_IN_SOURCE: m.SRC_PEND, DEFERRED_PUBLICATION: m.DEFER, BY_AUTHORITY: byAuthority,
     },
   };
 }

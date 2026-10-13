@@ -82,6 +82,18 @@ export function classifyDraftHumanState(
   return { human: false };
 }
 
+/**
+ * Estado humano de um rascunho composto por MODELO institucional: a composição do sistema (`template_compose`) com hash coincidente não é
+ * trabalho humano. Classificador SEPARADO (não altera `classifyDraftHumanState`, usado pelo fluxo legado): só a recomposição governada o usa.
+ */
+export function classifyTemplateDraftHumanState(
+  draft: { readonly content: string; readonly sources?: readonly string[] | null },
+  lastEdit: LastDraftEdit | null | undefined,
+): DraftHumanState {
+  const asSystem = lastEdit?.operation === "template_compose" ? { ...lastEdit, operation: "ai_regenerate" } : lastEdit;
+  return classifyDraftHumanState(draft, asSystem);
+}
+
 const KIND_LABELS: Record<"etp" | "tr" | "edital", string> = { etp: "ETP", tr: "TR", edital: "Edital" };
 const REASON_LABELS: Record<DraftHumanReason, string> = {
   human_edit: "edição humana",

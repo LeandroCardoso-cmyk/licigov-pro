@@ -70,6 +70,8 @@ export interface ReadinessCounters {
   ORIGIN_ACTION_REQUIRED_TOTAL: number;
   ONE_TIME_CONFIGURATION_REQUIRED_TOTAL: number;
   PROCESS_DECISIONS_TOTAL: number;
+  /** Dados de PUBLICAÇÃO (número do pregão, cronograma) ainda vazios: podem ser preenchidos depois; NÃO contam em nenhum dos outros e NUNCA bloqueiam. */
+  DEFERRED_PUBLICATION_TOTAL: number;
 }
 
 /** Decomposição (detalhes técnicos): explica de onde vêm os totais, sem dupla contagem. */
@@ -92,6 +94,9 @@ export interface ReadinessDetails {
   profilePolicies: number;
   scheduleIndependent: number;
   scheduleDerived: number;
+  /** PublicationReadiness (informativa): todos os dados de publicação presentes? Nunca bloqueia a geração. */
+  publicationComplete: boolean;
+  publicationMissing: readonly string[];
 }
 
 export type GenerationPrimary = "RESOLVE_PENDING" | "GENERATE";
@@ -204,7 +209,8 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
   const decisions = livePendingItems(state, edits).filter(isCertameDecision);
   const PROCESS_DECISIONS_TOTAL = decisions.length;
   const scheduleIndependent = decisions.filter((i) => i.field.authority === "CERTAME_SCHEDULE").length;
-  const scheduleDerived = fields.filter((f) => f.authority === "CERTAME_SCHEDULE" && statusOf(f) === "AUTO").length;
+  const scheduleDerived = fields.filter((f) => f.authority === "CERTAME_SCHEDULE" && statusOf(f) === "AUTO" && !f.completionPolicy).length;
+  const DEFERRED_PUBLICATION_TOTAL = fields.filter((f) => statusOf(f) === "DEFERRED").length;
 
   // ── configuração única: necessário a ESTE Edital × perfil global incompleto ───────────────────────────────────
   const profile = profileReadiness(state, edits);
@@ -250,7 +256,7 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
   const nextStep = steps.find((s) => !s.done)?.key ?? null;
 
   return {
-    counters: { AUTO_RESOLVED_TOTAL, ORIGIN_ACTION_REQUIRED_TOTAL, ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, PROCESS_DECISIONS_TOTAL },
+    counters: { AUTO_RESOLVED_TOTAL, ORIGIN_ACTION_REQUIRED_TOTAL, ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, PROCESS_DECISIONS_TOTAL, DEFERRED_PUBLICATION_TOTAL },
     details: {
       autoFromFields, autoFromCanonicalAuthorities: autoCanonical,
       conditionalHidden: fields.filter((f) => statusOf(f) === "HIDDEN_CONDITIONAL").length,
@@ -259,6 +265,7 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
       sourceIssues: originIssues - trParams, trParametersToConfirm: trParams, trOfficialRequired: trRequired,
       requiredForCurrentDocument: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, profileGlobalIncomplete: profile.additional.length,
       profileRoles, profilePolicies: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL - profileRoles, scheduleIndependent, scheduleDerived,
+      publicationComplete: state.publication?.readiness.complete ?? false, publicationMissing: state.publication?.readiness.missing ?? [],
     },
     steps,
     tr: trRequired ? { status: TR_OFFICIAL_EXACT_REQUIRED, message: TR_OFFICIAL_EXACT_MESSAGE } : { status: "OK" },
@@ -313,5 +320,9 @@ export function readinessHeadline(c: ReadinessCounters): string {
   ];
   if (c.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL > 0) parts.push(`${c.ONE_TIME_CONFIGURATION_REQUIRED_TOTAL} a configurar uma única vez`);
   parts.push(`${c.PROCESS_DECISIONS_TOTAL} ${c.PROCESS_DECISIONS_TOTAL === 1 ? "decisão" : "decisões"} deste certame`);
-  return parts.join(" · ");
+  const line = parts.join(" · ");
+  // Dados de publicação NÃO se misturam aos demais conceitos: frase própria (podem ser preenchidos depois).
+  return c.DEFERRED_PUBLICATION_TOTAL > 0
+    ? `${line} · ${c.DEFERRED_PUBLICATION_TOTAL} ${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "dado para publicação pode" : "dados para publicação podem"} ser preenchido${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "" : "s"} depois`
+    : line;
 }

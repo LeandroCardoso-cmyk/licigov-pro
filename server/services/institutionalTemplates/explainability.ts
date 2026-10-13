@@ -16,6 +16,8 @@ export interface CompositionExplanation {
   readonly aiNarratives: readonly { readonly slotKey: string; readonly status: AiNarrativeStatus; readonly humanAccepted: boolean | null }[];
   readonly officialDocRefs: readonly { readonly role: string; readonly order: number; readonly documentId: string; readonly version: number; readonly title: string }[];
   readonly annexes: readonly { readonly id: string }[];
+  /** Dados de publicação diferidos: quais estavam DEFERRED (texto "A DEFINIR PARA PUBLICAÇÃO") e quais RESOLVED (valor real). Vazio quando o catálogo não declara nenhum. */
+  readonly deferredPublication: readonly { readonly variable: string; readonly status: "DEFERRED" | "RESOLVED" }[];
   readonly manifest: { readonly stage: string; readonly persisted: boolean; readonly id: string | null; readonly manifestHash: string; readonly composedOutputHash: string };
   readonly notices: readonly string[];
 }
@@ -57,6 +59,7 @@ export function explainComposition(args: {
     aiNarratives: narratives(manifest, revision, preview),
     officialDocRefs: manifest.officialDocRefs.map((r) => ({ role: r.role, order: r.order, documentId: r.documentId, version: r.version, title: r.title })),
     annexes: manifest.annexes.map((a) => ({ id: a.id })),
+    deferredPublication: (manifest.deferredPublication ?? []).map((d) => ({ variable: d.variable, status: d.status })),
     manifest: { stage: manifest.stage, persisted: !preview && persistedId !== null, id: preview ? null : persistedId, manifestHash: manifest.manifestHash, composedOutputHash: manifest.composedOutputHash },
     notices,
   };

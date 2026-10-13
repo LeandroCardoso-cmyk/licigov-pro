@@ -88,7 +88,7 @@ export default function PrepFieldControl({ field, value, error, disabled, onChan
       </div>
     );
   } else {
-    control = <Scalar type={field.type} id={id} label={field.description} value={value as string} enumValues={field.enumValues} disabled={disabled} onChange={onChange} />;
+    control = <Scalar type={field.type} id={id} label={field.question ?? field.description} value={value as string} enumValues={field.enumValues} disabled={disabled} onChange={onChange} />;
   }
   return (
     <div className="space-y-1" data-field={field.name}>
@@ -97,6 +97,7 @@ export default function PrepFieldControl({ field, value, error, disabled, onChan
         {field.required && !field.conditional && <span className="ml-1 text-destructive" aria-label="obrigatório">*</span>}
         {field.conditional && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-normal text-amber-700 dark:text-amber-300">condicional</span>}
       </label>
+      {field.question && <p id={`${id}-q`} className="text-xs text-muted-foreground" data-question="true">{field.question}</p>}
       {control}
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     </div>

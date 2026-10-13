@@ -57,6 +57,18 @@ export interface TableColumnDef {
   readonly required?: boolean;
 }
 
+/**
+ * Política de COMPLETUDE da variável (metadado EXPLÍCITO do catálogo; participa da versão do catálogo ⇒ do hash semântico da revisão).
+ *  - `DEFERRED_PUBLICATION`: dado que pertence à preparação operacional da PUBLICAÇÃO (número do pregão, datas/horários da sessão e das
+ *    propostas). NÃO é exigido para compor o documento: ausente ⇒ a composição segue, nunca inventa valor e registra o campo como
+ *    DEFERRED no manifest; presente ⇒ o valor real é usado normalmente. A autoridade do dado NÃO muda.
+ * Sem `completionPolicy` o comportamento é o de sempre (`required`/`requiredWhen`).
+ */
+export type CompletionPolicy = "DEFERRED_PUBLICATION";
+export const COMPLETION_POLICIES: readonly CompletionPolicy[] = ["DEFERRED_PUBLICATION"];
+/** Texto governado PADRÃO de um dado diferido ainda ausente (inequívoco: nunca parece valor real). */
+export const DEFERRED_PUBLICATION_TEXT = "A DEFINIR PARA PUBLICAÇÃO";
+
 export interface VariableDef2 {
   readonly name: string;
   readonly type: VariableType2;
@@ -76,6 +88,8 @@ export interface VariableDef2 {
    * Sem `absentText`, valor opcional ausente vira a marca explícita `[REVISAR: … não informado]`.
    */
   readonly absentText?: string;
+  /** Política de completude (ver `CompletionPolicy`). Só vale para variável NÃO obrigatória e sem `requiredWhen`. */
+  readonly completionPolicy?: CompletionPolicy;
   /** Documentação (não participa de hash de revisão). */
   readonly description?: string;
 }
@@ -119,6 +133,11 @@ export function validateVariableCatalog2(catalog: VariableCatalog2): TemplateRes
     if (v.absentText !== undefined) {
       if (typeof v.absentText !== "string" || !v.absentText.trim() || v.absentText.length > 200) issues.push(issue("CATALOG_INVALID", `${p}.absentText`, "absentText deve ser texto não vazio (≤ 200)"));
       else if (v.required || !v.renderable) issues.push(issue("CATALOG_INVALID", `${p}.absentText`, "absentText só vale para variável opcional e renderizável"));
+    }
+    if (v.completionPolicy !== undefined) {
+      if (!COMPLETION_POLICIES.includes(v.completionPolicy)) issues.push(issue("CATALOG_INVALID", `${p}.completionPolicy`, `política de completude inválida: ${String(v.completionPolicy)}`));
+      else if (v.required || v.requiredWhen) issues.push(issue("CATALOG_INVALID", `${p}.completionPolicy`, "completionPolicy exige variável NÃO obrigatória e sem requiredWhen (dado diferido nunca bloqueia a composição)"));
+      else if (v.renderable && !v.absentText) issues.push(issue("CATALOG_INVALID", `${p}.absentText`, "dado diferido renderizável exige absentText (texto governado enquanto ausente)"));
     }
     if (v.type === "enum") {
       const ev = v.enumValues;
@@ -182,3 +201,14 @@ export function validateVariableCatalog2(catalog: VariableCatalog2): TemplateRes
 export function findVariable2(catalog: VariableCatalog2, name: string): VariableDef2 | undefined {
   return catalog.vars.find((v) => v.name === name);
 }
+
+/** O valor desta variável pode faltar na composição porque pertence à preparação da publicação. */
+export const isDeferredPublication = (def: Pick<VariableDef2, "completionPolicy">): boolean => def.completionPolicy === "DEFERRED_PUBLICATION";
+
+/**
+ * CAPABILITY derivada da SEMÂNTICA do catálogo da revisão efetivamente composta (nunca de número/versão/string de revisão):
+ * a revisão que declara dados de publicação como `DEFERRED_PUBLICATION` suporta a recomposição governada do rascunho (preencher depois →
+ * nova versão do rascunho). Catálogo sem esse metadado (ex.: Revisão 1, catálogos v1) NÃO tem a capability: comportamento legado intacto.
+ */
+export const supportsGovernedDraftRecomposition = (catalog: { readonly vars: readonly object[] }): boolean =>
+  catalog.vars.some((v) => (v as { completionPolicy?: unknown }).completionPolicy === "DEFERRED_PUBLICATION");
