@@ -11,6 +11,7 @@
  *  - campos pós-homologação (`pos.*`) e condicionais com a condição inativa ficam ocultos;
  *  - `requiredWhen` aqui é só para ocultar/mostrar: a autoridade final da condição é o composer (preflight/geração).
  */
+import { processNumberParts, processYearOf } from "../../domain/institutionalTemplates/processYear";
 import { getCurrentDecision } from "../../db/institutionalDecisions";
 import { getProcess } from "../../db/procurement";
 import { isCatalogV2 } from "../../domain/institutionalTemplates/astVersions";
@@ -372,8 +373,8 @@ export async function getEditalPreparationState(
   const itemsOk = !!ctx && ctx.items.length > 0 && ctx.priceContext.itemsMissingPlannedQuantity === 0;
   const ownedView = (v: VariableDef2): { status: FieldStatus; displayValue?: unknown; origin: PreparationOrigin } => {
     switch (`${v.source}.${v.path}`) {
-      case "PROCESS.numeroProcesso": return process ? { status: "AUTO", displayValue: process.processNumber, origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Processo" } };
-      case "PROCESS.ano": { const y = process ? /^(\d{4})\//.exec(process.processNumber)?.[1] : undefined; return y ? { status: "AUTO", displayValue: Number(y), origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Processo" } }; }
+      case "PROCESS.numeroProcesso": return process ? { status: "AUTO", displayValue: processNumberParts(process.processNumber).sequence, origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Processo" } };
+      case "PROCESS.ano": { const y = process ? processYearOf(process.processNumber) : null; return y ? { status: "AUTO", displayValue: y, origin: { label: "Processo", ref: { processId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "o número do processo não indica o exercício — use AAAA/NNNN ou NNNN/AAAA no cadastro do processo" } }; }
       case "PROCESS.orcamentoSigilosoSimNao": return disclosure ? { status: "AUTO", displayValue: disclosure === "sigiloso", origin: { label: "Divulgação do orçamento (registrada na Pesquisa de Preços)", ref: { revision: budget?.revision ?? 0 } } } : { status: "PENDING_SOURCE", origin: { label: "Registre a divulgação do orçamento (público ou sigiloso) na Pesquisa de Preços" } };
       case "IDENTITY.municipioNome": return identity?.snapshot.municipio ? { status: "AUTO", displayValue: identity.snapshot.municipio, origin: { label: "Cadastro do órgão", ref: { organizationId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Cadastro do órgão" } };
       case "IDENTITY.municipioCnpj": return identity?.snapshot.cnpj ? { status: "AUTO", displayValue: identity.snapshot.cnpj, origin: { label: "Cadastro do órgão", ref: { organizationId } } } : { status: "CANONICAL_UNRESOLVED", origin: { label: "Cadastro do órgão" } };

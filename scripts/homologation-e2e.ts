@@ -1,32 +1,60 @@
 /**
- * Homologação E2E pelas APIs OFICIAIS (HTTP + login real + cookie de sessão + tRPC + RBAC do servidor) —
- * jornadas A (processo novo), B (legado → contrato vigente → aditivo) e C (monitoramento).
+ * Homologação E2E pelas APIs OFICIAIS — biblioteca do executor (`pnpm homolog:e2e`).
  *
- * Travado no tenant SINTÉTICO `homologacao-sintetica`: o órgão é descoberto pelas organizações do próprio usuário
- * (`organizations.listMine`), nunca por id presumido; qualquer outro slug ou a organização 1 ⇒ aborta antes de escrever.
- * Não cria órgão/usuário, não altera política, revisão ou binding de modelo, não toca produção: só usa as rotas que
- * a tela usa, com as credenciais de um usuário de teste do tenant sintético (lidas do ambiente, nunca do repositório).
+ * As jornadas ficam em `server/__tests__/homologation/staging-homologation-e2e.test.ts` (Vitest, para REUTILIZAR os helpers de
+ * preparação já usados pelos smokes; o arquivo é pulado sem `HOMOLOG_BASE_URL`). Aqui ficam só as peças compartilhadas:
+ * cliente HTTP real (login, cookie de sessão, tRPC, RBAC do servidor), guardas de destino/tenant/credencial e utilitários.
  *
- * Uso:
- *   HOMOLOG_CONFIRM=SINTETICO HOMOLOG_BASE_URL=https://<staging> \
- *   HOMOLOG_EMAIL=<usuário de teste> HOMOLOG_PASSWORD=<senha> \
- *   [HOMOLOG_REPORT=relatorio.json] pnpm homolog:e2e
- *
- * Saída: relatório JSON (jornadas, verificações, métricas por documento). Exit 0 = todas as verificações passaram.
+ * Guardas (validadas ANTES de qualquer escrita):
+ *  - destino só staging autorizado (`licigov-pro-staging.up.railway.app`) ou servidor local; qualquer outro host ⇒ recusa;
+ *  - tenant só `homologacao-sintetica`, descoberto pelas organizações do próprio usuário (nunca id presumido); organização 1 ⇒ recusa;
+ *  - credencial: não pode ser admin de plataforma (cross-tenant) nem ser membro da organização 1 (referências reais);
+ *  - exercício do processo informado explicitamente (`HOMOLOG_EXERCICIO`), nunca "ano corrente" por omissão.
+ * Senhas, cookies e tokens nunca são impressos nem gravados no relatório.
  */
 import { createTRPCClient, httpLink, TRPCClientError } from "@trpc/client";
 import superjson from "superjson";
-import { writeFileSync } from "node:fs";
 import type { AppRouter } from "../server/routers";
 import { COOKIE_NAME } from "../shared/const";
 
 export const SYNTHETIC_TENANT_SLUG = "homologacao-sintetica";
-const MARK = "[HOMOLOGAÇÃO SINTÉTICA]";
+export const STAGING_HOST = "licigov-pro-staging.up.railway.app";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+export const MARK = "[HOMOLOGAÇÃO SINTÉTICA]";
 
-interface Check { readonly journey: string; readonly name: string; readonly ok: boolean; readonly detail?: string }
-export interface HomologationReport {
-  readonly baseUrl: string; readonly run: string; readonly tenant: { id: number; slug: string; role: string } | null;
-  readonly checks: Check[]; readonly metrics: Record<string, unknown>; readonly passed: boolean;
+/** Destino permitido: staging autorizado (HTTPS) ou servidor local de desenvolvimento. Produção/outros ⇒ recusa. */
+export function assertAllowedTarget(baseUrl: string): URL {
+  let url: URL;
+  try { url = new URL(baseUrl); } catch { throw new Error(`HOMOLOG_BASE_URL inválida: ${baseUrl}`); }
+  if (url.hostname === STAGING_HOST && url.protocol === "https:") return url;
+  if (LOCAL_HOSTS.has(url.hostname)) return url;
+  throw new Error(`Destino recusado: ${url.hostname} não é o staging autorizado (${STAGING_HOST}) nem servidor local.`);
+}
+
+/** Guarda do tenant: só o slug sintético, nunca a organização 1 (referências reais). */
+export function assertSyntheticTenant(org: { id: number; slug: string | null } | undefined): asserts org is { id: number; slug: string } {
+  if (!org) throw new Error(`Usuário não é membro ativo do tenant sintético '${SYNTHETIC_TENANT_SLUG}'.`);
+  if (org.slug !== SYNTHETIC_TENANT_SLUG) throw new Error(`Tenant recusado: slug '${org.slug}' ≠ '${SYNTHETIC_TENANT_SLUG}'.`);
+  if (org.id === 1) throw new Error("Tenant recusado: a organização 1 contém referências reais.");
+}
+
+/** Credencial só de usuário do tenant sintético: nunca admin de plataforma, nunca membro da organização 1. */
+export function assertSyntheticCredential(me: { role?: string | null } | null, orgIds: readonly number[]): void {
+  if (!me) throw new Error("Login não estabeleceu sessão.");
+  if (me.role === "admin") throw new Error("Credencial recusada: admin de plataforma (acesso cross-tenant) não é usado na homologação.");
+  if (orgIds.includes(1)) throw new Error("Credencial recusada: o usuário é membro da organização 1 (referências reais).");
+}
+
+/** Exercício explícito (AAAA, 1900–2099). Sem valor válido ⇒ erro: nunca substituído pelo ano corrente. */
+export function parseExercicio(v: string | undefined): number {
+  if (!v || !/^(19|20)\d{2}$/.test(v.trim())) throw new Error("Informe HOMOLOG_EXERCICIO (AAAA) — o exercício do processo sintético nunca é presumido.");
+  return Number(v.trim());
+}
+
+/** Número do processo no formato NNNN/AAAA (aceito pelo motor documental); sequência derivada da execução, única por tentativa. */
+export function syntheticProcessNumber(run: string, exercicio: number, attempt = 0): string {
+  const seq = (Number.parseInt(run, 36) + attempt) % 9000 + 1000;
+  return `${seq}/${exercicio}`;
 }
 
 /** Marcadores de pendência que a composição deixa visíveis (nada é inventado). */
@@ -38,21 +66,35 @@ export function pendingMarkers(text: string): { revisar: number; aDefinir: numbe
   };
 }
 
+/** Resíduos técnicos que nunca podem chegar ao documento exportado. */
+export function technicalResidue(text: string): string[] {
+  const found: string[] = [];
+  if (/\{\{|\}\}/.test(text)) found.push("placeholder {{ }}");
+  if (/SYSTEM NOTE/i.test(text)) found.push("SYSTEM NOTE");
+  if (/⟦|⟧|\[XREF|xref:/.test(text)) found.push("xref");
+  return found;
+}
+
 /** Assinatura dos formatos exportados (bytes reais, não só o nome do arquivo). */
 export function looksLike(format: "docx" | "pdf", bytes: Uint8Array): boolean {
   const head = Buffer.from(bytes.subarray(0, 5)).toString("latin1");
   return format === "docx" ? head.startsWith("PK") : head.startsWith("%PDF-");
 }
 
-/** Guarda do tenant: só o slug sintético, nunca a organização 1 (referências reais). */
-export function assertSyntheticTenant(org: { id: number; slug: string | null } | undefined): asserts org is { id: number; slug: string } {
-  if (!org) throw new Error(`Usuário não é membro ativo do tenant sintético '${SYNTHETIC_TENANT_SLUG}'.`);
-  if (org.slug !== SYNTHETIC_TENANT_SLUG) throw new Error(`Tenant recusado: slug '${org.slug}' ≠ '${SYNTHETIC_TENANT_SLUG}'.`);
-  if (org.id === 1) throw new Error("Tenant recusado: a organização 1 contém referências reais.");
+/** Decisão governada marcada como DADO DE TESTE: autor = usuário autenticado; nenhum ato administrativo é imitado. */
+export function syntheticDecision(user: { name?: string | null; id: number }, today: string) {
+  return {
+    decidedByName: user.name || `Usuário ${user.id}`, decidedByRole: `${MARK} usuário de homologação`, decidedByUserId: user.id,
+    decidedAt: today, basisReference: `${MARK} sem ato administrativo — dado de teste`, reason: `${MARK} preenchimento de homologação`,
+  };
 }
 
-function client(baseUrl: string, state: { cookie: string; orgId: number | null }) {
-  return createTRPCClient<AppRouter>({
+export const trpcCode = (e: unknown): string => (e instanceof TRPCClientError ? String((e.data as { code?: string } | undefined)?.code ?? "") : "");
+
+/** Sessão HTTP real: cookie do login guardado em memória (nunca impresso); `orgId` vira `x-organization-id`. */
+export function homologSession(baseUrl: string) {
+  const state = { cookie: "", orgId: null as number | null };
+  const api = createTRPCClient<AppRouter>({
     links: [httpLink({
       url: `${baseUrl.replace(/\/$/, "")}/api/trpc`,
       transformer: superjson,
@@ -69,141 +111,29 @@ function client(baseUrl: string, state: { cookie: string; orgId: number | null }
       },
     })],
   });
+  return { api, state };
 }
 
-const codeOf = (e: unknown) => (e instanceof TRPCClientError ? String((e.data as { code?: string } | undefined)?.code ?? "") : "");
+type AnyNode = { query?: (i: unknown) => Promise<unknown>; mutate?: (i: unknown) => Promise<unknown> } & Record<string, unknown>;
 
-export async function runHomologation(cfg: { baseUrl: string; email: string; password: string; today?: string }): Promise<HomologationReport> {
-  const run = Date.now().toString(36).toUpperCase();
-  const today = cfg.today ?? new Date().toISOString().slice(0, 10);
-  const plus = (d: number) => { const t = new Date(`${today}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + d); return t.toISOString().slice(0, 10); };
-  const state = { cookie: "", orgId: null as number | null };
-  const api = client(cfg.baseUrl, state);
-  const checks: Check[] = [];
-  const metrics: Record<string, unknown> = {};
-  const check = (journey: string, name: string, ok: boolean, detail?: string) => { checks.push({ journey, name, ok, ...(detail ? { detail } : {}) }); return ok; };
-  const step = async <T>(journey: string, name: string, fn: () => Promise<T>): Promise<T | null> => {
-    try { const v = await fn(); check(journey, name, true); return v; } catch (e) { check(journey, name, false, `${codeOf(e)} ${(e as Error).message}`.trim()); return null; }
+/**
+ * Adapta o cliente tRPC à forma "chamada direta" (`proc().rota(input)`) dos helpers de preparação já existentes, sem duplicá-los:
+ * tenta `query` e, se o servidor responder que a rota é mutation (`METHOD_NOT_SUPPORTED`, nada executado), usa `mutate`.
+ * Em mutations, a `decision` sintética dos fixtures é SUBSTITUÍDA pela decisão marcada como dado de teste.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- forma dinâmica dos helpers (proc().rota(input))
+export function directCallAdapter(node: unknown, decision: Record<string, unknown>): any {
+  const call = async (n: AnyNode, input: unknown): Promise<unknown> => {
+    try { return await n.query!(input); } catch (e) {
+      if (trpcCode(e) !== "METHOD_NOT_SUPPORTED") throw e;
+      const patched = input && typeof input === "object" && "decision" in (input as object) ? { ...(input as object), decision } : input;
+      return n.mutate!(patched);
+    }
   };
-  const download = async (url: string) => new Uint8Array(await (await fetch(url)).arrayBuffer());
-
-  // ─── Sessão + tenant sintético (descoberto, nunca presumido) ─────────────────────────────────────────────
-  await api.auth.login.mutate({ email: cfg.email, password: cfg.password });
-  const mine = await api.organizations.listMine.query();
-  const found = mine.map((m) => m.org).find((o) => o.slug === SYNTHETIC_TENANT_SLUG);
-  assertSyntheticTenant(found);
-  state.orgId = found.id;
-  const current = await api.organizations.getCurrent.query();
-  assertSyntheticTenant(current.org);
-  const tenant = { id: current.org.id, slug: current.org.slug!, role: current.role };
-
-  // ─── Jornada A — processo novo: DFD → ETP → TR → Edital → DOCX/PDF ─────────────────────────────────────
-  const A = "A-processo-novo";
-  const object = `${MARK} Aquisição de papel A4 para a Secretaria Fictícia de Testes — run ${run}`;
-  const created = await step(A, "criar processo", () => api.procurementProcess.createProcess.mutate({ processNumber: `HOMOLOG-${run}`, object, startOption: "iniciar_pesquisa" }));
-  const pid = created?.process.id ?? "";
-  if (pid) {
-    await step(A, "item da contratação (quantidade prevista)", () => api.procurementItems.createManual.mutate({ processId: pid, description: `${MARK} Papel A4 75g/m²`, unit: "resma", plannedQuantity: "120", idempotencyKey: `homolog-item-${run}` }));
-    const dfd = await step(A, "DFD a partir do contexto (sem redigitação)", () => api.procurementProcess.generateDFD.mutate({ processId: pid, idempotencyKey: `homolog-dfd-${run}` }));
-    if (dfd) {
-      check(A, "DFD reutiliza objeto e itens", dfd.document.content.includes("Papel A4 75g/m²"));
-      const again = await api.procurementProcess.generateDFD.mutate({ processId: pid, idempotencyKey: `homolog-dfd-${run}` });
-      check(A, "replay do DFD (mesma chave ⇒ mesmo documento)", again.document.id === dfd.document.id && again.document.content === dfd.document.content);
-      metrics.DFD = { chars: dfd.document.content.length, ...pendingMarkers(dfd.document.content) };
-    }
-    const etp = await step(A, "ETP reutilizando o DFD", () => api.procurementProcess.generateETP.mutate({ processId: pid, object, idempotencyKey: `homolog-etp-${run}` }));
-    if (etp) metrics.ETP = { chars: etp.document.content.length, ...pendingMarkers(etp.document.content) };
-    const tr = await step(A, "TR reutilizando DFD + ETP + itens", () => api.procurementProcess.generateTR.mutate({ processId: pid, object, idempotencyKey: `homolog-tr-${run}` }));
-    if (tr) {
-      check(A, "TR contém os itens canônicos", tr.document.content.includes("Papel A4 75g/m²"));
-      metrics.TR = { chars: tr.document.content.length, ...pendingMarkers(tr.document.content) };
-    }
-    const params = { modality: "pregao", form: "eletronico", platform: "bll" } as const;
-    const resolution = await step(A, "resolução do modelo do Edital", () => api.procurementProcess.editalTemplateResolution.query({ processId: pid, ...params }));
-    metrics.EDITAL_TEMPLATE_RESOLUTION = resolution?.status ?? null;
-    if (resolution?.status === "BOUND") {
-      // Modelo institucional vinculado: mede a preparação (o que o servidor resolve sozinho × o que falta) sem emitir.
-      const prep = await step(A, "preparação do Edital BLL (servidor)", () => api.procurementProcess.editalTemplatePreparation.query({ processId: pid, ...params }));
-      if (prep && "metrics" in prep) metrics.EDITAL_BLL = { metrics: prep.metrics, publication: prep.publication?.readiness ?? null };
-      else if (prep) check(A, "preparação do Edital BLL disponível", false, `${prep.resolution}: ${prep.reason}`);
-    } else {
-      const ed = await step(A, "Edital (motor padrão do órgão)", () => api.procurementProcess.generateNotice.mutate({ processId: pid, object, ...params, idempotencyKey: `homolog-ed-${run}` }));
-      if (ed) metrics.EDITAL = { mode: ed.generationMode, chars: ed.document?.content.length ?? 0, ...pendingMarkers(ed.document?.content ?? "") };
-    }
-    for (const kind of ["dfd", "etp", "tr", "edital"] as const) {
-      for (const format of ["docx", "pdf"] as const) {
-        const out = await step(A, `exportar ${kind.toUpperCase()} ${format.toUpperCase()}`, () => api.procurementProcess.exportDocument.mutate({ processId: pid, kind, format }));
-        if (out) check(A, `${kind.toUpperCase()} ${format.toUpperCase()} íntegro`, looksLike(format, await download(out.url)));
-      }
-    }
-  }
-
-  // ─── Jornada B — legado: contrato vigente → aditivo → termo exportado ──────────────────────────────────
-  const B = "B-legado-contrato-aditivo";
-  const reg = await step(B, "registrar contrato vigente (declarado)", () => api.contractWorkspace.registerInForceContract.mutate({
-    idempotencyKey: `homolog-ct-${run}`, contractNumber: `HOMOLOG-CT-${run}`, contractor: `${MARK} Fornecedor Fictício Ltda`,
-    object: `${MARK} Manutenção predial`, term: "12 meses", value: 12000, endDate: plus(40), sourceReference: `${MARK} Pregão 1/2023`,
-  }));
-  if (reg) {
-    check(B, "nasce vigente, origem legado, informação declarada", reg.workspace.status === "vigente" && reg.workspace.originType === "legado" && reg.provenance === "DECLARADO");
-    const replay = await api.contractWorkspace.registerInForceContract.mutate({
-      idempotencyKey: `homolog-ct-${run}`, contractNumber: `HOMOLOG-CT-${run}`, contractor: `${MARK} Fornecedor Fictício Ltda`,
-      object: `${MARK} Manutenção predial`, term: "12 meses", value: 12000, endDate: plus(40), sourceReference: `${MARK} Pregão 1/2023`,
-    });
-    check(B, "replay do registro (mesma chave ⇒ mesmo contrato)", replay.workspace.id === reg.workspace.id);
-    const ad = await step(B, "aditivo de prazo sem DFD/ETP/TR/Edital", () => api.contractWorkspace.createAddendum.mutate({ contractId: reg.workspace.id, addendumType: "prazo", justification: `${MARK} Prorrogação por 12 meses.`, newTerm: "24 meses", idempotencyKey: `homolog-ad-${run}` }));
-    if (ad?.addendum) {
-      const v = await step(B, "termo aditivo versionado", () => api.documentEngine.versions.query({ businessDomain: "contratos", documentType: "aditivo", origin: reg.workspace.id, instrumentId: ad.addendum.id }));
-      const docId = v?.versions[0]?.id;
-      if (docId) {
-        for (const format of ["docx", "pdf"] as const) {
-          const out = await step(B, `exportar termo aditivo ${format.toUpperCase()}`, () => api.documentEngine.exportInstitutional.mutate({ documentId: docId, format }));
-          if (out) check(B, `termo ${format.toUpperCase()} íntegro`, looksLike(format, await download(out.url)));
-        }
-      }
-    }
-  }
-
-  // ─── Jornada C — monitoramento: registro externo/legado → calendário → Centro de Operações ──────────────
-  const C = "C-monitoramento";
-  const rec = await step(C, "contrato externo com término da vigência", () => api.operationRecord.createRecord.mutate({ recordType: "contrato_externo", origin: "externa", number: `HOMOLOG-CE-${run}`, object: `${MARK} Locação de veículos`, expirationDate: plus(20) }));
-  if (rec) {
-    const cal = await api.departmentOperation.calendar.query({ from: today, to: plus(60) });
-    const mine2 = cal.events.filter((e) => e.referenceId === rec.record.id);
-    check(C, "vencimento no calendário", mine2.some((e) => e.eventType === "vencimento_contrato" && e.eventDate === plus(20)));
-    check(C, "alertas automáticos (15d e 7d)", mine2.some((e) => e.eventDate === plus(5)) && mine2.some((e) => e.eventDate === plus(13)));
-    if (reg) check(C, "contrato legado (Jornada B) no calendário", cal.events.some((e) => e.referenceId === reg.workspace.id && e.eventDate === plus(40)));
-  }
-  const dash = await step(C, "Centro de Operações (indicadores)", () => api.departmentOperation.dashboard.query({ today }));
-  if (dash) metrics.CONTRACTS_EXPIRING_90D = dash.indicators.contractsExpiring;
-  const imp = await step(C, "processo legado só para acompanhamento", () => api.operationRecord.importLegacy.mutate({ recordType: "processo_licitatorio_legado", rawText: `${MARK} Processo nº 9/2022 — Pregão Eletrônico — Objeto: mobiliário escolar.` }));
-  if (imp) {
-    const panel = await api.departmentOperation.monitoringPanel.query({ today });
-    check(C, "legado no painel de acompanhamento", panel.rows.some((r) => r.processId === imp.record.id));
-  }
-
-  // ─── Isolamento: o mesmo usuário não alcança órgão do qual não é membro ─────────────────────────────────
-  const other = state.orgId; state.orgId = 2_147_000_000;
-  try { await api.organizations.getCurrent.query(); check("isolamento", "órgão alheio recusado", false, "acesso concedido"); }
-  catch (e) { check("isolamento", "órgão alheio recusado", ["FORBIDDEN", "NOT_FOUND", "UNAUTHORIZED", "BAD_REQUEST"].includes(codeOf(e)), codeOf(e)); }
-  state.orgId = other;
-
-  return { baseUrl: cfg.baseUrl, run, tenant, checks, metrics, passed: checks.every((c) => c.ok) };
-}
-
-export async function main(): Promise<number> {
-  const { HOMOLOG_CONFIRM, HOMOLOG_BASE_URL, HOMOLOG_EMAIL, HOMOLOG_PASSWORD, HOMOLOG_REPORT } = process.env;
-  if (HOMOLOG_CONFIRM !== "SINTETICO" || !HOMOLOG_BASE_URL || !HOMOLOG_EMAIL || !HOMOLOG_PASSWORD) {
-    console.error("Informe HOMOLOG_CONFIRM=SINTETICO, HOMOLOG_BASE_URL, HOMOLOG_EMAIL e HOMOLOG_PASSWORD (usuário do tenant sintético).");
-    return 1;
-  }
-  const report = await runHomologation({ baseUrl: HOMOLOG_BASE_URL, email: HOMOLOG_EMAIL, password: HOMOLOG_PASSWORD });
-  const json = JSON.stringify(report, null, 2);
-  if (HOMOLOG_REPORT) writeFileSync(HOMOLOG_REPORT, json);
-  console.info(json);
-  return report.passed ? 0 : 2;
-}
-
-if (process.argv[1]?.endsWith("homologation-e2e.ts")) {
-  main().then((code) => process.exit(code), (e) => { console.error((e as Error).message); process.exit(1); });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wrap = (n: unknown): any => new Proxy(function () { /* callable */ }, {
+    get: (_t, p) => wrap((n as Record<string | symbol, unknown>)[p]),
+    apply: (_t, _this, args) => call(n as AnyNode, args[0]),
+  });
+  return wrap(node);
 }

@@ -87,7 +87,7 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
           <OfficialDocumentPanel businessDomain="contratos" origin={contractId} title="Documentos Oficiais (DOCX/PDF)" />
         </div>
       )}
-      {tab === "aditivos" && <AddendumWorkspace contractId={contractId} addenda={data?.addenda ?? []} />}
+      {tab === "aditivos" && <AddendumWorkspace contractId={contractId} addenda={data?.addenda ?? []} currentEndDate={data?.expiration?.endDate ?? null} />}
       {tab === "apostilamentos" && <ApostilleWorkspace contractId={contractId} apostilles={data?.apostilles ?? []} />}
       {tab === "ocorrencias" && <OccurrenceWorkspace contractId={contractId} occurrences={data?.occurrences ?? []} />}
 

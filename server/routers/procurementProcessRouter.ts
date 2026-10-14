@@ -5,6 +5,7 @@
  * consequência do fluxo. tenantProcedure, multi-tenant, timeline auditável.
  * Todo acesso ao Kernel ocorre via kernelAccessService (nos serviços).
  */
+import { displayLateBoundForDraft } from "../domain/institutionalTemplates/lifecycleLateBound";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
@@ -299,7 +300,9 @@ export const procurementProcessRouter = router({
 
       const exported = await exportDocumentCore({
         organizationId: orgId,
-        content: document.content, // conteúdo persistido, renderizado FIELMENTE (sem correção)
+        // conteúdo persistido, renderizado FIELMENTE (sem correção); só o marcador INTERNO de campo de sistema (data de emissão,
+        // atribuída no ato oficial) vira texto legível na minuta — o rascunho persistido e seu hash não mudam.
+        content: displayLateBoundForDraft(document.content),
         baseName: `${input.kind.toUpperCase()}_${process.processNumber}`,
         // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
         downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,

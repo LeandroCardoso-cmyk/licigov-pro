@@ -15,6 +15,7 @@
  *  LIFECYCLE       projeção do ciclo de vida do processo (0313) + campos governados
  *  RESULT          sem autoridade no pré-certame ⇒ OMITIDA (campos pós-homologação renderizam o texto governado "a preencher")
  */
+import { processNumberParts } from "../../../domain/institutionalTemplates/processYear";
 import { createHash } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { procurementProcessesTable } from "../../../../drizzle/schema";
@@ -223,11 +224,11 @@ export async function resolveSourcesV2(
         const p = await getProcess(rc.processId, rc.organizationId);
         if (!p) throw unavailable("PROCESS", "PROCESS_NOT_FOUND", "processo inexistente nesta organização");
         const disclosure = await disclosureOf(rc, memo);
-        const year = /^(\d{4})\//.exec(p.processNumber)?.[1];
+        const { year, sequence } = processNumberParts(p.processNumber);
         const data = compact({
           ...(await projectedFor(rc, memo, "PROCESS")),
-          ...(declares(rc.catalog, "PROCESS", "numeroProcesso") ? { numeroProcesso: p.processNumber } : {}),
-          ...(declares(rc.catalog, "PROCESS", "ano") && year ? { ano: Number(year) } : {}),
+          ...(declares(rc.catalog, "PROCESS", "numeroProcesso") ? { numeroProcesso: sequence } : {}),
+          ...(declares(rc.catalog, "PROCESS", "ano") && year ? { ano: year } : {}),
           // O sigilo do orçamento é DERIVADO da decisão de divulgação (nunca digitado): fonte única da verdade.
           ...(declares(rc.catalog, "PROCESS", "orcamentoSigilosoSimNao") && disclosure ? { orcamentoSigilosoSimNao: disclosure === "sigiloso" } : {}),
         });

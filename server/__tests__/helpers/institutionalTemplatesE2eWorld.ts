@@ -213,3 +213,32 @@ export async function cleanupOrgs(conn: mysql.Connection, orgs: number[]): Promi
 export async function markTemplateOrgLegacy(conn: mysql.Connection, org: number): Promise<void> {
   await conn.execute("UPDATE institutional_template_identities SET created_at_iso = '2026-01-01T00:00:00.000Z' WHERE organization_id = ?", [org]);
 }
+
+/**
+ * Registra → evidência jurídica → aprova → publica → vincula o modelo BLL (Revisão 1 ou a Revisão 2 CANDIDATA `1.0.2-draft`) em um
+ * órgão SINTÉTICO, pelos serviços governados reais. Nunca é usado contra o órgão de produção (a Revisão 2 não é registrável pela API pública).
+ */
+export async function publishBllModel(org: number, rev: 1 | 2, key: (p: string) => string): Promise<{ identityId: string; revisionId: string }> {
+  const { getTemplateWorkflowPorts } = await import("../../services/institutionalTemplates/portsRegistry");
+  const { ModelRegistrationService } = await import("../../services/institutionalTemplates/modelRegistrationService");
+  const { TemplateGovernanceService } = await import("../../services/institutionalTemplates/governanceService");
+  const { InstitutionalTemplatesWorkflow } = await import("../../services/institutionalTemplates/workflowService");
+  const { getModelPackageVersion } = await import("../../services/institutionalTemplates/modelPackages");
+  const wports = getTemplateWorkflowPorts();
+  const pkg = rev === 2 ? getModelPackageVersion(BLL.modelKey, "1.0.2-draft")! : BLL;
+  const reg = await new ModelRegistrationService(wports, { allowCandidatePackages: rev === 2 }).register(ctxOf(org), {
+    target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: BLL.slug }, templateKey: BLL.modelKey, displayName: BLL.displayName,
+    declaredScope: BLL.declaredScope, source: { kind: "MODEL_PACKAGE", modelKey: BLL.modelKey, ...(rev === 2 ? { packageVersion: pkg.provenance.sourceLogicalVersion } : {}) },
+    sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256,
+    confirm: true, idempotencyKey: key("reg"), decision: decision(),
+  });
+  await new TemplateGovernanceService(wports).recordLegalEvidence(ctxOf(org), {
+    revisionId: reg.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: key("ev"), decision: decision({ basisReference: "Parecer jurídico — sintético" }),
+    evidence: { sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256 },
+  });
+  const wf = new InstitutionalTemplatesWorkflow(wports);
+  await wf.approve(ctxOf(org), { revisionId: reg.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decision({ basisReference: "Ato de aprovação" }) });
+  await wf.publish(ctxOf(org), { revisionId: reg.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato de publicação" }) });
+  await wf.setBinding(ctxOf(org), { documentKind: "edital", scope: { ...BLL.declaredScope }, identityId: reg.identity.id, pinnedRevisionId: reg.revision.id, effectiveFrom: "2026-01-01T00:00:00Z", confirm: true });
+  return { identityId: reg.identity.id, revisionId: reg.revision.id };
+}

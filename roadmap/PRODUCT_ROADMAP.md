@@ -38,21 +38,25 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 - Indicador "contratos vencendo" conta contratos (um por referência, janela de 90 dias), não alertas.
 - Smoke integrado `integrated-journeys-mysql-smoke` (J1 processo novo, J2 legado→contrato→aditivo, J3 monitoramento).
 
-### Progresso por marco (integrador — 14/10/2026, com evidência)
+### Progresso por marco (integrador — atualizado após integração de #298–#301, com evidência)
 
-| Marco | Peso | % | Evidência |
-|---|---|---|---|
-| M0 — Staging e baseline | 10 | 100 | Deploy `c7868b88` SUCCESS em `staging@2ddcdf5`; ledger até 0318; MySQL/S3 próprios; tenant `homologacao-sintetica` criado pelo Owner |
-| M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização acima; consultas dirigidas; grafo idempotente |
-| M2 — BLL diferido | 10 | 75 | Revisão 2 sintética: 13 → 0 decisões pendentes, 7 dados "A DEFINIR PARA PUBLICAÇÃO" (smoke); ativação real é decisão institucional |
-| M3 — Motor compartilhado | 10 | 85 | `TemplateDocumentKind` cobre 7 tipos; só o Edital BLL tem pacote de modelo |
-| M4 — Jornada principal | 15 | 70 | J1 (smoke MySQL) + DFD/replay via HTTP; encadeamento DFD→ETP→TR→Edital **BLL** aguarda entrega do Claude 2 |
-| M5 — Processos legados | 10 | 85 | Contrato vigente declarado → aditivo, replay e calendário validados via HTTP no servidor real (local) |
-| M6 — Contratos e aditivos | 10 | 60 | Aditivo/termo sobre contrato vigente; ativação de minuta e pós-parecer pendentes (jurídico) |
-| M7 — Pareceres e monitoramento | 10 | 70 | Calendário/alertas/indicador/painel validados via HTTP; parecer avulso pendente |
-| M8 — E2E staging | 15 | 35 | Executor `pnpm homolog:e2e` (APIs oficiais, travado no tenant sintético) validado localmente; execução em staging bloqueada pelo acesso de rede da sessão |
-| M9 — Regras, roadmap e integração | 5 | 85 | CLAUDE.md, roadmap, CI em PRs para `staging`, integrador ativo |
-| **Global ponderado** | 100 | **72,5** | Σ(peso × %) / 100; cada entrega contada num único marco |
+Legenda de evidência: **SMOKE** = MySQL real + IA mock (CI) · **HTTP-LOCAL** = executor oficial `pnpm homolog:e2e` contra o
+MESMO middleware tRPC do servidor (login/cookie/RBAC reais, IA mock, storage em memória) · **STAGING** = execução no staging.
+Homologação visual: **não realizada**.
+
+| Marco | Peso | % | Evidência | Próxima ação / bloqueador |
+|---|---|---|---|---|
+| M0 — Staging e baseline | 10 | 100 | Deploy SUCCESS a cada merge; ledger até 0318; MySQL/S3 próprios; tenant `homologacao-sintetica` | — |
+| M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização; grafo regenerado por merge e idempotente | — |
+| M2 — BLL diferido | 10 | 90 | Minuta BLL Rev. 2 gerada sobre TR emitido: 7 dados "A DEFINIR PARA PUBLICAÇÃO", 0 datas inventadas (SMOKE + HTTP-LOCAL) | Rev. 2 vinculada no tenant sintético do staging; ativação na org real é decisão institucional |
+| M3 — Motor documental | 10 | 90 | Mesmo motor para Edital BLL; mesma exportação/versionamento para DFD/ETP/TR/termos | Pacotes de modelo para os demais tipos |
+| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL) | Rodar em STAGING |
+| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido | Rodar em STAGING |
+| M6 — Contratos/aditivos/direta | 10 | 80 | Reagendamento de vigência, termo DOCX/PDF; contratação direta sem DFD (SMOKE) | Ativação de minuta e pós-parecer pendentes (jurídico) |
+| M7 — Pareceres/monitoramento | 10 | 80 | Calendário/alertas/indicador sem duplicidade (HTTP-LOCAL); pedido de parecer sem parecer fabricado (SMOKE) | Parecer avulso |
+| M8 — Homologação E2E staging | 15 | 50 | Executor completo (A/B/C/ISO) verde em HTTP-LOCAL; guardas de destino/tenant/credencial | Bloqueado: rede da sessão → staging e segredos `HOMOLOG_*` |
+| M9 — Regras/roadmap/integração | 5 | 95 | #298–#301 integrados por squash; conflitos só em artefatos do Graphify (regenerados) | — |
+| **Global ponderado** | 100 | **83,75** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
 
 ### P0 — disponibilização funcional
 - Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) e homologação integrada.
