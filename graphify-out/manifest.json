@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791849310.434547,
-    "ast_hash": "22cd2e66f67ea7249e424ac60d8c8131",
+    "mtime": 1791999361.8851635,
+    "ast_hash": "0f0d3e6307d65731ec5403ad84a937ad",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -14645,8 +14645,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalReadiness.ts": {
-    "mtime": 1791844281.6457777,
-    "ast_hash": "32b2e0c9638c74026d3d6726a3dfd065",
+    "mtime": 1791999359.2220778,
+    "ast_hash": "f6a2be7e6c23b31711ec524f71e52135",
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_PREPARATION_READINESS_UX.md": {
@@ -14917,6 +14917,21 @@
   "server/services/institutionalTemplates/electronicAuthority.ts": {
     "mtime": 1791986679.2173157,
     "ast_hash": "c8f88fa1b289ca1a203cdbb88c8f7dd7",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/PublicationPendingNotice.tsx": {
+    "mtime": 1791999359.2260778,
+    "ast_hash": "5cd137a7f5f9b678f32074ffd17556aa",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/publicationPending.test.ts": {
+    "mtime": 1791999430.3700762,
+    "ast_hash": "a941aef23a7485c1914b86ed70d28c99",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-bll-deferred-cause.test.ts": {
+    "mtime": 1791999452.3556836,
+    "ast_hash": "c2ac92c72e1331c2a1e326dff1ecba23",
     "semantic_hash": ""
   }
 }
