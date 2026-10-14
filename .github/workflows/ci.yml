@@ -283,7 +283,9 @@ jobs:
 
       # LICIGOV-FAST — homologação integrada (tenant sintético): J1 DFD → ETP → TR → Edital → DOCX/PDF; J2 contrato vigente
       # de processo anterior (declarado) → aditivo → termo exportado + vencimento; J3 registro externo com término ⇒
-      # vencimento/alertas no calendário, indicador por contrato; RBAC, replay e tenant.
+      # vencimento/alertas no calendário, indicador por contrato; RBAC, replay e tenant. J1-BLL: a MESMA jornada com o TR gerado
+      # e EMITIDO na própria jornada alimentando o Edital BLL Revisão 2 (órgão sintético): minuta sem datas de publicação
+      # ("A DEFINIR PARA PUBLICAÇÃO"), DOCX/PDF, replay, tenant e nenhuma mutação no órgão de produção.
       - name: Smoke — jornadas integradas (processo novo, legado→aditivo, monitoramento)
         run: pnpm exec vitest run server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts
 
