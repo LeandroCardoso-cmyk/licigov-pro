@@ -175,7 +175,7 @@ function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
     case "VALIDATION_FAILED": case "IMPORT_REJECTED": case "DECISION_REJECTED": case "BINDING_NOT_PINNED": case "SCOPE_INVALID": case "SCOPE_DIMENSION_UNSUPPORTED": return "BAD_REQUEST";
     case "CONFLICT": case "REVISION_IMMUTABLE": case "TRANSITION_INVALID": case "STALE_STATE": case "BINDING_AMBIGUOUS":
     case "BINDING_NOT_PUBLISHED": case "REVISION_PINNED_BY_BINDING": case "READINESS_STALE": return "CONFLICT";
-    case "ORIGINAL_STORAGE_FAILED": case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": case "PUBLICATION_BLOCKED": case "READINESS_UNAVAILABLE": return "PRECONDITION_FAILED";
+    case "ORIGINAL_STORAGE_FAILED": case "ORIGINAL_STORAGE_UNAVAILABLE": case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": case "PUBLICATION_BLOCKED": case "READINESS_UNAVAILABLE": return "PRECONDITION_FAILED";
     default: return "INTERNAL_SERVER_ERROR";
   }
 }
@@ -234,6 +234,10 @@ export const institutionalTemplatesRouter = router({
       importLimits: IMPORT_LIMITS, role: ctx.orgMembership?.role ?? null,
       scopeDimensions: SCOPE_DIMENSIONS.map((d) => ({ dimension: d, label: SCOPE_DIMENSION_LABEL[d], suggestions: SCOPE_VOCABULARY[d] })),
       persistedScopeDimensions: configured ? (getTemplateWorkflowPorts().capabilities ?? INTEGRATED_CAPABILITIES).scopeDimensions : [],
+      // preservação do original é requisito de qualquer envio de arquivo: sem armazenamento, a UI explica e o servidor recusa
+      originalPreservation: configured && getTemplateWorkflowPorts().originals !== undefined
+        ? { available: true as const, reason: null }
+        : { available: false as const, reason: "O armazenamento de arquivos não está disponível neste ambiente; o envio de arquivos (DOCX/Markdown) exige a preservação verificada do original e está indisponível." },
       registrationPresets: MODEL_REGISTRATION_PRESETS, readinessChecks: READINESS_CHECK_IDS,
     };
   }),
@@ -294,6 +298,9 @@ export const institutionalTemplatesRouter = router({
   governance: router({
     get: templatesProcedure("read").input(z.object({ revisionId: id }).strict())
       .query(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).get(ctx.wctx, input.revisionId))),
+    /** Reverificação sob demanda do original preservado (SHA-256 por leitura de volta). Só leitura; só do próprio órgão. */
+    verifyOriginal: templatesProcedure("read").input(z.object({ revisionId: id }).strict())
+      .query(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).verifyOriginal(ctx.wctx, input.revisionId))),
     recordLegalEvidence: templatesProcedure("evidence").input(legalEvidenceInput)
       .mutation(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordLegalEvidence(ctx.wctx, input))),
     /** Template Governance V2 — política do órgão sobre seus modelos (tenant-scoped; o órgão vem do contexto autenticado, nunca do cliente). */

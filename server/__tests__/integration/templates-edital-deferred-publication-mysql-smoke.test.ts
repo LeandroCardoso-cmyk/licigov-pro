@@ -69,7 +69,7 @@ import {
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
+  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, markTemplateOrgLegacy, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const R2 = getModelPackageVersion(BLL.modelKey, "1.0.2-draft")!;
@@ -696,6 +696,7 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     const again = await registerCandidateDraft(getTemplateWorkflowPorts(), candReq(p));
     expect(again).toMatchObject({ performed: "NONE", revisionId: r2Id }); expect(await revisionsOf(p)).toHaveLength(2);
 
+    await markTemplateOrgLegacy(conn, p.org);   // órgão com modelos anteriores à transição (LEGACY_COMPAT): evidência jurídica exigida, como em produção
     // MATRIZ: sem evidência ⇒ só a evidência bloqueia; aprovar não publica; publicar é recusado (fail closed)
     const matrix = async () => ((await tpl(p.org).readiness.evaluate({ revisionId: r2Id })) as any).matrix;
     expect((await matrix()).checks.filter((c: any) => c.status === "BLOCKED").map((c: any) => c.id)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);

@@ -22,13 +22,16 @@ import {
 } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { decodeKv } from "../../domain/institutionalTemplates/governance/kv";
 import {
-  decodeTemplateGovernancePolicy, encodeTemplateGovernancePolicy, originChangeIssue, resolveEffectiveTemplateGovernancePolicy, TEMPLATE_POLICY_SUBJECT_ID,
+  decodeTemplateGovernancePolicy, encodeTemplateGovernancePolicy, isLegacyTemplateOrganization, originChangeIssue, resolveEffectiveTemplateGovernancePolicy, TEMPLATE_POLICY_SUBJECT_ID,
   validateTemplateGovernancePolicy, type EffectiveTemplateGovernancePolicy, type TemplateGovernancePolicy,
 } from "../../domain/institutionalTemplates/governance/templateGovernanceV2";
+import { getTemplateGovernanceConfig } from "../../config/templates";
+import { explainIntegrity, type IntegrityExplanation, type LineageProbe } from "../../domain/institutionalTemplates/governance/integrityExplanation";
+import { getModelPackage } from "./modelPackages";
 import { serviceLogger } from "../observabilityService";
 import { assertHumanActor } from "./authority";
 import { TemplateWorkflowError } from "./errors";
-import type { TemplateGovernancePort, TemplateWorkflowPorts, WorkflowContext } from "./ports";
+import type { OriginalVerification, TemplateGovernancePort, TemplateWorkflowPorts, WorkflowContext } from "./ports";
 
 const log = serviceLogger("templateGovernance");
 
@@ -59,7 +62,13 @@ export interface RevisionGovernanceView {
   /** Registros do ledger que não puderam ser decodificados (nunca "meio válidos"): contagem para a UX alertar. */
   readonly malformedRecords: number;
   readonly lifecycleNote: string;
+  /** Explainability de integridade: hash declarado × calculado × semântico × lineage, com o grau de garantia de cada um. */
+  readonly integrity: IntegrityExplanation;
 }
+
+export type OriginalVerificationView =
+  | { readonly applicable: false; readonly reason: string }
+  | { readonly applicable: true; readonly status: OriginalVerification["status"]; readonly storageKey: string; readonly expectedSha256: string; readonly computedSha256: string | null; readonly checkedAt: string; readonly message: string };
 
 export interface TemplatePolicyVersionView {
   readonly version: number;
@@ -73,14 +82,24 @@ export interface TemplatePolicyVersionView {
 }
 export interface TemplatePolicyView extends EffectiveTemplateGovernancePolicy {
   readonly history: readonly TemplatePolicyVersionView[];
+  /** Compatibilidade/transição explícitas: por que este órgão está (ou não) no regime anterior e como sair dele. */
+  readonly transition: { readonly cutoverAt: string; readonly legacyOrganization: boolean; readonly explanation: string };
   readonly note: string;
+}
+function transitionExplanation(kind: EffectiveTemplateGovernancePolicy["kind"]): string {
+  switch (kind) {
+    case "TENANT_DEFINED": return "Política estabelecida pelo próprio órgão; prevalece sobre qualquer padrão da plataforma.";
+    case "LEGACY_COMPAT": return "O órgão já possuía modelos antes da transição do padrão da plataforma e não registrou política: segue, por compatibilidade, exigindo evidência jurídica prévia. Nada foi alterado em silêncio. Para adotar o padrão da plataforma (opcional) ou confirmar a exigência, registre a política do órgão (gerente).";
+    case "UNRESOLVED_STRICT": return "A política não pôde ser resolvida/lida: aplica-se o padrão estrito (evidência jurídica exigida) até que o órgão a restabeleça.";
+    default: return "Padrão da plataforma: a evidência jurídica prévia do modelo é opcional. O órgão pode estabelecer a exigência (REQUIRED) a qualquer momento.";
+  }
 }
 const POLICY_NOTE = "A política define o que o órgão exige para DISPONIBILIZAR um modelo no catálogo interno de elaboração. Não publica documento oficial e não substitui a análise jurídica dos documentos elaborados (etapa própria da Procuradoria).";
 
 const LIFECYCLE_NOTE = "Evidência jurídica e procedência são metadados de governança: não alteram o status da revisão nem substituem a aprovação e a publicação humanas no sistema.";
 
 export class TemplateGovernanceService {
-  constructor(private readonly ports: Pick<TemplateWorkflowPorts, "repository" | "governance" | "clock">) {}
+  constructor(private readonly ports: Pick<TemplateWorkflowPorts, "repository" | "governance" | "clock"> & Partial<Pick<TemplateWorkflowPorts, "originals">>) {}
 
   private gov(): TemplateGovernancePort {
     if (!this.ports.governance) throw new TemplateWorkflowError("PORTS_NOT_CONFIGURED", "registro de governança do modelo não está configurado (fail-closed)");
@@ -94,7 +113,7 @@ export class TemplateGovernanceService {
   }
 
   async get(ctx: WorkflowContext, revisionId: string): Promise<RevisionGovernanceView> {
-    await this.revision(ctx, revisionId);
+    const revision = await this.revision(ctx, revisionId);
     const [prov, ev] = await Promise.all([
       this.gov().listGovernanceDecisions(ctx.organizationId, IMPORT_PROVENANCE_SUBJECT, revisionId),
       this.gov().listGovernanceDecisions(ctx.organizationId, LEGAL_EVIDENCE_SUBJECT, revisionId),
@@ -106,10 +125,44 @@ export class TemplateGovernanceService {
     const provCurrent = decodedProv.length ? decodedProv[decodedProv.length - 1] : null;
     const evHistory = decodedEv.filter((d): d is LegalApprovalEvidence => d !== null);
     const evCurrent = decodedEv.length ? decodedEv[decodedEv.length - 1] : null;
+    const integrity = explainIntegrity({
+      revisionSemanticHash: revision.semanticHash, provenance: provCurrent, legalEvidence: evCurrent,
+      lineageProbe: await this.probeLineage(ctx, provCurrent),
+    });
     return {
       revisionId, provenance: provCurrent, provenanceVersions: prov.length, legalEvidence: evCurrent, legalEvidenceHistory: evHistory,
-      malformedRecords: malformed, lifecycleNote: LIFECYCLE_NOTE,
+      malformedRecords: malformed, lifecycleNote: LIFECYCLE_NOTE, integrity,
     };
+  }
+
+  /** Reverifica AGORA a origem do lineage (leitura tenant-scoped; revisão de outro órgão é indistinguível de inexistente). */
+  private async probeLineage(ctx: WorkflowContext, prov: ImportProvenance | null): Promise<LineageProbe | null> {
+    const l = prov?.origin?.lineage;
+    if (!l) return null;
+    if (l.kind === "PLATFORM_PACKAGE") return { kind: "PLATFORM_PACKAGE", currentPackageSha256: getModelPackage(l.packageKey)?.provenance.sourceSha256 ?? null };
+    const src = await this.ports.repository.getRevision(ctx.organizationId, l.revisionId);
+    return { kind: "TENANT_REVISION", sourceRevisionSemanticHash: src && src.organizationId === ctx.organizationId ? src.semanticHash : null };
+  }
+
+  /**
+   * Reverificação SOB DEMANDA do original preservado: relê o objeto no armazenamento e recalcula o SHA-256. Só leitura; só chaves do próprio órgão.
+   * O resultado é um FATO observado agora (não é gravado nem altera a revisão).
+   */
+  async verifyOriginal(ctx: WorkflowContext, revisionId: string): Promise<OriginalVerificationView> {
+    await this.revision(ctx, revisionId);
+    const list = await this.gov().listGovernanceDecisions(ctx.organizationId, IMPORT_PROVENANCE_SUBJECT, revisionId);
+    const prov = list.length ? decodeImportProvenance(list[list.length - 1]) : null;
+    const original = prov?.origin?.original ?? null;
+    if (!original) return { applicable: false, reason: "Este modelo não tem arquivo original enviado (pacote da plataforma, estrutura nativa ou derivado)." };
+    if (!this.ports.originals) throw new TemplateWorkflowError("ORIGINAL_STORAGE_UNAVAILABLE", "o armazenamento de arquivos não está disponível; não foi possível reverificar o original agora");
+    const r = await this.ports.originals.verify({ organizationId: ctx.organizationId, storageKey: original.storageKey, sha256: original.sha256 });
+    log.info("template_original_verified", { organizationId: ctx.organizationId, revisionId, status: r.status, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
+    const message = r.status === "VERIFIED" ? "O arquivo preservado existe e seu SHA-256 confere com o calculado no envio."
+      : r.status === "MISMATCH" ? "ATENÇÃO: o arquivo preservado NÃO confere com o SHA-256 calculado no envio. Não use este original e acione a administração."
+      : r.status === "MISSING" ? "O arquivo preservado não foi encontrado no armazenamento."
+      : r.status === "FORBIDDEN_KEY" ? "A chave de armazenamento registrada não pertence a este órgão; a leitura foi recusada."
+      : `O armazenamento não respondeu: ${r.message}`;
+    return { applicable: true, status: r.status, storageKey: original.storageKey, expectedSha256: original.sha256, computedSha256: r.status === "MISMATCH" ? r.computedSha256 : r.status === "VERIFIED" ? original.sha256 : null, checkedAt: this.ports.clock.now(), message };
   }
 
   /** Registra (ou supera) a EVIDÊNCIA de aprovação jurídica externa do conteúdo-fonte. Não transita a revisão. */
@@ -152,12 +205,18 @@ export class TemplateGovernanceService {
     return { provenance: decoded, replayed };
   }
 
-  /** Política de governança de templates do órgão (Template Governance V2). Ausente ⇒ padrão da plataforma; corrente ilegível ⇒ padrão ESTRITO. Só leitura. */
+  /**
+   * Política de governança de templates do órgão (Template Governance V2). Decisão explícita do órgão sempre prevalece; ausente ⇒ órgão LEGADO (modelos anteriores ao
+   * marco de transição) segue em LEGACY_COMPAT (REQUIRED), os demais no padrão da plataforma (OPTIONAL); corrente ilegível ⇒ estrito. Só leitura — nada é gravado.
+   */
   async getTemplatePolicy(ctx: WorkflowContext): Promise<TemplatePolicyView> {
     const history = this.ports.governance ? await this.ports.governance.listGovernanceDecisions(ctx.organizationId, "institutional.policy", TEMPLATE_POLICY_SUBJECT_ID) : [];
-    const effective = resolveEffectiveTemplateGovernancePolicy(history);
+    const cfg = getTemplateGovernanceConfig();
+    // só consulta as identidades quando o resultado depende disso (sem decisão registrada)
+    const legacyOrganization = history.length === 0 ? isLegacyTemplateOrganization(await this.ports.repository.listIdentities(ctx.organizationId, {}), cfg.legacyCutoverAt) : false;
+    const effective = resolveEffectiveTemplateGovernancePolicy(history, { legacyOrganization });
     return {
-      ...effective, note: POLICY_NOTE,
+      ...effective, note: POLICY_NOTE, transition: { cutoverAt: cfg.legacyCutoverAt, legacyOrganization, explanation: transitionExplanation(effective.kind) },
       history: history.map((d) => ({
         version: d.revision, decisionId: d.id, policy: decodeTemplateGovernancePolicy(d), declaredBy: { name: d.decidedByName, role: d.decidedByRole },
         actDate: d.decidedAt, basisReference: d.basisReference, reason: d.reason, recordedByUserId: d.recordedByUserId,
@@ -167,7 +226,7 @@ export class TemplateGovernanceService {
 
   /**
    * Estabelece (ou supera) a política do órgão. Só ator HUMANO, com confirmação, autoridade declarada, justificativa e CAS pela versão vista; append-only
-   * (a anterior permanece). O piso de papel para aprovar/publicar só pode ser elevado (≥ manager). Nada é presumido: sem este ato vale o padrão da plataforma.
+   * (a anterior permanece). O piso de papel para aprovar/publicar só pode ser elevado (≥ manager). Nada é presumido: sem este ato valem o padrão da plataforma ou, para órgão legado, o regime anterior (LEGACY_COMPAT).
    */
   async recordTemplatePolicy(ctx: WorkflowContext, input: GovernanceWriteInput & { policy: TemplateGovernancePolicy }): Promise<{ policy: TemplatePolicyView; replayed: boolean }> {
     assertHumanActor(ctx.actor);

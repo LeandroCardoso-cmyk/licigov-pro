@@ -18,6 +18,8 @@ import { ImportResultPanel, type ImportResultView } from "@/components/instituti
 import { GovernanceSummary, LegalEvidenceForm, type GovernanceView } from "@/components/institutionalTemplates/LegalEvidencePanel";
 import { PreviewDossierPanel, type PreviewDossierView } from "@/components/institutionalTemplates/PreviewDossierPanel";
 import { ReadinessMatrixPanel } from "@/components/institutionalTemplates/ReadinessMatrixPanel";
+import { IntegrityPanel, type OriginalVerificationResult } from "@/components/institutionalTemplates/IntegrityPanel";
+import { OriginBadge } from "@/components/institutionalTemplates/OriginBadge";
 import { ScopeFields } from "@/components/institutionalTemplates/ScopeFields";
 import { ResolutionNotice } from "@/components/institutionalTemplates/ResolutionNotice";
 import { RevisionStatusBadge } from "@/components/institutionalTemplates/RevisionStatusBadge";
@@ -112,6 +114,9 @@ export default function InstitutionalTemplateDetail() {
 
   // ── governança: evidência jurídica ──
   const governance = trpc.institutionalTemplates.governance.get.useQuery({ revisionId: selectedId ?? "" }, { enabled: enabled && !!selectedId });
+  // reverificação sob demanda do original preservado (somente leitura; só roda quando a pessoa pede)
+  const [verifyAsked, setVerifyAsked] = useState<string | null>(null);
+  const verifyOriginal = trpc.institutionalTemplates.governance.verifyOriginal.useQuery({ revisionId: selectedId ?? "" }, { enabled: enabled && !!selectedId && verifyAsked === selectedId, retry: false });
   const [evForm, setEvForm] = useState<LegalEvidenceFormState>(emptyLegalEvidenceForm(today()));
   const [evKey, setEvKey] = useState(makeIdempotencyKey());
   const [evErrors, setEvErrors] = useState(false);
@@ -307,6 +312,19 @@ export default function InstitutionalTemplateDetail() {
             <>
               <p className="flex items-center gap-2 text-sm"><span className="font-medium">{revisionLabel(rev)}</span><RevisionStatusBadge status={rev.status} /></p>
               {governance.data && <GovernanceSummary governance={governance.data as unknown as GovernanceView} />}
+              {governance.data && (() => {
+                const g = governance.data as unknown as GovernanceView;
+                return (
+                  <>
+                    {g.provenance && <OriginBadge origin={g.provenance.origin ?? null} originState={g.provenance.origin ? "RECORDED" : "LEGACY_UNCLASSIFIED"} />}
+                    {g.integrity && (
+                      <IntegrityPanel integrity={g.integrity} hasOriginal={!!g.provenance?.origin?.original} verifying={verifyOriginal.isFetching}
+                        verification={verifyAsked === selectedId ? (verifyOriginal.error ? { applicable: true, status: "UNAVAILABLE", message: verifyOriginal.error.message } : (verifyOriginal.data as unknown as OriginalVerificationResult | undefined) ?? null) : null}
+                        onVerify={() => { if (verifyAsked === selectedId) void verifyOriginal.refetch(); else setVerifyAsked(selectedId); }} />
+                    )}
+                  </>
+                );
+              })()}
               {governance.error && <p role="alert" className="text-sm text-destructive">{governance.error.message}</p>}
               {canEvidence ? (
                 <Card><CardHeader><CardTitle className="text-base">Registrar evidência de aprovação jurídica externa</CardTitle></CardHeader><CardContent className="space-y-3">

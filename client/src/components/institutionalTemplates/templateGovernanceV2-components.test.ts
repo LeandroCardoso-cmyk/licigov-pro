@@ -7,8 +7,8 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import {
-  canDeriveFrom, derivableRevision, emptyDeriveForm, emptyPolicyForm, filterByOwnership, groupChecksByLayer, legalPolicyExplanation, originBadge, ownershipCounts,
-  policyHeadline, validateDeriveForm, validatePolicyForm, type CatalogRowView, type OriginView, type PolicyView, type ReadinessMatrixView,
+  ASSURANCE_LABEL, canDeriveFrom, derivableRevision, emptyDeriveForm, emptyPolicyForm, filterByOwnership, groupChecksByLayer, legalPolicyExplanation, originBadge, ownershipCounts,
+  POLICY_KIND_LABEL, policyHeadline, validateDeriveForm, validatePolicyForm, type CatalogRowView, type OriginView, type PolicyView, type ReadinessMatrixView,
 } from "@/lib/institutionalTemplatesView";
 
 type Mods = {
@@ -18,14 +18,18 @@ type Mods = {
   DeriveTemplateForm: typeof import("./DeriveTemplateForm").DeriveTemplateForm;
   ReadinessMatrixPanel: typeof import("./ReadinessMatrixPanel").ReadinessMatrixPanel;
   CatalogCard: typeof import("./CatalogCard").CatalogCard;
+  IntegrityPanel: typeof import("./IntegrityPanel").IntegrityPanel;
+  RegisterModelForm: typeof import("./RegisterModelForm").RegisterModelForm;
 };
+let V: typeof import("@/lib/institutionalTemplatesView");
 let M: Mods;
 const h = (c: unknown, props: object) => renderToStaticMarkup(React.createElement(c as React.ComponentType<never>, props as never));
 // `Link` (wouter) precisa de um roteador; no SSR de teste usa-se `ssrPath` (sem `location`/DOM).
 const hr = (c: unknown, props: object) => renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" }, React.createElement(c as React.ComponentType<never>, props as never)));
 beforeAll(async () => {
   (globalThis as { React?: unknown }).React = React;
-  M = { ...(await import("./OriginBadge")), ...(await import("./OwnershipTabs")), ...(await import("./TemplatePolicyCard")), ...(await import("./DeriveTemplateForm")), ...(await import("./ReadinessMatrixPanel")), ...(await import("./CatalogCard")) } as Mods;
+  M = { ...(await import("./OriginBadge")), ...(await import("./OwnershipTabs")), ...(await import("./TemplatePolicyCard")), ...(await import("./DeriveTemplateForm")), ...(await import("./ReadinessMatrixPanel")), ...(await import("./CatalogCard")), ...(await import("./IntegrityPanel")), ...(await import("./RegisterModelForm")) } as Mods;
+  V = await import("@/lib/institutionalTemplatesView");
 });
 
 const H64 = "a".repeat(64);
@@ -37,7 +41,9 @@ const row = (over: Partial<CatalogRowView> = {}): CatalogRowView => ({
   revisions: [{ id: "tr1", revision: 1, status: "PUBLISHED", semanticHash: H64 }, { id: "tr2", revision: 2, status: "DRAFT", semanticHash: H64 }], bindings: [], origin: tenant, originState: "RECORDED", ...over,
 });
 const dec = { decidedByName: "A", decidedByRole: "B", decidedAt: "2026-10-14", basisReference: "Portaria 1", reason: "Justificativa longa", confirmed: true };
-const defaultPolicy: PolicyView = { kind: "PLATFORM_DEFAULT", version: 0, malformed: false, policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, history: [] };
+const defaultPolicy: PolicyView = { kind: "PLATFORM_DEFAULT", version: 0, malformed: false, policy: { legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" }, history: [] };
+const legacyPolicy: PolicyView = { ...defaultPolicy, kind: "LEGACY_COMPAT", policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, transition: { cutoverAt: "2026-10-14T00:00:00.000Z", legacyOrganization: true, explanation: "O órgão já possuía modelos antes da transição. Nada foi alterado em silêncio." } };
+const ownPolicy: PolicyView = { ...defaultPolicy, kind: "TENANT_DEFINED", version: 1, policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" } };
 
 describe("origem dos modelos", () => {
   it("selos distintos para plataforma / própria / derivada (com lineage legível) e estados sem origem ditos como são", () => {
@@ -75,29 +81,34 @@ describe("origem dos modelos", () => {
 });
 
 describe("política do órgão", () => {
-  it("manchete explicita se é padrão da plataforma ou do órgão, o que é exigido e o que NÃO muda", () => {
-    expect(policyHeadline(defaultPolicy)).toContain("Padrão da plataforma"); expect(policyHeadline(defaultPolicy)).toContain("OBRIGATÓRIA");
-    const optional: PolicyView = { ...defaultPolicy, kind: "TENANT_DEFINED", version: 2, policy: { ...defaultPolicy.policy, legalEvidence: "OPTIONAL" } };
-    expect(policyHeadline(optional)).toContain("versão 2"); expect(policyHeadline(optional)).toContain("OPCIONAL");
-    expect(policyHeadline({ ...defaultPolicy, malformed: true })).toContain("padrão estrito");
+  it("manchete explicita o regime: padrão da plataforma (OPCIONAL) · regime anterior (OBRIGATÓRIA) · política do órgão · não resolvida", () => {
+    expect(policyHeadline(defaultPolicy)).toContain("Padrão da plataforma"); expect(policyHeadline(defaultPolicy)).toContain("OPCIONAL");
+    expect(policyHeadline(legacyPolicy)).toContain("Regime anterior preservado"); expect(policyHeadline(legacyPolicy)).toContain("OBRIGATÓRIA");
+    expect(policyHeadline(ownPolicy)).toContain("versão 1"); expect(policyHeadline(ownPolicy)).toContain("OBRIGATÓRIA");
+    expect(policyHeadline({ ...defaultPolicy, kind: "UNRESOLVED_STRICT", malformed: true })).toContain("padrão estrito");
+    expect(POLICY_KIND_LABEL.LEGACY_COMPAT.tone).toBe("warning");
   });
 
-  it("formulário: exige autoridade/justificativa/confirmação humana e recusa 'sem alteração'; papel só manager|owner", () => {
-    const f = emptyPolicyForm(defaultPolicy.policy, "2026-10-14");
-    const v0 = validatePolicyForm(f, defaultPolicy);
+  it("formulário: exige autoridade/justificativa/confirmação humana; 'sem alteração' só se a decisão já é do órgão; confirmar o regime anterior/padrão É uma decisão válida", () => {
+    const f = emptyPolicyForm(ownPolicy.policy, "2026-10-14");
+    const v0 = validatePolicyForm(f, ownPolicy);
     expect(v0.valid).toBe(false); expect(v0.errors.unchanged).toBeTruthy();
     expect(v0.errors.confirmed).toBeTruthy();                                                                        // sem checkbox pré-marcado
-    expect(validatePolicyForm({ ...f, legalEvidence: "OPTIONAL", decision: dec }, defaultPolicy)).toEqual({ valid: true, errors: {} });
-    expect(validatePolicyForm({ ...f, decision: dec }, defaultPolicy).errors.unchanged).toBeTruthy();
+    expect(validatePolicyForm({ ...f, legalEvidence: "OPTIONAL", decision: dec }, ownPolicy)).toEqual({ valid: true, errors: {} });
+    expect(validatePolicyForm({ ...f, decision: dec }, ownPolicy).errors.unchanged).toBeTruthy();
+    // órgão legado confirma REQUIRED explicitamente (mesmos valores) ⇒ válido: encerra a compatibilidade e passa a ser decisão própria
+    expect(validatePolicyForm({ ...emptyPolicyForm(legacyPolicy.policy, "2026-10-14"), decision: dec }, legacyPolicy)).toEqual({ valid: true, errors: {} });
+    expect(validatePolicyForm({ ...emptyPolicyForm(defaultPolicy.policy, "2026-10-14"), decision: dec }, defaultPolicy)).toEqual({ valid: true, errors: {} });
     // registro ilegível pode ser restabelecido sem mudar os valores
-    expect(validatePolicyForm({ ...f, decision: dec }, { ...defaultPolicy, malformed: true }).valid).toBe(true);
+    expect(validatePolicyForm({ ...f, decision: dec }, { ...ownPolicy, malformed: true }).valid).toBe(true);
   });
-
   it("card: papel sem permissão só lê; gerente vê 'Alterar política'; aviso de que não substitui a Procuradoria e histórico visível", () => {
     const base = { policy: { ...defaultPolicy, note: "Não substitui a análise jurídica dos documentos elaborados (Procuradoria).", history: [{ version: 1, policy: { legalEvidence: "OPTIONAL" as const, approveMinRole: "manager" as const, publishMinRole: "owner" as const }, declaredBy: { name: "Ana", role: "Secretária" }, actDate: "2026-10-01", reason: "Decisão do órgão" }] }, form: null, onOpen: () => undefined, onChange: () => undefined, onCancel: () => undefined, onSubmit: () => undefined };
     const ro = h(M.TemplatePolicyCard, { ...base, canEdit: false });
     expect(ro).toContain("Somente gerentes"); expect(ro).not.toContain("Alterar política"); expect(ro).toContain("Procuradoria"); expect(ro).toContain("Versão 1"); expect(ro).toContain("publicar ≥ owner");
     expect(h(M.TemplatePolicyCard, { ...base, canEdit: true })).toContain("Alterar política");
+    const legacyHtml = h(M.TemplatePolicyCard, { ...base, policy: { ...legacyPolicy, history: [] }, canEdit: true });
+    expect(legacyHtml).toContain("Compatibilidade (regime anterior)"); expect(legacyHtml).toContain("Nada foi alterado em silêncio");
     const open = h(M.TemplatePolicyCard, { ...base, canEdit: true, form: emptyPolicyForm(defaultPolicy.policy, "2026-10-14"), showErrors: true });
     expect(open).toContain("Registrar política"); expect(open).toContain("nunca fica abaixo de gerente"); expect(open).not.toMatch(/checked=""[^>]*name="confirm/);
   });
@@ -120,14 +131,50 @@ describe("readiness por camada, com justificativa", () => {
     expect(html).toContain("Política do órgão sobre seus modelos"); expect(html).toContain("OPCIONAL"); expect(html).toContain("Procuradoria");
     expect(html).toContain("NOT_APPLICABLE"); expect(html).not.toContain("role=\"alert\"");
   });
-  it("com política obrigatória/padrão/ilegível: explica o bloqueio e NÃO oculta justificativas dos bloqueios", () => {
-    const blocked = matrix({ overall: "BLOCKED", summary: { pass: 1, blocked: 1, notApplicable: 0 }, policy: { kind: "PLATFORM_DEFAULT", legalEvidence: "REQUIRED", decisionId: null, malformed: false },
+  it("com regime anterior/obrigatória/ilegível: explica o bloqueio e NÃO oculta justificativas dos bloqueios", () => {
+    const mk = (policy: ReadinessMatrixView["policy"]) => matrix({ overall: "BLOCKED", summary: { pass: 1, blocked: 1, notApplicable: 0 }, policy,
       checks: [check("STRUCTURE", "TECHNICAL_TEMPLATE_READINESS", "PASS"), check("LEGAL_APPROVAL_EVIDENCE", "TENANT_TEMPLATE_POLICY", "BLOCKED")] as never });
-    const html = h(M.ReadinessMatrixPanel, { matrix: blocked });
-    expect(html).toContain("Padrão da plataforma"); expect(html).toContain("motivo do bloqueio"); expect(html).toContain('role="alert"');
+    const html = h(M.ReadinessMatrixPanel, { matrix: mk({ kind: "LEGACY_COMPAT", legalEvidence: "REQUIRED", decisionId: null, malformed: false }) });
+    expect(html).toContain("Compatibilidade com o regime anterior"); expect(html).toContain("motivo do bloqueio"); expect(html).toContain('role="alert"');
     expect(legalPolicyExplanation({ kind: "TENANT_DEFINED", legalEvidence: "REQUIRED", decisionId: "x", malformed: false })).toContain("exige evidência");
-    expect(legalPolicyExplanation({ kind: "PLATFORM_DEFAULT", legalEvidence: "REQUIRED", decisionId: null, malformed: true })).toContain("ESTRITO");
-    expect(legalPolicyExplanation(undefined)).toContain("Padrão da plataforma");
+    expect(legalPolicyExplanation({ kind: "UNRESOLVED_STRICT", legalEvidence: "REQUIRED", decisionId: null, malformed: true })).toContain("ESTRITO");
+    expect(legalPolicyExplanation(undefined)).toContain("ESTRITO");                                   // servidor antigo/sem política ⇒ nunca assume OPCIONAL
+    expect(legalPolicyExplanation({ kind: "PLATFORM_DEFAULT", legalEvidence: "OPTIONAL", decisionId: null, malformed: false })).toContain("Padrão da plataforma");
+    expect(legalPolicyExplanation({ kind: "PLATFORM_DEFAULT", legalEvidence: "OPTIONAL", decisionId: null, malformed: false })).toContain("Procuradoria");
+  });
+});
+
+describe("integridade da fonte e upload", () => {
+  const integrity = {
+    items: [
+      { id: "DECLARED_SOURCE_SHA256", label: "Hash declarado da fonte", value: H64, assurance: "CLIENT_DECLARED_UNVERIFIED" as const, explanation: "Informado por quem registrou." },
+      { id: "SERVER_FILE_SHA256", label: "Hash calculado do arquivo enviado", value: "b".repeat(64), assurance: "SERVER_COMPUTED" as const, explanation: "Calculado pelo servidor." },
+      { id: "SEMANTIC_HASH", label: "Hash semântico do modelo", value: "c".repeat(64), assurance: "SERVER_DERIVED" as const, explanation: "Derivado." },
+    ],
+    relations: [{ id: "DECLARED_VS_FILE", status: "DIFFERENT" as const, message: "Não é necessariamente erro." }], serverAssured: ["SERVER_FILE_SHA256", "SEMANTIC_HASH"], notices: ["Hashes DECLARADOS não são provas criptográficas verificadas."],
+  };
+  it("painel separa declarado (não verificado) de calculado/derivado pelo servidor e explica as comparações; nunca chama declaração de prova", () => {
+    const html = h(M.IntegrityPanel, { integrity, hasOriginal: false });
+    expect(html).toContain("Declarado — não verificado"); expect(html).toContain("Calculado pelo servidor"); expect(html).toContain("Derivado pelo servidor");
+    expect(html).toContain("Não é necessariamente erro"); expect(html).toContain("não são provas criptográficas");
+    expect(html).not.toContain("Reverificar arquivo original");                                          // sem original ⇒ sem ação
+    expect(ASSURANCE_LABEL.CLIENT_DECLARED_UNVERIFIED.tone).toBe("warning");
+  });
+  it("reverificação do original: botão só com original; resultado VERIFIED/MISMATCH explicado, MISMATCH como alerta", () => {
+    const withBtn = h(M.IntegrityPanel, { integrity, hasOriginal: true, onVerify: () => undefined });
+    expect(withBtn).toContain("Reverificar arquivo original");
+    const ok = h(M.IntegrityPanel, { integrity, hasOriginal: true, verification: { applicable: true, status: "VERIFIED", message: "confere" } });
+    expect(ok).toContain("Original conferido");
+    const bad = h(M.IntegrityPanel, { integrity, hasOriginal: true, verification: { applicable: true, status: "MISMATCH", message: "NÃO confere" } });
+    expect(bad).toContain("Original NÃO confere"); expect(bad).toContain('role="alert"');
+    expect(h(M.IntegrityPanel, { integrity, hasOriginal: true, verification: { applicable: false, reason: "Sem arquivo original." } })).toContain("Sem arquivo original.");
+  });
+  it("origem de upload mostra o arquivo preservado (sha + verificação); formulário sem armazenamento explica e desabilita o envio de arquivo", () => {
+    const up: OriginView = { ownership: "TENANT", source: "TENANT_UPLOAD", lineage: null, declaredAuthor: null, original: { sha256: H64, sizeBytes: 10, filename: "m.docx", contentType: "x", storageKey: `institutional-templates/1/originals/${H64}-m.docx`, preservation: "READBACK_SHA256" } };
+    expect(originBadge({ origin: up, originState: "RECORDED" }).detail).toContain("arquivo enviado pela organização");
+    const html = h(M.RegisterModelForm, { value: V.emptyRegisterForm("2026-10-14"), onChange: () => undefined, presets: [], documentKinds: ["edital"], today: "2026-10-14", hasDocx: false, uploadsAvailable: false, uploadsUnavailableReason: "O armazenamento de arquivos não está disponível." });
+    expect(html).toContain("O armazenamento de arquivos não está disponível."); expect(html).toContain('data-testid="uploads-unavailable"');
+    expect(html.match(/<input type="radio" disabled=""[^>]*name="reg-source"/g)).toHaveLength(2);   // Markdown e DOCX desabilitados; estrutura nativa segue disponível
   });
 });
 

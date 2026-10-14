@@ -205,3 +205,11 @@ export async function cleanupOrgs(conn: mysql.Connection, orgs: number[]): Promi
   ];
   for (const sql of stmts) await conn.query(sql).catch(() => { /* tabela/coluna ausente em esquemas antigos */ });
 }
+
+/**
+ * Template Governance V2 — marca o órgão como LEGADO para a política jurídica de modelos (modelos anteriores ao marco de transição ⇒ LEGACY_COMPAT, evidência
+ * jurídica exigida). Reproduz o estado de produção antes do deploy do padrão OPTIONAL. Só dado de teste (retrodata o `created_at_iso` das identidades do órgão).
+ */
+export async function markTemplateOrgLegacy(conn: mysql.Connection, org: number): Promise<void> {
+  await conn.execute("UPDATE institutional_template_identities SET created_at_iso = '2026-01-01T00:00:00.000Z' WHERE organization_id = ?", [org]);
+}

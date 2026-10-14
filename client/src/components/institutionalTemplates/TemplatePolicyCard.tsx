@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DecisionForm } from "./DecisionForm";
-import { policyHeadline, validatePolicyForm, type PolicyFormState, type PolicyView } from "@/lib/institutionalTemplatesView";
+import { POLICY_KIND_LABEL, policyHeadline, validatePolicyForm, type PolicyFormState, type PolicyView } from "@/lib/institutionalTemplatesView";
 
 export interface TemplatePolicyCardProps {
   policy: PolicyView;
@@ -32,12 +32,13 @@ export function TemplatePolicyCard({ policy, canEdit, form, onOpen, onChange, on
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">Política de governança dos modelos</CardTitle>
-          <StatusBadge label={policy.kind === "TENANT_DEFINED" ? "Definida pelo órgão" : "Padrão da plataforma"} tone={policy.kind === "TENANT_DEFINED" ? "success" : "neutral"} />
+          <StatusBadge label={POLICY_KIND_LABEL[policy.kind].label} tone={POLICY_KIND_LABEL[policy.kind].tone} />
         </div>
         <CardDescription data-testid="policy-headline">{policyHeadline(policy)}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         {policy.note && <p className="text-muted-foreground">{policy.note}</p>}
+        {policy.transition && <p data-testid="policy-transition" className={policy.kind === "LEGACY_COMPAT" ? "rounded border border-amber-500/50 p-2" : "text-muted-foreground"}>{policy.transition.explanation}</p>}
         {policy.malformed && <p role="alert" className="text-destructive">O registro da política está ilegível: vale o padrão estrito até que o órgão a restabeleça.</p>}
         {policy.history.length > 0 && (
           <ul className="space-y-1 text-xs" aria-label="Histórico da política">

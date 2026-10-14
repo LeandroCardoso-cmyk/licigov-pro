@@ -33,7 +33,7 @@ import { createTemplateCompositionPorts } from "../../services/institutionalTemp
 import { originalStorageKey } from "../../services/institutionalTemplates/adapters/originalStoreAdapter";
 import { IMPORT_PROVENANCE_SUBJECT } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { BLL, U_MANAGER, cleanupOrgs, ctxOf, decision, seedWorld } from "../helpers/institutionalTemplatesE2eWorld";
+import { BLL, U_MANAGER, cleanupOrgs, ctxOf, decision, markTemplateOrgLegacy, seedWorld } from "../helpers/institutionalTemplatesE2eWorld";
 import { createHash } from "node:crypto";
 
 const DB = process.env.DATABASE_URL;
@@ -58,9 +58,28 @@ const wf = () => new InstitutionalTemplatesWorkflow(wports());
 const gov = () => new TemplateGovernanceService(wports());
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 
-/** Armazenamento de originais em memória (o adapter real fala com o S3; aqui só o contrato). */
-const store = { puts: [] as { org: number; sha256: string; filename: string | null; contentType: string; bytes: Buffer }[], fail: false };
-const fakeStore = { put: async (i: any) => { if (store.fail) throw new Error("S3 indisponível (injetado)"); store.puts.push(i); return { storageKey: originalStorageKey(i.organizationId, i.sha256, i.filename) }; } };
+/** Armazenamento de originais em memória (o adapter real fala com o S3; aqui só o contrato, inclusive a preservação VERIFICADA). */
+const store = {
+  puts: [] as { organizationId: number; sha256: string; filename: string | null; contentType: string; bytes: Buffer }[],
+  objects: new Map<string, Buffer>(), fail: false, unverified: false, corrupt: false,
+};
+const fakeStore = {
+  put: async (i: any) => {
+    if (store.fail) throw new Error("S3 indisponível (injetado)");
+    store.puts.push(i);
+    const storageKey = originalStorageKey(i.organizationId, i.sha256, i.filename);
+    store.objects.set(storageKey, Buffer.from(i.bytes));
+    return store.unverified ? { storageKey, verifiedSha256: "0".repeat(64), verifiedSizeBytes: i.bytes.length } : { storageKey, verifiedSha256: i.sha256, verifiedSizeBytes: i.bytes.length };
+  },
+  verify: async (i: any) => {
+    if (!i.storageKey.startsWith(`institutional-templates/${i.organizationId}/originals/`)) return { status: "FORBIDDEN_KEY" };
+    const b = store.objects.get(i.storageKey); if (!b) return { status: "MISSING" };
+    const computed = sha(store.corrupt ? Buffer.concat([b, Buffer.from("x")]) : b);
+    return computed === i.sha256 ? { status: "VERIFIED" } : { status: "MISMATCH", computedSha256: computed };
+  },
+};
+/** Marca o órgão como LEGADO (modelos anteriores ao marco de transição) — equivale ao estado de produção antes deste deploy. Só dado de teste. */
+const makeLegacy = (org: number) => markTemplateOrgLegacy(conn, org);
 
 const register = (org: number, over: Record<string, unknown> = {}) => new ModelRegistrationService(wports()).register(ctxOf(org), {
   target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: BLL.slug }, templateKey: BLL.modelKey, displayName: BLL.displayName, declaredScope: BLL.declaredScope,
@@ -88,22 +107,53 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
     await conn.end();
   }, 120_000);
 
-  it("POL-1 COMPAT — sem política (padrão da plataforma) a publicação segue BLOQUEADA sem evidência jurídica, exatamente como antes", async () => {
-    const org = (await seedWorld(conn, newOrg(), "pol1", { flagOn: true }), ORGS[ORGS.length - 1]);
-    const reg = await register(org);
-    await wf().approve(ctxOf(org), lifecycle(reg.revision.id, "DRAFT", "ap"));
-    await expect(wf().publish(ctxOf(org), lifecycle(reg.revision.id, "APPROVED", "pb"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
-    const m = await readiness(org, reg.revision.id);
+  it("POL-1 — PADRÃO OPTIONAL para órgão novo; órgão LEGADO sem política segue em LEGACY_COMPAT (REQUIRED) até decidir; decisão explícita do órgão prevalece sempre", async () => {
+    // (a) órgão NOVO: sem política ⇒ padrão da plataforma OPCIONAL — publica no catálogo interno SEM evidência jurídica
+    const fresh = (await seedWorld(conn, newOrg(), "pol1a", { flagOn: true }), ORGS[ORGS.length - 1]);
+    const regA = await register(fresh);
+    expect(await tpl(fresh).governance.policy.get()).toMatchObject({ kind: "PLATFORM_DEFAULT", version: 0, history: [], policy: { legalEvidence: "OPTIONAL" }, transition: { legacyOrganization: false } });
+    const mA = await readiness(fresh, regA.revision.id);
+    expect(blockedIds(mA)).toEqual([]);
+    expect(mA.policy).toMatchObject({ kind: "PLATFORM_DEFAULT", legalEvidence: "OPTIONAL", decisionId: null });
+    expect(mA.checks.find((c: any) => c.id === "LEGAL_APPROVAL_EVIDENCE")).toMatchObject({ status: "NOT_APPLICABLE", layer: "TENANT_TEMPLATE_POLICY" });
+    await wf().approve(ctxOf(fresh), lifecycle(regA.revision.id, "DRAFT", "apA"));
+    await wf().publish(ctxOf(fresh), lifecycle(regA.revision.id, "APPROVED", "pbA"));
+    expect((await wports().repository.getRevision(fresh, regA.revision.id))!.status).toBe("PUBLISHED");
+    // (b) o órgão novo pode ESTABELECER REQUIRED: passa a bloquear (decisão explícita, auditável)
+    await setPolicy(fresh, { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" });
+    const regA2 = await register(fresh, { target: { kind: "EXISTING_IDENTITY", identityId: regA.identity.id }, idempotencyKey: key("reg2") });
+    expect(blockedIds(await readiness(fresh, regA2.revision.id))).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+    expect(((await tpl(fresh).governance.policy.get()) as any)).toMatchObject({ kind: "TENANT_DEFINED", version: 1, policy: { legalEvidence: "REQUIRED" } });
+
+    // (c) órgão LEGADO (modelos anteriores ao marco) sem política: o regime anterior é PRESERVADO, de forma EXPLÍCITA e sem nenhum registro novo
+    const legacy = (await seedWorld(conn, newOrg(), "pol1b", { flagOn: true }), ORGS[ORGS.length - 1]);
+    const reg = await register(legacy); await makeLegacy(legacy);
+    await wf().approve(ctxOf(legacy), lifecycle(reg.revision.id, "DRAFT", "ap"));
+    await expect(wf().publish(ctxOf(legacy), lifecycle(reg.revision.id, "APPROVED", "pb"))).rejects.toThrow(/PUBLICATION_BLOCKED|não pode ser publicada/);
+    const m = await readiness(legacy, reg.revision.id);
     expect(blockedIds(m)).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
-    expect(m.policy).toMatchObject({ kind: "PLATFORM_DEFAULT", legalEvidence: "REQUIRED", decisionId: null });
+    expect(m.policy).toMatchObject({ kind: "LEGACY_COMPAT", legalEvidence: "REQUIRED", decisionId: null });
     expect(m.checks.find((c: any) => c.id === "LEGAL_APPROVAL_EVIDENCE").layer).toBe("TENANT_TEMPLATE_POLICY");
-    expect(((await tpl(org).governance.policy.get()) as any)).toMatchObject({ kind: "PLATFORM_DEFAULT", version: 0, history: [] });
+    const view: any = await tpl(legacy).governance.policy.get();
+    expect(view).toMatchObject({ kind: "LEGACY_COMPAT", version: 0, history: [], policy: { legalEvidence: "REQUIRED" }, transition: { legacyOrganization: true } });
+    expect(view.transition.explanation).toMatch(/Nada foi alterado em silêncio/);
+    expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND subject_type = 'institutional.policy'", [legacy])).toBe(0);   // nenhum registro foi escrito por baixo
+    // (d) transição EXPLÍCITA: o órgão legado adota o padrão (OPTIONAL) por decisão registrada; a publicação passa a ser permitida
+    await setPolicy(legacy, OPTIONAL, 0);
+    expect(((await tpl(legacy).governance.policy.get()) as any)).toMatchObject({ kind: "TENANT_DEFINED", version: 1, policy: { legalEvidence: "OPTIONAL" } });
+    await wf().publish(ctxOf(legacy), lifecycle(reg.revision.id, "APPROVED", "pb2"));
+    expect((await wports().repository.getRevision(legacy, reg.revision.id))!.status).toBe("PUBLISHED");
+    // (e) um órgão legado que CONFIRMA REQUIRED explicitamente continua bloqueando — e agora é decisão sua (TENANT_DEFINED), não compatibilidade
+    const legacy2 = (await seedWorld(conn, newOrg(), "pol1c", { flagOn: true }), ORGS[ORGS.length - 1]);
+    await register(legacy2); await makeLegacy(legacy2);
+    await setPolicy(legacy2, { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" });
+    expect(((await tpl(legacy2).governance.policy.get()) as any)).toMatchObject({ kind: "TENANT_DEFINED", policy: { legalEvidence: "REQUIRED" } });
   }, 300_000);
 
   it("POL-2 — política OPTIONAL do órgão: matriz READY sem evidência (item NOT_APPLICABLE explicado), publicação no catálogo interno permitida; histórico e ledger auditáveis; vínculo e Revisão 1 intactos", async () => {
     const org = newOrg(); await seedWorld(conn, org, "pol2", { flagOn: true });
     // Revisão 1 (baseline) publicada e vinculada COM evidência (política padrão), como em produção
-    const r1 = await register(org);
+    const r1 = await register(org); await makeLegacy(org);       // estado de produção: órgão com modelo anterior à transição (regime anterior preservado)
     await gov().recordLegalEvidence(ctxOf(org), { revisionId: r1.revision.id, expectedVersion: 0, confirm: true, idempotencyKey: key("ev"), decision: decision({ basisReference: "Parecer sintético" }), evidence: { sourceLogicalVersion: BLL.provenance.sourceLogicalVersion, sourceSha256: BLL.provenance.sourceSha256 } });
     await wf().approve(ctxOf(org), lifecycle(r1.revision.id, "DRAFT", "ap1")); await wf().publish(ctxOf(org), lifecycle(r1.revision.id, "APPROVED", "pb1"));
     const bound = await wf().setBinding(ctxOf(org), { documentKind: "edital", scope: { ...BLL.declaredScope } as any, identityId: r1.identity.id, pinnedRevisionId: r1.revision.id, confirm: true });
@@ -217,7 +267,7 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
     expect(store.puts).toHaveLength(1);
     expect(store.puts[0]).toMatchObject({ organizationId: org, sha256: expectedSha, contentType: expect.stringContaining("markdown") });
     const prov: any = (await gov().get(ctxOf(org), res.revision.id)).provenance;
-    expect(prov.origin).toMatchObject({ ownership: "TENANT", source: "TENANT_UPLOAD", original: { sha256: expectedSha, sizeBytes: Buffer.byteLength(md, "utf8"), filename: "../../etc/passwd modelo.md" } });
+    expect(prov.origin).toMatchObject({ ownership: "TENANT", source: "TENANT_UPLOAD", original: { sha256: expectedSha, sizeBytes: Buffer.byteLength(md, "utf8"), filename: "../../etc/passwd modelo.md", preservation: "READBACK_SHA256" } });
     expect(prov.origin.original.storageKey).toBe(originalStorageKey(org, expectedSha, "../../etc/passwd modelo.md"));
     expect(prov.origin.original.storageKey).toMatch(new RegExp(`^institutional-templates/${org}/originals/${expectedSha}-[A-Za-z0-9._-]+$`));     // sem travessia de caminho
     expect(prov.origin.original.storageKey).not.toContain("..");
@@ -230,6 +280,90 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
     await expect(register(org, { target: { kind: "NEW_IDENTITY", documentKind: "tr", slug: "tr-upload-2" }, templateKey: "TR_UPLOAD", displayName: "TR 2", declaredScope: {}, source: { kind: "MARKDOWN", markdown: "# outro\n\ntexto" }, sourceLogicalVersion: "1.0.0", sourceSha256: sha("x") })).rejects.toThrow(/ORIGINAL_STORAGE_FAILED|preservado/);
     store.fail = false;
     expect(await count("SELECT COUNT(*) n FROM institutional_template_identities WHERE organization_id = ?", [org])).toBe(idsBefore);
+  }, 300_000);
+
+  it("ORG-4 — PRESERVAÇÃO OBRIGATÓRIA: sem armazenamento ou sem verificação ⇒ falha controlada, NADA criado/publicado/referenciado; idempotência, concorrência, integridade e reverificação multi-tenant", async () => {
+    const org = (await seedWorld(conn, newOrg(), "org4", { flagOn: true }), ORGS[ORGS.length - 1]);
+    const other = (await seedWorld(conn, newOrg(), "org4b", { flagOn: true }), ORGS[ORGS.length - 1]);
+    store.puts.length = 0; store.objects.clear();
+    const upload = (slug: string, md: string, over: Record<string, unknown> = {}, regOrg = org) => register(regOrg, { target: { kind: "NEW_IDENTITY", documentKind: "tr", slug }, templateKey: "TR_UP", displayName: `TR ${slug}`, declaredScope: {}, source: { kind: "MARKDOWN", markdown: md, filename: `${slug}.md` }, sourceLogicalVersion: "1.0.0", sourceSha256: sha("fonte-juridica-declarada"), ...over });
+    const totals = async () => ({
+      ids: await count("SELECT COUNT(*) n FROM institutional_template_identities WHERE organization_id = ?", [org]),
+      revs: await count("SELECT COUNT(*) n FROM institutional_template_revisions WHERE organization_id = ?", [org]),
+      decs: await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [org]),
+    });
+    const before = await totals();
+    // (1) armazenamento NÃO configurado ⇒ ORIGINAL_STORAGE_UNAVAILABLE (PRECONDITION_FAILED pela rota), mensagem clara ao operador, nada criado
+    const base = wports();
+    configureTemplateWorkflowPorts({ ...base, originals: undefined } as any);
+    try {
+      const caps: any = await tpl(org).getCapabilities();
+      expect(caps.originalPreservation).toMatchObject({ available: false, reason: expect.stringMatching(/exige a preservação verificada do original/) });
+      await expect(tpl(org, "operator").registration.register({ target: { kind: "NEW_IDENTITY", documentKind: "tr", slug: "tr-sem-storage" }, templateKey: "TR_UP", displayName: "x", declaredScope: {}, source: { kind: "MARKDOWN", markdown: "# t\n\ntexto" }, sourceLogicalVersion: "1.0.0", sourceSha256: sha("x"), confirm: true, idempotencyKey: key("nostore"), decision: decision() } as any))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/ORIGINAL_STORAGE_UNAVAILABLE|armazenamento de arquivos não está disponível.*preservação/) });
+      // estrutura nativa/pacote NÃO dependem do armazenamento de originais (nada a preservar): continuam funcionando
+      expect((await register(org, { target: { kind: "NEW_IDENTITY", documentKind: "edital", slug: "edital-pacote-sem-storage" } })).revision.status).toBe("DRAFT");
+    } finally { configureTemplateWorkflowPorts(base); }
+    const afterPkg = await totals();
+    expect(afterPkg.ids).toBe(before.ids + 1);                                         // só o pacote (sem upload)
+    // (2) leitura de volta NÃO confere ⇒ ORIGINAL_STORAGE_FAILED, nada criado
+    store.unverified = true;
+    await expect(upload("tr-nao-verificado", "# t\n\nnão verificado")).rejects.toThrow(/ORIGINAL_STORAGE_FAILED|preservado e verificado/);
+    store.unverified = false;
+    // (3) falha do armazenamento ⇒ idem
+    store.fail = true; await expect(upload("tr-falha", "# t\n\nfalha")).rejects.toThrow(/ORIGINAL_STORAGE_FAILED/); store.fail = false;
+    expect(await totals()).toEqual(afterPkg);                                          // zero efeitos nos 3 cenários de falha (identidade, revisão e ledger)
+    // (4) sucesso: original preservado, verificável; hash DECLARADO ≠ calculado ⇒ explicado, nunca tratado como prova
+    const md = "# Termo\n\nTexto do termo de referência.\n";
+    const ok = await upload("tr-ok", md);
+    const view: any = await gov().get(ctxOf(org), ok.revision.id);
+    const orig = view.provenance.origin.original;
+    expect(orig).toMatchObject({ sha256: sha(Buffer.from(md, "utf8")), preservation: "READBACK_SHA256" });
+    expect(orig.storageKey).toMatch(new RegExp(`^institutional-templates/${org}/originals/`));
+    const item = (id: string) => view.integrity.items.find((i: any) => i.id === id);
+    expect(item("DECLARED_SOURCE_SHA256")).toMatchObject({ assurance: "CLIENT_DECLARED_UNVERIFIED", value: sha("fonte-juridica-declarada") });
+    expect(item("SERVER_FILE_SHA256")).toMatchObject({ assurance: "SERVER_COMPUTED", value: orig.sha256 });
+    expect(item("SEMANTIC_HASH")).toMatchObject({ assurance: "SERVER_DERIVED", value: ok.revision.semanticHash });
+    expect(view.integrity.relations.find((r: any) => r.id === "DECLARED_VS_FILE")).toMatchObject({ status: "DIFFERENT" });
+    expect(view.integrity.serverAssured).not.toContain("DECLARED_SOURCE_SHA256");
+    // (5) idempotência: repetir o MESMO envio (mesmo slug) ⇒ CONFLICT sem efeitos — nada duplicado (identidade, revisão, ledger) e o original NÃO é regravado
+    const k = key("same-up");
+    const a1: any = await upload("tr-idem", "# i\n\nidempotente", { idempotencyKey: k });
+    const snap = { ...(await totals()), objects: store.objects.size, puts: store.puts.length };
+    await expect(upload("tr-idem", "# i\n\nidempotente", { idempotencyKey: k })).rejects.toThrow(/CONFLICT|já existe/);
+    expect({ ...(await totals()), objects: store.objects.size, puts: store.puts.length }).toEqual(snap);
+    expect(a1.revision.status).toBe("DRAFT");
+    // (6) concorrência: 4 envios idênticos simultâneos ⇒ UM vencedor, UMA identidade, UMA revisão, UM objeto preservado (chave por conteúdo)
+    const objectsBefore = store.objects.size;
+    const par = await Promise.allSettled(Array.from({ length: 4 }, () => upload("tr-par", "# p\n\nparalelo", { idempotencyKey: key("par-up") })));
+    const okPar = par.filter((x) => x.status === "fulfilled") as PromiseFulfilledResult<any>[];
+    expect(okPar).toHaveLength(1);
+    expect(par.filter((x) => x.status === "rejected").map((x: any) => String(x.reason?.message)).filter((m) => !/CONFLICT|já existe/i.test(m))).toEqual([]);   // os demais: só CONFLICT benigno
+    expect(await count("SELECT COUNT(*) n FROM institutional_template_identities WHERE organization_id = ? AND slug = 'tr-par'", [org])).toBe(1);
+    expect(await count("SELECT COUNT(*) n FROM institutional_template_revisions WHERE organization_id = ? AND identity_id = ?", [org, okPar[0].value.identity.id])).toBe(1);
+    expect(store.objects.size).toBe(objectsBefore + 1);
+    // (7) reverificação sob demanda: VERIFIED → MISMATCH (adulterado) ; só leitura (nenhum registro novo)
+    const decsBefore = (await totals()).decs;
+    expect(await tpl(org).governance.verifyOriginal({ revisionId: ok.revision.id })).toMatchObject({ applicable: true, status: "VERIFIED", expectedSha256: orig.sha256 });
+    store.corrupt = true;
+    expect(await tpl(org).governance.verifyOriginal({ revisionId: ok.revision.id })).toMatchObject({ applicable: true, status: "MISMATCH", message: expect.stringMatching(/NÃO confere/) });
+    store.corrupt = false;
+    expect((await totals()).decs).toBe(decsBefore);
+    // modelo SEM arquivo original (pacote) ⇒ não aplicável (explicado)
+    const pkgRev = (await register(other)).revision.id;
+    expect(await tpl(other).governance.verifyOriginal({ revisionId: pkgRev })).toMatchObject({ applicable: false });
+    // (8) multi-tenant: o outro órgão não verifica nem lê o original/integridade deste (indistinguível de inexistente)
+    await expect(tpl(other).governance.verifyOriginal({ revisionId: ok.revision.id })).rejects.toThrow(/não encontrad|NOT_FOUND/i);
+    await expect(tpl(other).governance.get({ revisionId: ok.revision.id })).rejects.toThrow(/não encontrad|NOT_FOUND/i);
+    // chave adulterada no ledger apontando para OUTRO órgão ⇒ o adapter real recusa (FORBIDDEN_KEY) — contrato do verify
+    expect(await fakeStore.verify({ organizationId: other, storageKey: orig.storageKey, sha256: orig.sha256 })).toEqual({ status: "FORBIDDEN_KEY" });
+    // (9) derivada de upload: lineage verificável e origem intacta
+    await wf().approve(ctxOf(org), lifecycle(ok.revision.id, "DRAFT", "ap-up")); await wf().publish(ctxOf(org), lifecycle(ok.revision.id, "APPROVED", "pb-up"));
+    const der: any = await new TemplateDerivationService(wports()).derive(ctxOf(org), { source: { kind: "TENANT_REVISION", revisionId: ok.revision.id }, slug: "tr-derivado-do-upload", displayName: "Derivado", confirm: true, idempotencyKey: key("der-up"), decision: decision() });
+    const dview: any = await gov().get(ctxOf(org), der.revision.id);
+    expect(dview.integrity.relations.find((r: any) => r.id === "LINEAGE_SOURCE")).toMatchObject({ status: "MATCH" });
+    expect(dview.integrity.relations.find((r: any) => r.id === "CONTENT_VS_LINEAGE")).toMatchObject({ status: "MATCH" });
+    expect(dview.provenance.origin.original).toBeNull();                              // a derivada não herda "arquivo enviado"; o original continua sendo do modelo de origem
   }, 300_000);
 
   it("ORG-3 — a origem registrada é IMUTÁVEL (alterar/remover recusado; repetir ok); registro LEGADO sem origem aparece como LEGACY_UNCLASSIFIED e pode ser classificado uma vez", async () => {
@@ -317,14 +451,18 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
     expect(await countEvents(org, "REVISION_PUBLISHED").catch(() => 0)).toBeGreaterThanOrEqual(0);
   }, 300_000);
 
-  it("COMPAT — governança sem política em outro tenant continua exigindo evidência; a rota de prontidão expõe a política e as camadas; getCapabilities lista o piso 'policy'", async () => {
+  it("COMPAT — a rota de prontidão expõe política e camadas; capacidades listam o piso 'policy' e a disponibilidade de preservação; órgão vizinho legado × novo não se contaminam", async () => {
     const org = (await seedWorld(conn, newOrg(), "compat", { flagOn: true }), ORGS[ORGS.length - 1]);
-    const reg = await register(org);
+    const other = (await seedWorld(conn, newOrg(), "compat2", { flagOn: true }), ORGS[ORGS.length - 1]);
+    const reg = await register(org); await register(other); await makeLegacy(other);
     const out: any = await tpl(org).readiness.evaluate({ revisionId: reg.revision.id });
-    expect(out.matrix.policy).toMatchObject({ kind: "PLATFORM_DEFAULT", legalEvidence: "REQUIRED" });
+    expect(out.matrix.policy).toMatchObject({ kind: "PLATFORM_DEFAULT", legalEvidence: "OPTIONAL" });
     expect(out.matrix.checks.every((c: any) => ["TECHNICAL_TEMPLATE_READINESS", "TENANT_TEMPLATE_POLICY"].includes(c.layer))).toBe(true);
+    expect(((await tpl(other).governance.policy.get()) as any)).toMatchObject({ kind: "LEGACY_COMPAT" });   // o legado do vizinho não altera o órgão novo (e vice-versa)
+    expect(((await tpl(org).governance.policy.get()) as any)).toMatchObject({ kind: "PLATFORM_DEFAULT" });
     const caps: any = await tpl(org).getCapabilities();
     expect(caps.roleFloors.policy).toBe("manager");
+    expect(caps.originalPreservation).toEqual({ available: true, reason: null });
     // a política não vaza para o ledger de procedência: decisões de procedência seguem por revisão
     expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND subject_type = ?", [org, IMPORT_PROVENANCE_SUBJECT])).toBe(1);
   }, 300_000);

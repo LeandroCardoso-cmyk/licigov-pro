@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { validateLegalEvidenceForm, type LegalEvidenceFormState } from "@/lib/institutionalTemplatesView";
+import { validateLegalEvidenceForm, type IntegrityView, type LegalEvidenceFormState, type OriginView } from "@/lib/institutionalTemplatesView";
 
 export interface LegalEvidenceView {
   decisionId: string; version: number; sourceLogicalVersion: string; sourceSha256: string; revisionSemanticHash: string;
@@ -12,9 +12,13 @@ export interface LegalEvidenceView {
 export interface ProvenanceView {
   templateKey: string; displayName: string; sourceLogicalVersion: string; sourceSha256: string; sourceFormat: string; recordedByUserId: number; recordedAt: string;
   inventory: { sha256: string; inputsTotal: number; controlOnlyInputs: number; conditionTypes: number } | null;
+  /** Template Governance V2 — ausente em registros legados. */
+  origin?: OriginView | null;
 }
 export interface GovernanceView {
   provenance: ProvenanceView | null; legalEvidence: LegalEvidenceView | null; legalEvidenceHistory: readonly LegalEvidenceView[]; malformedRecords: number; lifecycleNote: string;
+  /** Explainability de integridade (hash declarado × calculado × semântico × lineage). Ausente em servidores anteriores. */
+  integrity?: IntegrityView;
 }
 
 const short = (h: string) => `${h.slice(0, 12)}…`;

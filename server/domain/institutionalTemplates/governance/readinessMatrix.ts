@@ -14,7 +14,7 @@ import { ANY_SECTION } from "./sourceInventory";
 import { buildReadinessWitness, type ReadinessWitness } from "./readinessWitness";
 import type { TemplateCapabilities } from "./capabilities";
 import { evidenceCoversSource, type LegalApprovalEvidence } from "./legalEvidence";
-import { PLATFORM_DEFAULT_EFFECTIVE, type EffectiveTemplateGovernancePolicy, type LegalEvidenceRequirement, type ReadinessLayer } from "./templateGovernanceV2";
+import { UNRESOLVED_STRICT_EFFECTIVE, type EffectiveTemplateGovernancePolicy, type LegalEvidenceRequirement, type ReadinessLayer } from "./templateGovernanceV2";
 import type { ImportProvenance } from "./importProvenance";
 import { inventoryCounts, inventoryHash, type SourceInventory } from "./sourceInventory";
 
@@ -99,13 +99,14 @@ const NO_INVENTORY = "inventário da fonte não fornecido — não é possível 
 
 export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
   const { revision, catalog, provenance, legalEvidence: ev, inventory: inv, capabilities } = input;
-  const policy = input.policy ?? PLATFORM_DEFAULT_EFFECTIVE;
+  const policy = input.policy ?? UNRESOLVED_STRICT_EFFECTIVE;
   const legalRequired = policy.policy.legalEvidence === "REQUIRED";
   const facts = analyzeAst(revision.ast, catalog);
   const checks: ReadinessCheck[] = [];
 
   // 1 ─ procedência
   if (!provenance) checks.push(blocked("SOURCE_PROVENANCE", "nenhuma procedência registrada para esta revisão (registre/importe o modelo pelo fluxo de registro)"));
+  else if (provenance.originMalformed) checks.push(blocked("SOURCE_PROVENANCE", "a origem registrada é ilegível ou o arquivo original enviado não tem preservação verificada (chave de armazenamento + SHA-256 por leitura de volta); o modelo não pode ser disponibilizado até a procedência ser refeita"));
   else if (provenance.revisionSemanticHash !== revision.semanticHash) {
     checks.push(blocked("SOURCE_PROVENANCE", "o conteúdo da revisão difere do conteúdo importado (editado após a importação); registre nova procedência assumindo a divergência ou crie nova revisão",
       [`hash na importação: ${provenance.revisionSemanticHash.slice(0, 12)}…`, `hash atual: ${revision.semanticHash.slice(0, 12)}…`]));

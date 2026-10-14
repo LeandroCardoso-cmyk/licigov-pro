@@ -224,7 +224,8 @@ export default function InstitutionalTemplates() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader><DialogTitle>Registrar modelo</DialogTitle><DialogDescription>Importa o conteúdo-fonte como RASCUNHO e registra a procedência.</DialogDescription></DialogHeader>
           <RegisterModelForm value={reg} onChange={setReg} presets={(caps.data?.registrationPresets ?? []) as unknown as RegistrationPresetView[]}
-            documentKinds={caps.data?.documentKinds ?? []} today={today()} hasDocx={docx !== null} onDocxFile={onDocxFile} scopeSuggestions={suggestions} showErrors={showErrors} />
+            documentKinds={caps.data?.documentKinds ?? []} today={today()} hasDocx={docx !== null} onDocxFile={onDocxFile} scopeSuggestions={suggestions} showErrors={showErrors}
+            uploadsAvailable={caps.data?.originalPreservation?.available !== false} uploadsUnavailableReason={caps.data?.originalPreservation?.reason ?? null} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRegOpen(false)}>Cancelar</Button>
             <Button disabled={register.isPending} onClick={submitRegister}>Registrar como rascunho</Button>

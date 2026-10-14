@@ -22,7 +22,8 @@ export type TemplateWorkflowErrorCode =
   | "SCOPE_INVALID"
   | "SCOPE_DIMENSION_UNSUPPORTED"
   /** O arquivo original enviado pela prefeitura não pôde ser preservado no armazenamento: nada foi criado (falha fechada). */
-  | "ORIGINAL_STORAGE_FAILED";
+  | "ORIGINAL_STORAGE_FAILED"
+  | "ORIGINAL_STORAGE_UNAVAILABLE";
 
 export interface TemplateWorkflowIssue { readonly code: string; readonly path: string; readonly message: string }
 

@@ -58,8 +58,10 @@ export interface TemplateOriginalFile {
   readonly sizeBytes: number;
   readonly filename: string | null;
   readonly contentType: string | null;
-  /** Chave no armazenamento (S3) — `null` quando o armazenamento não está configurado (explícito, nunca omitido em silêncio). */
-  readonly storageKey: string | null;
+  /** Chave no armazenamento (S3). OBRIGATÓRIA: um envio só é concluído depois de o original ser preservado e verificado — nunca há referência documental sem objeto. */
+  readonly storageKey: string;
+  /** Como a preservação foi verificada: leitura de volta do objeto + SHA-256 igual ao calculado no servidor. */
+  readonly preservation: "READBACK_SHA256";
 }
 
 export interface TemplateOrigin {
@@ -95,7 +97,8 @@ export function validateTemplateOrigin(o: TemplateOrigin): OriginIssue[] {
     if (!Number.isSafeInteger(o.original.sizeBytes) || o.original.sizeBytes < 0) out.push({ field: "original.sizeBytes", message: "tamanho do original inválido" });
     if (o.original.filename !== null && !SHORT.test(o.original.filename)) out.push({ field: "original.filename", message: "nome do arquivo inválido" });
     if (o.original.contentType !== null && !SHORT.test(o.original.contentType)) out.push({ field: "original.contentType", message: "tipo do arquivo inválido" });
-    if (o.original.storageKey !== null && !KEY_RE.test(o.original.storageKey)) out.push({ field: "original.storageKey", message: "chave de armazenamento inválida" });
+    if (typeof o.original.storageKey !== "string" || !KEY_RE.test(o.original.storageKey)) out.push({ field: "original.storageKey", message: "o original enviado exige chave de armazenamento válida (preservação obrigatória)" });
+    if (o.original.preservation !== "READBACK_SHA256") out.push({ field: "original.preservation", message: "o original enviado exige preservação verificada (READBACK_SHA256)" });
   }
   if (o.declaredAuthor !== null && !SHORT.test(o.declaredAuthor)) out.push({ field: "declaredAuthor", message: "autoria declarada inválida (uma linha, até 160 caracteres)" });
   return out;
@@ -124,7 +127,7 @@ export function originChangeIssue(current: TemplateOrigin | null, next: Template
 }
 
 function originCanonical(o: TemplateOrigin): unknown {
-  return [o.ownership, o.source, o.lineage, o.original ? [o.original.sha256, o.original.sizeBytes, o.original.filename, o.original.contentType, o.original.storageKey] : null, o.declaredAuthor];
+  return [o.ownership, o.source, o.lineage, o.original ? [o.original.sha256, o.original.sizeBytes, o.original.filename, o.original.contentType, o.original.storageKey, o.original.preservation] : null, o.declaredAuthor];
 }
 
 // codec `origin.*` (linhas de evidência da procedência; o ledger existente guarda a lista de textos)
@@ -132,7 +135,7 @@ export const ORIGIN_KEYS = [
   "origin.ownership", "origin.source", "origin.author",
   "origin.lineage.kind", "origin.lineage.identityId", "origin.lineage.revisionId", "origin.lineage.semanticHash",
   "origin.lineage.packageKey", "origin.lineage.packageVersion", "origin.lineage.sourceSha256",
-  "origin.original.sha256", "origin.original.sizeBytes", "origin.original.filename", "origin.original.contentType", "origin.original.storageKey",
+  "origin.original.sha256", "origin.original.sizeBytes", "origin.original.filename", "origin.original.contentType", "origin.original.storageKey", "origin.original.preservation",
 ] as const;
 
 export function encodeTemplateOrigin(o: TemplateOrigin): string[] {
@@ -145,6 +148,7 @@ export function encodeTemplateOrigin(o: TemplateOrigin): string[] {
     if (o.original.filename) l.push(encodeKv("origin.original.filename", o.original.filename));
     if (o.original.contentType) l.push(encodeKv("origin.original.contentType", o.original.contentType));
     if (o.original.storageKey) l.push(encodeKv("origin.original.storageKey", o.original.storageKey));
+    if (o.original.preservation) l.push(encodeKv("origin.original.preservation", o.original.preservation));
   }
   return l;
 }
@@ -161,7 +165,7 @@ export function decodeTemplateOrigin(lines: readonly string[]): { readonly origi
     lineage = { kind: "TENANT_REVISION", identityId: v["origin.lineage.identityId"] ?? "", revisionId: v["origin.lineage.revisionId"] ?? "", semanticHash: v["origin.lineage.semanticHash"] ?? "" };
   } else if (v["origin.lineage.kind"] !== undefined) return { origin: null, malformed: true };
   const original: TemplateOriginalFile | null = v["origin.original.sha256"] !== undefined
-    ? { sha256: v["origin.original.sha256"], sizeBytes: /^\d{1,12}$/.test(v["origin.original.sizeBytes"] ?? "") ? Number(v["origin.original.sizeBytes"]) : -1, filename: v["origin.original.filename"] ?? null, contentType: v["origin.original.contentType"] ?? null, storageKey: v["origin.original.storageKey"] ?? null }
+    ? { sha256: v["origin.original.sha256"], sizeBytes: /^\d{1,12}$/.test(v["origin.original.sizeBytes"] ?? "") ? Number(v["origin.original.sizeBytes"]) : -1, filename: v["origin.original.filename"] ?? null, contentType: v["origin.original.contentType"] ?? null, storageKey: v["origin.original.storageKey"] ?? "", preservation: (v["origin.original.preservation"] ?? "") as TemplateOriginalFile["preservation"] }
     : null;
   const origin: TemplateOrigin = { ownership, source, lineage, original, declaredAuthor: v["origin.author"] ?? null };
   return validateTemplateOrigin(origin).length ? { origin: null, malformed: true } : { origin, malformed: false };
@@ -169,7 +173,12 @@ export function decodeTemplateOrigin(lines: readonly string[]): { readonly origi
 
 // ─── Política de governança de templates (por organização) ───────────────────────────────────────────────────────────
 
-export const TEMPLATE_GOVERNANCE_POLICY_KINDS = ["PLATFORM_DEFAULT", "TENANT_DEFINED"] as const;
+/**
+ * PLATFORM_DEFAULT = padrão da plataforma (órgão novo, sem política registrada) · TENANT_DEFINED = decisão explícita do órgão (sempre preservada) ·
+ * LEGACY_COMPAT = órgão com modelos anteriores ao marco de transição e SEM política registrada: segue no regime anterior até decidir · UNRESOLVED_STRICT = política
+ * não resolvida/ilegível: padrão ESTRITO (nunca relaxa em silêncio).
+ */
+export const TEMPLATE_GOVERNANCE_POLICY_KINDS = ["PLATFORM_DEFAULT", "TENANT_DEFINED", "LEGACY_COMPAT", "UNRESOLVED_STRICT"] as const;
 export type TemplateGovernancePolicyKind = (typeof TEMPLATE_GOVERNANCE_POLICY_KINDS)[number];
 
 /** Exigência de evidência jurídica PRÉVIA do template para a publicação no catálogo interno. */
@@ -187,11 +196,14 @@ export interface TemplateGovernancePolicy {
 }
 
 /**
- * Padrão da PLATAFORMA. TRANSIÇÃO: o comportamento anterior (evidência jurídica exigida para publicar modelo de Edital) é PRESERVADO como padrão até que o
- * Owner aprove a política de transição; um órgão pode, ele mesmo e de forma auditável, definir `OPTIONAL` (ADR-TG-V2 §Rollout). Para tornar OPCIONAL o padrão
- * da plataforma, altere SOMENTE esta constante (com a decisão registrada) — nenhum dado persistido precisa mudar.
+ * Padrão da PLATAFORMA (decisão do Owner): a evidência jurídica PRÉVIA do template NÃO é condição universal para disponibilizá-lo como modelo de elaboração.
+ * Vale para órgãos sem política registrada e sem histórico anterior ao marco de transição; cada órgão pode estabelecer `REQUIRED`. Nada persistido é reinterpretado:
+ * decisões explícitas (`TENANT_DEFINED`) prevalecem e órgãos legados seguem em `LEGACY_COMPAT` até registrarem a própria política.
  */
-export const PLATFORM_DEFAULT_POLICY: TemplateGovernancePolicy = Object.freeze({ legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" });
+export const PLATFORM_DEFAULT_POLICY: TemplateGovernancePolicy = Object.freeze({ legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" });
+
+/** Regime ANTERIOR (evidência jurídica exigida), preservado de forma explícita para órgãos que já tinham modelos antes da transição. */
+export const LEGACY_COMPAT_POLICY: TemplateGovernancePolicy = Object.freeze({ legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" });
 
 export const TEMPLATE_POLICY_SCHEMA = "tpl-governance-policy/1" as const;
 /** Assunto da política no ledger ORG existente (`institutional.policy`; lock da linha da organização). Distinto do assunto dos campos governados. */
@@ -211,6 +223,19 @@ export interface EffectiveTemplateGovernancePolicy {
 export const STRICT_FALLBACK_POLICY: TemplateGovernancePolicy = Object.freeze({ legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" });
 
 export const PLATFORM_DEFAULT_EFFECTIVE: EffectiveTemplateGovernancePolicy = Object.freeze({ kind: "PLATFORM_DEFAULT", policy: PLATFORM_DEFAULT_POLICY, decisionId: null, version: 0, malformed: false });
+export const LEGACY_COMPAT_EFFECTIVE: EffectiveTemplateGovernancePolicy = Object.freeze({ kind: "LEGACY_COMPAT", policy: LEGACY_COMPAT_POLICY, decisionId: null, version: 0, malformed: false });
+/** Quando a política não foi resolvida (porta ausente): estrito. Nunca assume o padrão OPCIONAL por omissão. */
+export const UNRESOLVED_STRICT_EFFECTIVE: EffectiveTemplateGovernancePolicy = Object.freeze({ kind: "UNRESOLVED_STRICT", policy: STRICT_FALLBACK_POLICY, decisionId: null, version: 0, malformed: false });
+
+/**
+ * Órgão LEGADO = possui ao menos um modelo (identidade) criado ANTES do marco de transição. Data ilegível ⇒ legado (estrito; nunca relaxa por dado ruim).
+ * Função pura: o marco vem da configuração; nada é gravado nem migrado.
+ */
+export function isLegacyTemplateOrganization(identities: readonly { readonly createdAt: string }[], cutoverAt: string): boolean {
+  const cutover = Date.parse(cutoverAt);
+  if (Number.isNaN(cutover)) return true;
+  return identities.some((i) => { const t = Date.parse(i.createdAt); return Number.isNaN(t) || t < cutover; });
+}
 
 export function validateTemplateGovernancePolicy(p: TemplateGovernancePolicy): { field: string; message: string }[] {
   const out: { field: string; message: string }[] = [];
@@ -232,11 +257,14 @@ export function decodeTemplateGovernancePolicy(d: InstitutionalDecision): Templa
   return validateTemplateGovernancePolicy(policy).length ? null : policy;
 }
 
-/** Política EFETIVA a partir do histórico do assunto (ordem de versão). Ausente ⇒ padrão da plataforma; corrente ilegível ⇒ padrão estrito + `malformed`. */
-export function resolveEffectiveTemplateGovernancePolicy(history: readonly InstitutionalDecision[]): EffectiveTemplateGovernancePolicy {
-  if (history.length === 0) return PLATFORM_DEFAULT_EFFECTIVE;
+/**
+ * Política EFETIVA a partir do histórico do assunto (ordem de versão). Decisão explícita do órgão SEMPRE prevalece. Ausente ⇒ legado ? LEGACY_COMPAT (REQUIRED) : padrão da plataforma
+ * (OPTIONAL). Corrente ilegível ⇒ padrão estrito + `malformed` (não importa o legado).
+ */
+export function resolveEffectiveTemplateGovernancePolicy(history: readonly InstitutionalDecision[], opts: { readonly legacyOrganization: boolean }): EffectiveTemplateGovernancePolicy {
+  if (history.length === 0) return opts.legacyOrganization ? LEGACY_COMPAT_EFFECTIVE : PLATFORM_DEFAULT_EFFECTIVE;
   const current = history[history.length - 1];
   const decoded = decodeTemplateGovernancePolicy(current);
-  if (!decoded) return { kind: "PLATFORM_DEFAULT", policy: STRICT_FALLBACK_POLICY, decisionId: current.id, version: current.revision, malformed: true };
+  if (!decoded) return { kind: "UNRESOLVED_STRICT", policy: STRICT_FALLBACK_POLICY, decisionId: current.id, version: current.revision, malformed: true };
   return { kind: "TENANT_DEFINED", policy: decoded, decisionId: current.id, version: current.revision, malformed: false };
 }

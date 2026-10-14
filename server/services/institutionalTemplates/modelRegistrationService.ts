@@ -135,6 +135,10 @@ export class ModelRegistrationService {
       }
       inventorySummary = { sha256: inventoryHash(parsed.value), ...inventoryCounts(parsed.value) };
     }
+    // slug já ocupado ⇒ CONFLICT ANTES de qualquer escrita/armazenamento (não deixa original órfão por um registro que não vai acontecer)
+    if (input.target.kind === "NEW_IDENTITY" && await this.ports.repository.findIdentityBySlug(ctx.organizationId, input.target.documentKind, input.target.slug)) {
+      throw new TemplateWorkflowError("CONFLICT", "já existe um modelo com este tipo documental e identificador (slug) nesta organização");
+    }
     const { ast, sourceFormat, catalogVersion } = await this.resolveSource(input.source, pkg);
     // Template Governance V2: origem INFERIDA pelo servidor + preservação do arquivo original (antes de qualquer escrita; falha ⇒ nada é criado).
     const origin = await this.resolveOrigin(ctx, input, pkg);
@@ -202,16 +206,20 @@ export class ModelRegistrationService {
     const filename = (input.source as { filename?: string }).filename ?? null;
     const contentType = isDocx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "text/markdown; charset=utf-8";
     const sha256 = createHash("sha256").update(bytes).digest("hex");
-    let storageKey: string | null = null;
-    if (this.ports.originals) {
-      try {
-        storageKey = (await this.ports.originals.put({ organizationId: ctx.organizationId, sha256, filename, contentType, bytes })).storageKey;
-      } catch (err) {
-        log.warn("template_original_storage_failed", { organizationId: ctx.organizationId, sha256, correlationId: ctx.correlationId, message: err instanceof Error ? err.message : "falha desconhecida" });
-        throw new TemplateWorkflowError("ORIGINAL_STORAGE_FAILED", "o arquivo original não pôde ser preservado no armazenamento; nada foi criado");
-      }
+    // Preservação do original é REQUISITO do envio: sem armazenamento, ou sem verificação por leitura de volta, o envio NÃO é concluído (nada é criado).
+    if (!this.ports.originals) {
+      throw new TemplateWorkflowError("ORIGINAL_STORAGE_UNAVAILABLE", "o armazenamento de arquivos não está disponível neste ambiente; o envio exige a preservação do arquivo original e não pôde ser concluído (nada foi criado). Tente novamente quando o armazenamento estiver operacional ou registre o modelo por outra via (pacote da plataforma ou estrutura nativa).");
     }
-    return inferOriginFromRegistration({ kind: isDocx ? "DOCX" : "MARKDOWN", original: { sha256, sizeBytes: bytes.length, filename, contentType, storageKey } }, author);
+    let storageKey: string;
+    try {
+      const stored = await this.ports.originals.put({ organizationId: ctx.organizationId, sha256, filename, contentType, bytes });
+      if (!stored.storageKey || stored.verifiedSha256 !== sha256 || stored.verifiedSizeBytes !== bytes.length) throw new Error("preservation_not_verified");
+      storageKey = stored.storageKey;
+    } catch (err) {
+      log.warn("template_original_storage_failed", { organizationId: ctx.organizationId, sha256, correlationId: ctx.correlationId, message: err instanceof Error ? err.message : "falha desconhecida" });
+      throw new TemplateWorkflowError("ORIGINAL_STORAGE_FAILED", "o arquivo original não pôde ser preservado e verificado no armazenamento; nada foi criado e nada foi publicado. Tente novamente; se persistir, acione o suporte.");
+    }
+    return inferOriginFromRegistration({ kind: isDocx ? "DOCX" : "MARKDOWN", original: { sha256, sizeBytes: bytes.length, filename, contentType, storageKey, preservation: "READBACK_SHA256" } }, author);
   }
 
   private async resolveSource(source: RegistrationSource, pkg: ModelPackage | null): Promise<{ ast: unknown; sourceFormat: "NATIVE" | "MARKDOWN_IMPORT" | "DOCX_IMPORT"; catalogVersion?: string }> {
