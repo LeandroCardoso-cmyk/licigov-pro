@@ -2,8 +2,9 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { OriginBadge } from "./OriginBadge";
 import {
-  BINDING_HEALTH_LABEL, BINDING_STATUS_LABEL, DISPLAY_NAME_SOURCE_LABEL, DOCUMENT_KIND_LABEL, pinnedRevisionLabel, scopeLabel, STATUS_LABEL, STATUS_TONE,
+  BINDING_HEALTH_LABEL, derivableRevision, BINDING_STATUS_LABEL, DISPLAY_NAME_SOURCE_LABEL, DOCUMENT_KIND_LABEL, pinnedRevisionLabel, scopeLabel, STATUS_LABEL, STATUS_TONE,
   type CatalogRowView,
 } from "@/lib/institutionalTemplatesView";
 
@@ -11,8 +12,9 @@ import {
  * Um modelo do catálogo multi-modelo. Mostra nome de exibição (e a origem do nome), slug, tipo, revisões com status, a
  * aplicabilidade EXPLÍCITA de cada vínculo, a saúde do vínculo e a revisão EXATA fixada — nunca "a última".
  */
-export function CatalogCard({ row }: { row: CatalogRowView }) {
+export function CatalogCard({ row, onDerive }: { row: CatalogRowView; onDerive?: (row: CatalogRowView, revisionId: string) => void }) {
   const status = BINDING_STATUS_LABEL[row.bindingStatus];
+  const source = derivableRevision(row);
   return (
     <Card>
       <CardHeader>
@@ -22,6 +24,7 @@ export function CatalogCard({ row }: { row: CatalogRowView }) {
           {row.templateKey ? <> · <span className="font-mono text-xs">{row.templateKey}</span></> : null}
         </CardDescription>
         <p className="text-xs text-muted-foreground">Nome: {DISPLAY_NAME_SOURCE_LABEL[row.displayNameSource]}</p>
+        <OriginBadge origin={row.origin} originState={row.originState} />
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="font-medium" data-testid="catalog-headline">{row.headline}</p>
@@ -48,7 +51,10 @@ export function CatalogCard({ row }: { row: CatalogRowView }) {
             })}
           </ul>
         ) : <p className="text-muted-foreground">Nenhum vínculo: este modelo só é usado em geração depois de uma revisão PUBLICADA ser vinculada a um escopo explícito.</p>}
-        <Link href={`/modelos-institucionais/${row.identityId}`}><Button size="sm" variant="outline">Abrir</Button></Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/modelos-institucionais/${row.identityId}`}><Button size="sm" variant="outline">Abrir</Button></Link>
+          {onDerive && source && <Button size="sm" variant="outline" onClick={() => onDerive(row, source.id)}>Derivar modelo</Button>}
+        </div>
       </CardContent>
     </Card>
   );

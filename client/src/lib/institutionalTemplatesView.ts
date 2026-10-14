@@ -256,6 +256,8 @@ export interface CatalogRowView {
   readonly templateKey: string | null; readonly declaredScope: ScopeLike; readonly headline: string; readonly bindingStatus: "BOUND" | "NOT_BOUND" | "CONFLICT";
   readonly revisions: readonly { id: string; revision: number; status: RevisionStatus; semanticHash: string }[];
   readonly bindings: readonly { bindingId: string; active: boolean; scope: ScopeLike; scopeHeadline: string; pinnedRevisionId: string | null; pinnedRevision: number | null; pinnedRevisionStatus: RevisionStatus | null; pinnedSemanticHash: string | null; health: BindingHealth; effectiveFrom: string }[];
+  /** Template Governance V2: origem registrada (ausente em servidores anteriores ⇒ sem procedência). */
+  readonly origin?: OriginView | null; readonly originState?: OriginStateKey;
 }
 export interface CatalogFilterState { documentKind: string; modality: string; form: string; platform: string; status: string }
 export const EMPTY_CATALOG_FILTER: CatalogFilterState = { documentKind: "", modality: "", form: "", platform: "", status: "" };
@@ -284,7 +286,9 @@ export const READINESS_STATUS_LABEL: Record<ReadinessStatusKey, { label: string;
 export interface ReadinessMatrixView {
   readonly revisionId: string; readonly revisionSemanticHash: string; readonly overall: "READY" | "BLOCKED"; readonly matrixHash: string;
   readonly summary: { pass: number; blocked: number; notApplicable: number }; readonly notices: readonly string[];
-  readonly checks: readonly { id: string; label: string; status: ReadinessStatusKey; detail: string; findings: readonly string[]; findingsTotal: number }[];
+  readonly checks: readonly { id: string; label: string; status: ReadinessStatusKey; detail: string; findings: readonly string[]; findingsTotal: number; layer?: ReadinessLayerKey }[];
+  /** Política efetiva do órgão aplicada a esta matriz (Template Governance V2). Ausente em servidores anteriores ⇒ tratado como padrão da plataforma. */
+  readonly policy?: { kind: PolicyKindKey; legalEvidence: LegalEvidenceRequirementKey; decisionId: string | null; malformed: boolean };
 }
 export function readinessHeadline(m: ReadinessMatrixView): string {
   return m.overall === "READY"
@@ -391,3 +395,149 @@ export function replaceableBinding<B extends BindingLike>(bindings: readonly B[]
   const hits = bindings.filter((b) => b.active && b.documentKind === documentKind && dims.every((k) => norm(b.scope, k) === norm(scope, k)));
   return hits.length === 1 ? hits[0] : null;
 }
+
+
+// ─── Template Governance V2: origem, política do órgão, camadas de prontidão, derivação ────────────────────────────────
+
+export type ReadinessLayerKey = "TECHNICAL_TEMPLATE_READINESS" | "TENANT_TEMPLATE_POLICY" | "DOCUMENT_LEGAL_REVIEW";
+export type LegalEvidenceRequirementKey = "REQUIRED" | "OPTIONAL";
+export type PolicyKindKey = "PLATFORM_DEFAULT" | "TENANT_DEFINED" | "LEGACY_COMPAT" | "UNRESOLVED_STRICT";
+
+export const READINESS_LAYER_LABEL: Record<ReadinessLayerKey, { title: string; hint: string }> = {
+  TECHNICAL_TEMPLATE_READINESS: { title: "Prontidão técnica do modelo", hint: "Estrutura, variáveis, procedência e inventário do modelo. Sempre exigida para disponibilizar o modelo." },
+  TENANT_TEMPLATE_POLICY: { title: "Política do órgão sobre seus modelos", hint: "O que a sua organização decidiu exigir antes de disponibilizar um modelo no catálogo interno." },
+  DOCUMENT_LEGAL_REVIEW: { title: "Análise jurídica do documento elaborado", hint: "Etapa própria da Procuradoria, na fase institucional adequada. Não é verificada aqui." },
+};
+const LAYER_ORDER: readonly ReadinessLayerKey[] = ["TECHNICAL_TEMPLATE_READINESS", "TENANT_TEMPLATE_POLICY", "DOCUMENT_LEGAL_REVIEW"];
+
+/** Agrupa as verificações por camada (ordem fixa; camada sem verificações é omitida). Servidor sem `layer` ⇒ tudo na camada técnica. */
+export function groupChecksByLayer(m: ReadinessMatrixView): { layer: ReadinessLayerKey; title: string; hint: string; checks: ReadinessMatrixView["checks"] }[] {
+  return LAYER_ORDER
+    .map((layer) => ({ layer, ...READINESS_LAYER_LABEL[layer], checks: m.checks.filter((c) => (c.layer ?? "TECHNICAL_TEMPLATE_READINESS") === layer) }))
+    .filter((g) => g.checks.length > 0);
+}
+
+/** Explica, em linguagem simples, por que a evidência jurídica pode (ou não) bloquear — nunca presume aprovação. */
+export function legalPolicyExplanation(policy: ReadinessMatrixView["policy"] | undefined): string {
+  const kind: PolicyKindKey = policy?.kind ?? "UNRESOLVED_STRICT";
+  if (policy?.malformed || kind === "UNRESOLVED_STRICT") return "A política do órgão não pôde ser resolvida/lida: aplica-se o padrão ESTRITO (evidência jurídica prévia exigida) até que seja restabelecida.";
+  if (policy && policy.legalEvidence === "OPTIONAL") {
+    return kind === "TENANT_DEFINED"
+      ? "Sua organização definiu a evidência jurídica como OPCIONAL: sem ela o modelo pode ser disponibilizado no catálogo interno. Se houver evidência registrada e válida, ela continua auditável. A análise jurídica do documento elaborado permanece com a Procuradoria."
+      : "Padrão da plataforma: a evidência jurídica prévia do modelo é OPCIONAL — sem ela o modelo pode ser disponibilizado no catálogo interno (se houver evidência válida, ela continua auditável). Sua organização pode estabelecer a exigência. A análise jurídica do documento elaborado permanece com a Procuradoria.";
+  }
+  return kind === "LEGACY_COMPAT"
+    ? "Compatibilidade com o regime anterior: sua organização já tinha modelos antes da transição do padrão e não registrou política, então a evidência de análise jurídica prévia continua exigida. Nada foi alterado em silêncio; um gerente pode registrar a política do órgão."
+    : "Sua organização exige evidência de análise jurídica prévia para disponibilizar o modelo.";
+}
+
+export type OwnershipKey = "PLATFORM" | "TENANT" | "DERIVED";
+export interface OriginView {
+  readonly ownership: OwnershipKey; readonly source: "PLATFORM_CATALOG" | "TENANT_UPLOAD" | "TENANT_AUTHORED";
+  readonly lineage: ({ kind: "PLATFORM_PACKAGE"; packageKey: string; packageVersion: string; sourceSha256: string } | { kind: "TENANT_REVISION"; identityId: string; revisionId: string; semanticHash: string }) | null;
+  readonly original: { sha256: string; sizeBytes: number; filename: string | null; contentType: string | null; storageKey: string; preservation: "READBACK_SHA256" } | null; readonly declaredAuthor: string | null;
+}
+export type OriginStateKey = "RECORDED" | "LEGACY_UNCLASSIFIED" | "MALFORMED" | "NO_PROVENANCE";
+
+export const OWNERSHIP_LABEL: Record<OwnershipKey, string> = { PLATFORM: "Modelo da plataforma", TENANT: "Modelo próprio", DERIVED: "Modelo derivado" };
+export const SOURCE_LABEL: Record<OriginView["source"], string> = { PLATFORM_CATALOG: "catálogo da plataforma", TENANT_UPLOAD: "arquivo enviado pela organização", TENANT_AUTHORED: "elaborado pela organização" };
+
+export interface OriginBadgeView { readonly label: string; readonly tone: StatusTone; readonly detail: string }
+/** Selo de origem do card/detalhe. Estados sem origem registrada são ditos como são (nunca "plataforma" por padrão). */
+export function originBadge(row: { origin?: OriginView | null; originState?: OriginStateKey }): OriginBadgeView {
+  const state = row.originState ?? "NO_PROVENANCE";
+  if (state === "RECORDED" && row.origin) {
+    const o = row.origin;
+    const lineage = o.lineage ? (o.lineage.kind === "PLATFORM_PACKAGE" ? ` · derivado de ${o.lineage.packageKey} v${o.lineage.packageVersion}` : ` · derivado da revisão ${o.lineage.revisionId.slice(0, 10)} (${o.lineage.semanticHash.slice(0, 8)})`) : "";
+    return { label: OWNERSHIP_LABEL[o.ownership], tone: o.ownership === "PLATFORM" ? "info" : o.ownership === "DERIVED" ? "warning" : "success", detail: `Origem: ${SOURCE_LABEL[o.source]}${lineage}` };
+  }
+  if (state === "LEGACY_UNCLASSIFIED") return { label: "Origem não classificada", tone: "neutral", detail: "Registrado antes da classificação de origem; pode ser classificado uma única vez." };
+  if (state === "MALFORMED") return { label: "Origem ilegível", tone: "danger", detail: "O registro de origem não passa na verificação de integridade; trate o modelo com cautela." };
+  return { label: "Sem procedência", tone: "neutral", detail: "Nenhuma procedência registrada para este modelo." };
+}
+
+export type OwnershipFilter = "ALL" | OwnershipKey | "UNCLASSIFIED";
+export const OWNERSHIP_FILTER_LABEL: Record<OwnershipFilter, string> = { ALL: "Todos", PLATFORM: "Da plataforma", TENANT: "Da minha prefeitura", DERIVED: "Derivados", UNCLASSIFIED: "Sem classificação" };
+const ownershipOf = (r: { origin?: OriginView | null; originState?: OriginStateKey }): OwnershipFilter => (r.originState === "RECORDED" && r.origin ? r.origin.ownership : "UNCLASSIFIED");
+export function filterByOwnership<T extends { origin?: OriginView | null; originState?: OriginStateKey }>(rows: readonly T[], f: OwnershipFilter): T[] {
+  return f === "ALL" ? [...rows] : rows.filter((r) => ownershipOf(r) === f);
+}
+export function ownershipCounts(rows: readonly { origin?: OriginView | null; originState?: OriginStateKey }[]): Record<OwnershipFilter, number> {
+  const out: Record<OwnershipFilter, number> = { ALL: rows.length, PLATFORM: 0, TENANT: 0, DERIVED: 0, UNCLASSIFIED: 0 };
+  for (const r of rows) out[ownershipOf(r)] += 1;
+  return out;
+}
+
+// política do órgão (somente gerente+; o servidor reautoriza)
+export interface PolicyView {
+  readonly kind: PolicyKindKey; readonly version: number; readonly malformed: boolean;
+  /** Compatibilidade/transição explícitas (marco imutável do 1º deploy, órgão legado?, explicação). `UNAVAILABLE` ⇒ modo estrito. Ausente em servidores anteriores. */
+  readonly transition?: { cutoverAt: string | null; source: "LEDGER_MARKER" | "UNAVAILABLE"; legacyOrganization: boolean | null; explanation: string };
+  readonly policy: { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner" };
+  readonly note?: string;
+  readonly history: readonly { version: number; policy: PolicyView["policy"] | null; declaredBy: { name: string; role: string }; actDate: string; reason: string }[];
+}
+export interface PolicyFormState { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner"; decision: DecisionFormState }
+export const emptyPolicyForm = (current: PolicyView["policy"], today: string): PolicyFormState => ({ ...current, decision: emptyDecisionForm(today) });
+export function validatePolicyForm(f: PolicyFormState, current: PolicyView): { valid: boolean; errors: Partial<Record<DecisionField | "unchanged", string>> } {
+  const { errors } = validateDecisionForm(f.decision);
+  const out: Partial<Record<DecisionField | "unchanged", string>> = { ...errors };
+  const c = current.policy;
+  // Só é "sem alteração" quando já há decisão PRÓPRIA do órgão; confirmar explicitamente o padrão/regime anterior é uma decisão legítima (encerra a compatibilidade).
+  if (current.kind === "TENANT_DEFINED" && f.legalEvidence === c.legalEvidence && f.approveMinRole === c.approveMinRole && f.publishMinRole === c.publishMinRole && !current.malformed) out.unchanged = "Nenhuma alteração em relação à política vigente.";
+  return { valid: Object.keys(out).length === 0, errors: out };
+}
+export const POLICY_KIND_LABEL: Record<PolicyKindKey, { label: string; tone: StatusTone }> = {
+  TENANT_DEFINED: { label: "Definida pelo órgão", tone: "success" }, PLATFORM_DEFAULT: { label: "Padrão da plataforma", tone: "neutral" },
+  LEGACY_COMPAT: { label: "Compatibilidade (regime anterior)", tone: "warning" }, UNRESOLVED_STRICT: { label: "Estrita (não resolvida)", tone: "danger" },
+};
+export function policyHeadline(p: Pick<PolicyView, "kind" | "malformed" | "policy" | "version">): string {
+  const origin = p.kind === "TENANT_DEFINED" ? `Política do órgão (versão ${p.version})` : p.kind === "LEGACY_COMPAT" ? "Regime anterior preservado (sem política registrada)" : p.kind === "UNRESOLVED_STRICT" ? "Política não resolvida" : "Padrão da plataforma";
+  const legal = p.policy.legalEvidence === "REQUIRED" ? "evidência jurídica OBRIGATÓRIA" : "evidência jurídica OPCIONAL";
+  const roles = `aprovar: ${p.policy.approveMinRole} · publicar: ${p.policy.publishMinRole}`;
+  return `${origin}: ${legal}; ${roles}${p.malformed ? " — registro ilegível, aplicado o padrão estrito" : ""}.`;
+}
+
+// derivação (a partir de modelo da plataforma ou próprio já decidido)
+export interface DeriveFormState { slug: string; displayName: string; declaredAuthor: string; decision: DecisionFormState }
+export const emptyDeriveForm = (today: string, suggestedName = ""): DeriveFormState => ({ slug: "", displayName: suggestedName ? `${suggestedName} (adaptado)` : "", declaredAuthor: "", decision: emptyDecisionForm(today) });
+export function validateDeriveForm(f: DeriveFormState): { valid: boolean; errors: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> } {
+  const { errors } = validateDecisionForm(f.decision);
+  const out: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> = { ...errors };
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(f.slug) || f.slug.length > 120) out.slug = "Slug: minúsculas, números e hífens.";
+  if (!f.displayName.trim() || f.displayName.length > 200) out.displayName = "Informe o nome do modelo (até 200 caracteres).";
+  if (f.declaredAuthor.trim() && (f.declaredAuthor.length > 160 || /[\r\n]/.test(f.declaredAuthor))) out.declaredAuthor = "Autor: uma linha, até 160 caracteres.";
+  return { valid: Object.keys(out).length === 0, errors: out };
+}
+/** Fontes de derivação mostradas na UI: só revisões JÁ decididas (nunca rascunho) e pacotes da plataforma. */
+export const DERIVABLE_STATUSES: readonly RevisionStatus[] = ["APPROVED", "PUBLISHED", "DEPRECATED"];
+export const canDeriveFrom = (status: RevisionStatus): boolean => DERIVABLE_STATUSES.includes(status);
+/** Revisão EXATA oferecida como origem de derivação de um modelo do catálogo: a mais recente já decidida (nunca rascunho). `null` = não há o que derivar. */
+export function derivableRevision(row: Pick<CatalogRowView, "revisions">): CatalogRowView["revisions"][number] | null {
+  const ok = row.revisions.filter((r) => canDeriveFrom(r.status)).sort((a, b) => b.revision - a.revision);
+  return ok[0] ?? null;
+}
+
+// ─── integridade da fonte: declarado × calculado × semântico × lineage ─────────────────────────────────────────────────
+
+export type HashAssuranceKey = "CLIENT_DECLARED_UNVERIFIED" | "SERVER_COMPUTED" | "SERVER_DERIVED" | "PLATFORM_VERSIONED";
+export interface IntegrityView {
+  readonly items: readonly { id: string; label: string; value: string | null; assurance: HashAssuranceKey; explanation: string }[];
+  readonly relations: readonly { id: string; status: "MATCH" | "DIFFERENT" | "NOT_APPLICABLE" | "UNKNOWN"; message: string }[];
+  readonly serverAssured: readonly string[]; readonly notices: readonly string[];
+}
+export const ASSURANCE_LABEL: Record<HashAssuranceKey, { label: string; tone: StatusTone }> = {
+  CLIENT_DECLARED_UNVERIFIED: { label: "Declarado — não verificado", tone: "warning" },
+  SERVER_COMPUTED: { label: "Calculado pelo servidor", tone: "success" },
+  SERVER_DERIVED: { label: "Derivado pelo servidor", tone: "success" },
+  PLATFORM_VERSIONED: { label: "Versionado pela plataforma", tone: "info" },
+};
+export const RELATION_LABEL: Record<IntegrityView["relations"][number]["status"], { label: string; tone: StatusTone }> = {
+  MATCH: { label: "Confere", tone: "success" }, DIFFERENT: { label: "Diferente", tone: "warning" }, NOT_APPLICABLE: { label: "Não se aplica", tone: "neutral" }, UNKNOWN: { label: "Não verificável agora", tone: "neutral" },
+};
+/** Verificação sob demanda do original preservado (somente leitura). */
+export type OriginalVerificationStatusKey = "VERIFIED" | "MISMATCH" | "MISSING" | "UNAVAILABLE" | "FORBIDDEN_KEY";
+export const ORIGINAL_VERIFICATION_LABEL: Record<OriginalVerificationStatusKey, { label: string; tone: StatusTone }> = {
+  VERIFIED: { label: "Original conferido", tone: "success" }, MISMATCH: { label: "Original NÃO confere", tone: "danger" }, MISSING: { label: "Original não encontrado", tone: "danger" },
+  UNAVAILABLE: { label: "Armazenamento indisponível", tone: "warning" }, FORBIDDEN_KEY: { label: "Chave recusada", tone: "danger" },
+};

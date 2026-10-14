@@ -21,6 +21,11 @@ export interface ReadinessWitnessRefs {
   readonly provenanceDecisionId: string | null;
   /** Id da decisão CORRENTE de evidência jurídica usada na matriz (`null` = nenhuma). */
   readonly legalEvidenceDecisionId: string | null;
+  /**
+   * Template Governance V2: id da decisão CORRENTE da política de governança de templates do órgão usada na matriz (`null`/ausente = padrão da plataforma).
+   * Uma política alterada entre o cálculo e o COMMIT invalida a prontidão (READINESS_STALE). Só entra no hash da testemunha quando existe (compatibilidade).
+   */
+  readonly policyDecisionId?: string | null;
 }
 
 export interface ReadinessWitness extends ReadinessWitnessRefs {
@@ -37,12 +42,13 @@ export interface ReadinessWitness extends ReadinessWitnessRefs {
 }
 
 export function buildReadinessWitness(input: Omit<ReadinessWitness, "version" | "witnessHash">): ReadinessWitness {
-  const base = { version: READINESS_WITNESS_VERSION, ...input };
+  const { policyDecisionId, ...rest } = input;
+  const base = { version: READINESS_WITNESS_VERSION, ...rest, ...(policyDecisionId ? { policyDecisionId } : {}) };
   return Object.freeze({ ...base, witnessHash: templateHash(base) });
 }
 
 export function witnessRefs(w: ReadinessWitness): ReadinessWitnessRefs {
-  return { revisionSemanticHash: w.revisionSemanticHash, provenanceDecisionId: w.provenanceDecisionId, legalEvidenceDecisionId: w.legalEvidenceDecisionId };
+  return { revisionSemanticHash: w.revisionSemanticHash, provenanceDecisionId: w.provenanceDecisionId, legalEvidenceDecisionId: w.legalEvidenceDecisionId, policyDecisionId: w.policyDecisionId ?? null };
 }
 
 /** Compara o estado RELIDO na transação com o da testemunha. Devolve os campos divergentes (vazio = íntegro). */
@@ -51,5 +57,6 @@ export function witnessDrift(expected: ReadinessWitnessRefs, current: ReadinessW
   if (expected.revisionSemanticHash !== current.revisionSemanticHash) out.push("revisionSemanticHash");
   if (expected.provenanceDecisionId !== current.provenanceDecisionId) out.push("provenance");
   if (expected.legalEvidenceDecisionId !== current.legalEvidenceDecisionId) out.push("legalEvidence");
+  if ((expected.policyDecisionId ?? null) !== (current.policyDecisionId ?? null)) out.push("policy");
   return out;
 }

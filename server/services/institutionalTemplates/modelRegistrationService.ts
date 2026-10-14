@@ -17,6 +17,8 @@ import type { ImportProvenance } from "../../domain/institutionalTemplates/gover
 import { readScope, validateExplicitScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { inventoryCounts, inventoryHash, parseSourceInventory } from "../../domain/institutionalTemplates/governance/sourceInventory";
 import { serviceLogger } from "../observabilityService";
+import { createHash } from "node:crypto";
+import { inferOriginFromRegistration, type TemplateOrigin } from "../../domain/institutionalTemplates/governance/templateGovernanceV2";
 import { assertHumanActor } from "./authority";
 import { TemplateWorkflowError } from "./errors";
 import { TemplateGovernanceService, type DeclaredAuthority } from "./governanceService";
@@ -70,6 +72,8 @@ export interface RegisterModelInput {
   readonly sourceSha256: string;
   /** Pacote de proveniência (inventário) — opcional; só seu hash e contagens são gravados (o conteúdo é reenviado na prontidão). */
   readonly inventory?: unknown;
+  /** Autoria declarada por quem cadastra (texto livre curto; informativa, nunca validada). A ORIGEM (ownership/fonte) NÃO é informada pelo cliente: o servidor a infere do tipo de fonte. */
+  readonly declaredAuthor?: string;
   readonly confirm: boolean;
   readonly idempotencyKey: string;
   readonly decision: DeclaredAuthority;
@@ -131,7 +135,13 @@ export class ModelRegistrationService {
       }
       inventorySummary = { sha256: inventoryHash(parsed.value), ...inventoryCounts(parsed.value) };
     }
+    // slug já ocupado ⇒ CONFLICT ANTES de qualquer escrita/armazenamento (não deixa original órfão por um registro que não vai acontecer)
+    if (input.target.kind === "NEW_IDENTITY" && await this.ports.repository.findIdentityBySlug(ctx.organizationId, input.target.documentKind, input.target.slug)) {
+      throw new TemplateWorkflowError("CONFLICT", "já existe um modelo com este tipo documental e identificador (slug) nesta organização");
+    }
     const { ast, sourceFormat, catalogVersion } = await this.resolveSource(input.source, pkg);
+    // Template Governance V2: origem INFERIDA pelo servidor + preservação do arquivo original (antes de qualquer escrita; falha ⇒ nada é criado).
+    const origin = await this.resolveOrigin(ctx, input, pkg);
 
     // 2) escritas: identidade (se nova) → revisão DRAFT → procedência
     const wf = new InstitutionalTemplatesWorkflow(this.ports);
@@ -157,7 +167,7 @@ export class ModelRegistrationService {
         revisionId: revision.id, expectedVersion: 0, confirm: true, idempotencyKey: input.idempotencyKey, decision: input.decision,
         provenance: {
           templateKey: input.templateKey, displayName: input.displayName, sourceLogicalVersion: input.sourceLogicalVersion, sourceSha256: input.sourceSha256,
-          sourceFormat, scope: readScope(input.declaredScope), ...(inventorySummary ? { inventory: inventorySummary } : {}),
+          sourceFormat, scope: readScope(input.declaredScope), ...(inventorySummary ? { inventory: inventorySummary } : {}), origin,
         },
       });
       provenance = { status: "RECORDED", value: rec.provenance };
@@ -179,6 +189,37 @@ export class ModelRegistrationService {
     const identity = await this.ports.repository.getIdentity(ctx.organizationId, identityId);
     if (!identity || identity.organizationId !== ctx.organizationId) throw new TemplateWorkflowError("NOT_FOUND", "modelo não encontrado nesta organização");
     return identity;
+  }
+
+  /**
+   * Origem do template (ownership · fonte · lineage · original). O cliente NUNCA declara `ownership`: pacote versionado ⇒ PLATFORM; Markdown/DOCX ⇒ TENANT
+   * enviado (SHA-256 do arquivo calculado AQUI, original preservado no armazenamento quando configurado); AST ⇒ TENANT redigido. Conteúdo do arquivo é dado não confiável.
+   */
+  private async resolveOrigin(ctx: WorkflowContext, input: RegisterModelInput, pkg: ModelPackage | null): Promise<TemplateOrigin> {
+    const author = input.declaredAuthor?.trim() || null;
+    if (input.source.kind === "MODEL_PACKAGE") {
+      return inferOriginFromRegistration({ kind: "MODEL_PACKAGE", packageKey: pkg!.modelKey, packageVersion: pkg!.provenance.sourceLogicalVersion, sourceSha256: pkg!.provenance.sourceSha256 }, author);
+    }
+    if (input.source.kind === "AST") return inferOriginFromRegistration({ kind: "AST" }, author);
+    const isDocx = input.source.kind === "DOCX";
+    const bytes = isDocx ? Buffer.from((input.source as { docx: Buffer }).docx) : Buffer.from((input.source as { markdown: string }).markdown, "utf8");
+    const filename = (input.source as { filename?: string }).filename ?? null;
+    const contentType = isDocx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "text/markdown; charset=utf-8";
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    // Preservação do original é REQUISITO do envio: sem armazenamento, ou sem verificação por leitura de volta, o envio NÃO é concluído (nada é criado).
+    if (!this.ports.originals) {
+      throw new TemplateWorkflowError("ORIGINAL_STORAGE_UNAVAILABLE", "o armazenamento de arquivos não está disponível neste ambiente; o envio exige a preservação do arquivo original e não pôde ser concluído (nada foi criado). Tente novamente quando o armazenamento estiver operacional ou registre o modelo por outra via (pacote da plataforma ou estrutura nativa).");
+    }
+    let storageKey: string;
+    try {
+      const stored = await this.ports.originals.put({ organizationId: ctx.organizationId, sha256, filename, contentType, bytes });
+      if (!stored.storageKey || stored.verifiedSha256 !== sha256 || stored.verifiedSizeBytes !== bytes.length) throw new Error("preservation_not_verified");
+      storageKey = stored.storageKey;
+    } catch (err) {
+      log.warn("template_original_storage_failed", { organizationId: ctx.organizationId, sha256, correlationId: ctx.correlationId, message: err instanceof Error ? err.message : "falha desconhecida" });
+      throw new TemplateWorkflowError("ORIGINAL_STORAGE_FAILED", "o arquivo original não pôde ser preservado e verificado no armazenamento; nada foi criado e nada foi publicado. Tente novamente; se persistir, acione o suporte.");
+    }
+    return inferOriginFromRegistration({ kind: isDocx ? "DOCX" : "MARKDOWN", original: { sha256, sizeBytes: bytes.length, filename, contentType, storageKey, preservation: "READBACK_SHA256" } }, author);
   }
 
   private async resolveSource(source: RegistrationSource, pkg: ModelPackage | null): Promise<{ ast: unknown; sourceFormat: "NATIVE" | "MARKDOWN_IMPORT" | "DOCX_IMPORT"; catalogVersion?: string }> {

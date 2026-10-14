@@ -14,13 +14,16 @@ export interface RegisterModelFormProps {
   onDocxFile?: (file: File | undefined) => void;
   scopeSuggestions?: ScopeFieldsProps["suggestions"];
   showErrors?: boolean;
+  /** Envio de arquivo (DOCX/Markdown) exige a preservação verificada do original; indisponível ⇒ a UI explica e não oferece o envio. Padrão: disponível. */
+  uploadsAvailable?: boolean;
+  uploadsUnavailableReason?: string | null;
 }
 
 /**
  * Registro de um modelo (ex.: "Edital — Pregão Eletrônico — BLL"). A revisão SEMPRE nasce DRAFT — mesmo com aprovação jurídica
  * externa: ainda são necessárias a aprovação humana no sistema e a decisão humana (distinta) de publicar.
  */
-export function RegisterModelForm({ value, onChange, presets, documentKinds, today, hasDocx, onDocxFile, scopeSuggestions, showErrors = false }: RegisterModelFormProps) {
+export function RegisterModelForm({ value, onChange, presets, documentKinds, today, hasDocx, onDocxFile, scopeSuggestions, showErrors = false, uploadsAvailable = true, uploadsUnavailableReason = null }: RegisterModelFormProps) {
   const { errors } = validateRegisterForm(value, hasDocx);
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const set = (patch: Partial<RegisterFormState>) => onChange({ ...value, ...patch });
@@ -77,7 +80,7 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
               Pacote aprovado versionado no servidor
             </label>
           )}
-          {(["AST", "MARKDOWN", "DOCX"] as const).map((k) => <label key={k} className="flex items-center gap-1"><input type="radio" name="reg-source" checked={value.sourceKind === k} onChange={() => set(isPackage ? { sourceKind: k, sourceLogicalVersion: "", sourceSha256: "" } : { sourceKind: k })} />{k === "AST" ? "AST nativo (JSON)" : k === "MARKDOWN" ? "Markdown" : "DOCX"}</label>)}
+          {(["AST", "MARKDOWN", "DOCX"] as const).map((k) => <label key={k} className="flex items-center gap-1"><input type="radio" name="reg-source" disabled={!uploadsAvailable && k !== "AST"} checked={value.sourceKind === k} onChange={() => set(isPackage ? { sourceKind: k, sourceLogicalVersion: "", sourceSha256: "" } : { sourceKind: k })} />{k === "AST" ? "AST nativo (JSON)" : k === "MARKDOWN" ? "Markdown" : "DOCX"}</label>)}
         </div>
         {isPackage ? (
           <div className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm" aria-label="Pacote aprovado versionado no servidor">
@@ -93,7 +96,14 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
         ) : value.sourceKind === "DOCX"
           ? <Input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => onDocxFile?.(e.target.files?.[0])} />
           : <Textarea rows={8} className="font-mono text-xs" value={value.sourceText} aria-label="Conteúdo-fonte" onChange={(e) => set({ sourceText: e.target.value })} />}
+        {!uploadsAvailable && <p role="alert" data-testid="uploads-unavailable" className="text-xs text-destructive">{uploadsUnavailableReason ?? "O envio de arquivos está indisponível: a preservação verificada do original não pôde ser garantida."}</p>}
         {err("source") && <p role="alert" className="text-xs text-destructive">{err("source")}</p>}
+        {!isPackage && (value.sourceKind === "DOCX" || value.sourceKind === "MARKDOWN") && (
+          <p className="text-xs text-muted-foreground" data-testid="upload-note">
+            Arquivo enviado pela sua organização: o servidor calcula o SHA-256 e preserva o original; o conteúdo é tratado como não confiável (HTML cru, links inseguros e variáveis desconhecidas são recusados).
+            O resultado nasce como RASCUNHO de modelo PRÓPRIO — nada é aprovado, publicado ou vinculado automaticamente.
+          </p>
+        )}
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
         {text("sourceLogicalVersion", "Versão lógica da fonte", "ex.: 1.0.1-draft", "text", isPackage)}

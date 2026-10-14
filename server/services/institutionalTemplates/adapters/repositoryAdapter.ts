@@ -15,6 +15,7 @@ import {
 } from "../../../db/institutionalTemplates";
 import { DecisionWriteRaceError, getCurrentDecision, getDecisionByIdempotencyKey, insertDecision, lockDecisionSubject } from "../../../db/institutionalDecisions";
 import { witnessDrift } from "../../../domain/institutionalTemplates/governance/readinessWitness";
+import { TEMPLATE_POLICY_SUBJECT_ID } from "../../../domain/institutionalTemplates/governance/templateGovernanceV2";
 import {
   DuplicateTemplateIdentityError, DuplicateTemplateRevisionError,
   type LifecycleCommit, type LifecycleCommitResult, type PersistenceContext, type TemplateRepositoryPort,
@@ -128,12 +129,13 @@ async function commitLifecycle(c: LifecycleCommit): Promise<LifecycleCommitResul
       // TOCTOU-001: com a linha da revisão TRAVADA (os registros de procedência/evidência também a travam para gravar), relê o estado
       // em que a prontidão foi provada. Divergiu ⇒ nada é gravado (a transação termina sem escrita) e o chamador recebe READINESS_STALE.
       if (c.readinessWitness) {
-        const [prov, legal] = await Promise.all([
+        const [prov, legal, policy] = await Promise.all([
           getCurrentDecision(tx, c.organizationId, "institutional_template.import_provenance", c.before.id),
           getCurrentDecision(tx, c.organizationId, "institutional_template.legal_evidence", c.before.id),
+          getCurrentDecision(tx, c.organizationId, "institutional.policy", TEMPLATE_POLICY_SUBJECT_ID),   // Template Governance V2: política do órgão usada na matriz
         ]);
         const drift = witnessDrift(c.readinessWitness, {
-          revisionSemanticHash: current.semanticHash, provenanceDecisionId: prov?.id ?? null, legalEvidenceDecisionId: legal?.id ?? null,
+          revisionSemanticHash: current.semanticHash, provenanceDecisionId: prov?.id ?? null, legalEvidenceDecisionId: legal?.id ?? null, policyDecisionId: policy?.id ?? null,
         });
         if (drift.length) return { status: "READINESS_STALE", drift };
       }

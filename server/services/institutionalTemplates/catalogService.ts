@@ -9,6 +9,7 @@
  */
 import type { RevisionStatus, TemplateBinding, TemplateDocumentKind, TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates";
 import { IMPORT_PROVENANCE_SUBJECT, decodeImportProvenance } from "../../domain/institutionalTemplates/governance/importProvenance";
+import type { TemplateOrigin } from "../../domain/institutionalTemplates/governance/templateGovernanceV2";
 import { readScope, scopeHeadline, sameScopeView, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import { TemplateWorkflowError } from "./errors";
 import type { TemplateWorkflowPorts, WorkflowContext } from "./ports";
@@ -49,6 +50,12 @@ export interface CatalogRow {
   readonly revisions: readonly { readonly id: string; readonly revision: number; readonly status: RevisionStatus; readonly semanticHash: string }[];
   readonly bindings: readonly CatalogBindingView[];
   readonly bindingStatus: "BOUND" | "NOT_BOUND" | "CONFLICT";
+  /**
+   * Origem do modelo (Template Governance V2): PLATFORM · TENANT · DERIVED, fonte, lineage e arquivo original (SHA-256). `LEGACY_UNCLASSIFIED` = registrado antes da
+   * classificação de origem (nada é presumido); `MALFORMED` = registro de origem ilegível (nunca "meio válido").
+   */
+  readonly origin: TemplateOrigin | null;
+  readonly originState: "RECORDED" | "LEGACY_UNCLASSIFIED" | "MALFORMED" | "NO_PROVENANCE";
   /** Ex.: "Edital — Pregão Eletrônico — BLL / Pregão | Eletrônica | BLL / PUBLISHED revisão 2 (ab12cd34)". */
   readonly headline: string;
 }
@@ -97,10 +104,16 @@ export class TemplateCatalogService {
     });
     // procedência mais recente (da revisão mais nova que a tenha) — só para nome/templateKey/escopo declarado
     let prov: ReturnType<typeof decodeImportProvenance> = null;
+    let origin: TemplateOrigin | null = null;
+    let originState: CatalogRow["originState"] = "NO_PROVENANCE";
     if (this.ports.governance) {
       for (const r of [...revisions].sort((a, b) => b.revision - a.revision)) {
         const list = await this.ports.governance.listGovernanceDecisions(ctx.organizationId, IMPORT_PROVENANCE_SUBJECT, r.id);
-        if (list.length) { prov = decodeImportProvenance(list[list.length - 1]); break; }
+        if (!list.length) continue;
+        const decoded = decodeImportProvenance(list[list.length - 1]);
+        if (!prov) { prov = decoded; originState = decoded ? (decoded.originMalformed ? "MALFORMED" : "LEGACY_UNCLASSIFIED") : "NO_PROVENANCE"; }
+        // a origem é IMUTÁVEL por revisão: vale a da revisão mais nova que a tenha registrado
+        if (decoded?.origin) { origin = decoded.origin; originState = "RECORDED"; break; }
       }
     }
     const own_name = identityDisplayName(identity);
@@ -112,7 +125,7 @@ export class TemplateCatalogService {
       identityId: identity.id, documentKind: identity.documentKind, slug: identity.slug, displayName, displayNameSource, templateKey: prov?.templateKey ?? null,
       declaredScope: prov?.scope ?? {},
       revisions: revisions.map((r) => ({ id: r.id, revision: r.revision, status: r.status, semanticHash: r.semanticHash })),
-      bindings, bindingStatus,
+      bindings, bindingStatus, origin, originState,
     } as const;
     return { ...base, headline: catalogHeadline(base) };
   }

@@ -161,6 +161,11 @@ export interface TemplateGovernancePort {
   recordGovernanceDecision(request: DecisionRequest): Promise<GovernanceCommitResult>;
   /** Histórico completo (v1…corrente) do assunto (= revisão), tenant-scoped. Revisão de outro tenant ⇒ lista vazia. */
   listGovernanceDecisions(organizationId: OrgId, subjectType: DecisionSubjectType, revisionId: string): Promise<readonly InstitutionalDecision[]>;
+  /**
+   * Marco de transição do padrão de política jurídica (registro imutável criado pela migration 0318 no 1º deploy da Governance V2). `null` = indisponível ⇒
+   * o serviço aplica o modo ESTRITO. Ausente no port (testes em memória) ⇒ idem. Somente leitura.
+   */
+  getLegacyPolicyCutover?(): Promise<{ readonly cutoverAt: string } | null>;
 }
 
 /**
@@ -281,6 +286,20 @@ export interface TemplateTransactionPort {
 // ─── Agregações ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Workflow / API (Lane C). */
+/**
+ * Preservação do ARQUIVO ORIGINAL enviado por uma prefeitura (Template Governance V2). Chave endereçada por conteúdo (SHA-256) e escopada por órgão:
+ * `institutional-templates/{org}/originals/{sha256}-{arquivo}`. Nunca base64 em banco.
+ * Contrato: `put` só RESOLVE depois de ler o objeto de volta e confirmar tamanho e SHA-256 (preservação verificada); qualquer falha rejeita ⇒ o registro é
+ * recusado sem criar nada.
+ */
+export interface TemplateOriginalStorePort {
+  put(input: { readonly organizationId: OrgId; readonly sha256: string; readonly filename: string | null; readonly contentType: string; readonly bytes: Buffer }):
+    Promise<{ readonly storageKey: string; readonly verifiedSha256: string; readonly verifiedSizeBytes: number }>;
+  /** Reverificação sob demanda: relê o objeto e recalcula o SHA-256. Só lê chaves do PRÓPRIO órgão. */
+  verify(input: { readonly organizationId: OrgId; readonly storageKey: string; readonly sha256: string }): Promise<OriginalVerification>;
+}
+export type OriginalVerification = { readonly status: "VERIFIED" } | { readonly status: "MISMATCH"; readonly computedSha256: string } | { readonly status: "MISSING" } | { readonly status: "UNAVAILABLE"; readonly message: string } | { readonly status: "FORBIDDEN_KEY" };
+
 export interface TemplateWorkflowPorts {
   readonly repository: TemplateRepositoryPort;
   readonly catalog: VariableCatalogPort;
@@ -295,6 +314,8 @@ export interface TemplateWorkflowPorts {
   readonly capabilities?: TemplateCapabilities;
   /** Prontidão para publicar. Ausente ⇒ publicar revisão de tipo sob `READINESS_GATED_KINDS` falha fechada (`READINESS_UNAVAILABLE`). */
   readonly readiness?: TemplateReadinessPort;
+  /** Armazenamento do arquivo original de modelos enviados pelo órgão. Ausente (armazenamento não configurado) ⇒ envio de arquivo é RECUSADO (`ORIGINAL_STORAGE_UNAVAILABLE`); nunca há conclusão sem preservação. */
+  readonly originals?: TemplateOriginalStorePort;
 }
 
 /** Composição e emissão governadas (Lane B). */

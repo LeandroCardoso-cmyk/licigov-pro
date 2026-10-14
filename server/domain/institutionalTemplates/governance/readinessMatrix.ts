@@ -14,6 +14,7 @@ import { ANY_SECTION } from "./sourceInventory";
 import { buildReadinessWitness, type ReadinessWitness } from "./readinessWitness";
 import type { TemplateCapabilities } from "./capabilities";
 import { evidenceCoversSource, type LegalApprovalEvidence } from "./legalEvidence";
+import { UNRESOLVED_STRICT_EFFECTIVE, type EffectiveTemplateGovernancePolicy, type LegalEvidenceRequirement, type ReadinessLayer } from "./templateGovernanceV2";
 import type { ImportProvenance } from "./importProvenance";
 import { inventoryCounts, inventoryHash, type SourceInventory } from "./sourceInventory";
 
@@ -40,8 +41,20 @@ export const READINESS_CHECK_LABEL: Readonly<Record<ReadinessCheckId, string>> =
   LEGAL_APPROVAL_EVIDENCE: "Evidência de aprovação jurídica externa",
 });
 
+/**
+ * Camada de cada verificação (Template Governance V2). Tudo é `TECHNICAL_TEMPLATE_READINESS` (nunca dispensável) exceto a evidência jurídica prévia, que é
+ * uma exigência INSTITUCIONAL do órgão (`TENANT_TEMPLATE_POLICY`). `DOCUMENT_LEGAL_REVIEW` (controle jurídico dos documentos elaborados) não é verificação de template.
+ */
+export const READINESS_CHECK_LAYER: Readonly<Record<ReadinessCheckId, ReadinessLayer>> = Object.freeze({
+  SOURCE_PROVENANCE: "TECHNICAL_TEMPLATE_READINESS", INPUTS_ACCOUNTED: "TECHNICAL_TEMPLATE_READINESS", CONTROL_ONLY_INPUTS: "TECHNICAL_TEMPLATE_READINESS",
+  CONDITION_TYPES: "TECHNICAL_TEMPLATE_READINESS", ITEMS_BACKING: "TECHNICAL_TEMPLATE_READINESS", TR_EXACT_PIN: "TECHNICAL_TEMPLATE_READINESS",
+  CERTAME_CONFIG: "TECHNICAL_TEMPLATE_READINESS", SOURCE_BACKING: "TECHNICAL_TEMPLATE_READINESS", ANNEX_MAPPING: "TECHNICAL_TEMPLATE_READINESS",
+  XREF_INTEGRITY: "TECHNICAL_TEMPLATE_READINESS", AI_SLOTS: "TECHNICAL_TEMPLATE_READINESS", LEGAL_APPROVAL_EVIDENCE: "TENANT_TEMPLATE_POLICY",
+});
+
 export interface ReadinessCheck {
   readonly id: ReadinessCheckId;
+  readonly layer: ReadinessLayer;
   readonly label: string;
   readonly status: ReadinessStatus;
   readonly detail: string;
@@ -57,6 +70,8 @@ export interface ReadinessMatrix {
   readonly summary: { readonly pass: number; readonly blocked: number; readonly notApplicable: number };
   /** `READY` só quando NENHUMA verificação está BLOCKED. `READY` não publica nada: a publicação é decisão humana. */
   readonly overall: "READY" | "BLOCKED";
+  /** Política de governança de templates aplicada a esta matriz (explicabilidade: por que a evidência jurídica foi, ou não, exigida). */
+  readonly policy: { readonly kind: EffectiveTemplateGovernancePolicy["kind"]; readonly legalEvidence: LegalEvidenceRequirement; readonly decisionId: string | null; readonly malformed: boolean };
   /** Hash determinístico da matriz (sem relógio) — a decisão humana de publicar pode citá-lo. */
   readonly matrixHash: string;
   /** Estado autoritativo em que a matriz foi provada (revalidado dentro da transação de publicação). */
@@ -72,21 +87,26 @@ export interface ReadinessInput {
   /** Inventário reenviado pelo operador (validado em forma por `parseSourceInventory`); `null` = não fornecido. */
   readonly inventory: SourceInventory | null;
   readonly capabilities: TemplateCapabilities;
+  /** Política efetiva do órgão. Ausente ⇒ padrão da plataforma (hoje: evidência jurídica exigida — comportamento anterior preservado). */
+  readonly policy?: EffectiveTemplateGovernancePolicy;
 }
 
 const LIMIT = 25;
 const mk = (id: ReadinessCheckId, status: ReadinessStatus, detail: string, findings: readonly string[] = []): ReadinessCheck =>
-  ({ id, label: READINESS_CHECK_LABEL[id], status, detail, findings: findings.slice(0, LIMIT), findingsTotal: findings.length });
+  ({ id, layer: READINESS_CHECK_LAYER[id], label: READINESS_CHECK_LABEL[id], status, detail, findings: findings.slice(0, LIMIT), findingsTotal: findings.length });
 const blocked = (id: ReadinessCheckId, detail: string, findings: readonly string[] = []) => mk(id, "BLOCKED", detail, findings);
 const NO_INVENTORY = "inventário da fonte não fornecido — não é possível provar este item (reenvie o pacote de proveniência)";
 
 export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
   const { revision, catalog, provenance, legalEvidence: ev, inventory: inv, capabilities } = input;
+  const policy = input.policy ?? UNRESOLVED_STRICT_EFFECTIVE;
+  const legalRequired = policy.policy.legalEvidence === "REQUIRED";
   const facts = analyzeAst(revision.ast, catalog);
   const checks: ReadinessCheck[] = [];
 
   // 1 ─ procedência
   if (!provenance) checks.push(blocked("SOURCE_PROVENANCE", "nenhuma procedência registrada para esta revisão (registre/importe o modelo pelo fluxo de registro)"));
+  else if (provenance.originMalformed) checks.push(blocked("SOURCE_PROVENANCE", "a origem registrada é ilegível ou o arquivo original enviado não tem preservação verificada (chave de armazenamento + SHA-256 por leitura de volta); o modelo não pode ser disponibilizado até a procedência ser refeita"));
   else if (provenance.revisionSemanticHash !== revision.semanticHash) {
     checks.push(blocked("SOURCE_PROVENANCE", "o conteúdo da revisão difere do conteúdo importado (editado após a importação); registre nova procedência assumindo a divergência ou crie nova revisão",
       [`hash na importação: ${provenance.revisionSemanticHash.slice(0, 12)}…`, `hash atual: ${revision.semanticHash.slice(0, 12)}…`]));
@@ -258,16 +278,30 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
     else checks.push(mk("AI_SLOTS", "PASS", `${slotKeys.length} slot(s) de IA delimitados; a IA só atua por solicitação explícita e a saída exige aceite humano exato${capabilities.aiNarrativeProducer ? "" : " (produtor automático de narrativas ainda não existe: as execuções serão informadas por id auditável)"}`));
   }
 
-  // 11 ─ evidência jurídica
-  if (!ev) checks.push(blocked("LEGAL_APPROVAL_EVIDENCE", "nenhuma evidência de aprovação jurídica externa registrada (metadado de governança; não é status do ciclo de vida)"));
-  else if (!provenance) checks.push(blocked("LEGAL_APPROVAL_EVIDENCE", "há evidência, mas não há procedência da fonte para confrontá-la"));
-  else if (!evidenceCoversSource(ev, provenance)) {
-    checks.push(blocked("LEGAL_APPROVAL_EVIDENCE", "a evidência registrada não corresponde à versão lógica/SHA-256 da fonte importada",
-      [`evidência: ${ev.sourceLogicalVersion} · ${ev.sourceSha256.slice(0, 12)}…`, `fonte: ${provenance.sourceLogicalVersion} · ${provenance.sourceSha256.slice(0, 12)}…`]));
-  } else if (ev.revisionSemanticHash !== revision.semanticHash) {
-    checks.push(blocked("LEGAL_APPROVAL_EVIDENCE", "o conteúdo da revisão mudou depois do registro da evidência", [`hash na evidência: ${ev.revisionSemanticHash.slice(0, 12)}…`, `hash atual: ${revision.semanticHash.slice(0, 12)}…`]));
+  // 11 ─ evidência jurídica PRÉVIA do template — camada TENANT_TEMPLATE_POLICY (exigência institucional configurável; nunca presumida nem fabricada).
+  //   REQUIRED (padrão da plataforma hoje): ausente/inválida ⇒ BLOCKED, como antes. OPTIONAL (política expressa do órgão): ausente ⇒ NOT_APPLICABLE; evidência
+  //   registrada que NÃO cobre o conteúdo atual é mostrada como aviso (NOT_APPLICABLE) e NÃO é considerada; evidência válida ⇒ PASS (auditável).
+  const legalProblem = (): { detail: string; findings: string[] } | null => {
+    if (!ev) return { detail: "nenhuma evidência de aprovação jurídica externa registrada (metadado de governança; não é status do ciclo de vida)", findings: [] };
+    if (!provenance) return { detail: "há evidência, mas não há procedência da fonte para confrontá-la", findings: [] };
+    if (!evidenceCoversSource(ev, provenance)) {
+      return { detail: "a evidência registrada não corresponde à versão lógica/SHA-256 da fonte importada",
+        findings: [`evidência: ${ev.sourceLogicalVersion} · ${ev.sourceSha256.slice(0, 12)}…`, `fonte: ${provenance.sourceLogicalVersion} · ${provenance.sourceSha256.slice(0, 12)}…`] };
+    }
+    if (ev.revisionSemanticHash !== revision.semanticHash) {
+      return { detail: "o conteúdo da revisão mudou depois do registro da evidência", findings: [`hash na evidência: ${ev.revisionSemanticHash.slice(0, 12)}…`, `hash atual: ${revision.semanticHash.slice(0, 12)}…`] };
+    }
+    return null;
+  };
+  const legalIssue = legalProblem();
+  if (!legalIssue) {
+    checks.push(mk("LEGAL_APPROVAL_EVIDENCE", "PASS", `evidência v${ev!.version} cobre ${ev!.sourceLogicalVersion} · registrada por usuário ${ev!.recordedByUserId}${ev!.parecerNumber ? ` · parecer ${ev!.parecerNumber}` : " · sem número de parecer informado"}`));
+  } else if (legalRequired) {
+    checks.push(blocked("LEGAL_APPROVAL_EVIDENCE", legalIssue.detail, legalIssue.findings));
   } else {
-    checks.push(mk("LEGAL_APPROVAL_EVIDENCE", "PASS", `evidência v${ev.version} cobre ${ev.sourceLogicalVersion} · registrada por usuário ${ev.recordedByUserId}${ev.parecerNumber ? ` · parecer ${ev.parecerNumber}` : " · sem número de parecer informado"}`));
+    checks.push(mk("LEGAL_APPROVAL_EVIDENCE", "NOT_APPLICABLE",
+      ev ? `política do órgão: evidência jurídica prévia NÃO exigida; a evidência registrada não é considerada porque ${legalIssue.detail}` : "política do órgão: evidência jurídica prévia NÃO exigida para disponibilizar este modelo (a análise jurídica dos documentos elaborados é etapa própria, fora desta matriz)",
+      legalIssue.findings));
   }
 
   const summary = {
@@ -275,7 +309,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
     blocked: checks.filter((c) => c.status === "BLOCKED").length,
     notApplicable: checks.filter((c) => c.status === "NOT_APPLICABLE").length,
   };
-  const matrixHash = templateHash({ v: "tpl-readiness/1", revision: revision.semanticHash, checks: checks.map((c) => [c.id, c.status, c.findingsTotal]) });
+  const matrixHash = templateHash({ v: "tpl-readiness/1", revision: revision.semanticHash, checks: checks.map((c) => [c.id, c.status, c.findingsTotal]), ...(legalRequired ? {} : { legalEvidencePolicy: "OPTIONAL" }) });
   const notices = [
     "A matriz é recalculada pelo servidor na publicação: qualquer BLOCKED impede a publicação (PUBLICATION_BLOCKED) e nenhuma decisão humana a substitui.",
     "PASS/NOT_APPLICABLE não aprovam nem publicam sozinhos: aprovação e publicação seguem como decisões humanas distintas, registradas no ledger institucional.",
@@ -284,7 +318,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessMatrix {
     revisionId: revision.id, revisionSemanticHash: revision.semanticHash, catalogVersion: revision.variableCatalogVersion,
     catalogHash: catalog ? templateHash(catalog) : null, capabilitiesHash: templateHash(capabilities),
     inventoryHash: invUsable ? inventoryHash(invUsable) : null,
-    provenanceDecisionId: provenance?.decisionId ?? null, legalEvidenceDecisionId: ev?.decisionId ?? null, matrixHash,
+    provenanceDecisionId: provenance?.decisionId ?? null, legalEvidenceDecisionId: ev?.decisionId ?? null, policyDecisionId: policy.decisionId, matrixHash,
   });
-  return { revisionId: revision.id, revisionSemanticHash: revision.semanticHash, checks, summary, overall: summary.blocked === 0 ? "READY" : "BLOCKED", matrixHash, witness, notices };
+  return { revisionId: revision.id, revisionSemanticHash: revision.semanticHash, checks, summary, policy: { kind: policy.kind, legalEvidence: policy.policy.legalEvidence, decisionId: policy.decisionId, malformed: policy.malformed }, overall: summary.blocked === 0 ? "READY" : "BLOCKED", matrixHash, witness, notices };
 }

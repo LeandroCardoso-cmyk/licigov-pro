@@ -10,6 +10,7 @@ import type { InstitutionalDecision } from "../../institutionalDecision";
 import { isSha256 } from "../types";
 import { decodeKv, encodeKv } from "./kv";
 import { readScope, SCOPE_DIMENSIONS, type ScopeView } from "./scopeDimensions";
+import { decodeTemplateOrigin, encodeTemplateOrigin, ORIGIN_KEYS, validateTemplateOrigin, type TemplateOrigin } from "./templateGovernanceV2";
 
 export const IMPORT_PROVENANCE_SUBJECT = "institutional_template.import_provenance" as const;
 export const IMPORT_PROVENANCE_DECISION_TYPE = "template_import_provenance" as const;
@@ -19,6 +20,7 @@ const KEYS = [
   "templateKey", "displayName", "sourceLogicalVersion", "sourceSha256", "sourceFormat", "revisionSemanticHash", "recordedAt",
   "inventorySha256", "inputsTotal", "controlOnlyInputs", "conditionTypes",
   "scope.modality", "scope.form", "scope.platform", "scope.regime", "scope.criterion",
+  ...ORIGIN_KEYS,
 ] as const;
 
 export interface ImportProvenanceInput {
@@ -29,6 +31,8 @@ export interface ImportProvenanceInput {
   readonly sourceFormat: string;
   readonly inventory?: { readonly sha256: string; readonly inputsTotal: number; readonly controlOnlyInputs: number; readonly conditionTypes: number };
   readonly scope: ScopeView;
+  /** Origem (ownership/fonte/lineage/original) — Template Governance V2. Opcional: registros legados não a têm. Imutável depois de registrada. */
+  readonly origin?: TemplateOrigin;
 }
 
 export interface ImportProvenance {
@@ -44,6 +48,9 @@ export interface ImportProvenance {
   readonly recordedAt: string;
   readonly inventory: { readonly sha256: string; readonly inputsTotal: number; readonly controlOnlyInputs: number; readonly conditionTypes: number } | null;
   readonly scope: ScopeView;
+  /** `null` = registro legado (sem origem) ou ilegível (`originMalformed`). */
+  readonly origin: TemplateOrigin | null;
+  readonly originMalformed: boolean;
 }
 
 export const TEMPLATE_KEY_RE = /^[A-Z][A-Z0-9_]{2,63}$/;
@@ -55,6 +62,7 @@ export function validateImportProvenanceInput(i: ImportProvenanceInput): { field
   if (i.sourceLogicalVersion.trim() === "" || i.sourceLogicalVersion.length > 64) out.push({ field: "sourceLogicalVersion", message: "versão lógica da fonte obrigatória" });
   if (!isSha256(i.sourceSha256)) out.push({ field: "sourceSha256", message: "SHA-256 da fonte inválido (64 hex minúsculos)" });
   if (i.inventory && !isSha256(i.inventory.sha256)) out.push({ field: "inventory.sha256", message: "SHA-256 do inventário inválido" });
+  if (i.origin) for (const m of validateTemplateOrigin(i.origin)) out.push({ field: `origin.${m.field}`, message: m.message });
   return out;
 }
 
@@ -70,6 +78,7 @@ export function encodeImportProvenance(i: ImportProvenanceInput, ctx: { readonly
   }
   const scope = readScope(i.scope);
   for (const d of SCOPE_DIMENSIONS) if (scope[d] !== undefined) lines.push(encodeKv(`scope.${d}`, scope[d]!));
+  if (i.origin) lines.push(...encodeTemplateOrigin(i.origin));
   return lines;
 }
 
@@ -84,9 +93,10 @@ export function decodeImportProvenance(d: InstitutionalDecision): ImportProvenan
     : null;
   const scope: Partial<Record<(typeof SCOPE_DIMENSIONS)[number], string>> = {};
   for (const dim of SCOPE_DIMENSIONS) { const s = v[`scope.${dim}`]; if (s) scope[dim] = s; }
+  const { origin, malformed: originMalformed } = decodeTemplateOrigin(d.evidence);
   return {
     decisionId: d.id, revisionId: d.subjectId, templateKey: v.templateKey, displayName: v.displayName,
     sourceLogicalVersion: v.sourceLogicalVersion, sourceSha256: v.sourceSha256, sourceFormat: v.sourceFormat,
-    revisionSemanticHash: v.revisionSemanticHash, recordedByUserId: d.recordedByUserId, recordedAt: v.recordedAt, inventory: inv, scope,
+    revisionSemanticHash: v.revisionSemanticHash, recordedByUserId: d.recordedByUserId, recordedAt: v.recordedAt, inventory: inv, scope, origin, originMalformed,
   };
 }

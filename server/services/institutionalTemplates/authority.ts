@@ -10,7 +10,7 @@ import type { HumanActor } from "./ports";
 
 export type TemplateAction =
   | "read" | "preview" | "draft" | "import" | "approve" | "publish" | "deprecate" | "bind" | "review" | "generate" | "govern"
-  | "register" | "evidence";
+  | "register" | "evidence" | "policy";
 
 /** Piso de papel por ação (aplicado no router por `orgRoleProcedure`; reafirmado nos testes). */
 export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>> = Object.freeze({
@@ -31,6 +31,8 @@ export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>>
   // aprovação jurídica externa = piso de aprovar (ato de governança com autoridade declarada, nunca competência validada).
   register: "operator",
   evidence: "manager",
+  // Template Governance V2: estabelecer a política do órgão sobre seus modelos (exigência de evidência jurídica prévia, pisos de aprovação/publicação).
+  policy: "manager",
 });
 
 /** Ações que exigem ator humano autenticado (todas as que mudam estado institucional). */

@@ -1,9 +1,10 @@
 /**
- * Adapter REAL do `TemplateGovernancePort` sobre o ledger institucional EXISTENTE (`institutional_decisions`). Nenhuma tabela
- * nova, nenhum segundo ledger/lock: `lockDecisionSubject` (extensão do mecanismo existente para a revisão do modelo).
+ * Adapter REAL do `TemplateGovernancePort` sobre o ledger institucional EXISTENTE (`institutional_decisions`). Nenhum segundo
+ * ledger/lock (o único dado novo é o marco de transição, somente leitura): `lockDecisionSubject` (extensão do mecanismo existente para a revisão do modelo).
  * Procedência e evidência jurídica são decisões append-only de assunto = revisão exata; NÃO transitam a revisão.
  */
 import { DecisionWriteRaceError, getCurrentDecision, getDecisionByIdempotencyKey, insertDecision, listDecisions, lockDecisionSubject } from "../../../db/institutionalDecisions";
+import { readLegacyPolicyCutover } from "../../../db/templateGovernanceTransition";
 import { TemplatePersistenceError, withTemplatesTransaction } from "../../../db/institutionalTemplates";
 import { DECISION_STALE_REVISION, planDecision } from "../../../domain/institutionalDecision";
 import type { TemplateGovernancePort } from "../ports";
@@ -41,5 +42,6 @@ export function createTemplateGovernanceAdapter(): TemplateGovernancePort {
       }
     },
     listGovernanceDecisions: (org, subjectType, revisionId) => listDecisions(org, subjectType, revisionId),
+    getLegacyPolicyCutover: readLegacyPolicyCutover,
   };
 }

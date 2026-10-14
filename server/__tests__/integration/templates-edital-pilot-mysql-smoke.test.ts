@@ -250,6 +250,7 @@ describe.skipIf(!DB)("Piloto Edital — Lane C (MySQL real, adapters reais)", ()
     const ports = createTemplateWorkflowPorts();
     const wf = new InstitutionalTemplatesWorkflow(ports);
     const r = await register(org, "edital-gate");
+    await conn.execute("UPDATE institutional_template_identities SET created_at_iso = '2026-01-01T00:00:00.000Z' WHERE organization_id = ?", [org]);   // regime anterior (LEGACY_COMPAT): evidência jurídica exigida — este teste prova o gate fail-closed desse regime
     await wf.approve(ctxOf(org), { revisionId: r.revision.id, expectedStatus: "DRAFT", confirm: true, idempotencyKey: key("ap"), decision: decision() });
     const pub = (over: Record<string, unknown> = {}, c = ctxOf(org), w = wf) => w.publish(c, { revisionId: r.revision.id, expectedStatus: "APPROVED", confirm: true, idempotencyKey: key("pb"), decision: decision({ basisReference: "Ato de publicação" }), inventory: SMALL_INV, ...over } as never);
     const snap = async () => ({

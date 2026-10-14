@@ -6743,3 +6743,19 @@ export type InstitutionalTemplateBindingRow = typeof institutionalTemplateBindin
 export type InstitutionalTemplateEventRow = typeof institutionalTemplateEventsTable.$inferSelect;
 export type DocumentCompositionManifestRow = typeof documentCompositionManifestsTable.$inferSelect;
 export type DocumentCompositionReferenceRow = typeof documentCompositionReferencesTable.$inferSelect;
+
+/**
+ * 0318 — Template Governance V2: MARCO DE TRANSIÇÃO do padrão de política jurídica de modelos (registro PLATFORM-LEVEL, imutável).
+ * Criado e semeado UMA vez pela própria migration, no instante efetivo da primeira aplicação (= primeiro deploy da Governance V2). A aplicação só LÊ:
+ * nunca UPDATE/DELETE (guarda estática em `institutional-templates-governance-v2-transition.test.ts`). Órgãos com modelos criados antes do marco são
+ * LEGACY_COMPAT; deploys futuros NÃO o movem (INSERT IGNORE por chave). Sem organization_id: é fato da plataforma, não dado de tenant.
+ */
+export const templateGovernanceTransitionsTable = mysqlTable("template_governance_transitions", {
+  markerKey:    varchar("marker_key", { length: 64 }).notNull().primaryKey(),
+  /** ISO-8601 UTC (mesmo formato de `institutional_template_identities.created_at_iso`). */
+  cutoverAtIso: varchar("cutover_at_iso", { length: 40 }).notNull(),
+  recordedBy:   varchar("recorded_by", { length: 96 }).notNull(),
+  note:         varchar("note", { length: 255 }).notNull().default(""),
+  recordedAt:   datetime("recorded_at", { mode: "string", fsp: 3 }).default(sql`CURRENT_TIMESTAMP(3)`).notNull(),
+});
+export type TemplateGovernanceTransitionRow = typeof templateGovernanceTransitionsTable.$inferSelect;
