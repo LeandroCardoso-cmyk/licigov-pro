@@ -94,3 +94,12 @@ Para legados e externos, o preenchimento de marcos segue a **mesma regra de ouro
 - **Multi-tenant**: registros isolados por departamento.
 - **Replay-safe** (IDs `sha256`): reimportar o mesmo arquivo não cria registros duplicados.
 - **Rastreabilidade**: criação, importação e edição registradas na Timeline (Área 4).
+
+## Promoção a contrato completo (sem alerta duplicado)
+
+Um registro `contrato_externo` (cadastro rápido, já monitorado) pode ser a origem de um contrato vigente no
+Contract Workspace (`registerInForceContract` com `legacyRecordId`). O vínculo grava `reference_type=contract_workspace`
+e o término de vigência existente é **transferido** para o contrato (`vigencia_transferida` → `registro_vinculado_contrato`
+na timeline): os eventos derivados são identificados por `(órgão, tipo, referência, data, offset)`, portanto o mesmo
+vencimento nunca gera alerta em dobro e o KPI de contratos a vencer conta o contrato uma única vez. Aditivo de prazo
+com `newEndDate` reagenda os eventos automáticos (`replaceExpirationEvents`), preservando eventos manuais.

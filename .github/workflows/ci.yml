@@ -287,6 +287,13 @@ jobs:
       - name: Smoke — jornadas integradas (processo novo, legado→aditivo, monitoramento)
         run: pnpm exec vitest run server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts
 
+      # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
+      # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
+      # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem
+      # parecer produzido; contratação direta completa; RBAC, replay e tenant.
+      - name: Smoke — continuidade legado, contratos, aditivos e vigência
+        run: pnpm exec vitest run server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts
+
       # Hotfix — elegibilidade dos candidatos da Pesquisa: legado de importação manual sem revisão + Pesquisa em
       # revisão (5 itens / 30 cotações) ⇒ 0 candidatos; revisão + aprovação + promoção ⇒ EXATAMENTE 5; nova sessão
       # não mistura; rejeição parcial ⇒ 4; manual aprovado por humano ⇒ elegível; tenant.
