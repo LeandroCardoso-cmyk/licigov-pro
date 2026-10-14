@@ -38,6 +38,26 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 - Indicador "contratos vencendo" conta contratos (um por referência, janela de 90 dias), não alertas.
 - Smoke integrado `integrated-journeys-mysql-smoke` (J1 processo novo, J2 legado→contrato→aditivo, J3 monitoramento).
 
+### Progresso por marco (integrador — atualizado após integração de #298–#301, com evidência)
+
+Legenda de evidência: **SMOKE** = MySQL real + IA mock (CI) · **HTTP-LOCAL** = executor oficial `pnpm homolog:e2e` contra o
+MESMO middleware tRPC do servidor (login/cookie/RBAC reais, IA mock, storage em memória) · **STAGING** = execução no staging.
+Homologação visual: **não realizada**.
+
+| Marco | Peso | % | Evidência | Próxima ação / bloqueador |
+|---|---|---|---|---|
+| M0 — Staging e baseline | 10 | 100 | Deploy SUCCESS a cada merge; ledger até 0318; MySQL/S3 próprios; tenant `homologacao-sintetica` | — |
+| M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização; grafo regenerado por merge e idempotente | — |
+| M2 — BLL diferido | 10 | 90 | Minuta BLL Rev. 2 gerada sobre TR emitido: 7 dados "A DEFINIR PARA PUBLICAÇÃO", 0 datas inventadas (SMOKE + HTTP-LOCAL) | Rev. 2 vinculada no tenant sintético do staging; ativação na org real é decisão institucional |
+| M3 — Motor documental | 10 | 90 | Mesmo motor para Edital BLL; mesma exportação/versionamento para DFD/ETP/TR/termos | Pacotes de modelo para os demais tipos |
+| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL) | Rodar em STAGING |
+| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido | Rodar em STAGING |
+| M6 — Contratos/aditivos/direta | 10 | 80 | Reagendamento de vigência, termo DOCX/PDF; contratação direta sem DFD (SMOKE) | Ativação de minuta e pós-parecer pendentes (jurídico) |
+| M7 — Pareceres/monitoramento | 10 | 80 | Calendário/alertas/indicador sem duplicidade (HTTP-LOCAL); pedido de parecer sem parecer fabricado (SMOKE) | Parecer avulso |
+| M8 — Homologação E2E staging | 15 | 50 | Executor completo (A/B/C/ISO) verde em HTTP-LOCAL; guardas de destino/tenant/credencial | Bloqueado: rede da sessão → staging e segredos `HOMOLOG_*` |
+| M9 — Regras/roadmap/integração | 5 | 95 | #298–#301 integrados por squash; conflitos só em artefatos do Graphify (regenerados) | — |
+| **Global ponderado** | 100 | **83,75** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
+
 ### P0 — disponibilização funcional
 - Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) e homologação integrada.
 - Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.
