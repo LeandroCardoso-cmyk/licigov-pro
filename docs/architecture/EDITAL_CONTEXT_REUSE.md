@@ -85,6 +85,17 @@ M1 ≠ emissão oficial, então:
 - Documentos oficiais antigos não são reescritos; manifests sem campo late-bound mantêm hashes idênticos (campos novos só entram quando presentes).
 - Janela residual: a data é fixada em `prepare` (antes da transação); um deadlock-retry reaproveita o mesmo conteúdo preparado.
 
+- **Exportação da minuta**: o DOCX/PDF de RASCUNHO troca o marcador interno por "(data atribuída automaticamente na emissão oficial)"
+  (`displayLateBoundForDraft`, só na apresentação). O rascunho persistido, seu hash e a integridade da emissão não mudam.
+
+### Numeração do processo no Edital (jornada integrada DFD → ETP → TR → Edital)
+
+Os modelos escrevem "Nº {processo.numeroProcesso}/{processo.ano}" (e "Nº {numeroPregao}/{ano}"); o catálogo define o número como
+"único no exercício". Fonte única `processNumberParts` (`domain/institutionalTemplates/processYear.ts`), usada pela preparação e pela
+fonte canônica PROCESS: `AAAA/NNNN` e `NNNN/AAAA` ⇒ exercício + sequência ("2026/253" ⇒ 253/2026; "45/2026" ⇒ 45/2026); outro formato
+⇒ sem exercício (pendência na origem, com a instrução de corrigir o número — nunca "ano corrente"). Exercícios inteiros
+(`EXERCISE_YEAR_VARIABLES`) são renderizados sem separador de milhar ("2026", não "2.026"). Revisões, AST e catálogos publicados não mudam.
+
 ## 2. Auditoria do que é realmente estruturado (provado por código/teste)
 
 - **Processo**: schema só estrutura número, objeto e modalidade (`procurement_processes`).
