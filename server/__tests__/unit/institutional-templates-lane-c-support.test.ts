@@ -83,6 +83,8 @@ describe("matriz de papéis e autoridade humana", () => {
       govern: "manager",
       // piloto Edital: registrar/importar o modelo (operator) e registrar a evidência de aprovação jurídica externa (manager)
       register: "operator", evidence: "manager",
+      // Template Governance V2: estabelecer a política do órgão sobre seus modelos (nunca abaixo de manager)
+      policy: "manager",
     });
     expect(Object.isFrozen(TEMPLATE_ACTION_MIN_ROLE)).toBe(true);
   });

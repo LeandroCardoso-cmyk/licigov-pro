@@ -14,9 +14,13 @@ import { CatalogCard } from "@/components/institutionalTemplates/CatalogCard";
 import { CatalogFilters } from "@/components/institutionalTemplates/CatalogFilters";
 import { TemplateActivationCard } from "@/components/institutionalTemplates/TemplateActivationCard";
 import { RegisterModelForm } from "@/components/institutionalTemplates/RegisterModelForm";
+import { OwnershipTabs } from "@/components/institutionalTemplates/OwnershipTabs";
+import { TemplatePolicyCard } from "@/components/institutionalTemplates/TemplatePolicyCard";
+import { DeriveTemplateForm } from "@/components/institutionalTemplates/DeriveTemplateForm";
 import {
-  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, emptyRegisterForm, hasRoleAtLeast, makeIdempotencyKey, packageSourceOf, scopeFromForm, validateRegisterForm,
-  type CatalogFilterState, type CatalogRowView, type RegisterFormState, type RegistrationPresetView,
+  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, emptyDeriveForm, emptyPolicyForm, filterByOwnership, hasRoleAtLeast, makeIdempotencyKey, ownershipCounts, packageSourceOf,
+  scopeFromForm, validateDeriveForm, validatePolicyForm, emptyRegisterForm, validateRegisterForm,
+  type CatalogFilterState, type CatalogRowView, type DeriveFormState, type OwnershipFilter, type PolicyFormState, type PolicyView, type RegisterFormState, type RegistrationPresetView,
 } from "@/lib/institutionalTemplatesView";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -85,8 +89,56 @@ export default function InstitutionalTemplates() {
     setDocx({ name: file.name, base64: btoa(bin) });
   };
 
+  // ── propriedade/origem dos modelos (plataforma · minha prefeitura · derivados) ──
+  const [ownership, setOwnership] = useState<OwnershipFilter>("ALL");
+  const shownRows = filterByOwnership(rows, ownership);
+  const counts = ownershipCounts((all.data ?? []) as unknown as CatalogRowView[]);
+
+  // ── política do órgão (leitura: qualquer papel; alteração: piso `policy`) ──
+  const policyQuery = trpc.institutionalTemplates.governance.policy.get.useQuery(undefined, { enabled });
+  const policy = policyQuery.data as unknown as PolicyView | undefined;
+  const [polForm, setPolForm] = useState<PolicyFormState | null>(null);
+  const [polKey, setPolKey] = useState(makeIdempotencyKey());
+  const [polErrors, setPolErrors] = useState(false);
+  const recordPolicy = trpc.institutionalTemplates.governance.policy.record.useMutation({
+    onSuccess: () => { toast.success("Política registrada (nova versão; a anterior permanece no histórico)."); setPolForm(null); setPolErrors(false); setPolKey(makeIdempotencyKey()); void policyQuery.refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const submitPolicy = () => {
+    if (!polForm || !policy || !validatePolicyForm(polForm, policy).valid) { setPolErrors(true); return; }
+    recordPolicy.mutate({
+      expectedVersion: policy.version, confirm: true, idempotencyKey: polKey,
+      policy: { legalEvidence: polForm.legalEvidence, approveMinRole: polForm.approveMinRole, publishMinRole: polForm.publishMinRole },
+      decision: { decidedByName: polForm.decision.decidedByName.trim(), decidedByRole: polForm.decision.decidedByRole.trim(), decidedAt: polForm.decision.decidedAt, basisReference: polForm.decision.basisReference.trim(), reason: polForm.decision.reason.trim() },
+    });
+  };
+
+  // ── derivação (a partir de modelo da plataforma OU de revisão decidida do órgão) ──
+  const [derive, setDerive] = useState<{ sourceLabel: string; source: { kind: "PLATFORM_PACKAGE"; modelKey: string } | { kind: "TENANT_REVISION"; revisionId: string } } | null>(null);
+  const [derForm, setDerForm] = useState<DeriveFormState>(emptyDeriveForm(today()));
+  const [derKey, setDerKey] = useState(makeIdempotencyKey());
+  const [derErrors, setDerErrors] = useState(false);
+  const openDerive = (d: NonNullable<typeof derive>, suggestedName: string) => { setDerive(d); setDerForm(emptyDeriveForm(today(), suggestedName)); setDerKey(makeIdempotencyKey()); setDerErrors(false); };
+  const deriveMut = trpc.institutionalTemplates.derivation.derive.useMutation({
+    onSuccess: (r) => {
+      toast.success(r.replayed ? "Esta derivação já existia; nada foi duplicado." : "Modelo derivado criado como rascunho, com lineage registrado.");
+      void utils.institutionalTemplates.catalog.list.invalidate(); setDerive(null);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const submitDerive = () => {
+    if (!derive || !validateDeriveForm(derForm).valid) { setDerErrors(true); return; }
+    deriveMut.mutate({
+      source: derive.source, slug: derForm.slug.trim(), displayName: derForm.displayName.trim(), ...(derForm.declaredAuthor.trim() ? { declaredAuthor: derForm.declaredAuthor.trim() } : {}),
+      confirm: true, idempotencyKey: derKey,
+      decision: { decidedByName: derForm.decision.decidedByName.trim(), decidedByRole: derForm.decision.decidedByRole.trim(), decidedAt: derForm.decision.decidedAt, basisReference: derForm.decision.basisReference.trim(), reason: derForm.decision.reason.trim() },
+    });
+  };
+  const platformPresets = ((caps.data?.registrationPresets ?? []) as unknown as RegistrationPresetView[]).filter((p) => p.sourceKind === "MODEL_PACKAGE");
+
   const canCreate = hasRoleAtLeast(caps.data?.role, caps.data?.roleFloors?.draft);
   const canRegister = hasRoleAtLeast(caps.data?.role, caps.data?.roleFloors?.register);
+  const canPolicy = hasRoleAtLeast(caps.data?.role, (caps.data?.roleFloors as Record<string, string> | undefined)?.policy);
 
   return (
     <PageShell
@@ -114,12 +166,31 @@ export default function InstitutionalTemplates() {
         </Card>
       ) : (
         <div className="space-y-4">
+          {policy && (
+            <TemplatePolicyCard policy={policy} canEdit={canPolicy} form={polForm} showErrors={polErrors} pending={recordPolicy.isPending}
+              onOpen={() => { setPolForm(emptyPolicyForm(policy.policy, today())); setPolKey(makeIdempotencyKey()); setPolErrors(false); }}
+              onChange={setPolForm} onCancel={() => { setPolForm(null); setPolErrors(false); }} onSubmit={submitPolicy} />
+          )}
+          {canRegister && platformPresets.length > 0 && (
+            <Card aria-label="Modelos da plataforma">
+              <CardHeader>
+                <CardTitle className="text-base">Modelos da plataforma</CardTitle>
+                <CardDescription>Você não é obrigado a usá-los: pode registrar o seu próprio modelo ou derivar (adaptar) um da plataforma. A derivada é do seu órgão, com versões independentes.</CardDescription>
+              </CardHeader>
+              <div className="flex flex-wrap gap-2 p-6 pt-0">
+                {platformPresets.map((p) => (
+                  <Button key={p.presetId} size="sm" variant="outline" onClick={() => openDerive({ sourceLabel: `Modelo da plataforma: ${p.displayName}`, source: { kind: "PLATFORM_PACKAGE", modelKey: p.templateKey } }, p.displayName)}>Derivar: {p.displayName}</Button>
+                ))}
+              </div>
+            </Card>
+          )}
+          <OwnershipTabs value={ownership} counts={counts} onChange={setOwnership} />
           <CatalogFilters value={filter} onChange={setFilter} documentKinds={caps.data?.documentKinds ?? []} options={options} />
-          {list.isLoading ? <PageLoader /> : rows.length === 0 ? (
+          {list.isLoading ? <PageLoader /> : shownRows.length === 0 ? (
             <EmptyState icon={LibraryBig} title="Nenhum modelo institucional" description={Object.keys(apiFilter).length ? "Nenhum modelo corresponde aos filtros." : "Registre um modelo (nasce como rascunho) ou crie um modelo vazio e, em seguida, a primeira revisão."}
               action={canCreate ? { label: "Novo modelo", onClick: () => setOpen(true) } : undefined} />
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.map((r) => <CatalogCard key={r.identityId} row={r} />)}</div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{shownRows.map((r) => <CatalogCard key={r.identityId} row={r} onDerive={canRegister ? (row, revisionId) => openDerive({ sourceLabel: `Modelo: ${row.displayName} (revisão ${row.revisions.find((x) => x.id === revisionId)?.revision ?? "?"})`, source: { kind: "TENANT_REVISION", revisionId } }, row.displayName) : undefined} />)}</div>
           )}
         </div>
       )}
@@ -157,6 +228,16 @@ export default function InstitutionalTemplates() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRegOpen(false)}>Cancelar</Button>
             <Button disabled={register.isPending} onClick={submitRegister}>Registrar como rascunho</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={derive !== null} onOpenChange={(o) => { if (!o) setDerive(null); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Derivar modelo</DialogTitle><DialogDescription>Cria uma cópia adaptável no seu órgão, como rascunho.</DialogDescription></DialogHeader>
+          {derive && <DeriveTemplateForm sourceLabel={derive.sourceLabel} value={derForm} onChange={setDerForm} showErrors={derErrors} />}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDerive(null)}>Cancelar</Button>
+            <Button disabled={deriveMut.isPending} onClick={submitDerive}>Criar derivada como rascunho</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

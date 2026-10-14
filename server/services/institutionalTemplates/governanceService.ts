@@ -21,6 +21,10 @@ import {
   validateImportProvenanceInput, type ImportProvenance, type ImportProvenanceInput,
 } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { decodeKv } from "../../domain/institutionalTemplates/governance/kv";
+import {
+  decodeTemplateGovernancePolicy, encodeTemplateGovernancePolicy, originChangeIssue, resolveEffectiveTemplateGovernancePolicy, TEMPLATE_POLICY_SUBJECT_ID,
+  validateTemplateGovernancePolicy, type EffectiveTemplateGovernancePolicy, type TemplateGovernancePolicy,
+} from "../../domain/institutionalTemplates/governance/templateGovernanceV2";
 import { serviceLogger } from "../observabilityService";
 import { assertHumanActor } from "./authority";
 import { TemplateWorkflowError } from "./errors";
@@ -56,6 +60,22 @@ export interface RevisionGovernanceView {
   readonly malformedRecords: number;
   readonly lifecycleNote: string;
 }
+
+export interface TemplatePolicyVersionView {
+  readonly version: number;
+  readonly decisionId: string;
+  readonly policy: TemplateGovernancePolicy | null;
+  readonly declaredBy: { readonly name: string; readonly role: string };
+  readonly actDate: string;
+  readonly basisReference: string;
+  readonly reason: string;
+  readonly recordedByUserId: number;
+}
+export interface TemplatePolicyView extends EffectiveTemplateGovernancePolicy {
+  readonly history: readonly TemplatePolicyVersionView[];
+  readonly note: string;
+}
+const POLICY_NOTE = "A política define o que o órgão exige para DISPONIBILIZAR um modelo no catálogo interno de elaboração. Não publica documento oficial e não substitui a análise jurídica dos documentos elaborados (etapa própria da Procuradoria).";
 
 const LIFECYCLE_NOTE = "Evidência jurídica e procedência são metadados de governança: não alteram o status da revisão nem substituem a aprovação e a publicação humanas no sistema.";
 
@@ -117,6 +137,10 @@ export class TemplateGovernanceService {
     const revision = await this.revision(ctx, input.revisionId);
     const issues = validateImportProvenanceInput(input.provenance);
     if (issues.length) throw new TemplateWorkflowError("VALIDATION_FAILED", "procedência inválida", issues.map((i) => ({ code: "PROVENANCE_INVALID", path: i.field, message: i.message })));
+    // Origem IMUTÁVEL: uma nova versão da procedência só repete a origem registrada (ou classifica um registro legado que não a tinha).
+    const priorProv = (await this.gov().listGovernanceDecisions(ctx.organizationId, IMPORT_PROVENANCE_SUBJECT, revision.id)).map(decodeImportProvenance).filter((p): p is ImportProvenance => p !== null).pop() ?? null;
+    const originProblem = originChangeIssue(priorProv?.origin ?? null, input.provenance.origin ?? null);
+    if (originProblem) throw new TemplateWorkflowError("VALIDATION_FAILED", originProblem, [{ code: "ORIGIN_IMMUTABLE", path: "origin", message: originProblem }]);
     const recordedAt = await this.recordedAtFor(ctx, IMPORT_PROVENANCE_SUBJECT, revision.id, input.idempotencyKey);
     const lines = encodeImportProvenance(input.provenance, { revisionSemanticHash: revision.semanticHash, recordedAt });
     const { decision, replayed } = await this.commit(ctx, {
@@ -126,6 +150,39 @@ export class TemplateGovernanceService {
     if (!decoded) throw new TemplateWorkflowError("VALIDATION_FAILED", "a procedência gravada não pôde ser reconstruída (registro inconsistente)");
     log.info("template_import_provenance_recorded", { organizationId: ctx.organizationId, revisionId: revision.id, decisionId: decision.id, version: decision.revision, replayed, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId });
     return { provenance: decoded, replayed };
+  }
+
+  /** Política de governança de templates do órgão (Template Governance V2). Ausente ⇒ padrão da plataforma; corrente ilegível ⇒ padrão ESTRITO. Só leitura. */
+  async getTemplatePolicy(ctx: WorkflowContext): Promise<TemplatePolicyView> {
+    const history = this.ports.governance ? await this.ports.governance.listGovernanceDecisions(ctx.organizationId, "institutional.policy", TEMPLATE_POLICY_SUBJECT_ID) : [];
+    const effective = resolveEffectiveTemplateGovernancePolicy(history);
+    return {
+      ...effective, note: POLICY_NOTE,
+      history: history.map((d) => ({
+        version: d.revision, decisionId: d.id, policy: decodeTemplateGovernancePolicy(d), declaredBy: { name: d.decidedByName, role: d.decidedByRole },
+        actDate: d.decidedAt, basisReference: d.basisReference, reason: d.reason, recordedByUserId: d.recordedByUserId,
+      })),
+    };
+  }
+
+  /**
+   * Estabelece (ou supera) a política do órgão. Só ator HUMANO, com confirmação, autoridade declarada, justificativa e CAS pela versão vista; append-only
+   * (a anterior permanece). O piso de papel para aprovar/publicar só pode ser elevado (≥ manager). Nada é presumido: sem este ato vale o padrão da plataforma.
+   */
+  async recordTemplatePolicy(ctx: WorkflowContext, input: GovernanceWriteInput & { policy: TemplateGovernancePolicy }): Promise<{ policy: TemplatePolicyView; replayed: boolean }> {
+    assertHumanActor(ctx.actor);
+    this.requireConfirmation(input.confirm, "estabelecer a política de governança de modelos");
+    const issues = validateTemplateGovernancePolicy(input.policy);
+    if (issues.length) throw new TemplateWorkflowError("VALIDATION_FAILED", "política inválida", issues.map((i) => ({ code: "POLICY_INVALID", path: i.field, message: i.message })));
+    const { decision, replayed } = await this.commit(ctx, {
+      subjectType: "institutional.policy", decisionType: "institutional_policy", outcome: "estabelecida", revisionId: TEMPLATE_POLICY_SUBJECT_ID,
+      input, evidenceLines: encodeTemplateGovernancePolicy(input.policy),
+    });
+    log.info("template_governance_policy_recorded", {
+      organizationId: ctx.organizationId, decisionId: decision.id, version: decision.revision, replayed, legalEvidence: input.policy.legalEvidence,
+      approveMinRole: input.policy.approveMinRole, publishMinRole: input.policy.publishMinRole, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId,
+    });
+    return { policy: await this.getTemplatePolicy(ctx), replayed };
   }
 
   /**
@@ -147,7 +204,7 @@ export class TemplateGovernanceService {
   }
 
   private async commit(ctx: WorkflowContext, a: {
-    subjectType: DecisionSubjectType; decisionType: "template_legal_approval_evidence" | "template_import_provenance"; outcome: "registrado";
+    subjectType: DecisionSubjectType; decisionType: "template_legal_approval_evidence" | "template_import_provenance" | "institutional_policy"; outcome: "registrado" | "estabelecida";
     revisionId: string; input: GovernanceWriteInput; evidenceLines: readonly string[];
   }): Promise<{ decision: InstitutionalDecision; replayed: boolean }> {
     const d = a.input.decision;

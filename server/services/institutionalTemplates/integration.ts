@@ -9,6 +9,8 @@ import { createCanonicalReferenceAdapter } from "./adapters/canonicalAdapter";
 import { createTemplateDraftAdapter } from "./adapters/draftAdapter";
 import { createTemplateGovernanceAdapter } from "./adapters/governanceAdapter";
 import { createTemplateManifestAdapter } from "./adapters/manifestAdapter";
+import { createTemplateOriginalStoreAdapter } from "./adapters/originalStoreAdapter";
+import { isStorageConfigured } from "../../storage";
 import { createPreviewCompositionPort } from "./adapters/previewAdapter";
 import { createTemplateRepositoryAdapter } from "./adapters/repositoryAdapter";
 import { createTemplateReviewAdapter } from "./adapters/reviewAdapter";
@@ -34,7 +36,8 @@ export function createTemplateWorkflowPorts(): TemplateWorkflowPorts {
     ids: randomIds,
   };
   // prontidão para publicar: mesmo estado autoritativo (repositório + ledger + catálogo + capacidades), sem segunda authority
-  return { ...base, readiness: createTemplateReadinessPort(base) };
+  const withStore: TemplateWorkflowPorts = isStorageConfigured() ? { ...base, originals: createTemplateOriginalStoreAdapter() } : base;
+  return { ...withStore, readiness: createTemplateReadinessPort(withStore) };
 }
 
 export function createTemplateCompositionPorts(): TemplatePorts {

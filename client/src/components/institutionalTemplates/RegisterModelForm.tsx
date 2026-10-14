@@ -94,6 +94,12 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
           ? <Input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => onDocxFile?.(e.target.files?.[0])} />
           : <Textarea rows={8} className="font-mono text-xs" value={value.sourceText} aria-label="Conteúdo-fonte" onChange={(e) => set({ sourceText: e.target.value })} />}
         {err("source") && <p role="alert" className="text-xs text-destructive">{err("source")}</p>}
+        {!isPackage && (value.sourceKind === "DOCX" || value.sourceKind === "MARKDOWN") && (
+          <p className="text-xs text-muted-foreground" data-testid="upload-note">
+            Arquivo enviado pela sua organização: o servidor calcula o SHA-256 e preserva o original; o conteúdo é tratado como não confiável (HTML cru, links inseguros e variáveis desconhecidas são recusados).
+            O resultado nasce como RASCUNHO de modelo PRÓPRIO — nada é aprovado, publicado ou vinculado automaticamente.
+          </p>
+        )}
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
         {text("sourceLogicalVersion", "Versão lógica da fonte", "ex.: 1.0.1-draft", "text", isPackage)}

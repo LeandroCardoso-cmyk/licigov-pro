@@ -26,10 +26,12 @@ import { TemplateCatalogService } from "../services/institutionalTemplates/catal
 import { TemplateGovernanceService } from "../services/institutionalTemplates/governanceService";
 import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../services/institutionalTemplates/modelRegistrationService";
 import { TemplatePreviewDossierService } from "../services/institutionalTemplates/previewDossierService";
+import { TemplateDerivationService } from "../services/institutionalTemplates/templateDerivationService";
 import { TemplateReadinessService } from "../services/institutionalTemplates/readinessService";
 import { INTEGRATED_CAPABILITIES } from "../domain/institutionalTemplates/governance/capabilities";
 import { READINESS_CHECK_IDS } from "../domain/institutionalTemplates/governance/readinessMatrix";
 import { SCOPE_DIMENSIONS, SCOPE_DIMENSION_LABEL, SCOPE_VOCABULARY } from "../domain/institutionalTemplates/governance/scopeDimensions";
+import { roleMeetsFloor } from "../domain/institutionalTemplates/governance/templateGovernanceV2";
 
 
 const KINDS = TEMPLATE_DOCUMENT_KINDS as readonly [TemplateDocumentKind, ...TemplateDocumentKind[]];
@@ -93,6 +95,10 @@ const legalEvidenceInput = z.object({
     evidenceRefs: z.array(z.string().min(1).max(480)).max(20).optional(),
   }).strict(),
 }).strict();
+const templatePolicyInput = z.object({
+  expectedVersion: z.number().int().min(0).max(100000), confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+  policy: z.object({ legalEvidence: z.enum(["REQUIRED", "OPTIONAL"]), approveMinRole: z.enum(["manager", "owner"]), publishMinRole: z.enum(["manager", "owner"]) }).strict(),
+}).strict();
 const inventoryInput = z.unknown().refine((v) => { try { return JSON.stringify(v).length <= 1024 * 1024; } catch { return false; } }, "inventário acima do limite");
 const registerInput = z.object({
   target: z.discriminatedUnion("kind", [
@@ -106,7 +112,16 @@ const registerInput = z.object({
     z.object({ kind: z.literal("MARKDOWN"), markdown: z.string().max(IMPORT_LIMITS.maxMarkdownChars), filename: z.string().max(255).optional() }).strict(),
     z.object({ kind: z.literal("DOCX"), docxBase64: z.string().max(Math.ceil((IMPORT_LIMITS.maxDocxBytes * 4) / 3) + 8), filename: z.string().max(255).optional() }).strict(),
   ]),
-  sourceLogicalVersion: z.string().min(1).max(64), sourceSha256: sha64, inventory: inventoryInput.optional(),
+  sourceLogicalVersion: z.string().min(1).max(64), sourceSha256: sha64, inventory: inventoryInput.optional(), declaredAuthor: z.string().min(1).max(160).regex(/^[^\r\n]+$/).optional(),
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+}).strict();
+const deriveInput = z.object({
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("TENANT_REVISION"), revisionId: id }).strict(),
+    z.object({ kind: z.literal("PLATFORM_PACKAGE"), modelKey: z.string().min(3).max(64) }).strict(),
+  ]),
+  slug: z.string().min(1).max(120), displayName: z.string().min(1).max(200), declaredScope: scope.optional(),
+  declaredAuthor: z.string().min(1).max(160).regex(/^[^\r\n]+$/).optional(),
   confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
 }).strict();
 const previewContext = z.object({ scope, sampleValues }).strict();
@@ -160,7 +175,7 @@ function trpcCode(code: TemplateWorkflowErrorCode): TRPCError["code"] {
     case "VALIDATION_FAILED": case "IMPORT_REJECTED": case "DECISION_REJECTED": case "BINDING_NOT_PINNED": case "SCOPE_INVALID": case "SCOPE_DIMENSION_UNSUPPORTED": return "BAD_REQUEST";
     case "CONFLICT": case "REVISION_IMMUTABLE": case "TRANSITION_INVALID": case "STALE_STATE": case "BINDING_AMBIGUOUS":
     case "BINDING_NOT_PUBLISHED": case "REVISION_PINNED_BY_BINDING": case "READINESS_STALE": return "CONFLICT";
-    case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": case "PUBLICATION_BLOCKED": case "READINESS_UNAVAILABLE": return "PRECONDITION_FAILED";
+    case "ORIGINAL_STORAGE_FAILED": case "MODULE_DISABLED": case "PORTS_NOT_CONFIGURED": case "CONFIRMATION_REQUIRED": case "PUBLICATION_BLOCKED": case "READINESS_UNAVAILABLE": return "PRECONDITION_FAILED";
     default: return "INTERNAL_SERVER_ERROR";
   }
 }
@@ -193,6 +208,14 @@ function templatesProcedure(action: TemplateAction) {
     const wctx: WorkflowContext = {
       organizationId: ctx.organizationId!, actor: { kind: "human", userId: ctx.user.id }, correlationId: ctx.correlationId ?? "",
     };
+    // Template Governance V2: a política do órgão pode ELEVAR (nunca reduzir) o piso de papel para aprovar/publicar modelos próprios.
+    if (action === "approve" || action === "publish") {
+      const effective = await guarded(() => new TemplateGovernanceService(getTemplateWorkflowPorts()).getTemplatePolicy(wctx));
+      const floor = action === "approve" ? effective.policy.approveMinRole : effective.policy.publishMinRole;
+      if (!roleMeetsFloor(ctx.orgMembership?.role, floor)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: `A política de governança de modelos deste órgão exige papel ${floor} (ou superior) para ${action === "approve" ? "aprovar" : "publicar"} modelos.` });
+      }
+    }
     return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts() } });
   });
 }
@@ -273,6 +296,12 @@ export const institutionalTemplatesRouter = router({
       .query(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).get(ctx.wctx, input.revisionId))),
     recordLegalEvidence: templatesProcedure("evidence").input(legalEvidenceInput)
       .mutation(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordLegalEvidence(ctx.wctx, input))),
+    /** Template Governance V2 — política do órgão sobre seus modelos (tenant-scoped; o órgão vem do contexto autenticado, nunca do cliente). */
+    policy: router({
+      get: templatesProcedure("read").query(({ ctx }) => guarded(() => new TemplateGovernanceService(ctx.ports).getTemplatePolicy(ctx.wctx))),
+      record: templatesProcedure("policy").input(templatePolicyInput)
+        .mutation(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordTemplatePolicy(ctx.wctx, input))),
+    }),
   }),
 
   /** Registro/importação do modelo: cria (ou reutiliza) a identidade, uma revisão DRAFT e a procedência. Nunca aprova nem publica. */
@@ -282,6 +311,15 @@ export const institutionalTemplatesRouter = router({
         ...input,
         source: input.source.kind === "DOCX" ? { kind: "DOCX", docx: Buffer.from(input.source.docxBase64, "base64"), filename: input.source.filename } : input.source,
       }))),
+  }),
+
+  /**
+   * Template Governance V2 — DERIVAÇÃO: a prefeitura adapta um modelo da plataforma ou um modelo próprio (nova identidade DRAFT no MESMO órgão, lineage preservado).
+   * Mesmo piso de `register` (operator); nunca aprova/publica/vincula; a origem de outro tenant é indistinguível de inexistente.
+   */
+  derivation: router({
+    derive: templatesProcedure("register").input(deriveInput)
+      .mutation(({ ctx, input }) => guarded(() => new TemplateDerivationService(ctx.ports).derive(ctx.wctx, input))),
   }),
 
   /** Matriz de prontidão (só leitura). Na publicação o servidor a RECALCULA e qualquer BLOCKED impede publicar. */

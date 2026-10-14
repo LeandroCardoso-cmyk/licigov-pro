@@ -281,6 +281,14 @@ export interface TemplateTransactionPort {
 // ─── Agregações ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Workflow / API (Lane C). */
+/**
+ * Preservação do ARQUIVO ORIGINAL enviado por uma prefeitura (Template Governance V2). Chave endereçada por conteúdo (SHA-256) e escopada por órgão:
+ * `institutional-templates/{org}/originals/{sha256}-{arquivo}`. Nunca base64 em banco. Falha ⇒ o registro é recusado sem criar nada.
+ */
+export interface TemplateOriginalStorePort {
+  put(input: { readonly organizationId: OrgId; readonly sha256: string; readonly filename: string | null; readonly contentType: string; readonly bytes: Buffer }): Promise<{ readonly storageKey: string }>;
+}
+
 export interface TemplateWorkflowPorts {
   readonly repository: TemplateRepositoryPort;
   readonly catalog: VariableCatalogPort;
@@ -295,6 +303,8 @@ export interface TemplateWorkflowPorts {
   readonly capabilities?: TemplateCapabilities;
   /** Prontidão para publicar. Ausente ⇒ publicar revisão de tipo sob `READINESS_GATED_KINDS` falha fechada (`READINESS_UNAVAILABLE`). */
   readonly readiness?: TemplateReadinessPort;
+  /** Armazenamento do arquivo original de modelos enviados pelo órgão. Ausente (armazenamento não configurado) ⇒ o registro grava `storageKey = null` de forma EXPLÍCITA. */
+  readonly originals?: TemplateOriginalStorePort;
 }
 
 /** Composição e emissão governadas (Lane B). */

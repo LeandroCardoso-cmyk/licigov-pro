@@ -41,10 +41,12 @@ export class TemplateReadinessService {
       inventory = buildSourceInventory({ mapping: pkg.mapping, catalog: pkg.catalog, sourceLogicalVersion: pkg.provenance.sourceLogicalVersion, sourceSha256: pkg.provenance.sourceSha256 });
       derivedFromPackage = true;
     }
+    // Template Governance V2: a política do órgão decide se a evidência jurídica prévia é exigida (padrão da plataforma = exigida, comportamento anterior).
+    const policy = this.ports.governance ? await governance.getTemplatePolicy(ctx) : undefined;
     const matrix = evaluateReadiness({
       revision, catalog: this.ports.catalog.byVersion(revision.variableCatalogVersion),
       provenance: gov?.provenance ?? null, legalEvidence: gov?.legalEvidence ?? null, inventory,
-      capabilities: this.ports.capabilities ?? INTEGRATED_CAPABILITIES,
+      capabilities: this.ports.capabilities ?? INTEGRATED_CAPABILITIES, ...(policy ? { policy } : {}),
     });
     return { matrix, inventory: { supplied: input.inventory !== undefined, derivedFromPackage, shapeIssues }, revision: { id: revision.id, revision: revision.revision, status: revision.status, semanticHash: revision.semanticHash } };
   }

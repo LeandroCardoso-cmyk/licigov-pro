@@ -256,6 +256,8 @@ export interface CatalogRowView {
   readonly templateKey: string | null; readonly declaredScope: ScopeLike; readonly headline: string; readonly bindingStatus: "BOUND" | "NOT_BOUND" | "CONFLICT";
   readonly revisions: readonly { id: string; revision: number; status: RevisionStatus; semanticHash: string }[];
   readonly bindings: readonly { bindingId: string; active: boolean; scope: ScopeLike; scopeHeadline: string; pinnedRevisionId: string | null; pinnedRevision: number | null; pinnedRevisionStatus: RevisionStatus | null; pinnedSemanticHash: string | null; health: BindingHealth; effectiveFrom: string }[];
+  /** Template Governance V2: origem registrada (ausente em servidores anteriores ⇒ sem procedência). */
+  readonly origin?: OriginView | null; readonly originState?: OriginStateKey;
 }
 export interface CatalogFilterState { documentKind: string; modality: string; form: string; platform: string; status: string }
 export const EMPTY_CATALOG_FILTER: CatalogFilterState = { documentKind: "", modality: "", form: "", platform: "", status: "" };
@@ -284,7 +286,9 @@ export const READINESS_STATUS_LABEL: Record<ReadinessStatusKey, { label: string;
 export interface ReadinessMatrixView {
   readonly revisionId: string; readonly revisionSemanticHash: string; readonly overall: "READY" | "BLOCKED"; readonly matrixHash: string;
   readonly summary: { pass: number; blocked: number; notApplicable: number }; readonly notices: readonly string[];
-  readonly checks: readonly { id: string; label: string; status: ReadinessStatusKey; detail: string; findings: readonly string[]; findingsTotal: number }[];
+  readonly checks: readonly { id: string; label: string; status: ReadinessStatusKey; detail: string; findings: readonly string[]; findingsTotal: number; layer?: ReadinessLayerKey }[];
+  /** Política efetiva do órgão aplicada a esta matriz (Template Governance V2). Ausente em servidores anteriores ⇒ tratado como padrão da plataforma. */
+  readonly policy?: { kind: "PLATFORM_DEFAULT" | "TENANT_DEFINED"; legalEvidence: LegalEvidenceRequirementKey; decisionId: string | null; malformed: boolean };
 }
 export function readinessHeadline(m: ReadinessMatrixView): string {
   return m.overall === "READY"
@@ -390,4 +394,116 @@ export function replaceableBinding<B extends BindingLike>(bindings: readonly B[]
   const norm = (s: ScopeLike, k: (typeof dims)[number]) => (s as Record<string, string | null | undefined>)[k] ?? "";
   const hits = bindings.filter((b) => b.active && b.documentKind === documentKind && dims.every((k) => norm(b.scope, k) === norm(scope, k)));
   return hits.length === 1 ? hits[0] : null;
+}
+
+
+// ─── Template Governance V2: origem, política do órgão, camadas de prontidão, derivação ────────────────────────────────
+
+export type ReadinessLayerKey = "TECHNICAL_TEMPLATE_READINESS" | "TENANT_TEMPLATE_POLICY" | "DOCUMENT_LEGAL_REVIEW";
+export type LegalEvidenceRequirementKey = "REQUIRED" | "OPTIONAL";
+
+export const READINESS_LAYER_LABEL: Record<ReadinessLayerKey, { title: string; hint: string }> = {
+  TECHNICAL_TEMPLATE_READINESS: { title: "Prontidão técnica do modelo", hint: "Estrutura, variáveis, procedência e inventário do modelo. Sempre exigida para disponibilizar o modelo." },
+  TENANT_TEMPLATE_POLICY: { title: "Política do órgão sobre seus modelos", hint: "O que a sua organização decidiu exigir antes de disponibilizar um modelo no catálogo interno." },
+  DOCUMENT_LEGAL_REVIEW: { title: "Análise jurídica do documento elaborado", hint: "Etapa própria da Procuradoria, na fase institucional adequada. Não é verificada aqui." },
+};
+const LAYER_ORDER: readonly ReadinessLayerKey[] = ["TECHNICAL_TEMPLATE_READINESS", "TENANT_TEMPLATE_POLICY", "DOCUMENT_LEGAL_REVIEW"];
+
+/** Agrupa as verificações por camada (ordem fixa; camada sem verificações é omitida). Servidor sem `layer` ⇒ tudo na camada técnica. */
+export function groupChecksByLayer(m: ReadinessMatrixView): { layer: ReadinessLayerKey; title: string; hint: string; checks: ReadinessMatrixView["checks"] }[] {
+  return LAYER_ORDER
+    .map((layer) => ({ layer, ...READINESS_LAYER_LABEL[layer], checks: m.checks.filter((c) => (c.layer ?? "TECHNICAL_TEMPLATE_READINESS") === layer) }))
+    .filter((g) => g.checks.length > 0);
+}
+
+/** Explica, em linguagem simples, por que a evidência jurídica pode (ou não) bloquear — nunca presume aprovação. */
+export function legalPolicyExplanation(policy: ReadinessMatrixView["policy"] | undefined): string {
+  if (!policy || policy.legalEvidence === "REQUIRED") {
+    return policy?.malformed
+      ? "A política registrada pelo órgão está ilegível; vale o padrão ESTRITO (evidência jurídica obrigatória) até que seja restabelecida."
+      : policy?.kind === "TENANT_DEFINED"
+        ? "Sua organização exige evidência de análise jurídica prévia para disponibilizar o modelo."
+        : "Padrão da plataforma: a evidência de análise jurídica prévia é exigida. O órgão pode definir outra política (gerentes).";
+  }
+  return "Sua organização definiu a evidência jurídica como OPCIONAL: sem ela o modelo pode ser disponibilizado no catálogo interno. Se houver evidência registrada e válida, ela continua auditável. A análise jurídica do documento elaborado permanece com a Procuradoria.";
+}
+
+export type OwnershipKey = "PLATFORM" | "TENANT" | "DERIVED";
+export interface OriginView {
+  readonly ownership: OwnershipKey; readonly source: "PLATFORM_CATALOG" | "TENANT_UPLOAD" | "TENANT_AUTHORED";
+  readonly lineage: ({ kind: "PLATFORM_PACKAGE"; packageKey: string; packageVersion: string; sourceSha256: string } | { kind: "TENANT_REVISION"; identityId: string; revisionId: string; semanticHash: string }) | null;
+  readonly original: { sha256: string; sizeBytes: number; filename: string; storageKey: string | null } | null; readonly declaredAuthor: string | null;
+}
+export type OriginStateKey = "RECORDED" | "LEGACY_UNCLASSIFIED" | "MALFORMED" | "NO_PROVENANCE";
+
+export const OWNERSHIP_LABEL: Record<OwnershipKey, string> = { PLATFORM: "Modelo da plataforma", TENANT: "Modelo próprio", DERIVED: "Modelo derivado" };
+export const SOURCE_LABEL: Record<OriginView["source"], string> = { PLATFORM_CATALOG: "catálogo da plataforma", TENANT_UPLOAD: "arquivo enviado pela organização", TENANT_AUTHORED: "elaborado pela organização" };
+
+export interface OriginBadgeView { readonly label: string; readonly tone: StatusTone; readonly detail: string }
+/** Selo de origem do card/detalhe. Estados sem origem registrada são ditos como são (nunca "plataforma" por padrão). */
+export function originBadge(row: { origin?: OriginView | null; originState?: OriginStateKey }): OriginBadgeView {
+  const state = row.originState ?? "NO_PROVENANCE";
+  if (state === "RECORDED" && row.origin) {
+    const o = row.origin;
+    const lineage = o.lineage ? (o.lineage.kind === "PLATFORM_PACKAGE" ? ` · derivado de ${o.lineage.packageKey} v${o.lineage.packageVersion}` : ` · derivado da revisão ${o.lineage.revisionId.slice(0, 10)} (${o.lineage.semanticHash.slice(0, 8)})`) : "";
+    return { label: OWNERSHIP_LABEL[o.ownership], tone: o.ownership === "PLATFORM" ? "info" : o.ownership === "DERIVED" ? "warning" : "success", detail: `Origem: ${SOURCE_LABEL[o.source]}${lineage}` };
+  }
+  if (state === "LEGACY_UNCLASSIFIED") return { label: "Origem não classificada", tone: "neutral", detail: "Registrado antes da classificação de origem; pode ser classificado uma única vez." };
+  if (state === "MALFORMED") return { label: "Origem ilegível", tone: "danger", detail: "O registro de origem não passa na verificação de integridade; trate o modelo com cautela." };
+  return { label: "Sem procedência", tone: "neutral", detail: "Nenhuma procedência registrada para este modelo." };
+}
+
+export type OwnershipFilter = "ALL" | OwnershipKey | "UNCLASSIFIED";
+export const OWNERSHIP_FILTER_LABEL: Record<OwnershipFilter, string> = { ALL: "Todos", PLATFORM: "Da plataforma", TENANT: "Da minha prefeitura", DERIVED: "Derivados", UNCLASSIFIED: "Sem classificação" };
+const ownershipOf = (r: { origin?: OriginView | null; originState?: OriginStateKey }): OwnershipFilter => (r.originState === "RECORDED" && r.origin ? r.origin.ownership : "UNCLASSIFIED");
+export function filterByOwnership<T extends { origin?: OriginView | null; originState?: OriginStateKey }>(rows: readonly T[], f: OwnershipFilter): T[] {
+  return f === "ALL" ? [...rows] : rows.filter((r) => ownershipOf(r) === f);
+}
+export function ownershipCounts(rows: readonly { origin?: OriginView | null; originState?: OriginStateKey }[]): Record<OwnershipFilter, number> {
+  const out: Record<OwnershipFilter, number> = { ALL: rows.length, PLATFORM: 0, TENANT: 0, DERIVED: 0, UNCLASSIFIED: 0 };
+  for (const r of rows) out[ownershipOf(r)] += 1;
+  return out;
+}
+
+// política do órgão (somente gerente+; o servidor reautoriza)
+export interface PolicyView {
+  readonly kind: "PLATFORM_DEFAULT" | "TENANT_DEFINED"; readonly version: number; readonly malformed: boolean;
+  readonly policy: { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner" };
+  readonly note?: string;
+  readonly history: readonly { version: number; policy: PolicyView["policy"] | null; declaredBy: { name: string; role: string }; actDate: string; reason: string }[];
+}
+export interface PolicyFormState { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner"; decision: DecisionFormState }
+export const emptyPolicyForm = (current: PolicyView["policy"], today: string): PolicyFormState => ({ ...current, decision: emptyDecisionForm(today) });
+export function validatePolicyForm(f: PolicyFormState, current: PolicyView): { valid: boolean; errors: Partial<Record<DecisionField | "unchanged", string>> } {
+  const { errors } = validateDecisionForm(f.decision);
+  const out: Partial<Record<DecisionField | "unchanged", string>> = { ...errors };
+  const c = current.policy;
+  if (f.legalEvidence === c.legalEvidence && f.approveMinRole === c.approveMinRole && f.publishMinRole === c.publishMinRole && !current.malformed) out.unchanged = "Nenhuma alteração em relação à política vigente.";
+  return { valid: Object.keys(out).length === 0, errors: out };
+}
+export function policyHeadline(p: Pick<PolicyView, "kind" | "malformed" | "policy" | "version">): string {
+  const origin = p.kind === "TENANT_DEFINED" ? `Política do órgão (versão ${p.version})` : "Padrão da plataforma";
+  const legal = p.policy.legalEvidence === "REQUIRED" ? "evidência jurídica OBRIGATÓRIA" : "evidência jurídica OPCIONAL";
+  const roles = `aprovar: ${p.policy.approveMinRole} · publicar: ${p.policy.publishMinRole}`;
+  return `${origin}: ${legal}; ${roles}${p.malformed ? " — registro ilegível, aplicado o padrão estrito" : ""}.`;
+}
+
+// derivação (a partir de modelo da plataforma ou próprio já decidido)
+export interface DeriveFormState { slug: string; displayName: string; declaredAuthor: string; decision: DecisionFormState }
+export const emptyDeriveForm = (today: string, suggestedName = ""): DeriveFormState => ({ slug: "", displayName: suggestedName ? `${suggestedName} (adaptado)` : "", declaredAuthor: "", decision: emptyDecisionForm(today) });
+export function validateDeriveForm(f: DeriveFormState): { valid: boolean; errors: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> } {
+  const { errors } = validateDecisionForm(f.decision);
+  const out: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> = { ...errors };
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(f.slug) || f.slug.length > 120) out.slug = "Slug: minúsculas, números e hífens.";
+  if (!f.displayName.trim() || f.displayName.length > 200) out.displayName = "Informe o nome do modelo (até 200 caracteres).";
+  if (f.declaredAuthor.trim() && (f.declaredAuthor.length > 160 || /[\r\n]/.test(f.declaredAuthor))) out.declaredAuthor = "Autor: uma linha, até 160 caracteres.";
+  return { valid: Object.keys(out).length === 0, errors: out };
+}
+/** Fontes de derivação mostradas na UI: só revisões JÁ decididas (nunca rascunho) e pacotes da plataforma. */
+export const DERIVABLE_STATUSES: readonly RevisionStatus[] = ["APPROVED", "PUBLISHED", "DEPRECATED"];
+export const canDeriveFrom = (status: RevisionStatus): boolean => DERIVABLE_STATUSES.includes(status);
+/** Revisão EXATA oferecida como origem de derivação de um modelo do catálogo: a mais recente já decidida (nunca rascunho). `null` = não há o que derivar. */
+export function derivableRevision(row: Pick<CatalogRowView, "revisions">): CatalogRowView["revisions"][number] | null {
+  const ok = row.revisions.filter((r) => canDeriveFrom(r.status)).sort((a, b) => b.revision - a.revision);
+  return ok[0] ?? null;
 }
