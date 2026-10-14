@@ -326,3 +326,22 @@ export function readinessHeadline(c: ReadinessCounters): string {
     ? `${line} · ${c.DEFERRED_PUBLICATION_TOTAL} ${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "dado para publicação pode" : "dados para publicação podem"} ser preenchido${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "" : "s"} depois`
     : line;
 }
+
+// ─── dados de PUBLICAÇÃO ainda não definidos (informativo; nunca bloqueia a elaboração) ───────────────────────────────────
+
+export interface PublicationPendingView {
+  /** O modelo vinculado declara dados de publicação diferidos (`DEFERRED_PUBLICATION`); senão o aviso não existe (a Revisão 1 exige os dados na preparação). */
+  readonly applicable: boolean;
+  readonly complete: boolean;
+  /** Dados ainda sem valor (ordem do servidor — determinística), com o rótulo operacional já usado na preparação. */
+  readonly items: readonly { readonly name: string; readonly label: string }[];
+}
+
+/** Deriva do ESTADO do servidor (autoridade); o texto da minuta nunca é a fonte. Sem regra nova no cliente: só apresenta `publication.readiness`. */
+export function publicationPending(state: PreparationStateView | null | undefined): PublicationPendingView {
+  const pub = state?.publication;
+  if (!state || !pub?.deferredPolicy) return { applicable: false, complete: true, items: [] };
+  const byName = new Map(state.sections.flatMap((s) => s.fields).map((f) => [f.name, f.question ?? f.description] as const));
+  const items = pub.readiness.missingVariables.map((name) => ({ name, label: byName.get(name) ?? name }));
+  return { applicable: true, complete: pub.readiness.complete && items.length === 0, items };
+}

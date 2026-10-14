@@ -12,7 +12,8 @@ import EditalPreparationPanel from "./EditalPreparationPanel";
 import EditalPreflightCard from "./EditalPreflightCard";
 import { useEditalPreparationState } from "./useEditalPreparationState";
 import EditalGenerateCta from "./EditalGenerateCta";
-import { buildEditalReadiness, generationCta } from "@/lib/editalReadiness";
+import { buildEditalReadiness, generationCta, publicationPending } from "@/lib/editalReadiness";
+import { PublicationPendingNotice } from "./PublicationPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
@@ -192,6 +193,7 @@ export default function EditalWorkspace({
   // Prontidão (view-model puro sobre o MESMO estado da preparação — uma única requisição): define quem tem o protagonismo (Resolver pendências × Gerar).
   const { state: preparationState } = useEditalPreparationState(processId, boundParams, trPin, bound);
   const cta = bound && preparationState ? generationCta(buildEditalReadiness(preparationState), genReady) : null;
+  const publicationPendingView = publicationPending(bound ? preparationState : null);
   const generateBlockedReason = bound ? (cta?.generateDisabledReason ?? (!genReady.ready ? genReady.reason : undefined)) : undefined;
   const reviewQuery = trpc.procurementProcess.editalTemplateReviewState.useQuery({ processId }, { enabled: !!processId });
   const templateReviewBlockers = reviewReadiness(reviewQuery.data as ReviewStateView | undefined).blockers;
@@ -482,6 +484,7 @@ export default function EditalWorkspace({
             </div>
           )}
 
+          <PublicationPendingNotice pending={publicationPendingView} variant="drafting" />
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
             emissão oficial exige revisão de um terceiro (SoD).
@@ -503,6 +506,7 @@ export default function EditalWorkspace({
         pending={generateNotice.isPending} onConfirm={() => handleGenerate(true)}
       />
 
+      {draft && <div className="mt-6"><PublicationPendingNotice pending={publicationPendingView} variant="finalizing" /></div>}
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} templateReviewBlockers={templateReviewBlockers} />
     </div>
