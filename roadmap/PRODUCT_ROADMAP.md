@@ -30,6 +30,18 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 | Calendário | FUNCIONAL | Eventos operacionais + registros com data (grade mensal) | Contratos/processos não alimentam o calendário sem término informado (regra explícita, de propósito) |
 | Centro de Operações | FUNCIONAL · **corrigido** | Painel, indicadores, recomendações, timeline | Indicador "vencendo" contava alertas (inflado) — corrigido |
 
+### Staging alinhado (checkpoint de 14/10/2026)
+- Linha de homologação `staging` = `main@874ed8e` + PR #297 (squash `2ddcdf5`, árvore idêntica à do head aprovado nos 5 gates).
+- Railway/staging passou a acompanhar a branch `staging` (antes `feat/f-emb1-embedding-lineage@b4c6bad`, sem commits
+  próprios pendentes); mudança aplicada só no ambiente staging; produção sem alteração.
+- Deploy `c7868b88-8bb6-4eb8-98a1-5c34bd6dc56d` **SUCCESS**: pre-deploy oficial (`pnpm db:release:predeploy`, lock de
+  migração) aplicou as migrations pendentes 0302→0318; reference data `noop` (draft, não ativado); boot validou pelo
+  ledger que `0318_template_governance_transition` está aplicada + tabelas/FKs críticas; health check `/readyz` aprovado.
+- Isolamento: `DATABASE_URL` de staging é referência ao MySQL do próprio ambiente; buckets S3 distintos
+  (staging `licigov-pro-staging` × produção `licigov-pro-storage-msales`), confirmados pelo Owner.
+- Tenant sintético `homologacao-sintetica` criado pelo Owner (administrador de plataforma), com usuários de teste.
+- Integração de #301 → #300 → #299 → #298 por squash, cada merge com deploy automático SUCCESS em staging.
+
 ### Entregue neste ciclo
 - PR #296 — pendências de publicação do Edital visíveis e não bloqueantes (Revisão 1 preservada).
 - Contrato **vigente de processo anterior** registrado por declaração (sem recriar DFD/ETP/TR/Edital) → aditivo direto;
@@ -59,7 +71,7 @@ Homologação visual: **não realizada**.
 | **Global ponderado** | 100 | **83,75** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
 
 ### P0 — disponibilização funcional
-- Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) e homologação integrada.
+- ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).
 - Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.
 - Entrada flexível de processos legados (acompanhamento, contrato vigente, aditivo).
 - Ativação da Revisão 2 do Edital BLL na organização real — **decisão institucional da prefeitura**, nunca simulada.

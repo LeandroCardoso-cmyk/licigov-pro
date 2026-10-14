@@ -685,7 +685,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/AddendumWorkspace.tsx": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "1ea896af5f66e4568e0c4ac62a968608",
     "semantic_hash": ""
   },
@@ -705,7 +705,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractWorkspace.tsx": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "7586bd3f61428b8a502d2e489d7b2842",
     "semantic_hash": ""
   },
@@ -730,7 +730,7 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "fed5594092f9a6865cb261ac5926b54b",
     "semantic_hash": ""
   },
@@ -5140,7 +5140,7 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792016068.1682582,
+    "mtime": 1792016861.0764935,
     "ast_hash": "0c70ef6eb50eb6a98151076819b867de",
     "semantic_hash": ""
   },
@@ -6960,7 +6960,7 @@
     "semantic_hash": ""
   },
   "server/db/departmentOperation.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "3b8a52e42547d3c412c7f9cc70f1a628",
     "semantic_hash": ""
   },
@@ -8245,7 +8245,7 @@
     "semantic_hash": ""
   },
   "server/domain/operationRecord.ts": {
-    "mtime": 1792016068.165796,
+    "mtime": 1792016861.0804935,
     "ast_hash": "f7f3f91235ffd53bfed6585260f34947",
     "semantic_hash": ""
   },
@@ -8725,7 +8725,7 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "eb1e22c20fb18bb2bdae93cd93a6dcce",
     "semantic_hash": ""
   },
@@ -8935,7 +8935,7 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "7af3366b79c5a94fedc8b60c1acbde23",
     "semantic_hash": ""
   },
@@ -9405,7 +9405,7 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1792016061.740512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "16a221c556d4c410e8597cd7fd851f94",
     "semantic_hash": ""
   },
@@ -10075,7 +10075,7 @@
     "semantic_hash": ""
   },
   "server/services/operationRecordService.ts": {
-    "mtime": 1792016061.740512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "5542d97618488040f4135e7372d473a1",
     "semantic_hash": ""
   },
@@ -10590,7 +10590,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0084937,
     "ast_hash": "3635e690a5d7dac486fa58a00bb8ba60",
     "semantic_hash": ""
   },
@@ -11440,7 +11440,7 @@
     "semantic_hash": ""
   },
   "docs/business-domains/contracts/addenda.md": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "cfaa82007fbf9e87f6b5587c0d97fc48",
     "semantic_hash": ""
   },
@@ -11495,7 +11495,7 @@
     "semantic_hash": ""
   },
   "docs/business-domains/department-operation/legacy-records.md": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "fd0765902263e91fe90abba58c7f830e",
     "semantic_hash": ""
   },
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792016086.286993,
-    "ast_hash": "0ac912454a5f102c68913e25f8344ceb",
+    "mtime": 1792016869.5420125,
+    "ast_hash": "722a0e17cfd5159fe056d2e37ac0c172",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -13440,7 +13440,7 @@
     "semantic_hash": ""
   },
   "server/domain/instrumentTerms.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "c81b20d242fd1f6b54e37affe5b95268",
     "semantic_hash": ""
   },
@@ -14015,7 +14015,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "20143dee1f069131dd479b9e25b8667b",
     "semantic_hash": ""
   },
@@ -14255,7 +14255,7 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/valueTypes2.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "7e1c3f0ad2b98edf37a20ba04dce50de",
     "semantic_hash": ""
   },
@@ -14265,7 +14265,7 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/canonicalSources.ts": {
-    "mtime": 1792016061.740512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "1bb82ec527187f8204c443e64e2a7114",
     "semantic_hash": ""
   },
@@ -14440,7 +14440,7 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalPreparationService.ts": {
-    "mtime": 1792016061.740512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "cd00b3107a631af5fd99b6a41ee6ad7c",
     "semantic_hash": ""
   },
@@ -14555,7 +14555,7 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1792016061.664512,
+    "mtime": 1792016861.0124936,
     "ast_hash": "8226c3e902061d542244c1630b95be6a",
     "semantic_hash": ""
   },
@@ -14600,7 +14600,7 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/lifecycleLateBound.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "dc6556541f39fcf85288c22c504e80a6",
     "semantic_hash": ""
   },
@@ -14935,7 +14935,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "fc3afbab47180330882bdfd8a9d2aa41",
     "semantic_hash": ""
   },
@@ -14950,12 +14950,12 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/document-journey-numbering.test.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "026733039d809e0f181a496aeb4b0363",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/processYear.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "3c2d86cf140fbbdc90c87252f94667f3",
     "semantic_hash": ""
   },
@@ -14965,37 +14965,37 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "967315811d6657332e196dee03485d06",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legacy-contract-continuity.test.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "ac0c71245f3bce56eee6021b45dd9530",
     "semantic_hash": ""
   },
   "server/domain/legacyContractContinuity.ts": {
-    "mtime": 1792016061.736512,
+    "mtime": 1792016861.0804935,
     "ast_hash": "59aaecd32af888601b6eaa6103e98af7",
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1792016068.136235,
+    "mtime": 1792016861.0804935,
     "ast_hash": "5552b838b330c48cdb4635a3f0220647",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1792016068.1445107,
+    "mtime": 1792016861.0804935,
     "ast_hash": "6b036d52995c60a4cc0dffd27118cb95",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
-    "mtime": 1792016068.152034,
+    "mtime": 1792016861.0804935,
     "ast_hash": "ca10511c02c492b8f8517e299f133c1e",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legacy-import-extraction.test.ts": {
-    "mtime": 1792016068.1594226,
+    "mtime": 1792016861.0804935,
     "ast_hash": "d5c29b16f79a978a2ee34b023284a172",
     "semantic_hash": ""
   }
