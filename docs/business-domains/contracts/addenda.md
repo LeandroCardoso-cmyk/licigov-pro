@@ -84,3 +84,25 @@ Workspace: vigente
 O aditivo trata da **instrumentalização documental** da alteração. Não executa recálculo
 orçamentário, empenho, nem controle financeiro — isso pertence a sistemas de ERP, fora do
 escopo do LiciGov Pro.
+
+## Continuidade de contratos de processos anteriores (legado)
+
+Para o servidor que **não** elaborou o processo no sistema (nada de DFD/ETP/TR/Edital):
+
+- **Contrato vigente a partir de um registro legado.** `registerInForceContract` aceita `legacyRecordId`
+  (registro do Centro de Operações do tipo `processo_licitatorio_legado`, `contratacao_direta_legada` ou
+  `contrato_externo`). Objeto e origem são **reaproveitados** do registro (o que o usuário digitou prevalece) e o
+  registro passa a apontar para o contrato (`reference_type/reference_id`) — o registro complementa, nunca duplica.
+  Tudo continua marcado como **DECLARADO — formalizado fora do sistema, não verificado**.
+- **Aditivos anteriores declarados.** `priorAmendments` (até 20) registra aditivos já formalizados fora do sistema
+  como histórico `documento_externo`/`finalizado`: continuam a numeração (o próximo aditivo é o nº N+1), **não geram
+  termo e não alteram o contrato**. O termo do aditivo seguinte traz a "Cláusula quinta — Das alterações anteriores",
+  com o histórico declarado rotulado.
+- **Vigência pós-aditivo.** `createAddendum` aceita `newEndDate` (somente aditivo de **prazo**): o texto do termo
+  recebe "término da vigência em DD/MM/AAAA" e, ao finalizar, o vencimento e os alertas (90/60/30/15/7) do contrato
+  são **reagendados** no Centro de Operações (eventos antigos automáticos removidos, manuais intactos), com evento
+  `vigencia_reagendada` na timeline. O KPI continua contando o contrato **uma vez**.
+- **Sem ativação automática.** Minuta → vigente continua dependendo de definição/autorização jurídica; aditivo sobre
+  minuta segue recusado. O pedido de parecer cria apenas a solicitação institucional — o sistema não emite parecer.
+
+Teste de referência: `server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts` (J4–J7).

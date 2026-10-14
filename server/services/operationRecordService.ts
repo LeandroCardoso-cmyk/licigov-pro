@@ -20,6 +20,7 @@ import {
   insertOperationRecord, insertOperationalEvent, insertOperationalMilestone,
   countOperationalTimeline, insertOperationalTimelineEntry, upsertPublicationRecord,
   setOperationRecordSchedule, insertManualOperationalEvent, transitionOperationRecordLifecycle,
+  getCurrentExpirationDate, replaceExpirationEvents, linkOperationRecordReference,
 } from "../db/departmentOperation";
 import { COMPLETION_REASON_MAX, type LifecycleAction } from "../domain/operationRecordLifecycle";
 import { serviceLogger } from "./observabilityService";
@@ -140,6 +141,67 @@ export async function registerExpiration(params: {
   for (const e of events) await insertOperationalEvent(e);
   await recordTimeline({ organizationId: params.organizationId, actor: params.actor, action: "vencimento_agendado", referenceType: params.kind, referenceId: params.referenceId, summary: `Evento de vencimento e alertas (90/60/30/15/7d) gerados para ${params.title}.`, correlationId: params.correlationId });
   return { events };
+}
+
+/**
+ * REAGENDA o vencimento e os alertas (90/60/30/15/7d) de um contrato/aditivo/ata quando a vigência muda (ex.: aditivo de
+ * prazo): substitui, numa transação, os eventos AUTOMÁTICOS da referência pelos do novo término — o calendário nunca mostra o
+ * vencimento antigo nem alertas duplicados, e o indicador continua contando a referência UMA vez. Eventos manuais não são
+ * tocados. Idempotente (mesmo término ⇒ mesmos ids ⇒ nada muda). Auditoria na timeline operacional.
+ */
+export async function rescheduleExpiration(params: {
+  organizationId: number; kind: "contrato" | "aditivo" | "ata"; referenceId: string; title: string;
+  expirationDate: string; actor: string; correlationId: string; reason: string;
+}): Promise<{ previousDate: string | null; newDate: string; changed: boolean }> {
+  if (!validLocalDate(params.expirationDate)) throw new Error("Término de vigência inválido.");
+  const previousDate = await getCurrentExpirationDate(params.organizationId, params.kind, params.referenceId);
+  const events = createExpirationEvents({
+    organizationId: params.organizationId, kind: params.kind, referenceId: params.referenceId, title: params.title,
+    expirationDate: params.expirationDate, correlationId: params.correlationId,
+  });
+  await replaceExpirationEvents({ organizationId: params.organizationId, referenceType: params.kind, referenceId: params.referenceId, events });
+  const changed = previousDate !== params.expirationDate;
+  if (changed) {
+    await recordTimeline({
+      organizationId: params.organizationId, actor: params.actor, action: "vigencia_reagendada", referenceType: params.kind, referenceId: params.referenceId,
+      summary: `Vigência de ${params.title} ${previousDate ? `reagendada de ${previousDate} para ${params.expirationDate}` : `agendada para ${params.expirationDate}`} (${params.reason}); vencimento e alertas (90/60/30/15/7d) regenerados.`,
+      correlationId: params.correlationId,
+    });
+  }
+  return { previousDate, newDate: params.expirationDate, changed };
+}
+
+/**
+ * Passagem de um CONTRATO EXTERNO já monitorado (cadastro rápido) para o contrato completo: remove os eventos automáticos do
+ * registro (a vigência passa a viver SOB O CONTRATO) — sem isso o mesmo contrato teria dois vencimentos/alertas e contaria
+ * duas vezes no indicador. Devolve o término que o registro monitorava (para reaproveitar quando o usuário não informar outro).
+ */
+export async function releaseRecordExpiration(params: {
+  organizationId: number; recordId: string; actor: string; correlationId: string; toContractId: string;
+}): Promise<{ releasedDate: string | null }> {
+  const releasedDate = await getCurrentExpirationDate(params.organizationId, "contrato", params.recordId);
+  if (releasedDate === null) return { releasedDate: null };
+  await replaceExpirationEvents({ organizationId: params.organizationId, referenceType: "contrato", referenceId: params.recordId, events: [] });
+  await recordTimeline({
+    organizationId: params.organizationId, actor: params.actor, action: "vigencia_transferida", referenceType: "operation_record", referenceId: params.recordId,
+    summary: `Vencimento (${releasedDate}) transferido para o contrato ${params.toContractId}; os alertas deste registro foram retirados para não duplicar.`,
+    correlationId: params.correlationId,
+  });
+  return { releasedDate };
+}
+
+/** Liga o registro operacional ao contrato (complementa; nunca duplica) e registra o vínculo na timeline operacional. */
+export async function linkRecordToContract(params: {
+  organizationId: number; recordId: string; contractId: string; actor: string; correlationId: string;
+}): Promise<{ status: "linked" | "already_linked" } | { status: "conflict"; referenceId: string } | { status: "not_found" }> {
+  const res = await linkOperationRecordReference({ organizationId: params.organizationId, recordId: params.recordId, referenceType: "contract_workspace", referenceId: params.contractId });
+  if (res.status === "linked") {
+    await recordTimeline({
+      organizationId: params.organizationId, actor: params.actor, action: "registro_vinculado_contrato", referenceType: "operation_record", referenceId: params.recordId,
+      summary: `Registro vinculado ao contrato ${params.contractId} (dados reaproveitados do registro; informação DECLARADA, não verificada).`, correlationId: params.correlationId,
+    });
+  }
+  return res.status === "conflict" ? { status: "conflict", referenceId: res.referenceId } : res;
 }
 
 /** Cria um evento manual do calendário (reunião, audiência, visita técnica…). */
