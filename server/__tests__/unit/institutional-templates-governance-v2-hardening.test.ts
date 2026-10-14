@@ -1,10 +1,9 @@
 /**
- * Template Governance V2 — HARDENING (domínio/config puros): marco de transição configurável (fail-closed), explainability de integridade
+ * Template Governance V2 — HARDENING (domínio puro): explainability de integridade
  * (declarado × calculado × semântico × lineage) e adaptador de originais (chave escopada por órgão, preservação verificada por leitura de volta).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { getTemplateGovernanceConfig, TEMPLATE_LEGACY_POLICY_CUTOVER_DEFAULT_AT } from "../../config/templates";
 import { explainIntegrity } from "../../domain/institutionalTemplates/governance/integrityExplanation";
 import type { ImportProvenance } from "../../domain/institutionalTemplates/governance/importProvenance";
 import type { LegalApprovalEvidence } from "../../domain/institutionalTemplates/governance/legalEvidence";
@@ -24,14 +23,6 @@ import { createTemplateOriginalStoreAdapter, isOwnOriginalKey, originalStorageKe
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 const H = (c: string) => c.repeat(64);
-
-describe("config — marco de transição do padrão de política", () => {
-  it("padrão do código; override ISO válido; inválido/ambíguo ⇒ volta ao padrão e SINALIZA (nunca adivinha)", () => {
-    expect(getTemplateGovernanceConfig({})).toEqual({ legacyCutoverAt: TEMPLATE_LEGACY_POLICY_CUTOVER_DEFAULT_AT, source: "DEFAULT" });
-    expect(getTemplateGovernanceConfig({ TEMPLATE_LEGACY_POLICY_CUTOVER_AT: "2026-12-01T03:00:00-03:00" })).toEqual({ legacyCutoverAt: "2026-12-01T06:00:00.000Z", source: "ENV" });
-    for (const bad of ["amanhã", "2026-13-45T00:00:00Z", "1700000000", "2026/12/01"]) expect(getTemplateGovernanceConfig({ TEMPLATE_LEGACY_POLICY_CUTOVER_AT: bad }), bad).toMatchObject({ legacyCutoverAt: TEMPLATE_LEGACY_POLICY_CUTOVER_DEFAULT_AT, source: "ENV_INVALID_FELL_BACK" });
-  });
-});
 
 const upload: TemplateOrigin = { ownership: "TENANT", source: "TENANT_UPLOAD", lineage: null, declaredAuthor: null,
   original: { sha256: H("b"), sizeBytes: 10, filename: "m.docx", contentType: "x", storageKey: `institutional-templates/1/originals/${H("b")}-m.docx`, preservation: "READBACK_SHA256" } };

@@ -161,6 +161,11 @@ export interface TemplateGovernancePort {
   recordGovernanceDecision(request: DecisionRequest): Promise<GovernanceCommitResult>;
   /** Histórico completo (v1…corrente) do assunto (= revisão), tenant-scoped. Revisão de outro tenant ⇒ lista vazia. */
   listGovernanceDecisions(organizationId: OrgId, subjectType: DecisionSubjectType, revisionId: string): Promise<readonly InstitutionalDecision[]>;
+  /**
+   * Marco de transição do padrão de política jurídica (registro imutável criado pela migration 0318 no 1º deploy da Governance V2). `null` = indisponível ⇒
+   * o serviço aplica o modo ESTRITO. Ausente no port (testes em memória) ⇒ idem. Somente leitura.
+   */
+  getLegacyPolicyCutover?(): Promise<{ readonly cutoverAt: string } | null>;
 }
 
 /**

@@ -1,6 +1,6 @@
 # ADR-TG-V2 — Governança escalável de Modelos Institucionais (templates)
 
-- **Status:** implementado e **endurecido (hardening final)** na branch `feat/template-governance-v2`, pronto para PR. Sem merge, sem deploy, sem migration, sem mutação de dados produtivos.
+- **Status:** implementado, endurecido e com marco de transição imutável (migration aditiva 0318), na branch `feat/template-governance-v2`. Sem merge, sem deploy, sem migration executada em produção, sem mutação de dados produtivos.
 - **Baseline:** `main` @ `c7ead2b6` (PR #293). Revisão 1 do Edital PUBLISHED e vinculada; Revisão 2 DRAFT (`trec9c3113392f420d5ec8`) — **nenhuma delas é tocada por esta mudança**.
 - **Precedência:** [`PRODUCT_NORTH_STAR.md`](PRODUCT_NORTH_STAR.md). Complementa [`INSTITUTIONAL_TEMPLATES_MULTIMODEL.md`](INSTITUTIONAL_TEMPLATES_MULTIMODEL.md), [`EDITAL_PILOT_LANE_C.md`](EDITAL_PILOT_LANE_C.md) e [`INSTITUTIONAL_DECISION_CONTRACT.md`](INSTITUTIONAL_DECISION_CONTRACT.md).
 
@@ -56,7 +56,9 @@ Resolução da política efetiva (`resolveEffectiveTemplateGovernancePolicy(hist
 | Sem decisão e **com** modelo anterior ao marco | `LEGACY_COMPAT` | `REQUIRED` (regime anterior preservado) |
 | Decisão corrente ilegível | `UNRESOLVED_STRICT` | `REQUIRED` |
 
-O marco de transição (`server/config/templates.ts`: `TEMPLATE_LEGACY_POLICY_CUTOVER_DEFAULT_AT`, override opcional `TEMPLATE_LEGACY_POLICY_CUTOVER_AT`, valor inválido ⇒ volta ao padrão e sinaliza) é puro dado de configuração: **nada é gravado nem migrado**. "Órgão legado" = possui ao menos uma identidade de modelo criada antes do marco (data ilegível ⇒ legado, estrito).
+O **marco de transição** é um registro **imutável** da plataforma (`template_governance_transitions`, chave `LEGACY_POLICY_CUTOVER`), criado e semeado **uma única vez pela migration 0318** com o **instante efetivo da sua aplicação (UTC, ISO-8601 com ms)** — isto é, o instante do **primeiro deploy** da Governance V2 (Railway `preDeployCommand: pnpm db:release:predeploy`). Não há variável de ambiente, constante nem rota que o defina ou altere (guardas estáticas); a aplicação só **lê**. `INSERT IGNORE` por chave: reaplicar a migration, migrar de novo ou fazer deploys futuros **nunca** o move nem reclassifica órgãos. "Órgão legado" = possui ao menos uma identidade de modelo criada **antes** do marco (criada exatamente no marco ou depois = novo; data ilegível ⇒ legado, estrito).
+
+**Fail-closed:** marco ausente, ilegível ou erro de leitura ⇒ `UNRESOLVED_STRICT` para todo órgão sem política registrada (inclusive órgão novo) — exatamente o comportamento anterior à V2. O padrão `OPTIONAL` só vale quando o marco pode ser lido. Auditoria por consulta somente leitura: `SELECT marker_key, cutover_at_iso, recorded_by, recorded_at FROM template_governance_transitions;`.
 
 ## 4. Fluxo de governança revisado (Fase B)
 
@@ -129,13 +131,15 @@ Catálogo com abas **Da plataforma · Da minha prefeitura · Derivados · Sem cl
 
 ## 8. Migrations — avaliação
 
-**Nenhuma migration nesta entrega** (`pnpm db:generate` sem alterações). Política e origem usam o ledger append-only e a procedência existentes; o original usa o storage S3 existente.
+**Uma migration aditiva (0318)** — requisito do Owner de um marco estável, auditável e imutável, que variável de ambiente ou constante não garantem: cria a tabela platform-level `template_governance_transitions` (sem `organization_id`, sem FK, nenhuma tabela existente alterada) e semeia o marco. Replay-safe (`CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`), schema-only quanto à estrutura e com **uma** linha de dado de plataforma determinística. Prova: `templates-0318-migration-mysql-smoke.test.ts` (fresh, upgrade com dados, replay, estado parcial) e a guarda HD-26 (apenas a tabela nova é acrescentada ao snapshot). O restante da V2 (política, origem, lineage) continua sem schema: ledger e procedência existentes.
+
+Política e origem usam o ledger append-only e a procedência existentes; o original usa o storage S3 existente.
 
 Otimização futura **opcional** (não necessária hoje): colunas `ownership`/`source` em `institutional_template_identities` + índice, para filtrar o catálogo no banco em vez de decodificar a procedência. Exigiria migration aditiva (nullable, sem default destrutivo), backfill a partir do ledger e staging antes de produção. Não será aplicada em produção sem autorização do Owner.
 
 ## 9. Plano de rollout e transição (padrão OPTIONAL + compatibilidade explícita)
 
-1. Revisão humana desta branch → merge autorizado → deploy (nenhuma migration, nenhum backfill). **Antes do deploy**, o Owner confirma o marco de transição: por padrão `2026-10-14T00:00:00Z`; se houver modelos criados em produção entre essa data e o deploy, fixar `TEMPLATE_LEGACY_POLICY_CUTOVER_AT` no instante do deploy (ISO-8601) para que **todo** órgão com modelos existentes seja `LEGACY_COMPAT`.
+1. Revisão humana → merge autorizado → o `preDeployCommand` do Railway (`pnpm db:release:predeploy`) aplica a **0318**, que grava o marco com o instante efetivo — **esse é o "primeiro deploy da Governance V2"**. Nada a configurar antes: não existe knob mutável (de propósito). **Antes do merge** (somente leitura, em produção): listar órgãos que ainda NÃO têm nenhum modelo (`SELECT o.id FROM organizations o LEFT JOIN institutional_template_identities i ON i.organization_id = o.id WHERE i.id IS NULL`) — só estes receberão o padrão `OPTIONAL`; todo órgão com modelos (inclusive o da Rev1/Rev2) ficará `LEGACY_COMPAT`. **Staging**: aplicar as migrations (prática existente `pnpm db:migrate:release`) antes de validar — no ambiente de staging o marco será o instante dessa aplicação, independente do de produção.
 2. Órgão **legado sem política** (inclui o órgão da Revisão 1/Revisão 2): comportamento **idêntico** ao atual (evidência exigida), agora rotulado `LEGACY_COMPAT` na UI/API, com explicação. Nada é gravado em seu nome.
 3. Órgão **novo** sem política: `PLATFORM_DEFAULT` (`OPTIONAL`).
 4. Transição **explícita** por órgão (gerente): registrar a política — adotar `OPTIONAL` ou confirmar `REQUIRED` — encerra o `LEGACY_COMPAT` e passa a ser decisão do órgão, auditável, versionada e append-only. Nenhuma decisão `TENANT_DEFINED` é alterada pela plataforma.
@@ -157,7 +161,7 @@ Conteúdo de arquivo é **não confiável**: validação do pipeline existente, 
 
 1. **Edital próprio/derivado** depende de inventário/pacote para passar nas verificações técnicas de Edital; tipos fora de `READINESS_GATED_KINDS` (apenas `edital`) não são gateados por prontidão.
 2. O `sourceSha256` de um upload continua **declarado** pelo usuário (procedência), agora explicitado como declaração não verificada; `origin.original.sha256` é o calculado e verificado no servidor. Ambos ficam registrados e a diferença é explicada.
-3. **Janela do marco de transição:** órgão cujo primeiro modelo seja criado entre o marco configurado e o deploy seria tratado como novo (`OPTIONAL`). Mitigação: fixar `TEMPLATE_LEGACY_POLICY_CUTOVER_AT` no instante do deploy (§9.1). Marco inválido nunca é "adivinhado" (volta ao padrão e sinaliza).
+3. **Janela migration→container:** o predeploy aplica a 0318 enquanto a versão anterior ainda atende; um órgão sem NENHUM modelo que crie o primeiro entre a migration e a troca do container seria tratado como novo (`OPTIONAL`). Impacto mínimo (módulo atrás de flag por tenant; segundos). Mitigação: checagem somente leitura pré-merge (§9.1) e reclassificação futura só por decisão explícita do órgão. Marco ausente/ilegível nunca é "adivinhado": modo estrito.
 4. Um órgão legado que **nunca** registrar política permanece em `LEGACY_COMPAT` indefinidamente (escolha deliberada: sem mudança silenciosa); a UI explica como sair.
 5. Preservação exige S3 operacional: em ambiente sem storage o envio de arquivo é recusado (dev/CI usam porta em memória nos testes). Objeto preservado cuja gravação do registro falhe depois (ex.: colisão de slug na corrida) pode permanecer órfão — é endereçado por conteúdo, escopado ao órgão e inofensivo; slug ocupado é detectado antes de armazenar.
 6. Origem de registros legados fica `LEGACY_UNCLASSIFIED` até classificação humana; filtro por propriedade no catálogo é feito na aplicação (ver §8).
@@ -165,7 +169,7 @@ Conteúdo de arquivo é **não confiável**: validação do pipeline existente, 
 
 ## 13. Pendências institucionais
 
-- Owner: confirmar o marco de transição (§9.1) antes do deploy.
+- Owner: executar a checagem somente leitura pré-merge (§9.1) e autorizar o merge/deploy; o marco será o instante da aplicação da 0318.
 - Cada órgão (e a Procuradoria): decidir se estabelece `REQUIRED` ou adota `OPTIONAL` para seus modelos (o órgão legado decide quando quiser).
 - Autorizações D3–D6 da Revisão 2 (independentes desta entrega).
 

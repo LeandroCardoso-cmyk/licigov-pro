@@ -42,7 +42,7 @@ const row = (over: Partial<CatalogRowView> = {}): CatalogRowView => ({
 });
 const dec = { decidedByName: "A", decidedByRole: "B", decidedAt: "2026-10-14", basisReference: "Portaria 1", reason: "Justificativa longa", confirmed: true };
 const defaultPolicy: PolicyView = { kind: "PLATFORM_DEFAULT", version: 0, malformed: false, policy: { legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" }, history: [] };
-const legacyPolicy: PolicyView = { ...defaultPolicy, kind: "LEGACY_COMPAT", policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, transition: { cutoverAt: "2026-10-14T00:00:00.000Z", legacyOrganization: true, explanation: "O órgão já possuía modelos antes da transição. Nada foi alterado em silêncio." } };
+const legacyPolicy: PolicyView = { ...defaultPolicy, kind: "LEGACY_COMPAT", policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, transition: { cutoverAt: "2026-10-20T13:00:00.000Z", source: "LEDGER_MARKER" as const, legacyOrganization: true, explanation: "O órgão já possuía modelos antes da transição. Nada foi alterado em silêncio." } };
 const ownPolicy: PolicyView = { ...defaultPolicy, kind: "TENANT_DEFINED", version: 1, policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" } };
 
 describe("origem dos modelos", () => {

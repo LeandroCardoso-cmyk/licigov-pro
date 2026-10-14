@@ -41,8 +41,9 @@ describe("separação conceitual: publicar template ≠ publicar documento ofici
   });
 });
 
-const NEW_ORG = { legacyOrganization: false } as const;
-const LEGACY_ORG = { legacyOrganization: true } as const;
+const NEW_ORG = { organization: "NEW" } as const;
+const LEGACY_ORG = { organization: "LEGACY" } as const;
+const UNKNOWN_ORG = { organization: "UNKNOWN" } as const;
 
 describe("política do órgão — padrão da plataforma, validação e resolução", () => {
   it("decisão do Owner: o padrão da plataforma é evidência jurídica OPCIONAL; o regime anterior fica EXPLÍCITO como LEGACY_COMPAT e a não-resolução é ESTRITA", () => {
@@ -67,6 +68,9 @@ describe("política do órgão — padrão da plataforma, validação e resoluç
   it("sem registros ⇒ órgão novo: padrão (OPTIONAL); órgão legado: LEGACY_COMPAT (REQUIRED); corrente válida ⇒ TENANT_DEFINED (a MAIOR versão decide) e PREVALECE sobre o legado", () => {
     expect(resolveEffectiveTemplateGovernancePolicy([], NEW_ORG)).toBe(PLATFORM_DEFAULT_EFFECTIVE);
     expect(resolveEffectiveTemplateGovernancePolicy([], LEGACY_ORG)).toBe(LEGACY_COMPAT_EFFECTIVE);
+    // marco de transição INDISPONÍVEL ⇒ estrito (nunca presume órgão novo); decisão explícita continua valendo mesmo assim
+    expect(resolveEffectiveTemplateGovernancePolicy([], UNKNOWN_ORG)).toBe(UNRESOLVED_STRICT_EFFECTIVE);
+    expect(resolveEffectiveTemplateGovernancePolicy([policyDecision({ legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" })], UNKNOWN_ORG)).toMatchObject({ kind: "TENANT_DEFINED", policy: { legalEvidence: "OPTIONAL" } });
     const explicitRequired = policyDecision({ legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, 1);
     const explicitOptional = policyDecision({ legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" }, 1);
     // decisão explícita do órgão é preservada em QUALQUER dos regimes (novo ou legado) — nunca reinterpretada

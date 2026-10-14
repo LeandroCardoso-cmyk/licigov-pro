@@ -257,12 +257,15 @@ export function decodeTemplateGovernancePolicy(d: InstitutionalDecision): Templa
   return validateTemplateGovernancePolicy(policy).length ? null : policy;
 }
 
+/** Estado do órgão frente ao marco de transição: LEGACY (modelos anteriores) · NEW (sem modelos anteriores) · UNKNOWN (marco indisponível ⇒ estrito). */
+export type OrganizationTransitionState = "LEGACY" | "NEW" | "UNKNOWN";
+
 /**
- * Política EFETIVA a partir do histórico do assunto (ordem de versão). Decisão explícita do órgão SEMPRE prevalece. Ausente ⇒ legado ? LEGACY_COMPAT (REQUIRED) : padrão da plataforma
- * (OPTIONAL). Corrente ilegível ⇒ padrão estrito + `malformed` (não importa o legado).
+ * Política EFETIVA a partir do histórico do assunto (ordem de versão). Decisão explícita do órgão SEMPRE prevalece. Ausente ⇒ LEGACY: LEGACY_COMPAT (REQUIRED);
+ * NEW: padrão da plataforma (OPTIONAL); UNKNOWN (marco indisponível): UNRESOLVED_STRICT. Corrente ilegível ⇒ estrito + `malformed` (independe do estado).
  */
-export function resolveEffectiveTemplateGovernancePolicy(history: readonly InstitutionalDecision[], opts: { readonly legacyOrganization: boolean }): EffectiveTemplateGovernancePolicy {
-  if (history.length === 0) return opts.legacyOrganization ? LEGACY_COMPAT_EFFECTIVE : PLATFORM_DEFAULT_EFFECTIVE;
+export function resolveEffectiveTemplateGovernancePolicy(history: readonly InstitutionalDecision[], opts: { readonly organization: OrganizationTransitionState }): EffectiveTemplateGovernancePolicy {
+  if (history.length === 0) return opts.organization === "LEGACY" ? LEGACY_COMPAT_EFFECTIVE : opts.organization === "NEW" ? PLATFORM_DEFAULT_EFFECTIVE : UNRESOLVED_STRICT_EFFECTIVE;
   const current = history[history.length - 1];
   const decoded = decodeTemplateGovernancePolicy(current);
   if (!decoded) return { kind: "UNRESOLVED_STRICT", policy: STRICT_FALLBACK_POLICY, decisionId: current.id, version: current.revision, malformed: true };

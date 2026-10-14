@@ -48,8 +48,10 @@ const codes = async (c: mysql.Connection) => (await checkForeignKeyContract(c)).
 const sqlCode = async (p: Promise<unknown>) => { try { await p; return "NO_ERROR"; } catch (e) { return (e as { code?: string }).code ?? "UNKNOWN"; } };
 
 /** Assinatura estrutural (colunas + índices + FKs) das tabelas SELECIONADAS. */
+/** Tabelas criadas por migrations POSTERIORES (0318 — marco de transição da Governance V2): fora do que esta migration promete preservar. */
+const LATER_MIGRATION_TABLES = ["template_governance_transitions"];
 async function signature(c: mysql.Connection, tables: string[] | "EXISTING"): Promise<string> {
-  const filter = tables === "EXISTING" ? `NOT IN (${inList(NEW)})` : `IN (${inList(tables)})`;
+  const filter = tables === "EXISTING" ? `NOT IN (${inList([...NEW, LATER_MIGRATION_TABLES].flat())})` : `IN (${inList(tables)})`;
   const cols = await rows(c, `SELECT TABLE_NAME t, COLUMN_NAME c, COLUMN_TYPE ty, IS_NULLABLE n, COLUMN_DEFAULT d, COLLATION_NAME k, EXTRA e, GENERATION_EXPRESSION g
     FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME ${filter} ORDER BY TABLE_NAME, ORDINAL_POSITION`);
   const idx = await rows(c, `SELECT TABLE_NAME t, INDEX_NAME i, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) c, MIN(NON_UNIQUE) nu FROM INFORMATION_SCHEMA.STATISTICS

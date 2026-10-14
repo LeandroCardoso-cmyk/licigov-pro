@@ -2138,6 +2138,13 @@
       "when": 1791347562029,
       "tag": "0317_institutional_template_multimodel_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 318,
+      "version": "5",
+      "when": 1791979436362,
+      "tag": "0318_template_governance_transition",
+      "breakpoints": true
     }
   ]
 }

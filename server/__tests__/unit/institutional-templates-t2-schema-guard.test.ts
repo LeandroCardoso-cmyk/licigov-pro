@@ -204,8 +204,11 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     const e315 = journal.find((e) => e.idx === 315)!;
     expect(e316.tag).toBe(TAG);
     expect(e316.when).toBeGreaterThan(e315.when);
-    // 0317 (escopo multi-modelo) é a ÚNICA migration posterior à 0316 neste contexto: aditiva, só nas tabelas do bounded context.
-    expect(journal.filter((e) => e.idx > 317)).toEqual([]);
+    // 0317 (escopo multi-modelo) é a ÚNICA migration deste contexto posterior à 0316: aditiva, só nas tabelas do bounded context.
+    // 0318 (marco de transição da Governance V2) é POSTERIOR e independente: só ACRESCENTA a tabela platform-level `template_governance_transitions`
+    // (nenhuma tabela existente muda) — provado logo abaixo. Nada além da 0318 é admitido aqui.
+    expect(journal.filter((e) => e.idx > 318)).toEqual([]);
+    expect(journal.find((e) => e.idx === 318)!.tag).toBe("0318_template_governance_transition");
     const e317 = journal.find((e) => e.idx === 317)!;
     expect(e317.tag).toBe("0317_institutional_template_multimodel_scope");
     expect(e317.when).toBeGreaterThan(e316.when);
@@ -222,6 +225,12 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     expect(Object.keys(after317).sort()).toEqual(Object.keys(after).sort());
     const changed = Object.keys(after).filter((k) => templateCanonicalJson(after317[k] as never) !== templateCanonicalJson(after[k] as never)).sort();
     expect(changed).toEqual(["institutional_template_bindings", "institutional_template_identities"]);
+
+    // 0318: só ACRESCENTA a tabela do marco; todas as demais tabelas permanecem byte a byte iguais às do snapshot 0317.
+    const after318 = snap("0318").tables;
+    expect(Object.keys(after318).filter((k) => !(k in after317)).sort()).toEqual(["template_governance_transitions"]);
+    expect(Object.keys(after317).filter((k) => !(k in after318))).toEqual([]);
+    for (const k of Object.keys(after317)) expect(templateCanonicalJson(after318[k] as never), `tabela existente alterada pela 0318: ${k}`).toBe(templateCanonicalJson(after317[k] as never));
   });
 });
 

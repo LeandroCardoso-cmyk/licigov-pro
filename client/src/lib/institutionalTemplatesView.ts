@@ -471,8 +471,8 @@ export function ownershipCounts(rows: readonly { origin?: OriginView | null; ori
 // política do órgão (somente gerente+; o servidor reautoriza)
 export interface PolicyView {
   readonly kind: PolicyKindKey; readonly version: number; readonly malformed: boolean;
-  /** Compatibilidade/transição explícitas (marco, órgão legado?, explicação). Ausente em servidores anteriores. */
-  readonly transition?: { cutoverAt: string; legacyOrganization: boolean; explanation: string };
+  /** Compatibilidade/transição explícitas (marco imutável do 1º deploy, órgão legado?, explicação). `UNAVAILABLE` ⇒ modo estrito. Ausente em servidores anteriores. */
+  readonly transition?: { cutoverAt: string | null; source: "LEDGER_MARKER" | "UNAVAILABLE"; legacyOrganization: boolean | null; explanation: string };
   readonly policy: { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner" };
   readonly note?: string;
   readonly history: readonly { version: number; policy: PolicyView["policy"] | null; declaredBy: { name: string; role: string }; actDate: string; reason: string }[];

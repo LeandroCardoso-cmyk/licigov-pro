@@ -35,6 +35,9 @@ import { IMPORT_PROVENANCE_SUBJECT } from "../../domain/institutionalTemplates/g
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { BLL, U_MANAGER, cleanupOrgs, ctxOf, decision, markTemplateOrgLegacy, seedWorld } from "../helpers/institutionalTemplatesE2eWorld";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { readLegacyPolicyCutover, resetLegacyPolicyCutoverCache } from "../../db/templateGovernanceTransition";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
@@ -45,6 +48,7 @@ const key = (p: string) => `${p}-${RUN}-${++keySeq}-tgv2`;
 const ORGS: number[] = [];
 const newOrg = () => { const o = BASE_ORG + orgSeq++; ORGS.push(o); return o; };
 let conn: mysql.Connection;
+const markerBackup = { iso: "" };
 const rows = async <T = any>(sql: string, args: unknown[] = []): Promise<T[]> => (await conn.execute(sql, args as never))[0] as T[];
 const count = async (sql: string, args: unknown[] = []): Promise<number> => Number((await rows<{ n: number }>(sql, args))[0].n);
 const callerCtx = (org: number, role: string, userId: number) => {
@@ -97,6 +101,7 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
   beforeAll(async () => {
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn); await validateSchema(conn);
+    markerBackup.iso = (await rows<{ c: string }>("SELECT cutover_at_iso c FROM template_governance_transitions WHERE marker_key = 'LEGACY_POLICY_CUTOVER'"))[0].c;
     await conn.query("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
     configureTemplateWorkflowPorts({ ...createTemplateWorkflowPorts(), originals: fakeStore as any });
     configureTemplateCompositionPorts(createTemplateCompositionPorts());
@@ -449,6 +454,63 @@ describe.skipIf(!DB)("Template Governance V2 (MySQL real)", () => {
     expect(resBll).toMatchObject({ status: "RESOLVED", revision: { id: r1.revision.id } });           // escopos independentes: a Revisão 1 segue vinculada ao seu escopo
     expect((await wf().listBindings(ctxOf(org), { documentKind: "edital", activeOnly: true })).map((b) => b.id).sort()).toEqual([bound.id, own.id].sort());
     expect(await countEvents(org, "REVISION_PUBLISHED").catch(() => 0)).toBeGreaterThanOrEqual(0);
+  }, 300_000);
+
+  it("TRN-1 — marco de transição: criado pela migration 0318, imutável (reaplicar/outros deploys NÃO o movem) e classifica órgãos por criação ANTES/DEPOIS; fronteira exata", async () => {
+    const [m] = await rows<{ marker_key: string; cutover_at_iso: string; recorded_by: string }>("SELECT marker_key, cutover_at_iso, recorded_by FROM template_governance_transitions");
+    expect(m).toMatchObject({ marker_key: "LEGACY_POLICY_CUTOVER", recorded_by: "migration:0318_template_governance_transition" });
+    expect(m.cutover_at_iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(Date.parse(m.cutover_at_iso)).toBeLessThanOrEqual(Date.now());
+    // "outro deploy": reexecuta as instruções da migration (CREATE IF NOT EXISTS + INSERT IGNORE) e as migrações do Drizzle ⇒ o marco NÃO se move
+    const sqlText = readFileSync(path.resolve("drizzle/0318_template_governance_transition.sql"), "utf8");
+    for (const stmt of sqlText.split("--> statement-breakpoint").map((x) => x.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").trim()).filter(Boolean)) await conn.query(stmt);
+    await new Promise((r) => setTimeout(r, 20));
+    await runMigrations(conn);
+    expect(await rows("SELECT cutover_at_iso FROM template_governance_transitions WHERE marker_key = 'LEGACY_POLICY_CUTOVER'")).toEqual([{ cutover_at_iso: m.cutover_at_iso }]);
+    expect(await count("SELECT COUNT(*) n FROM template_governance_transitions")).toBe(1);
+
+    const cut = Date.parse(m.cutover_at_iso);
+    const iso = (t: number) => new Date(t).toISOString();
+    const stateAt = async (label: string, createdAtIso: string) => {
+      const o = (await seedWorld(conn, newOrg(), label, { flagOn: true }), ORGS[ORGS.length - 1]);
+      await register(o);
+      await conn.execute("UPDATE institutional_template_identities SET created_at_iso = ? WHERE organization_id = ?", [createdAtIso, o]);
+      return ((await tpl(o).governance.policy.get()) as any);
+    };
+    const before = await stateAt("trn1a", iso(cut - 1));            // 1 ms ANTES do marco ⇒ legado
+    const exact = await stateAt("trn1b", iso(cut));                  // exatamente NO marco ⇒ NÃO é anterior ⇒ novo
+    const after = await stateAt("trn1c", iso(cut + 1));
+    expect(before).toMatchObject({ kind: "LEGACY_COMPAT", policy: { legalEvidence: "REQUIRED" }, transition: { source: "LEDGER_MARKER", cutoverAt: m.cutover_at_iso, legacyOrganization: true } });
+    expect(exact).toMatchObject({ kind: "PLATFORM_DEFAULT", policy: { legalEvidence: "OPTIONAL" }, transition: { legacyOrganization: false } });
+    expect(after).toMatchObject({ kind: "PLATFORM_DEFAULT" });
+  }, 300_000);
+
+  it("TRN-2 — FAIL-CLOSED: marco indisponível/ilegível ⇒ TODO órgão sem política é ESTRITO (evidência exigida), inclusive órgão novo; decisão explícita continua valendo; nada é gravado", async () => {
+    const org = (await seedWorld(conn, newOrg(), "trn2", { flagOn: true }), ORGS[ORGS.length - 1]);
+    const reg = await register(org);
+    const base = wports();
+    const noMarker = { ...base, governance: { ...base.governance!, getLegacyPolicyCutover: async () => null } };
+    configureTemplateWorkflowPorts(noMarker as any);
+    try {
+      const v: any = await tpl(org).governance.policy.get();
+      expect(v).toMatchObject({ kind: "UNRESOLVED_STRICT", malformed: false, policy: { legalEvidence: "REQUIRED" }, transition: { source: "UNAVAILABLE", cutoverAt: null, legacyOrganization: null } });
+      expect(v.transition.explanation).toMatch(/marco de transição.*não está disponível.*estrito/);
+      expect(blockedIds(await readiness(org, reg.revision.id))).toEqual(["LEGAL_APPROVAL_EVIDENCE"]);
+      // decisão explícita do órgão prevalece mesmo sem o marco
+      await setPolicy(org, OPTIONAL, 0);
+      expect(((await tpl(org).governance.policy.get()) as any)).toMatchObject({ kind: "TENANT_DEFINED", policy: { legalEvidence: "OPTIONAL" } });
+      expect(blockedIds(await readiness(org, reg.revision.id))).toEqual([]);
+    } finally { configureTemplateWorkflowPorts(base); }
+    // o leitor real devolve null para linha ilegível e nunca cacheia ausência
+    await conn.execute("UPDATE template_governance_transitions SET cutover_at_iso = 'ontem' WHERE marker_key = 'LEGACY_POLICY_CUTOVER'");
+    try {
+      resetLegacyPolicyCutoverCache();
+      expect(await readLegacyPolicyCutover()).toBeNull();
+    } finally {
+      await conn.execute("UPDATE template_governance_transitions SET cutover_at_iso = ? WHERE marker_key = 'LEGACY_POLICY_CUTOVER'", [markerBackup.iso]);
+      resetLegacyPolicyCutoverCache();
+    }
+    expect(await readLegacyPolicyCutover()).toMatchObject({ cutoverAt: markerBackup.iso });
   }, 300_000);
 
   it("COMPAT — a rota de prontidão expõe política e camadas; capacidades listam o piso 'policy' e a disponibilidade de preservação; órgão vizinho legado × novo não se contaminam", async () => {

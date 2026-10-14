@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1791755360.165211,
-    "ast_hash": "84d3ebbb9577977643bbb89e9441733b",
+    "mtime": 1791979453.7893403,
+    "ast_hash": "f42351f4feefaa5ad3ba25cbf365d976",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1791755360.165211,
-    "ast_hash": "36a7032ffc68b38cddc8f9c4b1aad55b",
+    "mtime": 1791979431.6447816,
+    "ast_hash": "3cef390a9f805011a232bf6b6c858777",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -6870,8 +6870,8 @@
     "semantic_hash": ""
   },
   "server/config/index.ts": {
-    "mtime": 1791976020.353001,
-    "ast_hash": "8866738e1bb8284e671b76df5777b296",
+    "mtime": 1791979487.9678035,
+    "ast_hash": "1d30b8475caa93e075351cddb62d93e3",
     "semantic_hash": ""
   },
   "server/config/ocr.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791949841.1717353,
-    "ast_hash": "727b6c9ec19d3cb4b8fd1199fd4271ea",
+    "mtime": 1791980085.5551572,
+    "ast_hash": "ced343c417170ba82cb3acb6b6043dab",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13675,8 +13675,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/institutionalTemplatesView.ts": {
-    "mtime": 1791977523.0962255,
-    "ast_hash": "ca7ae481c5a0b2a13a817848cff2650d",
+    "mtime": 1791980141.0868688,
+    "ast_hash": "c35f33496e6eee99819d90c5610f525d",
     "semantic_hash": ""
   },
   "client/src/pages/InstitutionalTemplateDetail.tsx": {
@@ -13715,8 +13715,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
-    "mtime": 1791769650.895219,
-    "ast_hash": "22969365147e1650ad1f5a7e20150be0",
+    "mtime": 1791979974.794487,
+    "ast_hash": "6f80ec826a9c0e8cc91f15929522e0b1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-integration-mysql-smoke.test.ts": {
@@ -13760,8 +13760,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-t2-schema-guard.test.ts": {
-    "mtime": 1791755360.7452111,
-    "ast_hash": "e40beef6ce5c9a7a55530f982f05c488",
+    "mtime": 1791979974.815793,
+    "ast_hash": "16b88991973479d050c024635cb57cee",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/bindings.ts": {
@@ -13910,8 +13910,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/ports.ts": {
-    "mtime": 1791976141.135366,
-    "ast_hash": "5961b943c06836905079e20af920ccf4",
+    "mtime": 1791979488.0361352,
+    "ast_hash": "57cbc54c3d0be191f161026c61de65c1",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/portsRegistry.ts": {
@@ -14045,8 +14045,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0317-migration-mysql-smoke.test.ts": {
-    "mtime": 1791769650.896083,
-    "ast_hash": "7d8d7d5f6ea313c68d03c26a758025c2",
+    "mtime": 1791979974.8004587,
+    "ast_hash": "7f9959921f64c926f952f0a3e9f8b4a6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
@@ -14275,8 +14275,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/governanceAdapter.ts": {
-    "mtime": 1791755360.777211,
-    "ast_hash": "dbe29b3bac5d9f860487f0d6cb0dc4fc",
+    "mtime": 1791979488.036785,
+    "ast_hash": "ebc9af95a2b03ef81d2706339110ab6d",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/catalogService.ts": {
@@ -14290,8 +14290,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/governanceService.ts": {
-    "mtime": 1791976235.187556,
-    "ast_hash": "dfea30b07111888f73983cd0f3995353",
+    "mtime": 1791979488.109892,
+    "ast_hash": "061a390cda45b2df43ac7d516221a468",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/governedFieldsStore.ts": {
@@ -14830,23 +14830,23 @@
     "semantic_hash": ""
   },
   "client/src/components/institutionalTemplates/templateGovernanceV2-components.test.ts": {
-    "mtime": 1791977607.1198592,
-    "ast_hash": "09684a3c8acbb960fa3e84457f12d891",
+    "mtime": 1791980141.0873322,
+    "ast_hash": "87d4ea8b450013a36b5d8f718742072d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-governance-v2-mysql-smoke.test.ts": {
-    "mtime": 1791977368.0825577,
-    "ast_hash": "d1a94137d3369dfc0206a3bc2c465bae",
+    "mtime": 1791979596.5224028,
+    "ast_hash": "9d479975d8bf7a112369a763c377cbcc",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-governance-v2-domain.test.ts": {
-    "mtime": 1791976343.29256,
-    "ast_hash": "7d4141502b2f82aa7a6ef3d217460621",
+    "mtime": 1791979573.5234118,
+    "ast_hash": "9eb34c596e34aabae3ba133c7f8f5636",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/governance/templateGovernanceV2.ts": {
-    "mtime": 1791976123.4901524,
-    "ast_hash": "ec5d92ccd3bc778d66d1f8be608dd1a9",
+    "mtime": 1791979488.1076503,
+    "ast_hash": "911013a419a4940462d520f22eae57e5",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/originalStoreAdapter.ts": {
@@ -14860,8 +14860,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/TEMPLATE_GOVERNANCE_V2.md": {
-    "mtime": 1791977623.7539995,
-    "ast_hash": "817e88bf13aca8d3a5452a5e79907de0",
+    "mtime": 1791980151.4462624,
+    "ast_hash": "f59327467d1f5a3a04d70d2e9c87c6bf",
     "semantic_hash": ""
   },
   "client/src/components/institutionalTemplates/IntegrityPanel.tsx": {
@@ -14870,18 +14870,38 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-governance-v2-hardening.test.ts": {
-    "mtime": 1791976384.4059398,
-    "ast_hash": "b43e573d292a7d09aa6fd1e886f9e6a3",
-    "semantic_hash": ""
-  },
-  "server/config/templates.ts": {
-    "mtime": 1791976020.353001,
-    "ast_hash": "c8d9cd401d8e494c27f787f219f76b31",
+    "mtime": 1791979573.5240827,
+    "ast_hash": "08e3c1662980a955295faebde5d4d5ab",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/governance/integrityExplanation.ts": {
     "mtime": 1791976218.6909323,
     "ast_hash": "f5a7a849a839b5cd9271f4d73d51b369",
+    "semantic_hash": ""
+  },
+  "drizzle/0318_template_governance_transition.sql": {
+    "mtime": 1791979453.7923532,
+    "ast_hash": "20cc7afb380fa5df770322084027c7ad",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0318_snapshot.json": {
+    "mtime": 1791979436.3527818,
+    "ast_hash": "7326f35cd0bc9fd2d2e2698b47aca904",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/templates-0318-migration-mysql-smoke.test.ts": {
+    "mtime": 1791980085.54223,
+    "ast_hash": "e3717bcefa17431bdf9d1a9fa0551c69",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-governance-v2-transition.test.ts": {
+    "mtime": 1791979573.52479,
+    "ast_hash": "b1827fd07d5f526d05645815f5bf5163",
+    "semantic_hash": ""
+  },
+  "server/db/templateGovernanceTransition.ts": {
+    "mtime": 1791979488.0347507,
+    "ast_hash": "003203686037e9d9b1f5c3664ccdc78b",
     "semantic_hash": ""
   }
 }

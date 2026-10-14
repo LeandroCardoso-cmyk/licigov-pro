@@ -3,4 +3,3 @@ export * from "./app";
 export * from "./aws";
 export * from "./auth";
 export * from "./ai";
-export * from "./templates";

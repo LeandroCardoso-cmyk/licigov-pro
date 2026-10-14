@@ -22,10 +22,9 @@ import {
 } from "../../domain/institutionalTemplates/governance/importProvenance";
 import { decodeKv } from "../../domain/institutionalTemplates/governance/kv";
 import {
-  decodeTemplateGovernancePolicy, encodeTemplateGovernancePolicy, isLegacyTemplateOrganization, originChangeIssue, resolveEffectiveTemplateGovernancePolicy, TEMPLATE_POLICY_SUBJECT_ID,
+  decodeTemplateGovernancePolicy, encodeTemplateGovernancePolicy, isLegacyTemplateOrganization, originChangeIssue, type OrganizationTransitionState, resolveEffectiveTemplateGovernancePolicy, TEMPLATE_POLICY_SUBJECT_ID,
   validateTemplateGovernancePolicy, type EffectiveTemplateGovernancePolicy, type TemplateGovernancePolicy,
 } from "../../domain/institutionalTemplates/governance/templateGovernanceV2";
-import { getTemplateGovernanceConfig } from "../../config/templates";
 import { explainIntegrity, type IntegrityExplanation, type LineageProbe } from "../../domain/institutionalTemplates/governance/integrityExplanation";
 import { getModelPackage } from "./modelPackages";
 import { serviceLogger } from "../observabilityService";
@@ -83,14 +82,14 @@ export interface TemplatePolicyVersionView {
 export interface TemplatePolicyView extends EffectiveTemplateGovernancePolicy {
   readonly history: readonly TemplatePolicyVersionView[];
   /** Compatibilidade/transição explícitas: por que este órgão está (ou não) no regime anterior e como sair dele. */
-  readonly transition: { readonly cutoverAt: string; readonly legacyOrganization: boolean; readonly explanation: string };
+  readonly transition: { readonly cutoverAt: string | null; readonly source: "LEDGER_MARKER" | "UNAVAILABLE"; readonly legacyOrganization: boolean | null; readonly explanation: string };
   readonly note: string;
 }
-function transitionExplanation(kind: EffectiveTemplateGovernancePolicy["kind"]): string {
+function transitionExplanation(kind: EffectiveTemplateGovernancePolicy["kind"], markerUnavailable: boolean): string {
   switch (kind) {
     case "TENANT_DEFINED": return "Política estabelecida pelo próprio órgão; prevalece sobre qualquer padrão da plataforma.";
     case "LEGACY_COMPAT": return "O órgão já possuía modelos antes da transição do padrão da plataforma e não registrou política: segue, por compatibilidade, exigindo evidência jurídica prévia. Nada foi alterado em silêncio. Para adotar o padrão da plataforma (opcional) ou confirmar a exigência, registre a política do órgão (gerente).";
-    case "UNRESOLVED_STRICT": return "A política não pôde ser resolvida/lida: aplica-se o padrão estrito (evidência jurídica exigida) até que o órgão a restabeleça.";
+    case "UNRESOLVED_STRICT": return markerUnavailable ? "O marco de transição da plataforma não está disponível: por segurança aplica-se o padrão estrito (evidência jurídica prévia exigida) até que ele possa ser lido. Nada foi alterado em silêncio." : "A política não pôde ser resolvida/lida: aplica-se o padrão estrito (evidência jurídica exigida) até que o órgão a restabeleça.";
     default: return "Padrão da plataforma: a evidência jurídica prévia do modelo é opcional. O órgão pode estabelecer a exigência (REQUIRED) a qualquer momento.";
   }
 }
@@ -207,16 +206,19 @@ export class TemplateGovernanceService {
 
   /**
    * Política de governança de templates do órgão (Template Governance V2). Decisão explícita do órgão sempre prevalece; ausente ⇒ órgão LEGADO (modelos anteriores ao
-   * marco de transição) segue em LEGACY_COMPAT (REQUIRED), os demais no padrão da plataforma (OPTIONAL); corrente ilegível ⇒ estrito. Só leitura — nada é gravado.
+   * marco de transição) segue em LEGACY_COMPAT (REQUIRED), os demais no padrão da plataforma (OPTIONAL); marco indisponível ou corrente ilegível ⇒ estrito. Só leitura — nada é gravado.
    */
   async getTemplatePolicy(ctx: WorkflowContext): Promise<TemplatePolicyView> {
     const history = this.ports.governance ? await this.ports.governance.listGovernanceDecisions(ctx.organizationId, "institutional.policy", TEMPLATE_POLICY_SUBJECT_ID) : [];
-    const cfg = getTemplateGovernanceConfig();
-    // só consulta as identidades quando o resultado depende disso (sem decisão registrada)
-    const legacyOrganization = history.length === 0 ? isLegacyTemplateOrganization(await this.ports.repository.listIdentities(ctx.organizationId, {}), cfg.legacyCutoverAt) : false;
-    const effective = resolveEffectiveTemplateGovernancePolicy(history, { legacyOrganization });
+    // marco imutável (migration 0318) — indisponível/ilegível ⇒ null ⇒ modo ESTRITO (nunca presume órgão novo)
+    const marker = this.ports.governance?.getLegacyPolicyCutover ? await this.ports.governance.getLegacyPolicyCutover() : null;
+    let organization: OrganizationTransitionState = "UNKNOWN";
+    // só consulta as identidades quando o resultado depende disso (sem decisão registrada e com marco disponível)
+    if (marker && history.length === 0) organization = isLegacyTemplateOrganization(await this.ports.repository.listIdentities(ctx.organizationId, {}), marker.cutoverAt) ? "LEGACY" : "NEW";
+    const effective = resolveEffectiveTemplateGovernancePolicy(history, { organization });
     return {
-      ...effective, note: POLICY_NOTE, transition: { cutoverAt: cfg.legacyCutoverAt, legacyOrganization, explanation: transitionExplanation(effective.kind) },
+      ...effective, note: POLICY_NOTE,
+      transition: { cutoverAt: marker?.cutoverAt ?? null, source: marker ? "LEDGER_MARKER" : "UNAVAILABLE", legacyOrganization: history.length === 0 && marker ? organization === "LEGACY" : null, explanation: transitionExplanation(effective.kind, !marker) },
       history: history.map((d) => ({
         version: d.revision, decisionId: d.id, policy: decodeTemplateGovernancePolicy(d), declaredBy: { name: d.decidedByName, role: d.decidedByRole },
         actDate: d.decidedAt, basisReference: d.basisReference, reason: d.reason, recordedByUserId: d.recordedByUserId,
