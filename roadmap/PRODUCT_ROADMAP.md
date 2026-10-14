@@ -38,6 +38,22 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 - Indicador "contratos vencendo" conta contratos (um por referência, janela de 90 dias), não alertas.
 - Smoke integrado `integrated-journeys-mysql-smoke` (J1 processo novo, J2 legado→contrato→aditivo, J3 monitoramento).
 
+### Progresso por marco (integrador — 14/10/2026, com evidência)
+
+| Marco | Peso | % | Evidência |
+|---|---|---|---|
+| M0 — Staging e baseline | 10 | 100 | Deploy `c7868b88` SUCCESS em `staging@2ddcdf5`; ledger até 0318; MySQL/S3 próprios; tenant `homologacao-sintetica` criado pelo Owner |
+| M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização acima; consultas dirigidas; grafo idempotente |
+| M2 — BLL diferido | 10 | 75 | Revisão 2 sintética: 13 → 0 decisões pendentes, 7 dados "A DEFINIR PARA PUBLICAÇÃO" (smoke); ativação real é decisão institucional |
+| M3 — Motor compartilhado | 10 | 85 | `TemplateDocumentKind` cobre 7 tipos; só o Edital BLL tem pacote de modelo |
+| M4 — Jornada principal | 15 | 70 | J1 (smoke MySQL) + DFD/replay via HTTP; encadeamento DFD→ETP→TR→Edital **BLL** aguarda entrega do Claude 2 |
+| M5 — Processos legados | 10 | 85 | Contrato vigente declarado → aditivo, replay e calendário validados via HTTP no servidor real (local) |
+| M6 — Contratos e aditivos | 10 | 60 | Aditivo/termo sobre contrato vigente; ativação de minuta e pós-parecer pendentes (jurídico) |
+| M7 — Pareceres e monitoramento | 10 | 70 | Calendário/alertas/indicador/painel validados via HTTP; parecer avulso pendente |
+| M8 — E2E staging | 15 | 35 | Executor `pnpm homolog:e2e` (APIs oficiais, travado no tenant sintético) validado localmente; execução em staging bloqueada pelo acesso de rede da sessão |
+| M9 — Regras, roadmap e integração | 5 | 85 | CLAUDE.md, roadmap, CI em PRs para `staging`, integrador ativo |
+| **Global ponderado** | 100 | **72,5** | Σ(peso × %) / 100; cada entrega contada num único marco |
+
 ### P0 — disponibilização funcional
 - Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) e homologação integrada.
 - Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.

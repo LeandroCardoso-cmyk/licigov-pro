@@ -32,6 +32,7 @@
     "templates:compile-master": "tsx scripts/templates-compile-master.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "homolog:e2e": "tsx scripts/homologation-e2e.ts",
     "ops:schedule-backfill": "tsx scripts/operation-record-schedule-backfill.ts"
   },
   "dependencies": {

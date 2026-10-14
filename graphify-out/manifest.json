@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1791349386.037224,
-    "ast_hash": "af1cf81dc26cb37a75aa3575856d91ba",
+    "mtime": 1792010887.5345597,
+    "ast_hash": "ab511a347aa82fe41282b912f447dee5",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792003098.6432986,
-    "ast_hash": "8821958b98dd244259f896a362afcf98",
+    "mtime": 1792011277.2953196,
+    "ast_hash": "216907e83fdb4a9c916d30325d8dfaa8",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -14947,6 +14947,21 @@
   "shared/operationRecordExpiration.ts": {
     "mtime": 1792002459.84216,
     "ast_hash": "343e206dcbb7b1f84228bcfc0d8c2434",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1792010732.623332,
+    "ast_hash": "921e32a7a00a91f52431fc4967d0e2e1",
+    "semantic_hash": ""
+  },
+  "scripts/homologation-e2e.ts": {
+    "mtime": 1792010993.7918527,
+    "ast_hash": "6ca237feea8a3261716d15e2c69628d4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/homologation-e2e-guards.test.ts": {
+    "mtime": 1792011263.07888,
+    "ast_hash": "170a40cdc5e6716aa5deb23ceeb4bc2d",
     "semantic_hash": ""
   }
 }
