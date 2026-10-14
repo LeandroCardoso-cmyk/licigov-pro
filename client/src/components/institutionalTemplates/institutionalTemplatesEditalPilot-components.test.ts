@@ -161,8 +161,9 @@ describe("RegisterModelForm", () => {
   const preset = { presetId: "EDITAL_PREGAO_ELETRONICO_BLL", templateKey: "EDITAL_PREGAO_ELETRONICO_BLL", documentKind: "edital", slug: "edital-pregao-eletronico-bll", displayName: "Edital — Pregão Eletrônico — BLL", scope: { modality: "pregao", form: "eletronica", platform: "bll" } };
   it("oferece o preset BLL, declara que nasce RASCUNHO e nunca aprova/publica, e não pré-marca a confirmação", () => {
     const html = h(M.RegisterModelForm, { value: V.emptyRegisterForm("2026-10-07", preset), onChange: () => undefined, presets: [preset], documentKinds: ["edital", "tr"], today: "2026-10-07", hasDocx: false });
-    for (const t of ["Edital — Pregão Eletrônico — BLL", "EDITAL_PREGAO_ELETRONICO_BLL", "edital-pregao-eletronico-bll", "RASCUNHO (DRAFT)", "Nunca aprova nem publica", "Aplicabilidade", "AST nativo (JSON)", "SHA-256 da fonte", "Versão lógica da fonte"]) expect(html, t).toContain(t);
-    expect(html).not.toMatch(/checked=""[^>]*\/><span>Confirmo/);
+    for (const t of ["Edital — Pregão Eletrônico — BLL", "EDITAL_PREGAO_ELETRONICO_BLL", "edital-pregao-eletronico-bll", "RASCUNHO", "nunca aprova, publica nem vincula", "Aplicabilidade", "AST nativo (JSON)", "Opções avançadas"]) expect(html, t).toContain(t);
+    // LICIGOV-FAST: nenhum campo de autoridade/ato nem checkbox de confirmação no envio do modelo
+    for (const banned of ["Quem registra", "Cargo / função", "Referência da fonte/ato", "Justificativa", "Confirmo", 'type="checkbox"']) expect(html, banned).not.toContain(banned);
   });
 });
 

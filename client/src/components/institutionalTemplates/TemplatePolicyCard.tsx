@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { DecisionForm } from "./DecisionForm";
+import { ActionNote } from "./ActionNote";
 import { POLICY_KIND_LABEL, policyHeadline, validatePolicyForm, type PolicyFormState, type PolicyView } from "@/lib/institutionalTemplatesView";
 
 export interface TemplatePolicyCardProps {
@@ -16,7 +16,6 @@ export interface TemplatePolicyCardProps {
   onCancel: () => void;
   onSubmit: () => void;
   pending?: boolean;
-  showErrors?: boolean;
 }
 
 const ROLE_LABEL = { manager: "gerente", owner: "titular (owner)" } as const;
@@ -25,7 +24,7 @@ const ROLE_LABEL = { manager: "gerente", owner: "titular (owner)" } as const;
  * Política do órgão sobre os SEUS modelos. Deixa explícito que a decisão é do órgão, auditável e versionada, e que o que muda é a
  * exigência para DISPONIBILIZAR modelos no catálogo interno — não a análise jurídica dos documentos elaborados (Procuradoria).
  */
-export function TemplatePolicyCard({ policy, canEdit, form, onOpen, onChange, onCancel, onSubmit, pending = false, showErrors = false }: TemplatePolicyCardProps) {
+export function TemplatePolicyCard({ policy, canEdit, form, onOpen, onChange, onCancel, onSubmit, pending = false }: TemplatePolicyCardProps) {
   const { errors, valid } = form ? validatePolicyForm(form, policy) : { errors: {}, valid: false };
   return (
     <Card aria-label="Política de governança de modelos">
@@ -72,12 +71,13 @@ export function TemplatePolicyCard({ policy, canEdit, form, onOpen, onChange, on
                 </select>
               </div>
             ))}
-            <p className="text-xs text-muted-foreground">O piso nunca fica abaixo de gerente. A mudança vale para novas aprovações/publicações; nada já publicado é alterado.</p>
-            <DecisionForm action="APPROVE" revisionLabel="Política de governança de modelos do órgão" value={form.decision} showErrors={showErrors} onChange={(d) => onChange({ ...form, decision: d })} />
-            {showErrors && (errors as { unchanged?: string }).unchanged && <p role="alert" className="text-xs text-destructive">{(errors as { unchanged?: string }).unchanged}</p>}
+            <p className="text-xs text-muted-foreground">O piso nunca fica abaixo de gerente.</p>
+            <ActionNote id="pol-note" note={form.note} onNote={(n) => onChange({ ...form, note: n })}
+              consequence={`A política escolhida passa a valer para os modelos do órgão (${form.legalEvidence === "REQUIRED" ? "evidência jurídica obrigatória" : "evidência jurídica opcional"}; aprovar: ${form.approveMinRole}; disponibilizar: ${form.publishMinRole}). Nada já disponibilizado é alterado.`} />
+            {(errors as { unchanged?: string }).unchanged && <p role="alert" className="text-xs text-destructive">{(errors as { unchanged?: string }).unchanged}</p>}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={onCancel}>Cancelar</Button>
-              <Button size="sm" disabled={pending || (showErrors && !valid)} onClick={onSubmit}>Registrar política</Button>
+              <Button size="sm" disabled={pending || !valid} onClick={onSubmit}>Registrar política</Button>
             </div>
           </form>
         )}

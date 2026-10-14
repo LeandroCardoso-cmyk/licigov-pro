@@ -27,7 +27,7 @@ const bll: RegistrationPresetView = {
   displayName: "Edital — Pregão Eletrônico — BLL", scope: { modality: "pregao", form: "eletronica", platform: "bll" },
   sourceKind: "MODEL_PACKAGE", sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA,
 };
-const filled = (over: object = {}) => ({ ...V.emptyRegisterForm("2026-10-08", bll), decidedByName: "Maria Souza", decidedByRole: "Procuradora", basisReference: "Ato 1/2026", reason: "Registro do primeiro modelo aprovado.", confirmed: true, ...over });
+const filled = (over: object = {}) => ({ ...V.emptyRegisterForm("2026-10-08", bll), ...over });
 const render = (value: object, presets: RegistrationPresetView[] = [bll]) => h(Form, { value, onChange: () => undefined, presets, documentKinds: ["edital", "tr"], today: "2026-10-08", hasDocx: false });
 const read = (rel: string) => readFileSync(path.resolve(rel), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -96,7 +96,9 @@ describe("registro por MODEL_PACKAGE", () => {
     expect(html).not.toMatch(/<textarea[^>]*aria-label="Conteúdo-fonte"/);
     expect(html).not.toContain('type="file"');
     expect(html).not.toContain("reg-inventory");
-    for (const id of ["reg-templateKey", "reg-sourceLogicalVersion", "reg-sourceSha256"]) expect(html).toMatch(new RegExp(`id="${id}"[^>]*readOnly=""|readOnly=""[^>]*id="${id}"`));
+    // metadados do pacote são só EXIBIDOS (versão e SHA vêm do servidor; nada a digitar)
+    for (const id of ["reg-templateKey", "reg-slug"]) expect(html).toMatch(new RegExp(`id="${id}"[^>]*readOnly=""|readOnly=""[^>]*id="${id}"`));
+    expect(html).not.toContain("reg-sourceSha256");
   });
   it("J: o payload do pacote é {kind:'MODEL_PACKAGE', modelKey} — nenhum conteúdo jurídico trafega", () => {
     expect(V.packageSourceOf(filled())).toEqual({ kind: "MODEL_PACKAGE", modelKey: "EDITAL_PREGAO_ELETRONICO_BLL" });
@@ -105,17 +107,17 @@ describe("registro por MODEL_PACKAGE", () => {
     expect(page).toMatch(/reg\.sourceKind !== "MODEL_PACKAGE" && reg\.inventoryText/);
   });
   it("K: o registro continua só DRAFT (aviso, confirmação humana, sem auto-aprovar/publicar/vincular)", () => {
-    const html = render(filled({ confirmed: false }));
-    expect(html).toContain("RASCUNHO (DRAFT)");
-    expect(html).toContain("Nunca aprova nem publica");
-    expect(V.validateRegisterForm(filled({ confirmed: false }), false).errors.confirmed).toBeTruthy();
+    const html = render(filled());
+    expect(html).toContain("RASCUNHO");
+    expect(html).toContain("nunca aprova, publica nem vincula");
+    expect(V.validateRegisterForm(filled(), false).errors.confirmed).toBeUndefined();   // sem checkbox: o clique em "Enviar modelo" é a confirmação
     const v = V.validateRegisterForm(filled(), false);
     expect(v.valid).toBe(true);                                       // pacote válido SEM texto-fonte nem inventário
-    for (const k of ["decidedByName", "decidedByRole", "decidedAt", "basisReference", "reason"]) expect(V.validateRegisterForm(filled({ [k]: "" }), false).errors[k], k).toBeTruthy();
+    expect(html).not.toMatch(/Quem registra|Referência da fonte\/ato|Confirmo/);   // LICIGOV-FAST: nenhum campo de ato
   });
   it("L: o registro livre AST/MARKDOWN/DOCX continua funcionando (inclui validação e campos editáveis)", () => {
     const free = { ...V.emptyRegisterForm("2026-10-08"), slug: "meu-modelo", templateKey: "MEU_MODELO", displayName: "Meu modelo", scope: { ...V.emptyRegisterForm("2026-10-08").scope, modality: "pregao", form: "eletronica" },
-      sourceKind: "AST" as const, sourceText: '{"schema":"tpl-ast/1","root":[]}', sourceLogicalVersion: "1", sourceSha256: "a".repeat(64), decidedByName: "A", decidedByRole: "B", basisReference: "C", reason: "Registro livre de teste.", confirmed: true };
+      sourceKind: "AST" as const, sourceText: '{"schema":"tpl-ast/1","root":[]}', sourceLogicalVersion: "1", sourceSha256: "a".repeat(64), reason: "Registro livre de teste.", confirmed: true };
     expect(V.validateRegisterForm(free, false).errors.source).toBeUndefined();
     expect(V.validateRegisterForm({ ...free, sourceText: "{" }, false).errors.source).toBeTruthy();
     expect(V.validateRegisterForm({ ...free, sourceKind: "DOCX", sourceText: "" }, true).errors.source).toBeUndefined();

@@ -13,7 +13,7 @@ import { PageLoader } from "@/components/ui/PageLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AstOutline } from "@/components/institutionalTemplates/AstOutline";
-import { DecisionForm } from "@/components/institutionalTemplates/DecisionForm";
+import { ActionNote } from "@/components/institutionalTemplates/ActionNote";
 import { ImportResultPanel, type ImportResultView } from "@/components/institutionalTemplates/ImportResultPanel";
 import { GovernanceSummary, LegalEvidenceForm, type GovernanceView } from "@/components/institutionalTemplates/LegalEvidencePanel";
 import { PreviewDossierPanel, type PreviewDossierView } from "@/components/institutionalTemplates/PreviewDossierPanel";
@@ -25,10 +25,10 @@ import { ResolutionNotice } from "@/components/institutionalTemplates/Resolution
 import { RevisionStatusBadge } from "@/components/institutionalTemplates/RevisionStatusBadge";
 import { RevisionTable, type RevisionRow } from "@/components/institutionalTemplates/RevisionTable";
 import {
-  ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyDecisionForm, emptyLegalEvidenceForm, emptyScopeForm, formatIssues, hasRoleAtLeast,
+  ACTION_COPY, AST_SNIPPETS, appendSnippet, DOCUMENT_KIND_LABEL, emptyLegalEvidenceForm, emptyScopeForm, formatIssues, hasRoleAtLeast,
   legalEvidencePayload, makeIdempotencyKey, replaceableBinding, revisionLabel, sampleValuesFromText, scopeFormProblems, scopeFromForm, scopeLabel, STATUS_EXPLANATION,
-  validateDecisionForm, validateLegalEvidenceForm,
-  type DecisionFormState, type LegalEvidenceFormState, type LifecycleAction, type ReadinessMatrixView, type RevisionStatus, type ResolutionView, type ScopeFormState,
+  validateLegalEvidenceForm,
+  type LegalEvidenceFormState, type LifecycleAction, type ReadinessMatrixView, type RevisionStatus, type ResolutionView, type ScopeFormState,
 } from "@/lib/institutionalTemplatesView";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -61,29 +61,30 @@ export default function InstitutionalTemplateDetail() {
 
   // ── ciclo de vida ──
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const [form, setForm] = useState<DecisionFormState>(emptyDecisionForm(today()));
-  const [showErrors, setShowErrors] = useState(false);
+  const [note, setNote] = useState("");
   const approve = trpc.institutionalTemplates.revisions.approve.useMutation({ onError });
   const publish = trpc.institutionalTemplates.revisions.publish.useMutation({ onError });
+  const makeAvailable = trpc.institutionalTemplates.revisions.makeAvailable.useMutation({ onError });
   const deprecate = trpc.institutionalTemplates.revisions.deprecate.useMutation({ onError });
 
   const startAction = (action: LifecycleAction, revision: RevisionRow) => {
-    setForm(emptyDecisionForm(today())); setShowErrors(false);
+    setNote("");
     setPending({ action, revision, expectedStatus: revision.status, idempotencyKey: makeIdempotencyKey() });
   };
   const confirmAction = async () => {
     if (!pending) return;
-    const v = validateDecisionForm(form);
-    if (!v.valid) { setShowErrors(true); return; }
+    // A confirmação é o clique no botão que nomeia a ação. Autoridade = usuário autenticado (registrada pelo servidor); observação é opcional.
     const input = {
-      revisionId: pending.revision.id, expectedStatus: pending.expectedStatus, confirm: true, idempotencyKey: pending.idempotencyKey,
-      decision: { decidedByName: form.decidedByName.trim(), decidedByRole: form.decidedByRole.trim(), decidedAt: form.decidedAt, basisReference: form.basisReference.trim(), reason: form.reason.trim() },
+      revisionId: pending.revision.id, expectedStatus: pending.expectedStatus, confirm: true as const, idempotencyKey: pending.idempotencyKey,
+      ...(note.trim() ? { note: note.trim() } : {}),
     };
     try {
-      // Publicar: o servidor RECALCULA a prontidão; o cliente envia só o inventário (dado) — nunca uma matriz nem "aceite de bloqueio".
-      if (pending.action === "PUBLISH") await publish.mutateAsync({ ...input, ...(inventoryJson !== undefined && !inventoryBad ? { inventory: inventoryJson } : {}) });
+      // Disponibilizar/Publicar: o servidor RECALCULA a prontidão; o cliente envia só o inventário (dado) — nunca uma matriz nem "aceite de bloqueio".
+      const inv = inventoryJson !== undefined && !inventoryBad ? { inventory: inventoryJson } : {};
+      if (pending.action === "AVAILABLE") await makeAvailable.mutateAsync({ ...input, expectedStatus: pending.expectedStatus as "DRAFT" | "APPROVED", ...inv });
+      else if (pending.action === "PUBLISH") await publish.mutateAsync({ ...input, ...inv });
       else await (pending.action === "APPROVE" ? approve : deprecate).mutateAsync(input);
-      toast.success(`${ACTION_COPY[pending.action].title}: decisão registrada.`);
+      toast.success(pending.action === "AVAILABLE" ? "Modelo disponível para elaboração." : `${ACTION_COPY[pending.action].title}: registrado.`);
       setPending(null); invalidate();
     } catch { /* mensagem já exibida pelo onError */ }
   };
@@ -381,28 +382,28 @@ export default function InstitutionalTemplateDetail() {
       <AlertDialog open={!!pending} onOpenChange={(o) => { if (!o) setPending(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>{pending ? ACTION_COPY[pending.action].title : ""}</AlertDialogTitle>
-            <AlertDialogDescription>Esta é uma decisão institucional registrada com a autoridade que você declarar. Revise antes de confirmar.</AlertDialogDescription></AlertDialogHeader>
-          {pending && pending.action === "PUBLISH" && (() => {
+            <AlertDialogDescription>{pending ? revisionLabel(pending.revision) : ""}</AlertDialogDescription></AlertDialogHeader>
+          {pending && (pending.action === "PUBLISH" || pending.action === "AVAILABLE") && (() => {
             const m = readiness.data?.matrix.revisionId === pending.revision.id ? (readiness.data.matrix as unknown as ReadinessMatrixView) : null;
             const blocked = m ? m.checks.filter((c) => c.status === "BLOCKED") : [];
             return (
               <div className="space-y-2 rounded-md border p-3 text-sm" aria-label="Prontidão para publicar">
-                <p>O servidor recalcula a prontidão ao publicar: qualquer verificação BLOCKED impede a publicação e nenhuma decisão humana a substitui.</p>
+                <p>O servidor confere a prontidão ao disponibilizar: qualquer verificação BLOCKED impede a disponibilização e nenhuma decisão humana a substitui.</p>
                 {!m ? <p>A matriz ainda não foi avaliada nesta sessão; avalie na aba Prontidão (com o inventário da fonte) para ver os bloqueios antes de decidir.</p>
                   : blocked.length === 0 ? <p>Última avaliação sem bloqueios (hash {m.matrixHash.slice(0, 12)}…).</p> : (
                     <>
-                      <p role="alert" className="font-medium text-destructive">{blocked.length} verificação(ões) BLOCKED — a publicação será recusada:</p>
+                      <p role="alert" className="font-medium text-destructive">{blocked.length} verificação(ões) BLOCKED — a disponibilização será recusada:</p>
                       <ul className="list-disc pl-5">{blocked.map((c) => <li key={c.id}>{c.label}</li>)}</ul>
                     </>
                   )}
               </div>
             );
           })()}
-          {pending && <DecisionForm action={pending.action} revisionLabel={revisionLabel(pending.revision)} value={form} onChange={setForm} showErrors={showErrors} />}
+          {pending && <ActionNote id="lc-note" consequence={ACTION_COPY[pending.action].consequence} note={note} onNote={setNote} />}
           <AlertDialogFooter>
             <Button variant="outline" onClick={() => setPending(null)}>Cancelar</Button>
-            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending
-              || (pending?.action === "PUBLISH" && readiness.data?.matrix.revisionId === pending.revision.id && readiness.data.matrix.overall === "BLOCKED")} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].title : "Confirmar"}</Button>
+            <Button disabled={approve.isPending || publish.isPending || deprecate.isPending || makeAvailable.isPending
+              || ((pending?.action === "PUBLISH" || pending?.action === "AVAILABLE") && readiness.data?.matrix.revisionId === pending.revision.id && readiness.data.matrix.overall === "BLOCKED")} onClick={confirmAction}>{pending ? ACTION_COPY[pending.action].button : "Confirmar"}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

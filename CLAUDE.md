@@ -5,6 +5,23 @@
 > sobre qualquer documento de visão anterior. Toda implementação futura deve respeitá-la
 > (missão, posicionamento não-ERP, IA supervisionada, Regra de Ouro, princípios arquiteturais).
 
+## LICIGOV-FAST — simplicidade operacional e velocidade de entrega (diretriz permanente do Owner)
+> Complementa — sem substituir — as regras abaixo. Em caso de conflito aparente, preservam-se os controles de segurança e a velocidade vem de **remover trabalho**, nunca de enfraquecer o backend.
+
+O LiciGov Pro existe para tornar departamentos de licitações mais rápidos, organizados e seguros. A complexidade técnica é absorvida pela arquitetura, **não transferida ao servidor público**. Todo campo obrigatório, aprovação, confirmação ou etapa precisa de justificativa concreta; não criar processo artificial só porque a arquitetura comporta controles sofisticados.
+
+1. Uma informação, um preenchimento. 2. Uma decisão, uma confirmação. 3. Governança automática e, preferencialmente, invisível. 4. Complexidade proporcional ao risco. 5. Elaboração sem burocracia artificial. 6. Reutilizar dados contextuais já disponíveis. 7. Aprovação humana só onde for juridicamente/operacionalmente necessária. 8. Correção incremental em vez de reescrita. 9. Testes proporcionais ao risco (sem repetir a suíte completa sem motivo concreto). 10. Entrega funcional antes de refinamento opcional.
+
+**Preservar sempre:** isolamento multi-tenant, RBAC, integridade, versionamento, provenance/lineage, replay safety, idempotência, ledger auditável, observabilidade e aprovação humana nas decisões juridicamente relevantes. Governança não é sinônimo de formulário.
+
+**Plataforma × prefeitura × documento (nunca misturar):**
+- *Governança da plataforma* — produto, curadoria, versões e disponibilização dos templates mantidos pelo LiciGov Pro. Decisão técnica de desenvolvimento **não** exige ato administrativo.
+- *Governança do tenant* — decisões institucionais da prefeitura sobre seus modelos e procedimentos. Só autoridade da própria organização as toma; o Owner da plataforma **não** simula aprovação de prefeitura. Nunca criar atos administrativos fictícios.
+- *Workflow documental* — elaboração, revisão, análise jurídica quando aplicável e finalização de documentos de processos. Publicar template no catálogo interno **≠** publicar documento oficial.
+- Desenvolvimento/testes: tenant ou ambiente **sintético explicitamente identificado**. A organização 1 contém referências reais (Moreira Sales): **nunca** reclassificá-la em silêncio como sintética.
+
+**Como aplicar nos formulários/contratos:** identificar automaticamente o usuário autenticado e registrar data/hora, tenant, versão, correlation id e histórico (ver `server/services/institutionalTemplates/electronicAuthority.ts`); pedir fundamento institucional (autoridade/cargo/ato) **somente** onde o contrato o exige de fato (ex.: evidência jurídica). O texto de confirmação deve corresponder exatamente à ação ("Registrar política", não "Confirmo a APROVAÇÃO desta revisão"). Seleção de modelo simples; a versão usada fica **fixada no documento** (replay); hash semântico, provenance, lineage e binding ficam numa área técnica avançada.
+
 ## O que é este projeto
 Plataforma SaaS especializada em automação documental, apoio operacional e inteligência aplicada
 para departamentos de licitações e jurídico-administrativo de órgãos públicos.
