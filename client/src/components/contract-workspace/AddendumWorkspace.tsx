@@ -14,6 +14,8 @@ import { ADDENDUM_TYPE_LABELS } from "./labels";
 export interface AddendumWorkspaceProps {
   contractId: string;
   addenda?: Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin?: string }>;
+  /** Vigência acompanhada hoje (derivada do Centro de Operações); mostrada para a pessoa saber o que o aditivo de prazo vai mover. */
+  currentEndDate?: string | null;
 }
 
 const TYPES: Array<"prazo" | "valor" | "quantitativo" | "qualitativo"> = ["prazo", "valor", "quantitativo", "qualitativo"];
@@ -26,26 +28,27 @@ const ORIGINS: Array<{ value: Origin; label: string }> = [
 ];
 const ORIGIN_LABELS: Record<string, string> = Object.fromEntries(ORIGINS.map((o) => [o.value, o.label]));
 
-export default function AddendumWorkspace({ contractId, addenda = [] }: AddendumWorkspaceProps) {
+export default function AddendumWorkspace({ contractId, addenda = [], currentEndDate = null }: AddendumWorkspaceProps) {
   const utils = trpc.useUtils();
   const [addendumType, setAddendumType] = React.useState<"prazo" | "valor" | "quantitativo" | "qualitativo">("prazo");
   const [requestOrigin, setRequestOrigin] = React.useState<Origin>("contract_workspace");
   const [justification, setJustification] = React.useState("");
   const [newValue, setNewValue] = React.useState("");
   const [newTerm, setNewTerm] = React.useState("");
+  const [newEndDate, setNewEndDate] = React.useState("");
 
   // SEM084-B — uma chave por tentativa lógica: o retry (inclusive após erro) reusa a MESMA chave e converge para o
   // mesmo aditivo; só um novo aditivo, depois do sucesso, recebe chave nova.
   const { key: idempotencyKey, rotate } = useIdempotencyKey();
   const create = trpc.contractWorkspace.createAddendum.useMutation({
-    onSuccess: () => { rotate(); void utils.contractWorkspace.loadContract.invalidate({ contractId }); setJustification(""); setNewValue(""); setNewTerm(""); },
+    onSuccess: () => { rotate(); void utils.contractWorkspace.loadContract.invalidate({ contractId }); setJustification(""); setNewValue(""); setNewTerm(""); setNewEndDate(""); },
   });
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold text-foreground">Termos Aditivos</h3>
 
-      <form onSubmit={(e) => { e.preventDefault(); if (justification.trim()) create.mutate({ contractId, addendumType, justification, newValue: newValue ? Number(newValue) : undefined, newTerm: newTerm || undefined, requestOrigin, idempotencyKey }); }} className="space-y-2">
+      <form onSubmit={(e) => { e.preventDefault(); if (justification.trim()) create.mutate({ contractId, addendumType, justification, newValue: newValue ? Number(newValue) : undefined, newTerm: newTerm || undefined, ...(addendumType === "prazo" && newEndDate ? { newEndDate } : {}), requestOrigin, idempotencyKey }); }} className="space-y-2">
         <div className="flex flex-wrap gap-2">
           {TYPES.map((t) => (
             <button key={t} type="button" onClick={() => setAddendumType(t)} className={`rounded-full border px-3 py-1 text-xs font-medium transition ${addendumType === t ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{ADDENDUM_TYPE_LABELS[t]}</button>
@@ -59,11 +62,23 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
         <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={2} placeholder="Justificativa do aditivo…" className="w-full resize-y rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
         <div className="grid grid-cols-2 gap-2">
           {addendumType === "valor" && <input type="number" step="0.01" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Novo valor (R$)" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
-          {addendumType === "prazo" && <input value={newTerm} onChange={(e) => setNewTerm(e.target.value)} placeholder="Nova vigência" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
+          {addendumType === "prazo" && <input value={newTerm} onChange={(e) => setNewTerm(e.target.value)} placeholder="Nova vigência (texto, ex.: 12 meses)" className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />}
+          {addendumType === "prazo" && (
+            <label className="block text-xs font-medium text-foreground">Novo término da vigência
+              <input type="date" aria-label="Novo término da vigência" value={newEndDate} onChange={(e) => setNewEndDate(e.target.value)} className="mt-1 w-full rounded-md border border-border px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none" />
+            </label>
+          )}
         </div>
+        {addendumType === "prazo" && (
+          <p className="text-[11px] text-muted-foreground" data-testid="addendum-expiration-hint">
+            {currentEndDate ? `Vigência acompanhada hoje: término em ${currentEndDate}. ` : "Este contrato ainda não tem término acompanhado. "}
+            Informando o novo término, o vencimento e os alertas (90/60/30/15/7 dias) do Centro de Operações são reagendados e a data entra no termo.
+          </p>
+        )}
         <button type="submit" disabled={create.isPending || !justification.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Criar aditivo + minuta"}
         </button>
+        {create.data?.expiration && <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">Vigência reagendada: {create.data.expiration.previousDate ? `de ${create.data.expiration.previousDate} ` : ""}para {create.data.expiration.newDate}.</p>}
         {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine). O status do contrato só muda após o parecer.</p>}
         {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
         {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
@@ -76,7 +91,7 @@ export default function AddendumWorkspace({ contractId, addenda = [] }: Addendum
               <div>
                 <p className="font-medium text-foreground">Aditivo {a.sequence} — {ADDENDUM_TYPE_LABELS[a.addendumType] ?? a.addendumType}</p>
                 <p className="line-clamp-1 text-xs text-muted-foreground">{a.justification}</p>
-                {a.requestOrigin && <p className="text-[11px] text-muted-foreground">Origem: {ORIGIN_LABELS[a.requestOrigin] ?? a.requestOrigin}</p>}
+                {a.requestOrigin && <p className="text-[11px] text-muted-foreground">Origem: {ORIGIN_LABELS[a.requestOrigin] ?? a.requestOrigin}{a.requestOrigin === "documento_externo" ? " · declarado, não verificado" : ""}</p>}
               </div>
               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{a.status}</span>
             </li>
