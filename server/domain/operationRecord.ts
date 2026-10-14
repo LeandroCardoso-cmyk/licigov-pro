@@ -31,6 +31,9 @@ export const OPERATION_RECORD_TYPES: readonly OperationRecordType[] = [
   "aditivo_externo", "ata_externa", "parecer_externo", "reuniao", "evento", "tarefa", "outro",
 ];
 
+/** Tipos com vigência (contrato/aditivo/ata externos) — fonte única em `shared/`. */
+export { expirationKindFor } from "@shared/operationRecordExpiration";
+
 export interface OperationRecord {
   readonly id: string;
   readonly organizationId: number;

@@ -36,7 +36,8 @@ export type ContractWorkspaceProcedureClass =
 export interface ContractWorkspaceRbacEntry {
   /** Classe(s) do efeito. A primeira define o piso; as demais documentam efeitos adicionais. */
   readonly classes: readonly ContractWorkspaceProcedureClass[];
-  readonly oldBuilder: "tenantProcedure";
+  /** Builder anterior à NEW-006; `null` = procedure criada depois da NEW-006 (já nasceu com piso). */
+  readonly oldBuilder: "tenantProcedure" | null;
   /** Piso de papel na organização. `null` = qualquer membro ativo (tenantProcedure). */
   readonly minRole: Extract<OrgRole, "operator" | "manager"> | null;
   /**
@@ -68,6 +69,11 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     classes: ["DRAFT_CREATE"], oldBuilder: "tenantProcedure", minRole: "operator",
     rationale: "Reconstrução assistida determinística (sem IA) — nasce MINUTA pendente de revisão do servidor.",
     sideEffects: ["contract_workspaces (upsert)", "imported_contracts", "process_timeline"],
+  },
+  registerInForceContract: {
+    classes: ["STATE_CHANGE", "DRAFT_CREATE"], oldBuilder: null, minRole: "manager",
+    rationale: "LICIGOV-FAST — contrato JÁ FORMALIZADO fora do sistema (processo anterior) registrado por declaração: nasce VIGENTE (informação declarada, não verificada). PISO TÉCNICO manager por nascer vigente; não transiciona minuta.",
+    sideEffects: ["contract_workspaces (insert-only)", "process_timeline", "operational_events (se término informado)", "operational_timeline (se término informado)", "idempotency_keys"],
   },
   loadContract: {
     classes: ["READ"], oldBuilder: "tenantProcedure", minRole: null,

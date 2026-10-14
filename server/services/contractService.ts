@@ -18,6 +18,7 @@ import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
 import { recordProcessEvent } from "../db/procurement";
+import { registerExpiration } from "./operationRecordService";
 import { timelineActor } from "../domain/timelineActor";
 import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
@@ -249,6 +250,52 @@ export async function createManualContract(params: {
   if (!created) return ws;
   await recordProcessEvent({ organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`, summary: `Contrato avulso ${ws.contractNumber} criado do zero (sem processo de origem).`, refId: ws.id, correlationId: params.correlationId });
   return ws;
+}
+
+/** Rótulo de procedência do registro legado (informação declarada × importada × verificada). */
+export const LEGACY_CONTRACT_DECLARED = "DECLARADO";
+
+/**
+ * Registro de contrato VIGENTE de processo anterior (legado) — entrada independente, sem recriar DFD/ETP/TR/Edital.
+ *
+ * O contrato foi formalizado FORA do sistema; o usuário autenticado DECLARA os dados mínimos para a operação atual
+ * (acompanhar e emitir aditivo/apostilamento). Nasce `vigente` com origem `legado`, e a timeline registra a declaração
+ * (quem, quando, correlationId) como informação DECLARADA, não verificada. Não é ativação de minuta: nenhum contrato
+ * existente muda de estado por aqui. Informado o término da vigência, o vencimento e os alertas entram no Centro de
+ * Operações pela regra existente (registerExpiration).
+ */
+export async function registerInForceLegacyContract(params: {
+  organizationId: number; contractNumber: string; contractor: string; object: string; term: string;
+  value?: number; manager?: string; inspector?: string;
+  /** Término da vigência (AAAA-MM-DD) — opcional; quando informado, gera vencimento + alertas. */
+  endDate?: string;
+  /** Referência declarada ao processo/ato de origem (ex.: "Pregão 12/2023") — texto livre, só para a timeline. */
+  sourceReference?: string;
+  correlationId: string; createdBy: number;
+}): Promise<{ workspace: ContractWorkspace; created: boolean; provenance: typeof LEGACY_CONTRACT_DECLARED }> {
+  const contractNumber = requireContractNumber(params.contractNumber);
+  const candidate = createContractWorkspace({
+    organizationId: params.organizationId, originType: "legado", originProcess: "",
+    contractNumber, contractor: params.contractor, object: params.object,
+    value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
+    status: "vigente", correlationId: params.correlationId, createdBy: params.createdBy,
+  });
+  const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
+  if (!created) return { workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED };
+  const ref = params.sourceReference?.trim() ? ` Origem declarada: ${params.sourceReference.trim().slice(0, 200)}.` : "";
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`,
+    summary: `Contrato ${ws.contractNumber} registrado como VIGENTE (processo anterior, formalizado fora do sistema) — informação ${LEGACY_CONTRACT_DECLARED} pelo usuário, não verificada.${ref}`,
+    refId: ws.id, correlationId: params.correlationId,
+  });
+  log.info("legacy_contract_registered", { organizationId: params.organizationId, contractId: ws.id, actorUserId: params.createdBy, provenance: LEGACY_CONTRACT_DECLARED, correlationId: params.correlationId });
+  if (params.endDate) {
+    await registerExpiration({
+      organizationId: params.organizationId, kind: "contrato", referenceId: ws.id, title: `Contrato ${ws.contractNumber}`,
+      expirationDate: params.endDate, actor: `user:${params.createdBy}`, correlationId: params.correlationId,
+    });
+  }
+  return { workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED };
 }
 
 /**

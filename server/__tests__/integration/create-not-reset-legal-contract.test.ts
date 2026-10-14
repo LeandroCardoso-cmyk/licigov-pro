@@ -177,18 +177,19 @@ describe("R3 / PR-06 — freeze: caminhos de criação não usam upsert", () => 
     expect(ver).not.toMatch(/onDuplicateKeyUpdate\(\{ set: \{ contentHash/);
   });
 
-  it("contract_workspaces: os 4 fluxos de criação usam INSERT-only (persistNewContract), nunca insertContractWorkspace", () => {
+  // 5º fluxo (LICIGOV-FAST): registro de contrato VIGENTE de processo anterior (legado) — também INSERT-only.
+  it("contract_workspaces: os 5 fluxos de criação usam INSERT-only (persistNewContract), nunca insertContractWorkspace", () => {
     const svc = src("services/contractService.ts");
     const creation = svc.slice(svc.indexOf("export async function createFromProcurement"), svc.indexOf("// ─── Geração inteligente de minutas"));
     expect(creation).not.toContain("insertContractWorkspace(");
-    expect((creation.match(/persistNewContract\(/g) ?? []).length).toBe(4);
+    expect((creation.match(/persistNewContract\(/g) ?? []).length).toBe(5);
     // 2º passe: a chave é a PK que já existia (órgão, origem, número normalizado) — lida antes do INSERT; o escopo entre
     // origens (HD-15) não decide a criação: a colisão com outra origem só é registrada (observabilidade).
     const persist = svc.slice(svc.indexOf("async function persistNewContract"), svc.indexOf("export interface Recommendation"));
     expect(persist).toContain("getContractWorkspace(ws.id, ws.organizationId)");
     expect(persist).toContain("create_contract_number_used_by_other_origin");
     expect(persist).not.toMatch(/findContractByNormalizedNumber\([^)]*\)\s*;\s*\n\s*if \(before\)/);
-    expect((creation.match(/requireContractNumber\(/g) ?? []).length).toBe(4);
+    expect((creation.match(/requireContractNumber\(/g) ?? []).length).toBe(5);
     const db = src("db/contractWorkspace.ts");
     const fn = db.slice(db.indexOf("export async function insertNewContractWorkspace"), db.indexOf("export async function getContractWorkspace"));
     expect(fn).not.toContain("onDuplicateKeyUpdate");

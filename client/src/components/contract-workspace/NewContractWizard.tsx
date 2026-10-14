@@ -23,13 +23,14 @@ export interface NewContractWizardProps {
   onCreated?: (contractId: string) => void;
 }
 
-type Origin = "processo_licitatorio" | "contratacao_direta" | "avulso" | "externo";
+type Origin = "processo_licitatorio" | "contratacao_direta" | "avulso" | "externo" | "legado";
 
 const ORIGINS: ReadonlyArray<readonly [Origin, string]> = [
   ["processo_licitatorio", "Do Processo"],
   ["contratacao_direta", "Da Contratação Direta"],
   ["avulso", "Novo (do zero)"],
   ["externo", "Externo (reconstrução)"],
+  ["legado", "Vigente (processo anterior)"],
 ];
 
 /** Extrai "(id: ...)" da mensagem de conflito — ver contractWorkspaceRouter.createManual e domain/contractCreation. */
@@ -49,6 +50,9 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   const [object, setObject] = React.useState("");
   const [valueReais, setValueReais] = React.useState("");
   const [term, setTerm] = React.useState("");
+  // Contrato vigente de processo anterior (legado): término e referência declarada de origem.
+  const [endDate, setEndDate] = React.useState("");
+  const [sourceReference, setSourceReference] = React.useState("");
   // SEM-062 — proposta selecionada (id do registro da proposta) + campos CONFIRMADOS pelo usuário (reais).
   const [proposalId, setProposalId] = React.useState("");
   const [inheritContractor, setInheritContractor] = React.useState("");
@@ -87,9 +91,10 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
   const fromDirect = trpc.contractWorkspace.createFromDirectProcurement.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
   const createManual = trpc.contractWorkspace.createManual.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
   const importExt = trpc.contractWorkspace.importExternalContract.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
+  const registerLegacy = trpc.contractWorkspace.registerInForceContract.useMutation({ onSuccess: (r) => onOk(r.workspace.id) });
 
-  const busy = fromProc.isPending || fromDirect.isPending || createManual.isPending || importExt.isPending;
-  const rawErr = fromProc.error ?? fromDirect.error ?? createManual.error ?? importExt.error ?? null;
+  const busy = fromProc.isPending || fromDirect.isPending || createManual.isPending || importExt.isPending || registerLegacy.isPending;
+  const rawErr = fromProc.error ?? fromDirect.error ?? createManual.error ?? importExt.error ?? registerLegacy.error ?? null;
   // F7b — nunca exibir o corpo técnico/Zod; mapeamos para uma mensagem institucional e
   // preservamos o detalhe técnico apenas em observabilidade (console).
   React.useEffect(() => {
@@ -126,6 +131,17 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         value: valueReaisDecimal,
         term: term.trim() || undefined,
       });
+    } else if (origin === "legado") {
+      registerLegacy.mutate({
+        idempotencyKey,
+        contractNumber,
+        contractor: contractor.trim(),
+        object: object.trim(),
+        term: term.trim(),
+        value: parseReaisInputToDecimal(valueReais),
+        endDate: endDate || undefined,
+        sourceReference: sourceReference.trim() || undefined,
+      });
     } else {
       importExt.mutate({ source: "pdf", rawText, contractNumber: contractNumber || undefined });
     }
@@ -137,7 +153,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Novo Contrato</h2>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {ORIGINS.map(([v, label]) => (
           <button key={v} type="button" onClick={() => { setOrigin(v); setOriginId(""); resetInheritance(); }}
             className={`rounded-md border px-3 py-2 text-xs font-medium transition ${origin === v ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200" : "border-border text-muted-foreground hover:border-indigo-300"}`}>{label}</button>
@@ -208,6 +224,32 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
         </fieldset>
       )}
 
+      {origin === "legado" && (
+        <div className="space-y-3">
+          <label className="block text-xs font-medium text-foreground">Contratado (fornecedor)
+            <input value={contractor} onChange={(e) => setContractor(e.target.value)} placeholder="Razão social / nome" className={inputCls} required />
+          </label>
+          <label className="block text-xs font-medium text-foreground">Objeto
+            <textarea value={object} onChange={(e) => setObject(e.target.value)} rows={2} placeholder="Objeto do contrato" className={`${inputCls} resize-y`} required />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-medium text-foreground">Valor (R$)
+              <input value={valueReais} onChange={(e) => setValueReais(e.target.value)} inputMode="decimal" placeholder="0,00" className={inputCls} />
+            </label>
+            <label className="block text-xs font-medium text-foreground">Vigência / prazo
+              <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="12 meses, de 01/03/2026 a 28/02/2027" className={inputCls} required />
+            </label>
+            <label className="block text-xs font-medium text-foreground">Término da vigência (opcional)
+              <input type="date" aria-label="Término da vigência" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block text-xs font-medium text-foreground">Processo de origem (opcional)
+              <input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} placeholder="Pregão 12/2023" className={inputCls} />
+            </label>
+          </div>
+          <span className="text-[11px] text-muted-foreground">Contrato <strong>já assinado fora do sistema</strong>: entra como <strong>vigente</strong>, com os dados que você declara (registrados em seu nome no histórico), pronto para aditivos e apostilamentos. Não é preciso recriar DFD, ETP, TR ou edital. Com o término informado, o vencimento e os alertas vão para o Centro de Operações.</span>
+        </div>
+      )}
+
       {origin === "avulso" && (
         <div className="space-y-3">
           <label className="block text-xs font-medium text-foreground">Contratado (fornecedor)
@@ -254,7 +296,7 @@ export default function NewContractWizard({ onCreated }: NewContractWizardProps)
       )}
 
       <button type="submit" disabled={busy || ((origin === "processo_licitatorio" || origin === "contratacao_direta") && !originId)} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
-        {busy ? "Processando…" : origin === "externo" ? "Reconstruir contrato (assistido)" : origin === "avulso" ? "Criar contrato" : "Gerar contrato"}
+        {busy ? "Processando…" : origin === "externo" ? "Reconstruir contrato (assistido)" : origin === "avulso" ? "Criar contrato" : origin === "legado" ? "Registrar contrato vigente" : "Gerar contrato"}
       </button>
     </form>
   );

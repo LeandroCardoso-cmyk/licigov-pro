@@ -9,7 +9,7 @@
  */
 
 import {
-  createOperationRecord, createLegacyImportRecord, type OperationRecordType, type OperationOrigin,
+  createOperationRecord, createLegacyImportRecord, expirationKindFor, type OperationRecordType, type OperationOrigin,
 } from "../domain/operationRecord";
 import { createExpirationEvents, createOperationalEvent, type OperationalEventType } from "../domain/operationalEvent";
 import { createOperationalMilestone, type MilestoneType } from "../domain/operationalMilestone";
@@ -50,9 +50,15 @@ export async function createRecord(params: {
   eventDate?: string;
   eventEndDate?: string;
   eventTime?: string;
+  /** Término da vigência (contrato/aditivo/ata externos): gera vencimento + alertas automaticamente. */
+  expirationDate?: string;
   actor: string;
   correlationId: string;
 }): Promise<ReturnType<typeof createOperationRecord>> {
+  const expirationKind = params.expirationDate ? expirationKindFor(params.recordType) : null;
+  if (params.expirationDate && (!expirationKind || !validLocalDate(params.expirationDate))) {
+    throw new Error("Término de vigência inválido para este tipo de registro.");
+  }
   const schedule = { eventDate: params.eventDate ?? "", eventEndDate: params.eventEndDate ?? "", eventTime: params.eventTime ?? "" };
   assertOperationRecordSchedule(schedule);
   const record = createOperationRecord({
@@ -63,6 +69,13 @@ export async function createRecord(params: {
   });
   await insertOperationRecord(record);
   await recordTimeline({ organizationId: params.organizationId, actor: params.actor, action: "registro_criado", referenceType: "operation_record", referenceId: record.id, summary: `Registro operacional criado (${params.recordType}, origem ${record.origin}).`, correlationId: params.correlationId });
+  if (expirationKind && params.expirationDate) {
+    await registerExpiration({
+      organizationId: params.organizationId, kind: expirationKind, referenceId: record.id,
+      title: record.number || record.object || params.recordType, expirationDate: params.expirationDate,
+      actor: params.actor, correlationId: params.correlationId,
+    });
+  }
   return record;
 }
 

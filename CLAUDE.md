@@ -22,6 +22,14 @@ O LiciGov Pro existe para tornar departamentos de licitações mais rápidos, or
 
 **Como aplicar nos formulários/contratos:** identificar automaticamente o usuário autenticado e registrar data/hora, tenant, versão, correlation id e histórico (ver `server/services/institutionalTemplates/electronicAuthority.ts`); pedir fundamento institucional (autoridade/cargo/ato) **somente** onde o contrato o exige de fato (ex.: evidência jurídica). O texto de confirmação deve corresponder exatamente à ação ("Registrar política", não "Confirmo a APROVAÇÃO desta revisão"). Seleção de modelo simples; a versão usada fica **fixada no documento** (replay); hash semântico, provenance, lineage e binding ficam numa área técnica avançada.
 
+### LICIGOV-FAST — regras de execução (missão de integração, out/2026)
+- **REUTILIZAÇÃO PRIMEIRO:** REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR. Criar algo novo só depois de demonstrar que não há o que reutilizar/estender.
+- **GRAPHIFY FIRST:** antes de implementar uma estrutura potencialmente existente, consultar o grafo (`graphify-out/graph.json`, `bash tools/graphify/run.sh explain "X"`) e **confrontar com o código real** — nunca classificar algo como ausente sem conferir o código. Consulta dirigida, não auditoria geral.
+- **MOTOR DOCUMENTAL COMPARTILHADO:** todo documento institucional (DFD, ETP, TR, Edital, Parecer, Contrato, Aditivo) usa o mesmo motor — templates/revisões/bindings, catálogo de variáveis, resolvedores contextuais, composição, revisão, exportação, versionamento, provenance/lineage e isolamento por tenant (`server/domain/institutionalTemplates/*`, `server/services/institutionalTemplates/templateCompositionService.ts`, `TemplateDocumentKind`). Cada tipo traz só sua estrutura, variáveis, regras de completude e fontes. **Nunca** criar um motor por tipo de documento.
+- **PROCESSOS LEGADOS:** entrada independente em qualquer etapa (licitação anterior só para acompanhamento, contrato vigente, aditivo, contratação direta, parecer) sem recriar DFD/ETP/TR/Edital anteriores; pedir apenas o dado da operação atual; distinguir informação declarada × importada × verificada × pendente; nunca aprovar/recriar documento histórico por presunção.
+- **HOMOLOGAÇÃO INTEGRADA EM STAGING:** validar jornadas reais (cenários integrados, não validações fragmentadas) em staging isolado — banco, secrets e storage próprios, tenant sintético identificado — antes de promover a produção. Nunca copiar banco de produção nem compartilhar `DATABASE_URL`. Não declarar E2E visual quando só houve teste programático.
+- **VELOCIDADE DE ENTREGA:** diagnóstico, implementação e validação na mesma rodada; corrigir bloqueios encontrados na própria rodada; sem auditorias repetitivas sem evidência concreta; operações remotas persistentes pedidas num **único checkpoint** objetivo.
+
 ## O que é este projeto
 Plataforma SaaS especializada em automação documental, apoio operacional e inteligência aplicada
 para departamentos de licitações e jurídico-administrativo de órgãos públicos.
@@ -141,14 +149,16 @@ pnpm ai:models          # inspeciona modelos de IA disponíveis
 ## Módulos oficiais (arquitetura funcional)
 | Módulo | Descrição | Status |
 |---|---|---|
-| **Licitações** | DFD → ETP → TR → Edital | Em desenvolvimento — core do MVP |
-| **Contratação Direta** | Dispensa, Inexigibilidade, Credenciamento | Roadmap |
-| **Parecer Jurídico** | Parecer inicial, adjudicação, favorável/desfavorável | Roadmap |
-| **Contratos e Aditivos** | Geração contratual, aditivos, reaproveitamento processual | Roadmap |
+| **Licitações** | DFD → ETP → TR → Edital | Funcional ponta a ponta (smoke integrado J1); Edital BLL por modelo institucional — core do MVP |
+| **Contratação Direta** | Dispensa, Inexigibilidade, Credenciamento | Parcial (workspace, documentos, contrato derivado; entrada sem DFD) |
+| **Parecer Jurídico** | Parecer inicial, adjudicação, favorável/desfavorável | Parcial (workspace + assinatura; entrada via solicitação institucional) |
+| **Contratos e Aditivos** | Geração contratual, aditivos, reaproveitamento processual | Parcial (Contract Workspace, aditivos/apostilamentos, contrato vigente legado; ativação de minuta pendente de definição jurídica) |
 | **Gestão** | Calendário, protocolos, andamento, indicadores, produtividade | Implementado |
 | **Documentos** | Upload, versionamento, histórico, rastreabilidade | Parcial |
 | **IA** | Geração contextual, validação, revisão, apoio jurídico-operacional | Em desenvolvimento |
 | **Administração** | Usuários, permissões, auditoria, logs, configurações | Parcial |
+
+> Estado detalhado e prioridades P0/P1/P2: [`roadmap/PRODUCT_ROADMAP.md`](roadmap/PRODUCT_ROADMAP.md) (mapa de reutilização do ciclo out/2026).
 
 ## Módulo Gestão — o que já existe
 - Kanban com 7 colunas e drag & drop

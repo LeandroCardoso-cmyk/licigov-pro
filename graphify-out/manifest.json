@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/NewContractWizard.tsx": {
-    "mtime": 1791289220.2321227,
-    "ast_hash": "325e542b3c621e38575fc1e92ed75202",
+    "mtime": 1792002626.6426346,
+    "ast_hash": "51963261023e0f6229e4464d85d982ad",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/OccurrenceWorkspace.tsx": {
@@ -755,8 +755,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/labels.ts": {
-    "mtime": 1790643728.9214704,
-    "ast_hash": "df2834ae8235138aa3b8f5416a441688",
+    "mtime": 1792002623.086321,
+    "ast_hash": "8fad3e0408f53979c6888cc8fff6108c",
     "semantic_hash": ""
   },
   "client/src/components/contracts/ContractCard.tsx": {
@@ -850,8 +850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationRecordWizard.tsx": {
-    "mtime": 1790881529.9528847,
-    "ast_hash": "f65889cf2641000a403a28f4f3e9bd4d",
+    "mtime": 1792002467.4189243,
+    "ast_hash": "17445eb063361c956cc59e1ca7258be2",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationalCalendar.test.ts": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1791849310.434547,
-    "ast_hash": "22cd2e66f67ea7249e424ac60d8c8131",
+    "mtime": 1791999361.8851635,
+    "ast_hash": "0f0d3e6307d65731ec5403ad84a937ad",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -7335,8 +7335,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractWorkspace.ts": {
-    "mtime": 1791289219.5881226,
-    "ast_hash": "2a55cddd35ed5f86a4bcd89d5a9bb4a7",
+    "mtime": 1792002548.6878574,
+    "ast_hash": "64cff38c02f2a9bcf1688340fb22f701",
     "semantic_hash": ""
   },
   "server/domain/copilotCapability.ts": {
@@ -8245,8 +8245,8 @@
     "semantic_hash": ""
   },
   "server/domain/operationRecord.ts": {
-    "mtime": 1790881530.0408845,
-    "ast_hash": "a24ff9dff5e6c7b60aac87f44dc7a3a9",
+    "mtime": 1792002459.8543634,
+    "ast_hash": "4354a1ec59771dfe3265acd95f39a132",
     "semantic_hash": ""
   },
   "server/domain/operationRecordLifecycle.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1791289736.9276335,
-    "ast_hash": "d686001a2e90b06491a7ecb7e6dd4b58",
+    "mtime": 1792002558.1923742,
+    "ast_hash": "ad43a482df4d50a3072c9291133fbc68",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -8900,8 +8900,8 @@
     "semantic_hash": ""
   },
   "server/routers/operationRecordRouter.ts": {
-    "mtime": 1790881530.0448847,
-    "ast_hash": "b96d106a4c350f6b27a76244bd7f160b",
+    "mtime": 1792002449.0002384,
+    "ast_hash": "8478f912cdd782a2a590d5d497a0adb2",
     "semantic_hash": ""
   },
   "server/routers/organizationsRouter.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1791296554.8057718,
-    "ast_hash": "cf491df44973ead198769e8d18b38803",
+    "mtime": 1792002548.6887312,
+    "ast_hash": "ae983d4270f401a4e6b135164cde2557",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -9460,8 +9460,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1791289211.612123,
-    "ast_hash": "ba3ef0e0ee65a8f53b4124732bd15b4a",
+    "mtime": 1792002425.636501,
+    "ast_hash": "2bea8551fcdda6c92104d6d4d027bb2e",
     "semantic_hash": ""
   },
   "server/services/deploymentValidationService.ts": {
@@ -10075,8 +10075,8 @@
     "semantic_hash": ""
   },
   "server/services/operationRecordService.ts": {
-    "mtime": 1790881530.0448847,
-    "ast_hash": "5eb89f3be5920b62b626a6d7f1821925",
+    "mtime": 1792002448.9995985,
+    "ast_hash": "504ad8d599e08471ba0120b8e3056bf9",
     "semantic_hash": ""
   },
   "server/services/operationalAuditService.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1791987192.4655588,
-    "ast_hash": "50a59288169f9efc695786982b98f85c",
+    "mtime": 1792003338.313348,
+    "ast_hash": "bd5c9dab1b46e3373298fbaeb74d3bc2",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -10635,8 +10635,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1791986775.3036742,
-    "ast_hash": "2efc0da58b9dd16ac029eec1aef1c465",
+    "mtime": 1792003105.056849,
+    "ast_hash": "58aadcec22ceb3f4f44f6efe24bada07",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -11495,8 +11495,8 @@
     "semantic_hash": ""
   },
   "docs/business-domains/department-operation/legacy-records.md": {
-    "mtime": 1790643729.2565258,
-    "ast_hash": "ad03ad01b0c1c14cda1e1a8542cb439d",
+    "mtime": 1792002475.4619267,
+    "ast_hash": "6657796c7caae43eec74c4c985420b9a",
     "semantic_hash": ""
   },
   "docs/business-domains/department-operation/monitoring-panel.md": {
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1790643729.3180127,
-    "ast_hash": "178b8afd004ea790a98cf1f9d9dcf054",
+    "mtime": 1792003098.6432986,
+    "ast_hash": "8821958b98dd244259f896a362afcf98",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -12750,8 +12750,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/create-not-reset-legal-contract.test.ts": {
-    "mtime": 1790963626.1808689,
-    "ast_hash": "baed705095d65241c20a717e6ccb1ec1",
+    "mtime": 1792003012.194283,
+    "ast_hash": "ad4c915233100362ec1698e6380baaef",
     "semantic_hash": ""
   },
   "server/__tests__/integration/direct-procurement-rbac-contract.test.ts": {
@@ -12770,13 +12770,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791291090.381377,
-    "ast_hash": "5a3aff996e78e6800a7e776ddbc1277d",
+    "mtime": 1792004309.4245582,
+    "ast_hash": "7d1385b99742caca1bd60ccbd105896b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac.test.ts": {
-    "mtime": 1791291097.4535358,
-    "ast_hash": "e84ef8a69d6cc3d2eb1780e45e610c53",
+    "mtime": 1792004280.9009855,
+    "ast_hash": "81d6af3cbc6cfe9e1a87612aeef713f1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-assignment-authority.test.ts": {
@@ -12875,8 +12875,8 @@
     "semantic_hash": ""
   },
   "server/domain/contractCreation.ts": {
-    "mtime": 1790963435.4994304,
-    "ast_hash": "86d2fb97afee2c0c3a93f843cb6660a2",
+    "mtime": 1792002548.6873794,
+    "ast_hash": "b7fe000045ee8318059974a70c276712",
     "semantic_hash": ""
   },
   "server/domain/draftRegeneration.ts": {
@@ -12900,8 +12900,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRbac.ts": {
-    "mtime": 1791289219.5881226,
-    "ast_hash": "25a1d891826a4124ee875668e304431e",
+    "mtime": 1792004268.066437,
+    "ast_hash": "2f1dd25046be2a7213e244873eeee2b4",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRbacMatrix.ts": {
@@ -14645,8 +14645,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalReadiness.ts": {
-    "mtime": 1791844281.6457777,
-    "ast_hash": "32b2e0c9638c74026d3d6726a3dfd065",
+    "mtime": 1791999359.2220778,
+    "ast_hash": "f6a2be7e6c23b31711ec524f71e52135",
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_PREPARATION_READINESS_UX.md": {
@@ -14917,6 +14917,36 @@
   "server/services/institutionalTemplates/electronicAuthority.ts": {
     "mtime": 1791986679.2173157,
     "ast_hash": "c8f88fa1b289ca1a203cdbb88c8f7dd7",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/PublicationPendingNotice.tsx": {
+    "mtime": 1791999359.2260778,
+    "ast_hash": "5cd137a7f5f9b678f32074ffd17556aa",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/publicationPending.test.ts": {
+    "mtime": 1791999430.3700762,
+    "ast_hash": "a941aef23a7485c1914b86ed70d28c99",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/institutional-templates-bll-deferred-cause.test.ts": {
+    "mtime": 1791999452.3556836,
+    "ast_hash": "c2ac92c72e1331c2a1e326dff1ecba23",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts": {
+    "mtime": 1792002768.84192,
+    "ast_hash": "039ef395d93e9dea54b81c068167dac9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/integrated-journeys-rules.test.ts": {
+    "mtime": 1792002806.537919,
+    "ast_hash": "221ee7fbd705cbd962f82d2313a1d683",
+    "semantic_hash": ""
+  },
+  "shared/operationRecordExpiration.ts": {
+    "mtime": 1792002459.84216,
+    "ast_hash": "343e206dcbb7b1f84228bcfc0d8c2434",
     "semantic_hash": ""
   }
 }
