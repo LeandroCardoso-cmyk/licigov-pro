@@ -217,7 +217,14 @@ export function formatScalar(type: ScalarType2, v: unknown): string {
 }
 
 /** Texto inline de uma variável JÁ normalizada. `table` nunca é inline (só por `dataTable`). */
+/**
+ * Variáveis inteiras que são EXERCÍCIO (ano civil): renderizadas sem separador de milhar ("2026", nunca "2.026"). Lista explícita
+ * (não heurística por nome) dos catálogos publicados; um novo exercício entra aqui junto com o catálogo que o declara.
+ */
+export const EXERCISE_YEAR_VARIABLES: ReadonlySet<string> = new Set(["processo.ano", "pos.anoAta", "pos.anoContrato"]);
+
 export function formatValue2(def: VariableDef2, v: unknown): string {
+  if (def.type === "integer" && EXERCISE_YEAR_VARIABLES.has(def.name) && Number.isInteger(v)) return String(v);
   switch (def.type) {
     case "enum": return inlineText(v as string);
     case "duration": return formatDuration(v as DurationValue);
