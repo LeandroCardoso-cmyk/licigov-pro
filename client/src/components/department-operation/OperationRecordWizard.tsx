@@ -1,6 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { RECORD_TYPE_LABELS } from "./labels";
+import { expirationKindFor } from "@shared/operationRecordExpiration";
 
 /**
  * OperationRecordWizard — REAL (tRPC).
@@ -25,6 +26,8 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
   const [eventDate, setEventDate] = React.useState("");
   const [eventEndDate, setEventEndDate] = React.useState("");
   const [eventTime, setEventTime] = React.useState("");
+  const [expirationDate, setExpirationDate] = React.useState("");
+  const hasTerm = expirationKindFor(recordType) !== null;
 
   const create = trpc.operationRecord.createRecord.useMutation({
     onSuccess: (res) => {
@@ -36,12 +39,12 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
       void utils.departmentOperation.calendar.invalidate();
       onCreated?.(res.record.id);
       setNumber(""); setObject(""); setModality(""); setCurrentStage("");
-      setEventDate(""); setEventEndDate(""); setEventTime("");
+      setEventDate(""); setEventEndDate(""); setEventTime(""); setExpirationDate("");
     },
   });
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); create.mutate({ recordType, origin, number: number || undefined, object: object || undefined, modality: modality || undefined, currentStage: currentStage || undefined, eventDate: eventDate || undefined, eventEndDate: eventEndDate || undefined, eventTime: eventTime || undefined }); }}
+    <form onSubmit={(e) => { e.preventDefault(); create.mutate({ recordType, origin, number: number || undefined, object: object || undefined, modality: modality || undefined, currentStage: currentStage || undefined, eventDate: eventDate || undefined, eventEndDate: eventEndDate || undefined, eventTime: eventTime || undefined, expirationDate: hasTerm && expirationDate ? expirationDate : undefined }); }}
       className="space-y-3 rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Cadastro Rápido</h2>
       <p className="text-xs text-muted-foreground">Registre um item legado/externo — processo completo ou apenas uma parte.</p>
@@ -76,6 +79,13 @@ export default function OperationRecordWizard({ onCreated }: OperationRecordWiza
         </label>
       </div>
       <p className="text-xs text-muted-foreground">Sem horário, o evento aparece como dia inteiro no calendário.</p>
+
+      {hasTerm && (
+        <label className="block text-xs font-medium text-foreground">Término da vigência (opcional)
+          <input type="date" aria-label="Término da vigência" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm sm:w-1/3" />
+          <span className="mt-1 block font-normal text-muted-foreground">Informado o término, o vencimento e os alertas de 90, 60, 30, 15 e 7 dias entram no calendário automaticamente.</span>
+        </label>
+      )}
 
       {create.isSuccess && <p className="text-xs text-green-700 dark:text-green-300">Registro criado.</p>}
       {create.isError && <p role="alert" className="text-xs text-destructive">Não foi possível criar o registro: {create.error.message}</p>}

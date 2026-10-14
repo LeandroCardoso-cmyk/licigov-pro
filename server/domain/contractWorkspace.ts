@@ -13,7 +13,12 @@ import { createHash } from "crypto";
 import type { CopilotType } from "./institutionalCopilot";
 
 /** Como o contrato nasceu (três origens possíveis). */
-export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo" | "avulso";
+/**
+ * `legado` — contrato JÁ FORMALIZADO fora do sistema (processo anterior), registrado para acompanhamento e instrumentos
+ * futuros. Nasce `vigente` por DECLARAÇÃO do usuário autenticado (informação declarada, não verificada); nunca é uma
+ * transição de minuta (a ativação `minuta → vigente` segue pendente de definição jurídica).
+ */
+export type ContractOriginType = "processo_licitatorio" | "contratacao_direta" | "externo" | "avulso" | "legado";
 
 export type ContractStatus =
   | "minuta"

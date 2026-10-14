@@ -1,7 +1,64 @@
 # Product Roadmap — LiciGov Pro
 
-**Atualizado:** Maio 2026  
-**Versão:** 1.0
+**Atualizado:** Outubro 2026 (ciclo "Jornadas integradas"; seções de maio/2026 preservadas abaixo)  
+**Versão:** 1.1
+
+> Fonte de verdade da filosofia: [`docs/architecture/PRODUCT_NORTH_STAR.md`](../docs/architecture/PRODUCT_NORTH_STAR.md).
+> Regras de execução: `CLAUDE.md` (LICIGOV-FAST). Roadmaps por domínio em `docs/business-domains/*/roadmap.md`.
+
+---
+
+## Ciclo atual (out/2026) — Jornadas institucionais completas
+
+Mudança de estratégia do Owner: entregar **jornadas utilizáveis de ponta a ponta**, reutilizando a arquitetura
+existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homologadas em **staging isolado** antes de produção.
+
+### Mapa de reutilização (Graphify `874ed8e` confrontado com o código)
+
+| Componente | Estado | Reutilização | Lacuna real |
+|---|---|---|---|
+| DFD | FUNCIONAL | Pré-preenchido do contexto canônico, sem IA (`procurementProcessService.generateDFDDraft`, `dfdPrefill`); exporta DOCX/PDF | — |
+| ETP | FUNCIONAL | Autoria estruturada reutiliza o DFD (`authoringContext` + `upstreamAuthority`) | — |
+| TR | FUNCIONAL | Reutiliza DFD+ETP, itens canônicos e parâmetros estruturados (`renderTrStructuredBlock`) | Itens canônicos com quantidade prevista são pré-requisito (decisão HD-01) |
+| Edital | FUNCIONAL (motor padrão) · PARCIAL (modelo BLL) | Motor institucional (`templateCompositionService`, AST v2, catálogo v2, M1/M2, reuso de contexto) | Revisão 2 (datas diferidas) depende de ativação institucional na org real (política/evidência → disponibilizar → troca atômica de binding) |
+| Motor documental | FUNCIONAL p/ Edital · PREPARADO p/ demais | `TemplateDocumentKind` já cobre dfd/etp/tr/edital/parecer/contrato/aditivo; Governance V2 (templates próprios/derivados) | Só existe pacote de modelo para o Edital BLL; demais tipos precisam de pacote (não de motor novo) |
+| Contratos | PARCIAL | Contract Workspace (avulso, de processo, de contratação direta, reconstrução de externo), RBAC, CAS, timeline | Ativação `minuta → vigente` pendente de definição jurídica (`docs/design/CONTRACT_ACTIVATION_TRANSITION.md`) |
+| Aditivos / apostilamentos | FUNCIONAL sobre contrato vigente | Instrumentos com sequência atômica, linhagem própria, termo gerado e exportável | Finalização pós-parecer (valor/quantitativo) e tipo "reequilíbrio" ainda não existem |
+| Contratação direta | FUNCIONAL (sem homologação integrada ainda) | Entrada sem DFD (`startOption: sem_dfd`), documentos oficiais, contrato derivado | — |
+| Parecer jurídico | PARCIAL | Workspace, assinatura, versão `emitido`, export | Entrada só via solicitação institucional (não avulsa) |
+| Processos legados | FUNCIONAL (acompanhamento) · **corrigido** (contrato vigente) | Registros operacionais + importação assistida; **novo** `contractWorkspace.registerInForceContract` | Importação de contrato pelo pipeline de ingestão não existe (usa reconstrução assistida) |
+| Calendário | FUNCIONAL | Eventos operacionais + registros com data (grade mensal) | Contratos/processos não alimentam o calendário sem término informado (regra explícita, de propósito) |
+| Centro de Operações | FUNCIONAL · **corrigido** | Painel, indicadores, recomendações, timeline | Indicador "vencendo" contava alertas (inflado) — corrigido |
+
+### Entregue neste ciclo
+- PR #296 — pendências de publicação do Edital visíveis e não bloqueantes (Revisão 1 preservada).
+- Contrato **vigente de processo anterior** registrado por declaração (sem recriar DFD/ETP/TR/Edital) → aditivo direto;
+  origem `legado`, informação **DECLARADA** (não verificada) na timeline; não altera a ativação de minutas.
+- Término de vigência no Cadastro Rápido (contrato/aditivo/ata externos) ⇒ vencimento + alertas 90/60/30/15/7d automáticos.
+- Indicador "contratos vencendo" conta contratos (um por referência, janela de 90 dias), não alertas.
+- Smoke integrado `integrated-journeys-mysql-smoke` (J1 processo novo, J2 legado→contrato→aditivo, J3 monitoramento).
+
+### P0 — disponibilização funcional
+- Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) e homologação integrada.
+- Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.
+- Entrada flexível de processos legados (acompanhamento, contrato vigente, aditivo).
+- Ativação da Revisão 2 do Edital BLL na organização real — **decisão institucional da prefeitura**, nunca simulada.
+
+### P1
+- Contratos e aditivos: comando de ativação de minuta (após definição jurídica), finalização de aditivo pós-parecer, reequilíbrio.
+- Contratação direta: homologação integrada da jornada completa.
+- Parecer jurídico assistido: entrada avulsa (sem solicitação prévia) com análise/conclusão/assinatura humanas.
+- Calendário e Centro de Operações: datas de sessão do processo e vigência de contratos do workspace como fontes, com regra explícita.
+- Templates próprios e derivados para DFD/ETP/TR/contrato/aditivo (pacotes no mesmo motor).
+
+### P2
+- Integrações adicionais (PNCP, CATMAT/CATSER ampliado, assinatura digital).
+- Ampliação de modelos por prefeitura.
+- Inteligência contextual avançada.
+- Refinamentos operacionais.
+
+> As seções abaixo são o roadmap de maio/2026, preservado como histórico. Entregas posteriores estão registradas acima
+> e nos roadmaps por domínio; nenhum item concluído foi rebaixado por esta reorganização.
 
 ---
 

@@ -23,8 +23,9 @@ import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
   createManualContract, ManualContractConflictError, ContractStatusConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
-  requestContractLegalOpinion, getContractLegalOpinion,
+  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract,
 } from "../services/contractService";
+import { validLocalDate } from "../domain/operationRecordSchedule";
 import {
   getContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
@@ -168,6 +169,44 @@ export const contractWorkspaceRouter = router({
           // pelo frontend, para oferecer "abrir o contrato existente".
           throw new TRPCError({ code: "CONFLICT", message: `${error.message} (id: ${error.existingId})` });
         }
+        throw error;
+      }
+    }),
+
+  /**
+   * Contrato VIGENTE de processo anterior (legado): registro por DECLARAÇÃO do usuário autenticado, sem recriar etapas
+   * anteriores. Pede só o necessário para acompanhar e emitir instrumentos (número, contratado, objeto, vigência). Piso
+   * `manager` (o registro nasce vigente). Não altera contratos existentes; não é ativação de minuta.
+   */
+  registerInForceContract: orgRoleProcedure("manager")
+    .input(z.object({
+      idempotencyKey: z.string().min(1),
+      contractNumber: z.string().trim().min(1),
+      contractor: z.string().trim().min(1),
+      object: z.string().trim().min(1),
+      term: z.string().trim().min(1),
+      value: z.number().nonnegative().optional(),
+      manager: z.string().optional(),
+      inspector: z.string().optional(),
+      endDate: z.string().refine(validLocalDate, "Término da vigência inválido.").optional(),
+      sourceReference: z.string().max(200).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const userId = ctx.user.id;
+      const { idempotencyKey, ...fields } = input;
+      const payloadHash = createHash("sha256").update(JSON.stringify(fields)).digest("hex");
+      const idem = await checkIdempotency(idempotencyKey, userId, orgId, "contractWorkspace.registerInForceContract", payloadHash);
+      if (idem.status === "completed") {
+        if (idem.payloadMismatch) throw new TRPCError({ code: "CONFLICT", message: "Esta idempotencyKey já foi usada com dados diferentes." });
+        return idem.response as Awaited<ReturnType<typeof registerInForceLegacyContract>>;
+      }
+      try {
+        const result = await registerInForceLegacyContract({ organizationId: orgId, ...fields, createdBy: userId, correlationId: ctx.correlationId });
+        await saveIdempotencyResult(idempotencyKey, userId, orgId, result);
+        return result;
+      } catch (error) {
+        await failIdempotencyKey(idempotencyKey, userId, orgId);
         throw error;
       }
     }),

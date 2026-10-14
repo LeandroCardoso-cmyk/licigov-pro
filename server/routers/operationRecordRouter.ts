@@ -14,6 +14,7 @@ import {
 } from "../services/operationRecordService";
 import { COMPLETION_REASON_MAX } from "../domain/operationRecordLifecycle";
 import { validLocalDate, validLocalTime } from "../domain/operationRecordSchedule";
+import { expirationKindFor } from "../domain/operationRecord";
 import { listOperationRecords, listOperationalMilestones, listPublicationRecords, getOperationalSettings, upsertOperationalSettings } from "../db/departmentOperation";
 
 const RECORD_TYPES = ["processo_licitatorio_legado", "contratacao_direta_legada", "contrato_externo", "aditivo_externo", "ata_externa", "parecer_externo", "reuniao", "evento", "tarefa", "outro"] as const;
@@ -51,7 +52,13 @@ export const operationRecordRouter = router({
       documentReferences: z.array(z.string()).optional(),
       notes: z.string().optional(),
       ...scheduleFields,
-    }).superRefine(checkSchedule))
+      expirationDate: z.string().optional(),
+    }).superRefine((value, ctx) => {
+      checkSchedule(value, ctx);
+      if (!value.expirationDate) return;
+      if (!expirationKindFor(value.recordType)) ctx.addIssue({ code: "custom", path: ["expirationDate"], message: "Término de vigência só se aplica a contrato, aditivo ou ata." });
+      else if (!validLocalDate(value.expirationDate)) ctx.addIssue({ code: "custom", path: ["expirationDate"], message: "Término de vigência inválido." });
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const record = await createRecord({ organizationId: orgId, ...input, actor: String(ctx.user.id), correlationId: ctx.correlationId });

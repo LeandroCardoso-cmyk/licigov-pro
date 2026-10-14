@@ -149,14 +149,16 @@ pnpm ai:models          # inspeciona modelos de IA disponíveis
 ## Módulos oficiais (arquitetura funcional)
 | Módulo | Descrição | Status |
 |---|---|---|
-| **Licitações** | DFD → ETP → TR → Edital | Em desenvolvimento — core do MVP |
-| **Contratação Direta** | Dispensa, Inexigibilidade, Credenciamento | Roadmap |
-| **Parecer Jurídico** | Parecer inicial, adjudicação, favorável/desfavorável | Roadmap |
-| **Contratos e Aditivos** | Geração contratual, aditivos, reaproveitamento processual | Roadmap |
+| **Licitações** | DFD → ETP → TR → Edital | Funcional ponta a ponta (smoke integrado J1); Edital BLL por modelo institucional — core do MVP |
+| **Contratação Direta** | Dispensa, Inexigibilidade, Credenciamento | Parcial (workspace, documentos, contrato derivado; entrada sem DFD) |
+| **Parecer Jurídico** | Parecer inicial, adjudicação, favorável/desfavorável | Parcial (workspace + assinatura; entrada via solicitação institucional) |
+| **Contratos e Aditivos** | Geração contratual, aditivos, reaproveitamento processual | Parcial (Contract Workspace, aditivos/apostilamentos, contrato vigente legado; ativação de minuta pendente de definição jurídica) |
 | **Gestão** | Calendário, protocolos, andamento, indicadores, produtividade | Implementado |
 | **Documentos** | Upload, versionamento, histórico, rastreabilidade | Parcial |
 | **IA** | Geração contextual, validação, revisão, apoio jurídico-operacional | Em desenvolvimento |
 | **Administração** | Usuários, permissões, auditoria, logs, configurações | Parcial |
+
+> Estado detalhado e prioridades P0/P1/P2: [`roadmap/PRODUCT_ROADMAP.md`](roadmap/PRODUCT_ROADMAP.md) (mapa de reutilização do ciclo out/2026).
 
 ## Módulo Gestão — o que já existe
 - Kanban com 7 colunas e drag & drop

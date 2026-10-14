@@ -82,7 +82,12 @@ Para legados e externos, o preenchimento de marcos segue a **mesma regra de ouro
   canais configuráveis (PNCP padrão). Não viram eventos de calendário.
 - **Contratos, aditivos e atas externos** (Contrato Externo, Aditivo Externo, Ata Externa)
   geram **automaticamente** evento de vencimento + alertas (90/60/30/15/7 dias), exatamente
-  como os nativos. **Nunca cadastrados manualmente** como evento.
+  como os nativos, **quando o término da vigência é informado** no Cadastro Rápido (campo
+  opcional, exibido só para esses três tipos; `operationRecord.createRecord.expirationDate`).
+  **Nunca cadastrados manualmente** como evento. Sem término informado, o registro fica só em
+  acompanhamento, sem alertas.
+- O indicador "contratos vencendo" conta **contratos** (um por referência) com vencimento nos
+  próximos 90 dias — os alertas do mesmo vencimento não inflam o número.
 
 ## Garantias
 

@@ -39,6 +39,7 @@ const ORIGIN_LABEL: Record<ContractOriginType, string> = {
   contratacao_direta: "da Contratação Direta",
   externo: "externo (importado)",
   avulso: "avulso",
+  legado: "vigente de processo anterior (legado)",
 };
 
 /**
@@ -60,12 +61,12 @@ const cents = (v: number) => Math.round(Number(v) * 100);
 /**
  * Retry idempotente da MESMA criação. `createdBy` precisa estar presente e igual nos dois (linhas antigas sem ator
  * nunca convergem — fail-closed). Campos comparados = tudo o que a criação grava; o estado precisa ser o que a
- * criação produz ("minuta").
+ * criação produz ("minuta"; "vigente" só no registro de contrato legado já formalizado fora do sistema).
  */
 export function isSameContractCreate(existing: ContractWorkspace, candidate: ContractWorkspace): boolean {
   return existing.id === candidate.id
     && existing.organizationId === candidate.organizationId
-    && existing.status === "minuta"
+    && existing.status === candidate.status
     && existing.createdBy != null
     && existing.createdBy === candidate.createdBy
     && existing.originType === candidate.originType
