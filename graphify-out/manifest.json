@@ -12770,13 +12770,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac-mysql-smoke.test.ts": {
-    "mtime": 1791291090.381377,
-    "ast_hash": "5a3aff996e78e6800a7e776ddbc1277d",
+    "mtime": 1792004309.4245582,
+    "ast_hash": "7d1385b99742caca1bd60ccbd105896b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new006-contract-workspace-rbac.test.ts": {
-    "mtime": 1791291097.4535358,
-    "ast_hash": "e84ef8a69d6cc3d2eb1780e45e610c53",
+    "mtime": 1792004280.9009855,
+    "ast_hash": "81d6af3cbc6cfe9e1a87612aeef713f1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/new007-legal-opinion-assignment-authority.test.ts": {
@@ -12900,8 +12900,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRbac.ts": {
-    "mtime": 1791289219.5881226,
-    "ast_hash": "25a1d891826a4124ee875668e304431e",
+    "mtime": 1792004268.066437,
+    "ast_hash": "2f1dd25046be2a7213e244873eeee2b4",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRbacMatrix.ts": {
