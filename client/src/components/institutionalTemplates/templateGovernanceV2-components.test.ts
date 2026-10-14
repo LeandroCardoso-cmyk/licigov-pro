@@ -7,7 +7,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import {
-  ASSURANCE_LABEL, canDeriveFrom, derivableRevision, emptyDeriveForm, emptyPolicyForm, filterByOwnership, groupChecksByLayer, legalPolicyExplanation, originBadge, ownershipCounts,
+  ASSURANCE_LABEL, canDeriveFrom, derivableRevision, effectiveDeriveSlug, emptyDeriveForm, emptyPolicyForm, filterByOwnership, groupChecksByLayer, legalPolicyExplanation, originBadge, ownershipCounts,
   POLICY_KIND_LABEL, policyHeadline, validateDeriveForm, validatePolicyForm, type CatalogRowView, type OriginView, type PolicyView, type ReadinessMatrixView,
 } from "@/lib/institutionalTemplatesView";
 
@@ -40,7 +40,6 @@ const row = (over: Partial<CatalogRowView> = {}): CatalogRowView => ({
   identityId: "ti1", documentKind: "edital", slug: "edital-x", displayName: "Edital X", displayNameSource: "IDENTITY", templateKey: null, declaredScope: {}, headline: "h", bindingStatus: "NOT_BOUND",
   revisions: [{ id: "tr1", revision: 1, status: "PUBLISHED", semanticHash: H64 }, { id: "tr2", revision: 2, status: "DRAFT", semanticHash: H64 }], bindings: [], origin: tenant, originState: "RECORDED", ...over,
 });
-const dec = { decidedByName: "A", decidedByRole: "B", decidedAt: "2026-10-14", basisReference: "Portaria 1", reason: "Justificativa longa", confirmed: true };
 const defaultPolicy: PolicyView = { kind: "PLATFORM_DEFAULT", version: 0, malformed: false, policy: { legalEvidence: "OPTIONAL", approveMinRole: "manager", publishMinRole: "manager" }, history: [] };
 const legacyPolicy: PolicyView = { ...defaultPolicy, kind: "LEGACY_COMPAT", policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" }, transition: { cutoverAt: "2026-10-20T13:00:00.000Z", source: "LEDGER_MARKER" as const, legacyOrganization: true, explanation: "O órgão já possuía modelos antes da transição. Nada foi alterado em silêncio." } };
 const ownPolicy: PolicyView = { ...defaultPolicy, kind: "TENANT_DEFINED", version: 1, policy: { legalEvidence: "REQUIRED", approveMinRole: "manager", publishMinRole: "manager" } };
@@ -89,19 +88,17 @@ describe("política do órgão", () => {
     expect(POLICY_KIND_LABEL.LEGACY_COMPAT.tone).toBe("warning");
   });
 
-  it("formulário: exige autoridade/justificativa/confirmação humana; 'sem alteração' só se a decisão já é do órgão; confirmar o regime anterior/padrão É uma decisão válida", () => {
-    const f = emptyPolicyForm(ownPolicy.policy, "2026-10-14");
-    const v0 = validatePolicyForm(f, ownPolicy);
-    expect(v0.valid).toBe(false); expect(v0.errors.unchanged).toBeTruthy();
-    expect(v0.errors.confirmed).toBeTruthy();                                                                        // sem checkbox pré-marcado
-    expect(validatePolicyForm({ ...f, legalEvidence: "OPTIONAL", decision: dec }, ownPolicy)).toEqual({ valid: true, errors: {} });
-    expect(validatePolicyForm({ ...f, decision: dec }, ownPolicy).errors.unchanged).toBeTruthy();
-    // órgão legado confirma REQUIRED explicitamente (mesmos valores) ⇒ válido: encerra a compatibilidade e passa a ser decisão própria
-    expect(validatePolicyForm({ ...emptyPolicyForm(legacyPolicy.policy, "2026-10-14"), decision: dec }, legacyPolicy)).toEqual({ valid: true, errors: {} });
-    expect(validatePolicyForm({ ...emptyPolicyForm(defaultPolicy.policy, "2026-10-14"), decision: dec }, defaultPolicy)).toEqual({ valid: true, errors: {} });
-    // registro ilegível pode ser restabelecido sem mudar os valores
-    expect(validatePolicyForm({ ...f, decision: dec }, { ...ownPolicy, malformed: true }).valid).toBe(true);
+  it("LICIGOV-FAST — formulário sem campos de ato: 'sem alteração' só se a decisão já é do órgão; confirmar o regime anterior/padrão É uma decisão válida", () => {
+    const f = emptyPolicyForm(ownPolicy.policy);
+    expect(f).toEqual({ ...ownPolicy.policy, note: "" });                                        // nenhum campo de autoridade/cargo/data/ato/checkbox
+    expect(validatePolicyForm(f, ownPolicy)).toEqual({ valid: false, errors: { unchanged: "Nenhuma alteração em relação à política vigente." } });
+    expect(validatePolicyForm({ ...f, legalEvidence: "OPTIONAL" }, ownPolicy)).toEqual({ valid: true, errors: {} });
+    // órgão legado/padrão confirma explicitamente (mesmos valores) ⇒ válido: encerra a compatibilidade e passa a ser decisão própria
+    expect(validatePolicyForm(emptyPolicyForm(legacyPolicy.policy), legacyPolicy)).toEqual({ valid: true, errors: {} });
+    expect(validatePolicyForm(emptyPolicyForm(defaultPolicy.policy), defaultPolicy)).toEqual({ valid: true, errors: {} });
+    expect(validatePolicyForm(f, { ...ownPolicy, malformed: true }).valid).toBe(true);           // registro ilegível pode ser restabelecido
   });
+
   it("card: papel sem permissão só lê; gerente vê 'Alterar política'; aviso de que não substitui a Procuradoria e histórico visível", () => {
     const base = { policy: { ...defaultPolicy, note: "Não substitui a análise jurídica dos documentos elaborados (Procuradoria).", history: [{ version: 1, policy: { legalEvidence: "OPTIONAL" as const, approveMinRole: "manager" as const, publishMinRole: "owner" as const }, declaredBy: { name: "Ana", role: "Secretária" }, actDate: "2026-10-01", reason: "Decisão do órgão" }] }, form: null, onOpen: () => undefined, onChange: () => undefined, onCancel: () => undefined, onSubmit: () => undefined };
     const ro = h(M.TemplatePolicyCard, { ...base, canEdit: false });
@@ -109,8 +106,11 @@ describe("política do órgão", () => {
     expect(h(M.TemplatePolicyCard, { ...base, canEdit: true })).toContain("Alterar política");
     const legacyHtml = h(M.TemplatePolicyCard, { ...base, policy: { ...legacyPolicy, history: [] }, canEdit: true });
     expect(legacyHtml).toContain("Compatibilidade (regime anterior)"); expect(legacyHtml).toContain("Nada foi alterado em silêncio");
-    const open = h(M.TemplatePolicyCard, { ...base, canEdit: true, form: emptyPolicyForm(defaultPolicy.policy, "2026-10-14"), showErrors: true });
-    expect(open).toContain("Registrar política"); expect(open).toContain("nunca fica abaixo de gerente"); expect(open).not.toMatch(/checked=""[^>]*name="confirm/);
+    const open = h(M.TemplatePolicyCard, { ...base, canEdit: true, form: emptyPolicyForm(defaultPolicy.policy) });
+    expect(open).toContain("Registrar política"); expect(open).toContain("nunca fica abaixo de gerente");
+    // a confirmação é o botão "Registrar política": nada de "Confirmo a APROVAÇÃO desta revisão", nem autoridade/cargo/ato/checkbox
+    for (const banned of ["Confirmo", "APROVAÇÃO", "Autoridade", "Cargo", "Referência do ato", "Data do ato", 'type="checkbox"']) expect(open, banned).not.toContain(banned);
+    expect(open).toContain("Fica registrado com o seu usuário, papel, data e hora.");
   });
 });
 
@@ -179,16 +179,19 @@ describe("integridade da fonte e upload", () => {
 });
 
 describe("derivação e upload", () => {
-  it("formulário de derivação: slug canônico, nome, autor em uma linha, autoridade declarada e confirmação explícita", () => {
-    const f = emptyDeriveForm("2026-10-14", "Edital BLL");
-    expect(f.displayName).toBe("Edital BLL (adaptado)");
-    expect(validateDeriveForm(f).valid).toBe(false);
-    const ok = { ...f, slug: "edital-municipal", declaredAuthor: "Setor de Licitações", decision: dec };
-    expect(validateDeriveForm(ok)).toEqual({ valid: true, errors: {} });
-    for (const slug of ["", "Edital Municipal", "../x", "a--b", "-a"]) expect(validateDeriveForm({ ...ok, slug }).errors.slug, slug).toBeTruthy();
-    expect(validateDeriveForm({ ...ok, declaredAuthor: "a\nb" }).errors.declaredAuthor).toBeTruthy();
-    expect(validateDeriveForm({ ...ok, decision: { ...dec, confirmed: false } }).errors.confirmed).toBeTruthy();
-    const html = h(M.DeriveTemplateForm, { sourceLabel: "Modelo da plataforma: Edital BLL", value: ok, onChange: () => undefined });
+  it("LICIGOV-FAST — derivação: só o NOME é obrigatório; o identificador vem do nome (editável em avançado); sem autoridade/ato/checkbox", () => {
+    const f = emptyDeriveForm("Edital BLL");
+    expect(f).toEqual({ slug: "", displayName: "Edital BLL (adaptado)", declaredAuthor: "", note: "" });
+    expect(validateDeriveForm(f)).toEqual({ valid: true, errors: {} });
+    expect(effectiveDeriveSlug(f)).toBe("edital-bll-adaptado");
+    expect(validateDeriveForm({ ...f, displayName: "" }).errors.displayName).toBeTruthy();
+    expect(validateDeriveForm({ ...f, displayName: "###" }).errors.slug).toBeTruthy();                         // nome sem letras/números ⇒ sem identificador
+    for (const slug of ["Edital Municipal", "../x", "a--b", "-a"]) expect(validateDeriveForm({ ...f, slug }).errors.slug, slug).toBeTruthy();
+    expect(validateDeriveForm({ ...f, slug: "edital-municipal", declaredAuthor: "Setor de Licitações" }).valid).toBe(true);
+    expect(validateDeriveForm({ ...f, declaredAuthor: "a\nb" }).errors.declaredAuthor).toBeTruthy();
+    const html = h(M.DeriveTemplateForm, { sourceLabel: "Modelo da plataforma: Edital BLL", value: f, onChange: () => undefined });
     expect(html).toContain("Modelo da plataforma: Edital BLL"); expect(html).toContain("permanece intacta"); expect(html).toContain("Não publica nem vincula nada");
+    expect(html).toContain("edital-bll-adaptado");
+    for (const banned of ["Autoridade", "Cargo", "Referência do ato", "Confirmo", 'type="checkbox"']) expect(html, banned).not.toContain(banned);
   });
 });

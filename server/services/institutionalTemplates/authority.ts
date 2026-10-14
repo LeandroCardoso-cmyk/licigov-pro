@@ -10,7 +10,7 @@ import type { HumanActor } from "./ports";
 
 export type TemplateAction =
   | "read" | "preview" | "draft" | "import" | "approve" | "publish" | "deprecate" | "bind" | "review" | "generate" | "govern"
-  | "register" | "evidence" | "policy";
+  | "register" | "evidence" | "policy" | "available";
 
 /** Piso de papel por ação (aplicado no router por `orgRoleProcedure`; reafirmado nos testes). */
 export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>> = Object.freeze({
@@ -33,6 +33,8 @@ export const TEMPLATE_ACTION_MIN_ROLE: Readonly<Record<TemplateAction, OrgRole>>
   evidence: "manager",
   // Template Governance V2: estabelecer a política do órgão sobre seus modelos (exigência de evidência jurídica prévia, pisos de aprovação/publicação).
   policy: "manager",
+  // LICIGOV-FAST: disponibilizar para elaboração (aprovar + publicar no catálogo INTERNO) exige o piso de ambos (manager) e as duas políticas do órgão
+  available: "manager",
 });
 
 /** Ações que exigem ator humano autenticado (todas as que mudam estado institucional). */

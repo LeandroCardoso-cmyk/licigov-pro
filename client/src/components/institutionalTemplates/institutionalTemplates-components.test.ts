@@ -11,13 +11,13 @@ import path from "node:path";
 
 type Mods = {
   RevisionTable: typeof import("./RevisionTable").RevisionTable;
-  DecisionForm: typeof import("./DecisionForm").DecisionForm;
+  ActionNote: typeof import("./ActionNote").ActionNote;
   CompositionExplanationPanel: typeof import("./CompositionExplanationPanel").CompositionExplanationPanel;
   ResolutionNotice: typeof import("./ResolutionNotice").ResolutionNotice;
   AstOutline: typeof import("./AstOutline").AstOutline;
   ImportResultPanel: typeof import("./ImportResultPanel").ImportResultPanel;
   RevisionStatusBadge: typeof import("./RevisionStatusBadge").RevisionStatusBadge;
-  emptyDecisionForm: typeof import("@/lib/institutionalTemplatesView").emptyDecisionForm;
+  ACTION_COPY: typeof import("@/lib/institutionalTemplatesView").ACTION_COPY;
 };
 let M: Mods;
 const h = (c: unknown, props: object) => renderToStaticMarkup(React.createElement(c as React.ComponentType<never>, props as never));
@@ -26,14 +26,14 @@ beforeAll(async () => {
   // O JSX dos componentes usa o runtime clássico sob o esbuild padrão do vitest: expõe `React` só para este arquivo.
   (globalThis as { React?: unknown }).React = React;
   M = {
-    ...(await import("./RevisionTable")), ...(await import("./DecisionForm")), ...(await import("./CompositionExplanationPanel")),
+    ...(await import("./RevisionTable")), ...(await import("./ActionNote")), ...(await import("./CompositionExplanationPanel")),
     ...(await import("./ResolutionNotice")), ...(await import("./AstOutline")), ...(await import("./ImportResultPanel")),
-    ...(await import("./RevisionStatusBadge")), emptyDecisionForm: (await import("@/lib/institutionalTemplatesView")).emptyDecisionForm,
+    ...(await import("./RevisionStatusBadge")), ACTION_COPY: (await import("@/lib/institutionalTemplatesView")).ACTION_COPY,
   } as Mods;
 });
 
 const HASH = "b".repeat(64);
-const FLOORS = { read: "viewer", draft: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager" };
+const FLOORS = { read: "viewer", draft: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager", available: "manager" };
 const rows = [
   { id: "tr1", revision: 1, status: "PUBLISHED" as const, semanticHash: HASH, sourceFormat: "NATIVE", approvalDecisionId: "idc_a", publishDecisionId: "idc_p" },
   { id: "tr2", revision: 2, status: "DRAFT" as const, semanticHash: "c".repeat(64), sourceFormat: "MARKDOWN_IMPORT", approvalDecisionId: null, publishDecisionId: null },
@@ -53,10 +53,11 @@ describe("RevisionTable", () => {
     expect(html).toContain("Importada (DOCX)");
   });
 
-  it("oferece UMA ação de ciclo de vida por estado (Aprovar / Publicar / Depreciar) e nenhuma para DEPRECATED", () => {
+  it("LICIGOV-FAST: UMA ação por estado — 'Disponibilizar para elaboração' (RASCUNHO e APROVADA), 'Depreciar' (PUBLICADA) e nenhuma para DEPRECIADA", () => {
     const html = table("manager");
-    expect((html.match(/>Aprovar</g) ?? []).length).toBe(1);
-    expect((html.match(/>Publicar</g) ?? []).length).toBe(1);
+    expect((html.match(/>Disponibilizar para elaboração</g) ?? []).length).toBe(2);
+    expect((html.match(/>Aprovar</g) ?? []).length).toBe(0);          // sem atalhos burocráticos separados na tela
+    expect((html.match(/>Publicar</g) ?? []).length).toBe(0);
     expect((html.match(/>Depreciar</g) ?? []).length).toBe(1);
     expect((html.match(/Nova revisão a partir desta/g) ?? []).length).toBe(4);
   });
@@ -73,29 +74,25 @@ describe("RevisionTable", () => {
   });
 });
 
-describe("DecisionForm", () => {
-  const base = (action: "APPROVE" | "PUBLISH" | "DEPRECATE", showErrors = false, value = M?.emptyDecisionForm("2026-10-06")) =>
-    h(M.DecisionForm, { action, revisionLabel: "Revisão 2 · cccccccc", value, onChange: noop, showErrors });
+describe("ActionNote (confirmação enxuta — LICIGOV-FAST)", () => {
+  const html = (action: "AVAILABLE" | "APPROVE" | "PUBLISH" | "DEPRECATE") => h(M.ActionNote, { consequence: M.ACTION_COPY[action].consequence, note: "", onNote: noop });
 
-  it("explica a consequência; aprovar NÃO publica; publicar é decisão distinta", () => {
-    expect(base("APPROVE")).toContain("Aprovar NÃO publica");
-    expect(base("PUBLISH")).toContain("distinta da aprovação");
-    expect(base("DEPRECATE")).toContain("fixada por um vínculo ativo");
-    expect(base("APPROVE")).toContain("Revisão 2 · cccccccc");
+  it("explica exatamente o que a ação faz e que o registro é automático; não pede autoridade, cargo, data, ato nem checkbox", () => {
+    expect(html("AVAILABLE")).toContain("Não publica nenhum documento oficial");
+    expect(html("APPROVE")).toContain("Aprovar NÃO disponibiliza");
+    expect(html("DEPRECATE")).toContain("fixada por um vínculo ativo");
+    const h1 = html("AVAILABLE");
+    expect(h1).toContain("Fica registrado com o seu usuário, papel, data e hora.");
+    for (const banned of ["Autoridade", "Cargo", "Data do ato", "Referência do ato", "Confirmo a", 'type="checkbox"']) expect(h1, banned).not.toContain(banned);
   });
 
-  it("autoridade DECLARADA (nome, cargo, data, referência, justificativa) e confirmação NÃO pré-marcada", () => {
-    const html = base("PUBLISH");
-    for (const label of ["Autoridade que decidiu (nome)", "Cargo / função da autoridade", "Data do ato", "Referência do ato", "Justificativa", "Confirmo a PUBLICAÇÃO desta revisão"]) expect(html).toContain(label);
-    expect(html).toMatch(/type="checkbox"/);
-    expect(html).not.toMatch(/type="checkbox"[^>]*checked/);
-  });
-
-  it("mostra erros acessíveis (role=alert) só após a tentativa de confirmar", () => {
-    expect(base("APPROVE", false)).not.toContain('role="alert"');
-    const html = base("APPROVE", true);
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("É necessária a confirmação humana explícita.");
+  it("a observação é OPCIONAL (recolhida) e o botão que efetiva a ação tem o nome exato da ação — nunca 'Confirmo a APROVAÇÃO' numa operação que não é aprovação", () => {
+    expect(html("AVAILABLE")).toContain("Adicionar observação (opcional)");
+    for (const a of ["AVAILABLE", "APPROVE", "PUBLISH", "DEPRECATE"] as const) {
+      expect(M.ACTION_COPY[a].button).toBe(M.ACTION_COPY[a].title);
+      expect(JSON.stringify(M.ACTION_COPY[a])).not.toMatch(/Confirmo a/);
+    }
+    expect(M.ACTION_COPY.AVAILABLE.button).toBe("Disponibilizar para elaboração");
   });
 });
 
@@ -156,7 +153,7 @@ describe("AstOutline e ImportResultPanel", () => {
 describe("superfície de UX: sem HTML injetado/execução e rotas isoladas do legado", () => {
   const files = [
     "client/src/pages/InstitutionalTemplates.tsx", "client/src/pages/InstitutionalTemplateDetail.tsx",
-    ...["RevisionTable", "DecisionForm", "CompositionExplanationPanel", "ResolutionNotice", "AstOutline", "ImportResultPanel", "RevisionStatusBadge"].map((n) => `client/src/components/institutionalTemplates/${n}.tsx`),
+    ...["RevisionTable", "ActionNote", "CompositionExplanationPanel", "ResolutionNotice", "AstOutline", "ImportResultPanel", "RevisionStatusBadge"].map((n) => `client/src/components/institutionalTemplates/${n}.tsx`),
   ];
   const read = (rel: string) => readFileSync(path.resolve(rel), "utf8");
 
@@ -186,10 +183,13 @@ describe("superfície de UX: sem HTML injetado/execução e rotas isoladas do le
     expect(layout).toMatch(/institutionalTemplatesEnabled/);
   });
 
-  it("a página de detalhe confirma ações institucionais com formulário de decisão e envia confirm: true somente após validar", () => {
+  it("a página de detalhe efetiva a ação pelo botão que a nomeia (sem formulário de autoridade) e envia confirm: true com a chave de idempotência da ação", () => {
     const src = read("client/src/pages/InstitutionalTemplateDetail.tsx");
-    expect(src).toMatch(/validateDecisionForm\(form\)/);
-    expect(src).toMatch(/if \(!v\.valid\) \{ setShowErrors\(true\); return; \}/);
-    expect(src).toMatch(/confirm: true, idempotencyKey: pending\.idempotencyKey/);
+    const lifecycle = src.slice(src.indexOf("const confirmAction"), src.indexOf("// ── novo rascunho"));
+    expect(src).not.toMatch(/validateDecisionForm|DecisionForm/);
+    expect(lifecycle).not.toMatch(/decidedByName|decidedByRole|basisReference|decision:/);
+    expect(src).toMatch(/confirm: true as const, idempotencyKey: pending\.idempotencyKey/);
+    expect(src).toMatch(/ACTION_COPY\[pending\.action\]\.button/);
+    expect(src).toMatch(/makeAvailable\.mutateAsync/);
   });
 });

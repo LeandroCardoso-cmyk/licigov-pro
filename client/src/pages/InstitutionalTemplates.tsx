@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { LibraryBig, Plus, FilePlus2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -18,7 +19,7 @@ import { OwnershipTabs } from "@/components/institutionalTemplates/OwnershipTabs
 import { TemplatePolicyCard } from "@/components/institutionalTemplates/TemplatePolicyCard";
 import { DeriveTemplateForm } from "@/components/institutionalTemplates/DeriveTemplateForm";
 import {
-  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, emptyDeriveForm, emptyPolicyForm, filterByOwnership, hasRoleAtLeast, makeIdempotencyKey, ownershipCounts, packageSourceOf,
+  catalogFilterOptions, DOCUMENT_KIND_LABEL, EMPTY_CATALOG_FILTER, effectiveDeriveSlug, effectiveRegisterIds, emptyDeriveForm, emptyPolicyForm, filterByOwnership, sha256HexOf, hasRoleAtLeast, makeIdempotencyKey, ownershipCounts, packageSourceOf,
   scopeFromForm, validateDeriveForm, validatePolicyForm, emptyRegisterForm, validateRegisterForm,
   type CatalogFilterState, type CatalogRowView, type DeriveFormState, type OwnershipFilter, type PolicyFormState, type PolicyView, type RegisterFormState, type RegistrationPresetView,
 } from "@/lib/institutionalTemplatesView";
@@ -32,6 +33,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  */
 export default function InstitutionalTemplates() {
   const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
   const caps = trpc.institutionalTemplates.getCapabilities.useQuery();
   const enabled = caps.data?.enabled === true;
   const [filter, setFilter] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTER);
@@ -59,34 +61,38 @@ export default function InstitutionalTemplates() {
   const [regOpen, setRegOpen] = useState(false);
   const [reg, setReg] = useState<RegisterFormState>(emptyRegisterForm(today()));
   const [regKey, setRegKey] = useState(makeIdempotencyKey());
-  const [docx, setDocx] = useState<{ name: string; base64: string } | null>(null);
+  const [docx, setDocx] = useState<{ name: string; base64: string; sha256: string } | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const register = trpc.institutionalTemplates.registration.register.useMutation({
     onSuccess: (r) => {
-      toast.success(r.provenance.status === "RECORDED" ? "Modelo registrado como rascunho, com procedência." : `Rascunho criado, mas a procedência falhou: ${r.provenance.message}`);
+      toast.success(r.provenance.status === "RECORDED" ? "Modelo enviado como rascunho. Confira e disponibilize para elaboração." : `Rascunho criado, mas a procedência falhou: ${r.provenance.message}`);
       utils.institutionalTemplates.catalog.list.invalidate(); setRegOpen(false);
+      setLocation(`/modelos-institucionais/${r.identity.id}`);   // CONFERIR → DISPONIBILIZAR acontece na tela do modelo
     },
     onError: (e) => toast.error(e.message),
   });
-  const submitRegister = () => {
+  const submitRegister = async () => {
     if (!validateRegisterForm(reg, docx !== null).valid) { setShowErrors(true); return; }
     let inventory: unknown;
     if (reg.sourceKind !== "MODEL_PACKAGE" && reg.inventoryText.trim()) inventory = JSON.parse(reg.inventoryText);
     const source = reg.sourceKind === "MODEL_PACKAGE" ? packageSourceOf(reg) : reg.sourceKind === "AST" ? { kind: "AST" as const, ast: JSON.parse(reg.sourceText) as unknown }
       : reg.sourceKind === "MARKDOWN" ? { kind: "MARKDOWN" as const, markdown: reg.sourceText } : { kind: "DOCX" as const, docxBase64: docx!.base64, filename: docx!.name };
+    // LICIGOV-FAST: nada de digitar hash/versão/chave. Pacote = valores do servidor; demais = versão padrão + SHA-256 calculado aqui do conteúdo enviado (o servidor recalcula o do arquivo).
+    const ids = effectiveRegisterIds(reg);
+    const logical = reg.sourceKind === "MODEL_PACKAGE" || reg.sourceLogicalVersion.trim() ? reg.sourceLogicalVersion.trim() : "1.0.0";
+    const sha = reg.sourceSha256.trim() || (reg.sourceKind === "DOCX" ? docx!.sha256 : await sha256HexOf(reg.sourceKind === "AST" ? JSON.stringify(JSON.parse(reg.sourceText)) : reg.sourceText));
     register.mutate({
-      target: reg.targetKind === "NEW_IDENTITY" ? { kind: "NEW_IDENTITY", documentKind: reg.documentKind as never, slug: reg.slug } : { kind: "EXISTING_IDENTITY", identityId: reg.existingIdentityId.trim() },
-      templateKey: reg.templateKey, displayName: reg.displayName.trim(), declaredScope: scopeFromForm(reg.scope), source,
-      sourceLogicalVersion: reg.sourceLogicalVersion.trim(), sourceSha256: reg.sourceSha256.trim(), ...(inventory !== undefined ? { inventory } : {}),
-      confirm: true, idempotencyKey: regKey,
-      decision: { decidedByName: reg.decidedByName.trim(), decidedByRole: reg.decidedByRole.trim(), decidedAt: reg.decidedAt, basisReference: reg.basisReference.trim(), reason: reg.reason.trim() },
+      target: reg.targetKind === "NEW_IDENTITY" ? { kind: "NEW_IDENTITY", documentKind: reg.documentKind as never, slug: ids.slug } : { kind: "EXISTING_IDENTITY", identityId: reg.existingIdentityId.trim() },
+      templateKey: ids.templateKey, displayName: reg.displayName.trim(), declaredScope: scopeFromForm(reg.scope), source,
+      sourceLogicalVersion: logical, sourceSha256: sha, ...(inventory !== undefined ? { inventory } : {}),
+      confirm: true, idempotencyKey: regKey, ...(reg.note.trim() ? { note: reg.note.trim() } : {}),
     });
   };
   const onDocxFile = async (file: File | undefined) => {
     if (!file) return;
     const buf = new Uint8Array(await file.arrayBuffer());
     let bin = ""; buf.forEach((b) => { bin += String.fromCharCode(b); });
-    setDocx({ name: file.name, base64: btoa(bin) });
+    setDocx({ name: file.name, base64: btoa(bin), sha256: await sha256HexOf(buf) });
   };
 
   // ── propriedade/origem dos modelos (plataforma · minha prefeitura · derivados) ──
@@ -99,26 +105,26 @@ export default function InstitutionalTemplates() {
   const policy = policyQuery.data as unknown as PolicyView | undefined;
   const [polForm, setPolForm] = useState<PolicyFormState | null>(null);
   const [polKey, setPolKey] = useState(makeIdempotencyKey());
-  const [polErrors, setPolErrors] = useState(false);
   const recordPolicy = trpc.institutionalTemplates.governance.policy.record.useMutation({
-    onSuccess: () => { toast.success("Política registrada (nova versão; a anterior permanece no histórico)."); setPolForm(null); setPolErrors(false); setPolKey(makeIdempotencyKey()); void policyQuery.refetch(); },
+    onSuccess: () => { toast.success("Política registrada (nova versão; a anterior permanece no histórico)."); setPolForm(null); setPolKey(makeIdempotencyKey()); void policyQuery.refetch(); },
     onError: (e) => toast.error(e.message),
   });
   const submitPolicy = () => {
-    if (!polForm || !policy || !validatePolicyForm(polForm, policy).valid) { setPolErrors(true); return; }
+    if (!polForm || !policy || !validatePolicyForm(polForm, policy).valid) return;
+    // A confirmação é o clique em "Registrar política". Autoridade = usuário autenticado (registrado pelo servidor); sem ato administrativo digitado.
     recordPolicy.mutate({
       expectedVersion: policy.version, confirm: true, idempotencyKey: polKey,
       policy: { legalEvidence: polForm.legalEvidence, approveMinRole: polForm.approveMinRole, publishMinRole: polForm.publishMinRole },
-      decision: { decidedByName: polForm.decision.decidedByName.trim(), decidedByRole: polForm.decision.decidedByRole.trim(), decidedAt: polForm.decision.decidedAt, basisReference: polForm.decision.basisReference.trim(), reason: polForm.decision.reason.trim() },
+      ...(polForm.note.trim() ? { note: polForm.note.trim() } : {}),
     });
   };
 
   // ── derivação (a partir de modelo da plataforma OU de revisão decidida do órgão) ──
   const [derive, setDerive] = useState<{ sourceLabel: string; source: { kind: "PLATFORM_PACKAGE"; modelKey: string } | { kind: "TENANT_REVISION"; revisionId: string } } | null>(null);
-  const [derForm, setDerForm] = useState<DeriveFormState>(emptyDeriveForm(today()));
+  const [derForm, setDerForm] = useState<DeriveFormState>(emptyDeriveForm());
   const [derKey, setDerKey] = useState(makeIdempotencyKey());
   const [derErrors, setDerErrors] = useState(false);
-  const openDerive = (d: NonNullable<typeof derive>, suggestedName: string) => { setDerive(d); setDerForm(emptyDeriveForm(today(), suggestedName)); setDerKey(makeIdempotencyKey()); setDerErrors(false); };
+  const openDerive = (d: NonNullable<typeof derive>, suggestedName: string) => { setDerive(d); setDerForm(emptyDeriveForm(suggestedName)); setDerKey(makeIdempotencyKey()); setDerErrors(false); };
   const deriveMut = trpc.institutionalTemplates.derivation.derive.useMutation({
     onSuccess: (r) => {
       toast.success(r.replayed ? "Esta derivação já existia; nada foi duplicado." : "Modelo derivado criado como rascunho, com lineage registrado.");
@@ -129,9 +135,8 @@ export default function InstitutionalTemplates() {
   const submitDerive = () => {
     if (!derive || !validateDeriveForm(derForm).valid) { setDerErrors(true); return; }
     deriveMut.mutate({
-      source: derive.source, slug: derForm.slug.trim(), displayName: derForm.displayName.trim(), ...(derForm.declaredAuthor.trim() ? { declaredAuthor: derForm.declaredAuthor.trim() } : {}),
-      confirm: true, idempotencyKey: derKey,
-      decision: { decidedByName: derForm.decision.decidedByName.trim(), decidedByRole: derForm.decision.decidedByRole.trim(), decidedAt: derForm.decision.decidedAt, basisReference: derForm.decision.basisReference.trim(), reason: derForm.decision.reason.trim() },
+      source: derive.source, slug: effectiveDeriveSlug(derForm), displayName: derForm.displayName.trim(), ...(derForm.declaredAuthor.trim() ? { declaredAuthor: derForm.declaredAuthor.trim() } : {}),
+      confirm: true, idempotencyKey: derKey, ...(derForm.note.trim() ? { note: derForm.note.trim() } : {}),
     });
   };
   const platformPresets = ((caps.data?.registrationPresets ?? []) as unknown as RegistrationPresetView[]).filter((p) => p.sourceKind === "MODEL_PACKAGE");
@@ -148,7 +153,7 @@ export default function InstitutionalTemplates() {
       description="Catálogo de modelos documentais da organização, com revisões aprovadas e publicadas por decisão humana. Diferente dos templates pessoais."
       actions={enabled ? (
         <div className="flex gap-2">
-          {canRegister && <Button variant="outline" onClick={() => { setReg(emptyRegisterForm(today())); setRegKey(makeIdempotencyKey()); setDocx(null); setShowErrors(false); setRegOpen(true); }}><FilePlus2 className="mr-2 h-4 w-4" />Registrar modelo</Button>}
+          {canRegister && <Button variant="outline" onClick={() => { setReg(emptyRegisterForm(today())); setRegKey(makeIdempotencyKey()); setDocx(null); setShowErrors(false); setRegOpen(true); }}><FilePlus2 className="mr-2 h-4 w-4" />Enviar modelo</Button>}
           {canCreate && <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo modelo</Button>}
         </div>
       ) : undefined}
@@ -167,9 +172,9 @@ export default function InstitutionalTemplates() {
       ) : (
         <div className="space-y-4">
           {policy && (
-            <TemplatePolicyCard policy={policy} canEdit={canPolicy} form={polForm} showErrors={polErrors} pending={recordPolicy.isPending}
-              onOpen={() => { setPolForm(emptyPolicyForm(policy.policy, today())); setPolKey(makeIdempotencyKey()); setPolErrors(false); }}
-              onChange={setPolForm} onCancel={() => { setPolForm(null); setPolErrors(false); }} onSubmit={submitPolicy} />
+            <TemplatePolicyCard policy={policy} canEdit={canPolicy} form={polForm} pending={recordPolicy.isPending}
+              onOpen={() => { setPolForm(emptyPolicyForm(policy.policy)); setPolKey(makeIdempotencyKey()); }}
+              onChange={setPolForm} onCancel={() => setPolForm(null)} onSubmit={submitPolicy} />
           )}
           {canRegister && platformPresets.length > 0 && (
             <Card aria-label="Modelos da plataforma">
@@ -222,13 +227,13 @@ export default function InstitutionalTemplates() {
 
       <Dialog open={regOpen} onOpenChange={setRegOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader><DialogTitle>Registrar modelo</DialogTitle><DialogDescription>Importa o conteúdo-fonte como RASCUNHO e registra a procedência.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Enviar modelo</DialogTitle><DialogDescription>Envie o conteúdo do modelo; ele nasce como rascunho do seu órgão e você confere antes de disponibilizar.</DialogDescription></DialogHeader>
           <RegisterModelForm value={reg} onChange={setReg} presets={(caps.data?.registrationPresets ?? []) as unknown as RegistrationPresetView[]}
             documentKinds={caps.data?.documentKinds ?? []} today={today()} hasDocx={docx !== null} onDocxFile={onDocxFile} scopeSuggestions={suggestions} showErrors={showErrors}
             uploadsAvailable={caps.data?.originalPreservation?.available !== false} uploadsUnavailableReason={caps.data?.originalPreservation?.reason ?? null} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRegOpen(false)}>Cancelar</Button>
-            <Button disabled={register.isPending} onClick={submitRegister}>Registrar como rascunho</Button>
+            <Button disabled={register.isPending} onClick={() => void submitRegister()}>Enviar modelo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -238,7 +243,7 @@ export default function InstitutionalTemplates() {
           {derive && <DeriveTemplateForm sourceLabel={derive.sourceLabel} value={derForm} onChange={setDerForm} showErrors={derErrors} />}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDerive(null)}>Cancelar</Button>
-            <Button disabled={deriveMut.isPending} onClick={submitDerive}>Criar derivada como rascunho</Button>
+            <Button disabled={deriveMut.isPending} onClick={submitDerive}>Criar derivada</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

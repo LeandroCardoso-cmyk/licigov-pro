@@ -34,12 +34,13 @@ export function hasRoleAtLeast(role: string | null | undefined, floor: string | 
   return (ROLE_RANK[role] ?? 0) >= (ROLE_RANK[floor] ?? Infinity);
 }
 
-export type LifecycleAction = "APPROVE" | "PUBLISH" | "DEPRECATE";
+export type LifecycleAction = "APPROVE" | "PUBLISH" | "DEPRECATE" | "AVAILABLE";
 export interface ActionState { readonly action: LifecycleAction; readonly label: string; readonly enabled: boolean; readonly disabledReason?: string }
 
 const NEXT: Record<RevisionStatus, { action: LifecycleAction; floorKey: string; label: string } | null> = {
-  DRAFT: { action: "APPROVE", floorKey: "approve", label: "Aprovar" },
-  APPROVED: { action: "PUBLISH", floorKey: "publish", label: "Publicar" },
+  // LICIGOV-FAST: um clique — aprova (se preciso) e disponibiliza no catálogo INTERNO. Aprovar/publicar separados seguem existindo na API, não na tela.
+  DRAFT: { action: "AVAILABLE", floorKey: "available", label: "Disponibilizar para elaboração" },
+  APPROVED: { action: "AVAILABLE", floorKey: "available", label: "Disponibilizar para elaboração" },
   PUBLISHED: { action: "DEPRECATE", floorKey: "deprecate", label: "Depreciar" },
   DEPRECATED: null,
 };
@@ -52,25 +53,34 @@ export function nextLifecycleAction(status: RevisionStatus, role: string | null 
   return { action: n.action, label: n.label, enabled: ok, ...(ok ? {} : { disabledReason: `Exige papel mínimo "${floors?.[n.floorKey] ?? "manager"}" na organização.` }) };
 }
 
-export const ACTION_COPY: Record<LifecycleAction, { title: string; confirmLabel: string; consequence: string }> = {
+/** `button` é o texto do botão que EFETIVA a ação (a confirmação é o clique nele): corresponde exatamente ao que será feito. */
+export const ACTION_COPY: Record<LifecycleAction, { title: string; button: string; consequence: string }> = {
+  AVAILABLE: {
+    title: "Disponibilizar para elaboração",
+    button: "Disponibilizar para elaboração",
+    consequence: "Aprova esta revisão e a disponibiliza no catálogo interno de modelos para elaboração. Não publica nenhum documento oficial e não muda o modelo usado nos novos documentos (isso é o Vínculo). A revisão fica imutável.",
+  },
   APPROVE: {
     title: "Aprovar revisão",
-    confirmLabel: "Confirmo a APROVAÇÃO desta revisão",
-    consequence: "Registra uma decisão institucional de aprovação. A revisão passa a APPROVED e deixa de aceitar edição. Aprovar NÃO publica.",
+    button: "Aprovar revisão",
+    consequence: "A revisão passa a APPROVED e deixa de aceitar edição. Aprovar NÃO disponibiliza o modelo.",
   },
   PUBLISH: {
-    title: "Publicar revisão",
-    confirmLabel: "Confirmo a PUBLICAÇÃO desta revisão",
-    consequence: "Registra uma decisão institucional de publicação, distinta da aprovação. A revisão passa a PUBLISHED, fica imutável e poderá ser vinculada a tipos de documento.",
+    title: "Publicar no catálogo interno",
+    button: "Publicar no catálogo interno",
+    consequence: "A revisão passa a PUBLISHED no catálogo interno de elaboração e fica imutável. Não publica documento oficial.",
   },
   DEPRECATE: {
     title: "Depreciar revisão",
-    confirmLabel: "Confirmo a DEPRECIAÇÃO desta revisão",
-    consequence: "Registra uma decisão institucional de depreciação. A revisão deixa de poder ser vinculada; documentos já gerados continuam reproduzíveis. Não é possível depreciar uma revisão ainda fixada por um vínculo ativo.",
+    button: "Depreciar revisão",
+    consequence: "A revisão deixa de poder ser vinculada; documentos já gerados continuam reproduzíveis. Não é possível depreciar uma revisão ainda fixada por um vínculo ativo.",
   },
 };
 
-// ─── formulário de decisão (autoridade DECLARADA no ato) ────────────────────────────
+/** Todo registro feito pela tela fica com o seu usuário, o papel, a data/hora e o histórico — sem digitar nada disso. */
+export const ELECTRONIC_RECORD_NOTE = "Fica registrado com o seu usuário, papel, data e hora.";
+
+// ─── formulário de decisão institucional (SÓ onde o contrato exige fundamento: ex. evidência jurídica) ────────────────────────────
 
 export interface DecisionFormState {
   decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
@@ -344,39 +354,55 @@ export interface RegisterFormState {
   documentKind: string; slug: string; templateKey: string; displayName: string; scope: ScopeFormState;
   sourceKind: "AST" | "MARKDOWN" | "DOCX" | "MODEL_PACKAGE"; sourceText: string;
   sourceLogicalVersion: string; sourceSha256: string; inventoryText: string;
-  decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
+  /** Observação livre opcional (vira a justificativa do registro). */
+  note: string;
 }
 
-export const emptyRegisterForm = (today: string, preset?: RegistrationPresetView): RegisterFormState => ({
+export const emptyRegisterForm = (_today: string, preset?: RegistrationPresetView): RegisterFormState => ({
   targetKind: "NEW_IDENTITY", existingIdentityId: "",
   documentKind: preset?.documentKind ?? "edital", slug: preset?.slug ?? "", templateKey: preset?.templateKey ?? "", displayName: preset?.displayName ?? "",
   scope: { ...emptyScopeForm(), ...(preset?.scope ?? {}) } as ScopeFormState,
   ...(preset?.sourceKind === "MODEL_PACKAGE"
     ? { sourceKind: "MODEL_PACKAGE" as const, sourceText: "", sourceLogicalVersion: preset.sourceLogicalVersion ?? "", sourceSha256: preset.sourceSha256 ?? "", inventoryText: "" }
     : { sourceKind: "AST" as const, sourceText: "", sourceLogicalVersion: "", sourceSha256: "", inventoryText: "" }),
-  decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false,
+  note: "",
 });
+
+/** Identificador estável sugerido a partir do nome (minúsculas, sem acento, hífens). */
+export function slugFromName(name: string): string {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120).replace(/-+$/g, "");
+}
+/** Chave técnica do modelo derivada do identificador (MAIÚSCULAS, dígitos e _; começa por letra). */
+export function templateKeyFromSlug(slug: string): string {
+  const k = slug.toUpperCase().replace(/-/g, "_");
+  return (/^[A-Z]/.test(k) ? k : `M_${k}`).padEnd(3, "X").slice(0, 64);
+}
+/** Identificadores efetivos do registro: o que a pessoa digitou OU o derivado do nome (uma informação, um preenchimento). */
+export function effectiveRegisterIds(f: Pick<RegisterFormState, "slug" | "templateKey" | "displayName">): { slug: string; templateKey: string } {
+  const slug = f.slug.trim() || slugFromName(f.displayName);
+  return { slug, templateKey: f.templateKey.trim() || templateKeyFromSlug(slug) };
+}
+/** SHA-256 (hex) calculado no navegador a partir do conteúdo enviado — preenche, sem digitação, a fonte declarada. O servidor recalcula o do arquivo. */
+export async function sha256HexOf(data: string | Uint8Array): Promise<string> {
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export function validateRegisterForm(f: RegisterFormState, hasDocx: boolean): { valid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   if (f.targetKind === "NEW_IDENTITY") {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(f.slug)) errors.slug = "Slug: minúsculas, números e hífens.";
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(effectiveRegisterIds(f).slug)) errors.slug = "Dê um nome ao modelo (ou informe o identificador: minúsculas, números e hífens).";
   } else if (!f.existingIdentityId.trim()) errors.existingIdentityId = "Informe o modelo existente.";
-  if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(f.templateKey)) errors.templateKey = "templateKey: MAIÚSCULAS, dígitos e _ (ex.: EDITAL_PREGAO_ELETRONICO_BLL).";
+  if (!/^[A-Z][A-Z0-9_]{2,63}$/.test(effectiveRegisterIds(f).templateKey)) errors.templateKey = "Chave técnica inválida (MAIÚSCULAS, dígitos e _).";
   if (!f.displayName.trim()) errors.displayName = "Informe o nome de exibição.";
   Object.assign(errors, Object.fromEntries(Object.entries(scopeFormProblems(f.documentKind, f.scope)).map(([k, v]) => [`scope.${k}`, v as string])));
   const isPackage = f.sourceKind === "MODEL_PACKAGE";   // pacote do servidor: sem AST/Markdown/DOCX/inventário no cliente
   if (!isPackage && (f.sourceKind === "DOCX" ? !hasDocx : !f.sourceText.trim())) errors.source = "Informe o conteúdo-fonte.";
   if (f.sourceKind === "AST") { try { JSON.parse(f.sourceText); } catch { if (f.sourceText.trim()) errors.source = "AST: JSON inválido."; } }
-  if (!f.sourceLogicalVersion.trim()) errors.sourceLogicalVersion = "Informe a versão lógica da fonte.";
-  if (!/^[0-9a-f]{64}$/.test(f.sourceSha256.trim())) errors.sourceSha256 = "SHA-256 da fonte: 64 hexadecimais minúsculos.";
+  // pacote da plataforma: versão/SHA vêm do servidor. Demais fontes: versão padrão e SHA-256 calculado pelo navegador (campos avançados opcionais; se informados, são validados).
+  if (f.sourceSha256.trim() && !/^[0-9a-f]{64}$/.test(f.sourceSha256.trim())) errors.sourceSha256 = "SHA-256 da fonte: 64 hexadecimais minúsculos.";
   if (!isPackage && f.inventoryText.trim()) { try { JSON.parse(f.inventoryText); } catch { errors.inventoryText = "Inventário: JSON inválido."; } }
-  if (!f.decidedByName.trim()) errors.decidedByName = "Informe quem registra (nome).";
-  if (!f.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.decidedAt)) errors.decidedAt = "Data AAAA-MM-DD.";
-  if (!f.basisReference.trim()) errors.basisReference = "Informe a referência da fonte/ato.";
-  if (f.reason.trim().length < 10) errors.reason = "Justificativa (mín. 10 caracteres).";
-  if (!f.confirmed) errors.confirmed = "É necessária a confirmação humana explícita.";
   return { valid: Object.keys(errors).length === 0, errors };
 }
 
@@ -477,15 +503,13 @@ export interface PolicyView {
   readonly note?: string;
   readonly history: readonly { version: number; policy: PolicyView["policy"] | null; declaredBy: { name: string; role: string }; actDate: string; reason: string }[];
 }
-export interface PolicyFormState { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner"; decision: DecisionFormState }
-export const emptyPolicyForm = (current: PolicyView["policy"], today: string): PolicyFormState => ({ ...current, decision: emptyDecisionForm(today) });
-export function validatePolicyForm(f: PolicyFormState, current: PolicyView): { valid: boolean; errors: Partial<Record<DecisionField | "unchanged", string>> } {
-  const { errors } = validateDecisionForm(f.decision);
-  const out: Partial<Record<DecisionField | "unchanged", string>> = { ...errors };
+export interface PolicyFormState { legalEvidence: LegalEvidenceRequirementKey; approveMinRole: "manager" | "owner"; publishMinRole: "manager" | "owner"; note: string }
+export const emptyPolicyForm = (current: PolicyView["policy"]): PolicyFormState => ({ ...current, note: "" });
+export function validatePolicyForm(f: PolicyFormState, current: PolicyView): { valid: boolean; errors: Partial<Record<"unchanged", string>> } {
   const c = current.policy;
   // Só é "sem alteração" quando já há decisão PRÓPRIA do órgão; confirmar explicitamente o padrão/regime anterior é uma decisão legítima (encerra a compatibilidade).
-  if (current.kind === "TENANT_DEFINED" && f.legalEvidence === c.legalEvidence && f.approveMinRole === c.approveMinRole && f.publishMinRole === c.publishMinRole && !current.malformed) out.unchanged = "Nenhuma alteração em relação à política vigente.";
-  return { valid: Object.keys(out).length === 0, errors: out };
+  const unchanged = current.kind === "TENANT_DEFINED" && f.legalEvidence === c.legalEvidence && f.approveMinRole === c.approveMinRole && f.publishMinRole === c.publishMinRole && !current.malformed;
+  return unchanged ? { valid: false, errors: { unchanged: "Nenhuma alteração em relação à política vigente." } } : { valid: true, errors: {} };
 }
 export const POLICY_KIND_LABEL: Record<PolicyKindKey, { label: string; tone: StatusTone }> = {
   TENANT_DEFINED: { label: "Definida pelo órgão", tone: "success" }, PLATFORM_DEFAULT: { label: "Padrão da plataforma", tone: "neutral" },
@@ -498,14 +522,14 @@ export function policyHeadline(p: Pick<PolicyView, "kind" | "malformed" | "polic
   return `${origin}: ${legal}; ${roles}${p.malformed ? " — registro ilegível, aplicado o padrão estrito" : ""}.`;
 }
 
-// derivação (a partir de modelo da plataforma ou próprio já decidido)
-export interface DeriveFormState { slug: string; displayName: string; declaredAuthor: string; decision: DecisionFormState }
-export const emptyDeriveForm = (today: string, suggestedName = ""): DeriveFormState => ({ slug: "", displayName: suggestedName ? `${suggestedName} (adaptado)` : "", declaredAuthor: "", decision: emptyDecisionForm(today) });
-export function validateDeriveForm(f: DeriveFormState): { valid: boolean; errors: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> } {
-  const { errors } = validateDecisionForm(f.decision);
-  const out: Partial<Record<"slug" | "displayName" | "declaredAuthor" | DecisionField, string>> = { ...errors };
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(f.slug) || f.slug.length > 120) out.slug = "Slug: minúsculas, números e hífens.";
+// derivação (a partir de modelo da plataforma ou próprio já decidido): só nome (+ autor opcional); o identificador é derivado do nome
+export interface DeriveFormState { slug: string; displayName: string; declaredAuthor: string; note: string }
+export const emptyDeriveForm = (suggestedName = ""): DeriveFormState => ({ slug: "", displayName: suggestedName ? `${suggestedName} (adaptado)` : "", declaredAuthor: "", note: "" });
+export const effectiveDeriveSlug = (f: Pick<DeriveFormState, "slug" | "displayName">): string => f.slug.trim() || slugFromName(f.displayName);
+export function validateDeriveForm(f: DeriveFormState): { valid: boolean; errors: Partial<Record<"slug" | "displayName" | "declaredAuthor", string>> } {
+  const out: Partial<Record<"slug" | "displayName" | "declaredAuthor", string>> = {};
   if (!f.displayName.trim() || f.displayName.length > 200) out.displayName = "Informe o nome do modelo (até 200 caracteres).";
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(effectiveDeriveSlug(f))) out.slug = "Não foi possível formar o identificador: use letras e números no nome (ou informe o identificador).";
   if (f.declaredAuthor.trim() && (f.declaredAuthor.length > 160 || /[\r\n]/.test(f.declaredAuthor))) out.declaredAuthor = "Autor: uma linha, até 160 caracteres.";
   return { valid: Object.keys(out).length === 0, errors: out };
 }

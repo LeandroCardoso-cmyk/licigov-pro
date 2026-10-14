@@ -26,6 +26,7 @@ import { TemplateCatalogService } from "../services/institutionalTemplates/catal
 import { TemplateGovernanceService } from "../services/institutionalTemplates/governanceService";
 import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../services/institutionalTemplates/modelRegistrationService";
 import { TemplatePreviewDossierService } from "../services/institutionalTemplates/previewDossierService";
+import { resolveAuthority } from "../services/institutionalTemplates/electronicAuthority";
 import { TemplateDerivationService } from "../services/institutionalTemplates/templateDerivationService";
 import { TemplateReadinessService } from "../services/institutionalTemplates/readinessService";
 import { INTEGRATED_CAPABILITIES } from "../domain/institutionalTemplates/governance/capabilities";
@@ -71,7 +72,10 @@ const lifecycleInput = z.object({
   /** Literal `true`: a confirmação humana é um ato explícito (um booleano ausente/false é recusado). */
   confirm: z.boolean(),
   idempotencyKey: z.string().min(8).max(128),
-  decision: decisionSchema,
+  /** LICIGOV-FAST: fundamento institucional OPCIONAL. Ausente ⇒ o servidor registra a decisão eletronicamente com o usuário autenticado (sem inventar ato). */
+  decision: decisionSchema.optional(),
+  /** Observação livre opcional (vira a justificativa quando não há `decision`). */
+  note: z.string().max(2000).optional(),
 }).strict();
 
 /**
@@ -79,6 +83,9 @@ const lifecycleInput = z.object({
  * (`.strict()` recusa qualquer `readiness`/`acceptedBlockedChecks`). `inventory` é só DADO da fonte: autenticado pelo SHA-256 da procedência.
  */
 const publishInput = lifecycleInput.extend({ inventory: z.unknown().refine((v) => { try { return JSON.stringify(v).length <= 1024 * 1024; } catch { return false; } }, "inventário acima do limite").optional() }).strict();
+
+/** Disponibilizar = aprovar (se ainda DRAFT) + publicar no catálogo interno. `expectedStatus` é o estado que a pessoa viu (DRAFT ou APPROVED). */
+const makeAvailableInput = publishInput.extend({ expectedStatus: z.enum(["DRAFT", "APPROVED"]), idempotencyKey: z.string().min(8).max(110) }).strict();
 
 const sha64 = z.string().regex(/^[0-9a-f]{64}$/);
 const declaredAuthority = z.object({
@@ -96,7 +103,7 @@ const legalEvidenceInput = z.object({
   }).strict(),
 }).strict();
 const templatePolicyInput = z.object({
-  expectedVersion: z.number().int().min(0).max(100000), confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+  expectedVersion: z.number().int().min(0).max(100000), confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority.optional(), note: z.string().max(2000).optional(),
   policy: z.object({ legalEvidence: z.enum(["REQUIRED", "OPTIONAL"]), approveMinRole: z.enum(["manager", "owner"]), publishMinRole: z.enum(["manager", "owner"]) }).strict(),
 }).strict();
 const inventoryInput = z.unknown().refine((v) => { try { return JSON.stringify(v).length <= 1024 * 1024; } catch { return false; } }, "inventário acima do limite");
@@ -113,7 +120,7 @@ const registerInput = z.object({
     z.object({ kind: z.literal("DOCX"), docxBase64: z.string().max(Math.ceil((IMPORT_LIMITS.maxDocxBytes * 4) / 3) + 8), filename: z.string().max(255).optional() }).strict(),
   ]),
   sourceLogicalVersion: z.string().min(1).max(64), sourceSha256: sha64, inventory: inventoryInput.optional(), declaredAuthor: z.string().min(1).max(160).regex(/^[^\r\n]+$/).optional(),
-  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority.optional(), note: z.string().max(2000).optional(),
 }).strict();
 const deriveInput = z.object({
   source: z.discriminatedUnion("kind", [
@@ -122,9 +129,15 @@ const deriveInput = z.object({
   ]),
   slug: z.string().min(1).max(120), displayName: z.string().min(1).max(200), declaredScope: scope.optional(),
   declaredAuthor: z.string().min(1).max(160).regex(/^[^\r\n]+$/).optional(),
-  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority,
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: declaredAuthority.optional(), note: z.string().max(2000).optional(),
 }).strict();
 const previewContext = z.object({ scope, sampleValues }).strict();
+
+/** LICIGOV-FAST: autoridade da decisão = a informada (fundamento institucional explícito) OU o registro eletrônico do usuário autenticado. */
+const authorityOf = (
+  ctx: { user: { id: number; name?: string | null; email?: string | null }; orgMembership?: { role?: string | null } | null; ports: { clock: { now(): string } } },
+  action: string, decision: z.infer<typeof declaredAuthority> | undefined, note?: string,
+) => resolveAuthority(decision, { userId: ctx.user.id, userName: ctx.user.name, userEmail: ctx.user.email, orgRole: ctx.orgMembership?.role ?? null, today: ctx.ports.clock.now().slice(0, 10), action, note });
 
 const importInput = z.object({
   format: z.enum(["markdown", "docx"]),
@@ -209,11 +222,16 @@ function templatesProcedure(action: TemplateAction) {
       organizationId: ctx.organizationId!, actor: { kind: "human", userId: ctx.user.id }, correlationId: ctx.correlationId ?? "",
     };
     // Template Governance V2: a política do órgão pode ELEVAR (nunca reduzir) o piso de papel para aprovar/publicar modelos próprios.
-    if (action === "approve" || action === "publish") {
+    if (action === "approve" || action === "publish" || action === "available") {
       const effective = await guarded(() => new TemplateGovernanceService(getTemplateWorkflowPorts()).getTemplatePolicy(wctx));
-      const floor = action === "approve" ? effective.policy.approveMinRole : effective.policy.publishMinRole;
-      if (!roleMeetsFloor(ctx.orgMembership?.role, floor)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: `A política de governança de modelos deste órgão exige papel ${floor} (ou superior) para ${action === "approve" ? "aprovar" : "publicar"} modelos.` });
+      // "available" = aprovar + publicar: exige os DOIS pisos da política do órgão
+      const needs: Array<["aprovar" | "publicar", "manager" | "owner"]> = [];
+      if (action !== "publish") needs.push(["aprovar", effective.policy.approveMinRole]);
+      if (action !== "approve") needs.push(["publicar", effective.policy.publishMinRole]);
+      for (const [verb, floor] of needs) {
+        if (!roleMeetsFloor(ctx.orgMembership?.role, floor)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `A política de governança de modelos deste órgão exige papel ${floor} (ou superior) para ${verb} modelos.` });
+        }
       }
     }
     return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts() } });
@@ -264,9 +282,11 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input }) => guarded(() => ctx.wf.updateDraft(ctx.wctx, input))),
     validateAst: templatesProcedure("read").input(z.object({ ast: astInput }).strict())
       .query(({ ctx, input }) => guarded(() => ctx.wf.validateAst(ctx.wctx, input.ast))),
-    approve: templatesProcedure("approve").input(lifecycleInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.approve(ctx.wctx, input))),
-    publish: templatesProcedure("publish").input(publishInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.publish(ctx.wctx, input))),
-    deprecate: templatesProcedure("deprecate").input(lifecycleInput).mutation(({ ctx, input }) => guarded(() => ctx.wf.deprecate(ctx.wctx, input))),
+    approve: templatesProcedure("approve").input(lifecycleInput).mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => ctx.wf.approve(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Aprovação do modelo", decision, note) }))),
+    publish: templatesProcedure("publish").input(publishInput).mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => ctx.wf.publish(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Disponibilização do modelo no catálogo interno", decision, note) }))),
+    /** LICIGOV-FAST — um clique: aprova e disponibiliza no catálogo INTERNO de elaboração (duas decisões no ledger, readiness recalculada no servidor). Não publica documento oficial nem vincula. */
+    makeAvailable: templatesProcedure("available").input(makeAvailableInput).mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => ctx.wf.makeAvailable(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Disponibilização do modelo para elaboração", decision, note) }))),
+    deprecate: templatesProcedure("deprecate").input(lifecycleInput).mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => ctx.wf.deprecate(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Depreciação do modelo", decision, note) }))),
   }),
 
   bindings: router({
@@ -307,15 +327,15 @@ export const institutionalTemplatesRouter = router({
     policy: router({
       get: templatesProcedure("read").query(({ ctx }) => guarded(() => new TemplateGovernanceService(ctx.ports).getTemplatePolicy(ctx.wctx))),
       record: templatesProcedure("policy").input(templatePolicyInput)
-        .mutation(({ ctx, input }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordTemplatePolicy(ctx.wctx, input))),
+        .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateGovernanceService(ctx.ports).recordTemplatePolicy(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Política de governança dos modelos do órgão", decision, note) }))),
     }),
   }),
 
   /** Registro/importação do modelo: cria (ou reutiliza) a identidade, uma revisão DRAFT e a procedência. Nunca aprova nem publica. */
   registration: router({
     register: templatesProcedure("register").input(registerInput)
-      .mutation(({ ctx, input }) => guarded(() => new ModelRegistrationService(ctx.ports).register(ctx.wctx, {
-        ...input,
+      .mutation(({ ctx, input: { note, decision, ...input } }) => guarded(() => new ModelRegistrationService(ctx.ports).register(ctx.wctx, {
+        ...input, decision: authorityOf(ctx, "Registro de modelo", decision, note),
         source: input.source.kind === "DOCX" ? { kind: "DOCX", docx: Buffer.from(input.source.docxBase64, "base64"), filename: input.source.filename } : input.source,
       }))),
   }),
@@ -326,7 +346,7 @@ export const institutionalTemplatesRouter = router({
    */
   derivation: router({
     derive: templatesProcedure("register").input(deriveInput)
-      .mutation(({ ctx, input }) => guarded(() => new TemplateDerivationService(ctx.ports).derive(ctx.wctx, input))),
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateDerivationService(ctx.ports).derive(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Derivação de modelo", decision, note) }))),
   }),
 
   /** Matriz de prontidão (só leitura). Na publicação o servidor a RECALCULA e qualquer BLOCKED impede publicar. */

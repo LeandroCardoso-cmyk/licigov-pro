@@ -290,6 +290,19 @@ export class InstitutionalTemplatesWorkflow {
   publish(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "PUBLISHED", input); }
   deprecate(ctx: WorkflowContext, input: LifecycleInput) { return this.transition(ctx, "DEPRECATED", input); }
 
+  /**
+   * LICIGOV-FAST — disponibilizar para elaboração num único ato do usuário: APROVA (se ainda DRAFT) e PUBLICA no catálogo INTERNO. São as MESMAS duas decisões do
+   * ledger de sempre (aprovação e publicação, cada uma com sua chave de idempotência derivada), e a prontidão é recalculada no servidor na publicação:
+   * BLOCKED ⇒ `PUBLICATION_BLOCKED` e a revisão permanece APPROVED (estado seguro, sem perder o trabalho; repetir converge). Não publica documento oficial,
+   * não vincula, não decide política. `expectedStatus`: DRAFT (aprova + publica) ou APPROVED (só publica).
+   */
+  async makeAvailable(ctx: WorkflowContext, input: LifecycleInput & { readonly expectedStatus: "DRAFT" | "APPROVED" }) {
+    assertHumanActor(ctx.actor);
+    if (input.confirm !== true) throw new TemplateWorkflowError("CONFIRMATION_REQUIRED", "confirmação humana explícita obrigatória para esta ação (nada foi alterado)");
+    if (input.expectedStatus === "DRAFT") await this.approve(ctx, { ...input, expectedStatus: "DRAFT", idempotencyKey: `${input.idempotencyKey}:approve` });
+    return this.publish(ctx, { ...input, expectedStatus: "APPROVED", idempotencyKey: `${input.idempotencyKey}:publish` });
+  }
+
   private async transition(ctx: WorkflowContext, to: "APPROVED" | "PUBLISHED" | "DEPRECATED", input: LifecycleInput) {
     assertHumanActor(ctx.actor);
     if (input.confirm !== true) {

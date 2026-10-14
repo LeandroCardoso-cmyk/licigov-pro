@@ -10,7 +10,7 @@ import {
   validateDecisionForm, type ResolutionView,
 } from "./institutionalTemplatesView";
 
-const FLOORS = { read: "viewer", draft: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager" };
+const FLOORS = { read: "viewer", draft: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager", available: "manager" };
 const HASH = "a".repeat(64);
 
 describe("lifecycle canônico", () => {
@@ -22,8 +22,9 @@ describe("lifecycle canônico", () => {
 
   it("deixa explícito que aprovar NÃO publica e que publicada é imutável / depreciada só serve a replay", () => {
     expect(STATUS_EXPLANATION.APPROVED).toMatch(/NÃO publicada/);
-    expect(ACTION_COPY.APPROVE.consequence).toMatch(/Aprovar NÃO publica/);
-    expect(ACTION_COPY.PUBLISH.consequence).toMatch(/distinta da aprovação/);
+    expect(ACTION_COPY.APPROVE.consequence).toMatch(/Aprovar NÃO disponibiliza/);
+    expect(ACTION_COPY.PUBLISH.consequence).toMatch(/Não publica documento oficial/);
+    expect(ACTION_COPY.AVAILABLE.consequence).toMatch(/Não publica nenhum documento oficial/);
     expect(STATUS_EXPLANATION.PUBLISHED).toMatch(/imutável/);
     expect(STATUS_EXPLANATION.DEPRECATED).toMatch(/reproduzir documentos já gerados/);
   });
@@ -36,9 +37,9 @@ describe("lifecycle canônico", () => {
 });
 
 describe("ação de ciclo de vida (affordance; o servidor reautoriza)", () => {
-  it("uma única ação por estado, sem atalhos: DRAFT→Aprovar, APPROVED→Publicar, PUBLISHED→Depreciar, DEPRECATED→nenhuma", () => {
-    expect(nextLifecycleAction("DRAFT", "manager", FLOORS)).toMatchObject({ action: "APPROVE", label: "Aprovar", enabled: true });
-    expect(nextLifecycleAction("APPROVED", "manager", FLOORS)).toMatchObject({ action: "PUBLISH", label: "Publicar", enabled: true });
+  it("uma única ação por estado: DRAFT/APPROVED→Disponibilizar para elaboração, PUBLISHED→Depreciar, DEPRECATED→nenhuma", () => {
+    expect(nextLifecycleAction("DRAFT", "manager", FLOORS)).toMatchObject({ action: "AVAILABLE", label: "Disponibilizar para elaboração", enabled: true });
+    expect(nextLifecycleAction("APPROVED", "manager", FLOORS)).toMatchObject({ action: "AVAILABLE", label: "Disponibilizar para elaboração", enabled: true });
     expect(nextLifecycleAction("PUBLISHED", "manager", FLOORS)).toMatchObject({ action: "DEPRECATE", label: "Depreciar", enabled: true });
     expect(nextLifecycleAction("DEPRECATED", "owner", FLOORS)).toBeNull();
   });

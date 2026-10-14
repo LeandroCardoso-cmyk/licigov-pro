@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { ActionNote } from "./ActionNote";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScopeFields, type ScopeFieldsProps } from "./ScopeFields";
@@ -39,13 +40,13 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
   return (
     <form className="space-y-4" aria-label="Registrar modelo" onSubmit={(e) => e.preventDefault()}>
       <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-        O registro cria uma revisão em RASCUNHO (DRAFT) e grava a procedência (versão lógica + SHA-256 da fonte). Nunca aprova nem publica; não cria vínculo, documento nem usa IA.
+        Enviar modelo → conferir → disponibilizar para elaboração. O envio cria um RASCUNHO e grava a procedência; nunca aprova, publica nem vincula, e não usa IA.
       </p>
       {presets.length > 0 && (
         <div className="space-y-1">
           <Label htmlFor="reg-preset">Modelo do piloto (preenche rótulos e escopo — não preenche conteúdo)</Label>
           <select id="reg-preset" className="w-full rounded-md border bg-background p-2 text-sm" defaultValue=""
-            onChange={(e) => { const p = presets.find((x) => x.presetId === e.target.value); if (p) onChange({ ...emptyRegisterForm(today, p), decidedByName: value.decidedByName, decidedByRole: value.decidedByRole }); }}>
+            onChange={(e) => { const p = presets.find((x) => x.presetId === e.target.value); if (p) onChange(emptyRegisterForm(today, p)); }}>
             <option value="">Registro livre…</option>
             {presets.map((p) => <option key={p.presetId} value={p.presetId}>{p.displayName}</option>)}
           </select>
@@ -66,8 +67,8 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
             </select>
           </div>
         ) : text("existingIdentityId", "Id do modelo existente")}
-        {value.targetKind === "NEW_IDENTITY" && text("slug", "Identificador (slug)", "ex.: edital-pregao-eletronico-bll")}
-        {text("templateKey", "templateKey", "EDITAL_PREGAO_ELETRONICO_BLL", "text", isPackage)}
+        {value.targetKind === "NEW_IDENTITY" && isPackage && text("slug", "Identificador (slug)", "ex.: edital-pregao-eletronico-bll", "text", true)}
+        {isPackage && text("templateKey", "Chave técnica", "EDITAL_PREGAO_ELETRONICO_BLL", "text", true)}
         <div className="sm:col-span-2">{text("displayName", "Nome de exibição", "Edital — Pregão Eletrônico — BLL")}</div>
       </div>
       <ScopeFields idPrefix="reg-scope" documentKind={value.documentKind} value={value.scope} onChange={(scope) => set({ scope })} suggestions={scopeSuggestions} showErrors={showErrors} />
@@ -87,7 +88,7 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
             <p className="font-medium">Pacote aprovado versionado no servidor</p>
             <p className="text-muted-foreground">O conteúdo, o catálogo e o inventário são resolvidos no servidor a partir do pacote aprovado; nada é enviado pelo navegador.</p>
             <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">templateKey</dt><dd className="font-mono">{value.templateKey}</dd>
+              <dt className="text-muted-foreground">Chave técnica</dt><dd className="font-mono">{value.templateKey}</dd>
               <dt className="text-muted-foreground">Versão lógica</dt><dd className="font-mono">{value.sourceLogicalVersion}</dd>
               <dt className="text-muted-foreground">SHA-256</dt><dd className="break-all font-mono text-xs">{value.sourceSha256}</dd>
               <dt className="text-muted-foreground">Escopo</dt><dd>{[value.scope.modality, value.scope.form, value.scope.platform].filter(Boolean).join(" · ")}</dd>
@@ -105,33 +106,26 @@ export function RegisterModelForm({ value, onChange, presets, documentKinds, tod
           </p>
         )}
       </fieldset>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {text("sourceLogicalVersion", "Versão lógica da fonte", "ex.: 1.0.1-draft", "text", isPackage)}
-        {text("sourceSha256", "SHA-256 da fonte", "64 hexadecimais", "text", isPackage)}
-      </div>
       {!isPackage && (
-        <div className="space-y-1">
-          <Label htmlFor="reg-inventory">Inventário da fonte (JSON, opcional — só o hash e as contagens são gravados)</Label>
-          <Textarea id="reg-inventory" rows={3} className="font-mono text-xs" value={value.inventoryText} onChange={(e) => set({ inventoryText: e.target.value })} />
-          {err("inventoryText") && <p role="alert" className="text-xs text-destructive">{err("inventoryText")}</p>}
-        </div>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">Opções avançadas (identificador, chave técnica, fonte declarada, inventário)</summary>
+          <div className="mt-2 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {text("slug", "Identificador (slug) — vazio = derivado do nome", "ex.: edital-proprio")}
+              {text("templateKey", "Chave técnica — vazio = derivada do identificador", "ex.: EDITAL_PROPRIO")}
+              {text("sourceLogicalVersion", "Versão lógica da fonte — vazio = 1.0.0", "ex.: 1.0.1-draft")}
+              {text("sourceSha256", "SHA-256 da fonte declarada — vazio = calculado do conteúdo enviado", "64 hexadecimais")}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="reg-inventory">Inventário da fonte (JSON, opcional — só o hash e as contagens são gravados)</Label>
+              <Textarea id="reg-inventory" rows={3} className="font-mono text-xs" value={value.inventoryText} onChange={(e) => set({ inventoryText: e.target.value })} />
+              {err("inventoryText") && <p role="alert" className="text-xs text-destructive">{err("inventoryText")}</p>}
+            </div>
+          </div>
+        </details>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {text("decidedByName", "Quem registra (nome)")}
-        {text("decidedByRole", "Cargo / função")}
-        {text("decidedAt", "Data do ato", "AAAA-MM-DD", "date")}
-        {text("basisReference", "Referência da fonte/ato")}
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="reg-reason">Justificativa</Label>
-        <Textarea id="reg-reason" rows={2} value={value.reason} onChange={(e) => set({ reason: e.target.value })} />
-        {err("reason") && <p role="alert" className="text-xs text-destructive">{err("reason")}</p>}
-      </div>
-      <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" className="mt-1" checked={value.confirmed} onChange={(e) => set({ confirmed: e.target.checked })} />
-        <span>Confirmo o registro deste modelo como RASCUNHO, sob minha responsabilidade.</span>
-      </label>
-      {err("confirmed") && <p role="alert" className="text-xs text-destructive">{err("confirmed")}</p>}
+      <ActionNote id="reg-note" note={value.note} onNote={(n) => set({ note: n })}
+        consequence="O modelo nasce como RASCUNHO do seu órgão; depois você confere e o disponibiliza para elaboração. Nada é aprovado, publicado ou vinculado automaticamente." />
     </form>
   );
 }

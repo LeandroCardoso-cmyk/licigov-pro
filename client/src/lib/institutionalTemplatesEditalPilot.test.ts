@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  catalogFilterOptions, emptyLegalEvidenceForm, emptyRegisterForm, emptyScopeForm, legalEvidencePayload, pinnedRevisionLabel, readinessHeadline, scopeFormProblems,
-  scopeFromForm, scopeLabel, validateLegalEvidenceForm, validateRegisterForm, type CatalogRowView, type ReadinessMatrixView,
+  catalogFilterOptions, effectiveRegisterIds, emptyLegalEvidenceForm, emptyRegisterForm, emptyScopeForm, legalEvidencePayload, pinnedRevisionLabel, readinessHeadline, scopeFormProblems,
+  scopeFromForm, scopeLabel, sha256HexOf, templateKeyFromSlug, validateLegalEvidenceForm, validateRegisterForm, type CatalogRowView, type ReadinessMatrixView,
 } from "@/lib/institutionalTemplatesView";
 
 const SHA = "a".repeat(64);
@@ -70,19 +70,29 @@ describe("registro do modelo", () => {
   const preset = { presetId: "EDITAL_PREGAO_ELETRONICO_BLL", templateKey: "EDITAL_PREGAO_ELETRONICO_BLL", documentKind: "edital", slug: "edital-pregao-eletronico-bll", displayName: "Edital — Pregão Eletrônico — BLL", scope: { modality: "pregao", form: "eletronica", platform: "bll" } };
   it("o preset preenche rótulos e escopo (não conteúdo, SHA ou autoridade)", () => {
     const f = emptyRegisterForm("2026-10-07", preset);
-    expect(f).toMatchObject({ templateKey: "EDITAL_PREGAO_ELETRONICO_BLL", slug: "edital-pregao-eletronico-bll", displayName: "Edital — Pregão Eletrônico — BLL", sourceText: "", sourceSha256: "", decidedByName: "", confirmed: false });
+    expect(f).toMatchObject({ templateKey: "EDITAL_PREGAO_ELETRONICO_BLL", slug: "edital-pregao-eletronico-bll", displayName: "Edital — Pregão Eletrônico — BLL", sourceText: "", sourceSha256: "", note: "" });
     expect(f.scope).toMatchObject({ modality: "pregao", form: "eletronica", platform: "bll", regime: "", criterion: "" });
   });
-  it("validação: escopo completo, fonte, SHA-256, versão, autoridade, justificativa e confirmação", () => {
+  it("LICIGOV-FAST — validação: só escopo completo e conteúdo; versão, SHA-256, chave técnica e identificador são automáticos; nenhum campo de autoridade/ato/confirmação", () => {
     const f = { ...emptyRegisterForm("2026-10-07", preset) };
     const v = validateRegisterForm(f, false);
     expect(v.valid).toBe(false);
-    for (const k of ["source", "sourceLogicalVersion", "sourceSha256", "decidedByName", "decidedByRole", "basisReference", "reason", "confirmed"]) expect(v.errors[k], k).toBeDefined();
-    const ok = { ...f, scope: { ...f.scope, regime: "x", criterion: "y" }, sourceText: JSON.stringify({ schema: "tpl-ast/1", root: [] }), sourceLogicalVersion: "1.0.1-draft", sourceSha256: SHA, decidedByName: "A", decidedByRole: "B", basisReference: "C", reason: "Justificativa ok.", confirmed: true };
+    expect(Object.keys(v.errors)).toEqual(["source"]);
+    for (const k of ["sourceLogicalVersion", "sourceSha256", "decidedByName", "decidedByRole", "basisReference", "reason", "confirmed", "slug", "templateKey"]) expect(v.errors[k], k).toBeUndefined();
+    const ok = { ...f, scope: { ...f.scope, regime: "x", criterion: "y" }, sourceText: JSON.stringify({ schema: "tpl-ast/1", root: [] }) };
     expect(validateRegisterForm(ok, false)).toEqual({ valid: true, errors: {} });
+    expect(validateRegisterForm({ ...ok, sourceSha256: "xyz" }, false).errors.sourceSha256).toMatch(/64 hexadecimais/);    // se informado, é validado
     expect(validateRegisterForm({ ...ok, sourceText: "{" }, false).errors.source).toMatch(/JSON/);
     expect(validateRegisterForm({ ...ok, sourceKind: "DOCX", sourceText: "" }, false).errors.source).toBeDefined();
     expect(validateRegisterForm({ ...ok, sourceKind: "DOCX", sourceText: "" }, true).valid).toBe(true);
+  });
+  it("identificador e chave técnica são derivados do nome (sem acento, hífens, MAIÚSCULAS) e o SHA-256 do conteúdo é calculado no navegador", async () => {
+    const f = { ...emptyRegisterForm("2026-10-07"), displayName: "Edital Próprio — Pregão Eletrônico (2026)", slug: "", templateKey: "" };
+    expect(effectiveRegisterIds(f)).toEqual({ slug: "edital-proprio-pregao-eletronico-2026", templateKey: "EDITAL_PROPRIO_PREGAO_ELETRONICO_2026" });
+    expect(effectiveRegisterIds({ ...f, slug: "meu-slug", templateKey: "" })).toEqual({ slug: "meu-slug", templateKey: "MEU_SLUG" });
+    expect(templateKeyFromSlug("2026-modelo")).toBe("M_2026_MODELO");
+    expect(validateRegisterForm({ ...f, displayName: "###", scope: { ...f.scope } }, false).errors.slug).toBeDefined();
+    expect(await sha256HexOf("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   });
 });
 

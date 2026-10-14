@@ -85,6 +85,8 @@ describe("matriz de papéis e autoridade humana", () => {
       register: "operator", evidence: "manager",
       // Template Governance V2: estabelecer a política do órgão sobre seus modelos (nunca abaixo de manager)
       policy: "manager",
+      // LICIGOV-FAST: aprovar + publicar no catálogo interno num único ato
+      available: "manager",
     });
     expect(Object.isFrozen(TEMPLATE_ACTION_MIN_ROLE)).toBe(true);
   });
