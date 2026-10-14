@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792003111.909912,
-    "ast_hash": "ebed2080dde95e901b8460f2ad1a349d",
+    "mtime": 1792003338.313348,
+    "ast_hash": "bd5c9dab1b46e3373298fbaeb74d3bc2",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {

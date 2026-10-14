@@ -4,7 +4,8 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    # `staging` = linha de homologação integrada: PRs de integração passam pelos MESMOS gates (deploy segue só na main).
+    branches: [ main, staging ]
   # Permite rodar os gates manualmente em qualquer branch (ex.: validar a PR D antes do merge,
   # quando o Actions em PR aguarda aprovação). O job `deploy` continua restrito à `main`.
   workflow_dispatch:
