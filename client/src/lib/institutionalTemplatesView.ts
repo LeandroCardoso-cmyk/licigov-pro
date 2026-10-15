@@ -80,26 +80,55 @@ export const ACTION_COPY: Record<LifecycleAction, { title: string; button: strin
 /** Todo registro feito pela tela fica com o seu usuário, o papel, a data/hora e o histórico — sem digitar nada disso. */
 export const ELECTRONIC_RECORD_NOTE = "Fica registrado com o seu usuário, papel, data e hora.";
 
-// ─── formulário de decisão institucional (SÓ onde o contrato exige fundamento: ex. evidência jurídica) ────────────────────────────
+// ─── formulário de decisão sobre fontes governadas (TR, certame, Perfil, orçamento, itens, "usar como padrão", revisão do Edital) ────
+// LICIGOV-FAST (M8-UX-GOV-001): por padrão a decisão é registrada ELETRONICAMENTE pelo servidor com o usuário autenticado (nome, papel,
+// data/hora do servidor) — a pessoa só confirma. O ato formal (autoridade/cargo/data/referência/justificativa) é OPCIONAL, atrás de
+// "Informar ato formal (opcional)"; se usado, precisa estar COMPLETO (o servidor recusa ato parcial). Evidência jurídica NÃO usa este
+// formulário: lá o fundamento institucional continua obrigatório.
 
 export interface DecisionFormState {
   decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string; confirmed: boolean;
+  /** A pessoa abriu "Informar ato formal (opcional)". Fechado ⇒ os campos do ato são ignorados (registro eletrônico). */
+  formal?: boolean;
 }
-export const emptyDecisionForm = (today: string): DecisionFormState => ({ decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false });
+export const emptyDecisionForm = (today: string): DecisionFormState => ({ decidedByName: "", decidedByRole: "", decidedAt: today, basisReference: "", reason: "", confirmed: false, formal: false });
 
 export type DecisionField = keyof DecisionFormState;
 export interface DecisionValidation { readonly valid: boolean; readonly errors: Partial<Record<DecisionField, string>> }
 
-/** Espelha as regras do ledger (nome, cargo, data AAAA-MM-DD, referência do ato, justificativa ≥ 10) + confirmação explícita. */
+const FORMAL_TEXT_FIELDS = ["decidedByName", "decidedByRole", "basisReference", "reason"] as const;
+
+/** O ato formal só é usado quando a pessoa ABRIU a área opcional E preencheu algo (a data já vem com hoje e não conta). */
+export function formalDecisionUsed(s: DecisionFormState): boolean {
+  return s.formal === true && FORMAL_TEXT_FIELDS.some((k) => s[k].trim() !== "");
+}
+
+/**
+ * Confirmação explícita SEMPRE; campos do ato SÓ quando o ato formal é usado — e então todos (espelha o ledger: nome, cargo,
+ * data AAAA-MM-DD, referência do ato, justificativa ≥ 10). Ato parcial é erro (o servidor o recusaria).
+ */
 export function validateDecisionForm(s: DecisionFormState): DecisionValidation {
   const errors: Partial<Record<DecisionField, string>> = {};
-  if (!s.decidedByName.trim()) errors.decidedByName = "Informe o nome da autoridade que decidiu.";
-  if (!s.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função da autoridade.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s.decidedAt) || Number.isNaN(Date.parse(`${s.decidedAt}T00:00:00Z`))) errors.decidedAt = "Informe a data do ato (AAAA-MM-DD).";
-  if (!s.basisReference.trim()) errors.basisReference = "Informe a referência do ato (portaria, ata, processo).";
-  if (s.reason.trim().length < 10) errors.reason = "Informe a justificativa (mínimo de 10 caracteres).";
+  if (formalDecisionUsed(s)) {
+    if (!s.decidedByName.trim()) errors.decidedByName = "Informe o nome da autoridade que decidiu.";
+    if (!s.decidedByRole.trim()) errors.decidedByRole = "Informe o cargo/função da autoridade.";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s.decidedAt) || Number.isNaN(Date.parse(`${s.decidedAt}T00:00:00Z`))) errors.decidedAt = "Informe a data do ato (AAAA-MM-DD).";
+    if (!s.basisReference.trim()) errors.basisReference = "Informe a referência do ato (portaria, ata, processo).";
+    if (s.reason.trim().length < 10) errors.reason = "Informe a justificativa (mínimo de 10 caracteres).";
+  }
   if (!s.confirmed) errors.confirmed = "É necessária a confirmação humana explícita.";
   return { valid: Object.keys(errors).length === 0, errors };
+}
+
+export interface DecisionAct { decidedByName: string; decidedByRole: string; decidedAt: string; basisReference: string; reason: string }
+
+/**
+ * Parte do payload referente à autoridade: `{}` (OMITE `decision` ⇒ o servidor registra eletronicamente com o usuário autenticado)
+ * ou `{ decision }` com o ato formal completo. Use com spread: `{ ...decisionPayload(form), confirm: true, ... }`.
+ */
+export function decisionPayload(s: DecisionFormState): { decision?: DecisionAct } {
+  if (!formalDecisionUsed(s)) return {};
+  return { decision: { decidedByName: s.decidedByName.trim(), decidedByRole: s.decidedByRole.trim(), decidedAt: s.decidedAt, basisReference: s.basisReference.trim(), reason: s.reason.trim() } };
 }
 
 export function makeIdempotencyKey(random: () => string = () => globalThis.crypto.randomUUID()): string {

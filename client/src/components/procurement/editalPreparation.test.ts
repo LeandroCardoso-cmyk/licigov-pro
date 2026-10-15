@@ -345,7 +345,12 @@ describe("SSR da preparação orientada por exceções", () => {
     expect(review).toContain("3 decisões serão registradas");
     expect(review).toContain("Local de entrega: Almoxarifado");
     expect(review).toContain("Utiliza SRP: Sim");
-    expect(review).toContain("Autoridade humana");
+    // M8-UX-GOV-001: registro em nome do usuário autenticado; ato formal só como opção recolhida (não obrigatório)
+    expect(review).toContain("Registro da decisão");
+    expect(review).toContain("Registrado em seu nome (usuário autenticado), com data e hora do servidor.");
+    expect(review).toContain("Informar ato formal (opcional)");
+    expect(review).toMatch(/<details(?![^>]*\bopen\b)[^>]*>\s*<summary[^>]*>Informar ato formal \(opcional\)/);
+    expect(review.indexOf("Informar ato formal (opcional)")).toBeLessThan(review.indexOf("Autoridade que decidiu (nome)"));
     expect(review).toContain("Confirmar e registrar");
     expect((review.match(/Confirmar e registrar/g) ?? []).length).toBe(1);
   });
@@ -390,6 +395,21 @@ describe("guardas estruturais", () => {
     expect(review).toContain("idempotencyKey");
     // reconhecimento nunca é automático: só por clique (individual) ou seleção explícita
     expect(review).not.toMatch(/useEffect\([^)]*acknowledge/);
+  });
+  it("M8-UX-GOV-001: toda escrita governada monta a autoridade por `decisionPayload` (omite `decision` sem ato formal); nenhum ato redigitado à mão; evidência jurídica e ratificação intocadas", () => {
+    for (const f of ["EditalPreparationPanel", "ItemsParticipationCard", "LicitacoesProfilePanel", "UseAsDefaultButton", "BudgetDisclosureCard", "EditalTemplateReviewPanel"]) {
+      const src = read(`client/src/components/procurement/${f}.tsx`);
+      expect(src, f).toContain("decisionPayload(decision)");
+      expect(src, f).not.toMatch(/decidedByName: decision\.decidedByName/);
+      expect(src, f).not.toMatch(/decision: (act|d)\b/);
+    }
+    expect(review).toContain("<DecisionFieldset");
+    expect(review).not.toContain('basisReference: "Revisão do documento composto"');           // nenhum ato pré-preenchido/inventado
+    const fieldset = read("client/src/components/procurement/DecisionFieldset.tsx");
+    expect(fieldset).toContain("Informar ato formal (opcional)");
+    expect(fieldset).toContain('type="checkbox"');                                              // a confirmação explícita continua
+    // evidência jurídica continua exigindo fundamento institucional declarado (não usa o registro eletrônico)
+    expect(read("client/src/components/institutionalTemplates/LegalEvidencePanel.tsx")).not.toContain("decisionPayload");
   });
   it("OfficialPromotionSection continua usando promoteOfficial (o hook de emissão é do backend)", () => {
     const sec = read("client/src/components/procurement/OfficialPromotionSection.tsx");

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 import { formatDisplay } from "@/lib/editalPreparation";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -34,15 +34,15 @@ export default function BudgetDisclosureCard({ processId }: { processId: string 
   const newBaseDate = baseDate !== "" && baseDate !== s.baseDate;
   const baseDateError = baseDate !== "" && !ISO.test(baseDate) ? "Informe a data (dd/mm/aaaa)." : s.catalogVersion === null && baseDate !== "" ? "Defina os parâmetros do Edital antes de registrar a data-base." : null;
   const key = (id: string) => (keys.current[id] ??= crypto.randomUUID());
-  const act = () => ({ decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() });
+  const act = () => decisionPayload(decision);   // sem ato formal ⇒ `decision` omitida: o servidor registra com o usuário autenticado
 
   const save = async () => {
     setShowErrors(true);
     if (!validateDecisionForm(decision).valid || (!newDisclosure && !newBaseDate) || baseDateError) return;
     setBusy(true); setNotice(null);
     try {
-      if (newDisclosure) await recordDisclosure.mutateAsync({ confirm: true, idempotencyKey: key("disclosure"), expectedRevision: s.revision, processId, disclosure: choice as "publico" | "sigiloso", decision: act() });
-      if (newBaseDate) await recordBaseDate.mutateAsync({ confirm: true, idempotencyKey: key("basedate"), expectedRevision: s.baseDateRevision, catalogVersion: s.catalogVersion!, processId, baseDate, decision: act() });
+      if (newDisclosure) await recordDisclosure.mutateAsync({ confirm: true, idempotencyKey: key("disclosure"), expectedRevision: s.revision, processId, disclosure: choice as "publico" | "sigiloso", ...act() });
+      if (newBaseDate) await recordBaseDate.mutateAsync({ confirm: true, idempotencyKey: key("basedate"), expectedRevision: s.baseDateRevision, catalogVersion: s.catalogVersion!, processId, baseDate, ...act() });
       keys.current = {}; setChoice(""); setBaseDate(""); setDecision((d) => ({ ...d, confirmed: false }));
       setNotice({ kind: "ok", text: "Dados do orçamento registrados. O Edital e os demais documentos os consomem daqui." });
     } catch (e) { setNotice({ kind: "error", text: domainErrorMessage(e instanceof Error ? e.message : String(e), "Não foi possível registrar os dados do orçamento.") }); }
