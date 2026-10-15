@@ -87,6 +87,17 @@ histórico preservado; a validação desta rodada usa processo sintético NOVO).
 Percentuais da tabela acima **mantidos** (83,75% como referência histórica): a rodada corrige defeitos achados em homologação;
 M8 só sobe com execução registrada em STAGING (`pnpm homolog:e2e` com processo sintético novo).
 
+**Estado real em 15/10/2026:**
+- PR #302 integrado em `staging` por squash (`af0aa48`), com os 5 gates do CI verdes.
+- Deploy Railway staging `45831881` **SUCCESS**. Predeploy em 124 ms: migrations já em dia, nenhuma nova; reference
+  set em noop. Boot `APP_ENV=staging`, S3 ✓, IA ✓, schema validado, sem erros nem avisos após a inicialização.
+  Produção não foi tocada.
+- **Homologação E2E da rodada: NÃO executada.** A sessão do agente não alcança o staging e não há credenciais
+  `HOMOLOG_*` por mecanismo seguro. O procedimento está em `docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`: máquina
+  autorizada, processo sintético NOVO na org 2 e credenciais digitadas, nunca expostas.
+- O processo 2026/0001 fica preservado como evidência histórica, com os 36 itens do leitor antigo mantidos e sinalizados.
+  Nenhuma limpeza foi feita nem é exigida.
+
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).
 - Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.
