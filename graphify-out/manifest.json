@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemIntelligenceWorkspace.tsx": {
-    "mtime": 1791289217.5281227,
-    "ast_hash": "3b490280a19c41787d6ccd049a33a1c5",
+    "mtime": 1792037385.0802677,
+    "ast_hash": "edba8837426031f8b3d7326c31bf67f3",
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
@@ -6035,8 +6035,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-candidate-eligibility-mysql-smoke.test.ts": {
-    "mtime": 1792035739.0759845,
-    "ast_hash": "565f80b5a44b4d08f63cb65392e6b359",
+    "mtime": 1792037433.0256991,
+    "ast_hash": "4f547050907cffd335d382488ba9e83f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-canonical-context-router.test.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792037023.2147875,
-    "ast_hash": "9048e7e5b6db2bb092758ca6a3c033b9",
+    "mtime": 1792037385.079383,
+    "ast_hash": "01359004c5080aa54fb47ab956360d80",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792020884.6034052,
-    "ast_hash": "722a0e17cfd5159fe056d2e37ac0c172",
+    "mtime": 1792037449.963924,
+    "ast_hash": "df205b02e9ffc508f6a59365263301af",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -14935,8 +14935,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts": {
-    "mtime": 1792037144.6596682,
-    "ast_hash": "d554aa2bcfe0be5119d492fce3ba19f8",
+    "mtime": 1792037433.025282,
+    "ast_hash": "fbf630fa7e61d770b6a5be1b027a5425",
     "semantic_hash": ""
   },
   "server/__tests__/unit/integrated-journeys-rules.test.ts": {

@@ -46,7 +46,7 @@ import {
 import { listContextFacts } from "../db/procurementContext";
 import { getOrganizationById } from "../db/organizations";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
-import { parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
   listIntelligentItems,
@@ -547,6 +547,9 @@ export const procurementProcessRouter = router({
         items: items.map((it) => ({
           ...it,
           priceOutliers: findPriceOutliers(it.suppliers.map((s) => ({ name: s.name, valueCents: reaisToCents(s.value) }))),
+          // M8-PRICE-IMPORT-001: item que não parece bem/serviço (metadado, aviso, rótulo, sem cotação com preço) — típico do leitor
+          // antigo ("uma linha = um item"). Só SINALIZA: a limpeza é decisão humana explícita (rejeitar), nunca exclusão automática.
+          suspectedFragment: !isCatalogItemCandidate({ description: it.description ?? "", pricedQuotes: it.suppliers.filter((s) => s.value > 0).length }),
         })),
         total: items.length,
       };

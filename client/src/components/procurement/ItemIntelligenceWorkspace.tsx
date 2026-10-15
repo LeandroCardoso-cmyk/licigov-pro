@@ -138,6 +138,11 @@ export default function ItemIntelligenceWorkspace({
                         >
                           {it.description}
                         </button>
+                        {it.suspectedFragment && it.status !== "rejeitado" && (
+                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="suspected-fragment">
+                            Não parece um item da contratação (texto administrativo ou sem cotação com preço) — confira; se for resíduo de importação, rejeite.
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-foreground">{it.quantity}</td>
                       <td className="px-4 py-3 text-foreground">{it.unit}</td>

@@ -157,6 +157,8 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
     const before = await listIntelligentItems(pid, ORG);
     expect(before).toHaveLength(1);
     legacyId = before[0].id;
+    // M8: o resíduo do leitor antigo é SINALIZADO na lista (decisão de rejeitar continua humana).
+    expect(((await op.procurementProcess.listItems({ processId: pid })).items[0] as { suspectedFragment?: boolean }).suspectedFragment).toBe(true);
     expect(before[0]).toMatchObject({ quantity: 0, averagePriceCents: 0, quoteCount: 0, status: "pendente" });
 
     const sid = await goldenSession(ORG, pid);

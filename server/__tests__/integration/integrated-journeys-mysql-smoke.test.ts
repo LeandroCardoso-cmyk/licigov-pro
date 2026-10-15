@@ -235,7 +235,7 @@ describe.skipIf(!DB)("LICIGOV-FAST — jornadas integradas (MySQL real, tenant s
     expect(out.synthetic).toBe(true);
     const items = (await api.procurementProcess.listItems({ processId: pid })).items as any[];
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ description: "Computador desktop completo", unit: "UN" });
+    expect(items[0]).toMatchObject({ description: "Computador desktop completo", unit: "UN", suspectedFragment: false });
     expect(Number(items[0].quantity)).toBe(10);
     expect(await n("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).toBe(3);
     const [avg] = await rows<{ p: string }>("SELECT average_price p FROM intelligent_items WHERE organization_id = ? AND process_id = ?", [ORG, pid]);
