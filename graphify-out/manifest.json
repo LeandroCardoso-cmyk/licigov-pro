@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1792035794.23254,
-    "ast_hash": "8193397ff9e036ab718a15153d6c9dd4",
+    "mtime": 1792038099.1114495,
+    "ast_hash": "f231087e6a23d76f28d1641ccb345ad9",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.ux.test.ts": {

@@ -99,7 +99,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           type="button"
           onClick={handlePreview}
           disabled={!processId || !text.trim() || preview.isPending}
-          className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+          className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
           {preview.isPending ? "Conferindo..." : "Conferir extração"}
         </button>
