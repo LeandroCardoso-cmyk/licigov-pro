@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792061097.9423742,
-    "ast_hash": "6af7e7dd346bb892145b59f9df5b3b9b",
+    "mtime": 1792085985.3902125,
+    "ast_hash": "82083a9e2f0b583097d8c11c85524a03",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -15030,13 +15030,18 @@
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
-    "mtime": 1792060783.6223814,
-    "ast_hash": "c9a13170dcf31b3871789202ea994abb",
+    "mtime": 1792086006.162693,
+    "ast_hash": "ce7118e9fb6da55ca8b7d185211a9a20",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
     "mtime": 1792067243.1224496,
     "ast_hash": "3392725f18782dbb1a4186d423a63f90",
+    "semantic_hash": ""
+  },
+  "docs/ops/evidence/M8_E2E_HTTP_STAGING_2026-10-15.json": {
+    "mtime": 1792085950.1795406,
+    "ast_hash": "21001b113e70c7d1addfeba853c89766",
     "semantic_hash": ""
   }
 }

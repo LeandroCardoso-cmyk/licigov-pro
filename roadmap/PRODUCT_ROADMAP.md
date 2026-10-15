@@ -50,11 +50,11 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 - Indicador "contratos vencendo" conta contratos (um por referência, janela de 90 dias), não alertas.
 - Smoke integrado `integrated-journeys-mysql-smoke` (J1 processo novo, J2 legado→contrato→aditivo, J3 monitoramento).
 
-### Progresso por marco (integrador — atualizado após integração de #298–#301, com evidência)
+### Progresso por marco (integrador — atualizado em 15/10/2026 após a homologação E2E HTTP real em staging)
 
 Legenda de evidência: **SMOKE** = MySQL real + IA mock (CI) · **HTTP-LOCAL** = executor oficial `pnpm homolog:e2e` contra o
 MESMO middleware tRPC do servidor (login/cookie/RBAC reais, IA mock, storage em memória) · **STAGING** = execução no staging.
-Homologação visual: **não realizada**.
+Homologação visual: **não realizada** (roteiro mínimo em `docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`).
 
 | Marco | Peso | % | Evidência | Próxima ação / bloqueador |
 |---|---|---|---|---|
@@ -62,13 +62,24 @@ Homologação visual: **não realizada**.
 | M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização; grafo regenerado por merge e idempotente | — |
 | M2 — BLL diferido | 10 | 90 | Minuta BLL Rev. 2 gerada sobre TR emitido: 7 dados "A DEFINIR PARA PUBLICAÇÃO", 0 datas inventadas (SMOKE + HTTP-LOCAL) | Rev. 2 vinculada no tenant sintético do staging; ativação na org real é decisão institucional |
 | M3 — Motor documental | 10 | 90 | Mesmo motor para Edital BLL; mesma exportação/versionamento para DFD/ETP/TR/termos | Pacotes de modelo para os demais tipos |
-| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL) | Rodar em STAGING |
-| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido | Rodar em STAGING |
+| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL; STAGING contado em M8) | Homologação visual (produtividade do TR) |
+| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido (STAGING contado em M8) | Homologação visual |
 | M6 — Contratos/aditivos/direta | 10 | 80 | Reagendamento de vigência, termo DOCX/PDF; contratação direta sem DFD (SMOKE) | Ativação de minuta e pós-parecer pendentes (jurídico) |
 | M7 — Pareceres/monitoramento | 10 | 80 | Calendário/alertas/indicador sem duplicidade (HTTP-LOCAL); pedido de parecer sem parecer fabricado (SMOKE) | Parecer avulso |
-| M8 — Homologação E2E staging | 15 | 50 | Executor completo (A/B/C/ISO) verde em HTTP-LOCAL; guardas de destino/tenant/credencial | Bloqueado: rede da sessão → staging e segredos `HOMOLOG_*` |
-| M9 — Regras/roadmap/integração | 5 | 95 | #298–#301 integrados por squash; conflitos só em artefatos do Graphify (regenerados) | — |
-| **Global ponderado** | 100 | **83,75** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
+| M8 — Homologação E2E staging | 15 | 80 | **HTTP real APROVADO 4/4 em STAGING** (run `MV9SXMKG`, 15/10/2026, org 2, processo `4256/2026`); executor com guardas de destino/tenant/credencial/papel | Homologação visual (20% restantes do marco) |
+| M9 — Regras/roadmap/integração | 5 | 95 | #298–#304 integrados por squash; conflitos só em artefatos do Graphify (regenerados) | — |
+| **Global ponderado** | 100 | **88,25** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
+
+**Cálculo rastreável:**
+- Global anterior: **83,75%**, valor histórico até 15/10/2026, antes da execução em staging.
+- O que mudou foi só o M8, de 50% para 80%. Composição do marco:
+  - 50%: executor pronto e verde em HTTP-LOCAL (já contado);
+  - +30%: execução HTTP real **em STAGING** aprovada 4/4;
+  - 20%: homologação visual, pendente.
+- Novo global = 83,75 + 15 × (80 − 50) / 100 = **88,25%**.
+- M2, M4 e M5 ficaram **inalterados**: a evidência de staging é contada só uma vez, no M8.
+- **88,25% não significa plataforma homologada para produção.** Faltam a homologação visual, a ativação na organização
+  real (decisão institucional) e os itens pendentes de M3, M6 e M7.
 
 ### Rodada M8 — correções da homologação real em staging (15/10/2026)
 
@@ -84,19 +95,73 @@ histórico preservado; a validação desta rodada usa processo sintético NOVO).
 | M8-EDITAL-UX-001 | Pendências sem indicar o que bloqueiam | Nível de bloqueio por pendência (elaboração × só publicação) + resumo; configuração única explicitada | Unit (view-model) |
 | ETP coerência | "Fundamentado" com fatos insuficientes | Fundamentação normativa × suficiência factual; viabilidade preliminar com lacunas; divergência texto × base legal estruturada como ressalva | Unit |
 
-Percentuais da tabela acima **mantidos** (83,75% como referência histórica): a rodada corrige defeitos achados em homologação;
-M8 só sobe com execução registrada em STAGING (`pnpm homolog:e2e` com processo sintético novo).
+Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O marco só subiu com a evidência registrada a seguir.
 
-**Estado real em 15/10/2026:**
+**Histórico de integração em `staging` (15/10/2026):**
 - PR #302 integrado em `staging` por squash (`af0aa48`), com os 5 gates do CI verdes.
 - Deploy Railway staging `45831881` **SUCCESS**. Predeploy em 124 ms: migrations já em dia, nenhuma nova; reference
   set em noop. Boot `APP_ENV=staging`, S3 ✓, IA ✓, schema validado, sem erros nem avisos após a inicialização.
   Produção não foi tocada.
-- **Homologação E2E da rodada: NÃO executada.** A sessão do agente não alcança o staging e não há credenciais
-  `HOMOLOG_*` por mecanismo seguro. O procedimento está em `docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`: máquina
-  autorizada, processo sintético NOVO na org 2 e credenciais digitadas, nunca expostas.
+- PR #303 (`f867a25`): runbook da homologação e estado real; só documentação. Deploy `1d3a7bd6` SUCCESS.
+- PR #304 (`034ce42`): o executor envia `X-Organization-Id` a usuários com várias organizações (`HOMOLOG_ORGANIZATION_ID`)
+  e exige papel `manager` ou superior. Regras do backend inalteradas. Deploy `9f783de0` SUCCESS.
+  - Primeira tentativa no staging: falhou antes das jornadas com "múltiplas organizações". Esta foi a causa da correção.
 - O processo 2026/0001 fica preservado como evidência histórica, com os 36 itens do leitor antigo mantidos e sinalizados.
   Nenhuma limpeza foi feita nem é exigida.
+
+#### Marco M8 — Homologação E2E HTTP real: **APROVADO (4/4)**
+
+- **Origem dos dados:** transcrição do relatório fornecido pelo Owner, em
+  `docs/ops/evidence/M8_E2E_HTTP_STAGING_2026-10-15.json`, sem validação independente adicional.
+- **Execução:**
+  - Run `MV9SXMKG`, em 15/10/2026, no Console do Railway staging.
+  - Código em staging: `034ce42`.
+  - Organização 2 (`homologacao-sintetica`), com papéis `manager` / `manager`.
+  - Modo: HTTP real pelas APIs oficiais.
+  - Vitest: 1 arquivo e 4 testes aprovados, em 122,97 s.
+- **Jornada A:** novo processo `4256/2026` → DFD → ETP → Pesquisa → Itens → TR → Edital BLL **Revisão 2 (BOUND)**.
+  - Oito exportações DOCX/PDF, todas em **rascunho**: DFD 9.108/3.911 B; ETP 10.957/9.876 B; TR 11.028/9.898 B;
+    Edital 37.911/87.723 B.
+  - Não houve publicação oficial nem aprovação jurídica definitiva.
+- **Jornada B:**
+  - Contrato legado `11dc53b1f99127512a03` registrado, com 1 aditivo anterior reconhecido.
+  - Novo término em 2027-11-29.
+  - Termo DOCX/PDF com 9.031/3.731 B.
+  - Repetição da chamada (replay) validada.
+- **Jornada C:** registro `6de147d28fe137a95311`, com 3 eventos no calendário e alertas sem duplicidade, integrados ao
+  Centro de Operações.
+- **Isolamento:** acesso entre organizações recusado no cenário coberto.
+- **Correções M8 validadas no cenário testado** (não generalizar para todos os formatos documentais):
+  - Pesquisa de preços: 1 item e 3 cotações, média R$ 4.000,00 e total R$ 40.000,00; 7 linhas não-item ignoradas;
+    entrada ambígua recusada.
+  - IA do DFD: contrato estruturado, com 7 lacunas e 2 avisos fora do texto e 0 trechos descartados.
+- **Pendências legítimas:** são pendências da fase atual, não defeitos.
+  - Marcadores `[REVISAR]`: ETP 11, TR 9 e Edital 3. São lacunas factuais e precisam de revisão humana.
+  - Publicação diferida: `complete: false`, com 7 dados pendentes, conforme o contrato `DEFERRED_PUBLICATION` da Rev. 2.
+    - As 10 ocorrências do texto vêm dessas 7 variáveis; o AST do modelo tem 12 referências, 6 delas ao número do pregão.
+    - Nenhuma data fictícia foi preenchida.
+- **Limites do escopo:**
+  - Não é homologação visual.
+  - Os documentos são rascunhos, não documentos oficiais publicados.
+  - A IA do staging foi exercitada só na sugestão do DFD.
+  - Nada foi executado na organização real.
+
+#### Produtividade operacional (medida na execução) — o que é automático × o que ainda é humano
+
+| Etapa | Automático / reaproveitado | Ainda humano | Leitura |
+|---|---|---|---|
+| DFD | 6 de 11 campos pré-preenchidos; sugestão de IA estruturada | 5 campos desconhecidos; revisar lacunas (7) e avisos (2) | Adequado; IA supervisionada |
+| Pesquisa | 1 item e 3 cotações agrupados; 7 linhas ignoradas | Conferir a prévia e importar | Defeito M8 corrigido no cenário |
+| TR | 0 pré-preenchidos, 0 propostas | **21 de 37 parâmetros confirmados manualmente**; 9 `[REVISAR]` | **Maior carga manual restante** |
+| Edital BLL | 20 automáticos, 33 do órgão, 21 vindos do TR, 1 projeção do TR | 12 decisões do certame; 7 dados de publicação (depois) | Bom reuso; decisões do certame legítimas |
+
+- **TR:** a ausência de propostas é **efeito do cenário**, não regressão. As propostas vêm só dos padrões institucionais
+  do Perfil. O executor registrou o Perfil sem padrões e mediu o TR antes das confirmações.
+  - O recurso M8-TR-UX-001 permite definir padrões no Perfil para até 9 campos elegíveis: pagamento, prazos, recebimento
+    e reajuste.
+  - Esse recurso **não foi exercitado** na execução. Medir na homologação visual quanto ele reduz os 21 campos manuais.
+- **Edital:** `MANUAL_DECISIONS_VISIBLE: 0` é o estado medido **depois** das 12 decisões registradas pelo executor, não
+  ausência de trabalho humano.
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).
