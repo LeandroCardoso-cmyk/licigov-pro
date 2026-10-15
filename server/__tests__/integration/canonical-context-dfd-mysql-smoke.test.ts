@@ -239,7 +239,9 @@ describe.skipIf(!DB)("Contexto Canônico × DFD — fluxo integrado (MySQL estri
     const [p00] = await conn.execute<mysql.RowDataPacket[]>("SELECT COUNT(*) AS n FROM cognitive_provenance WHERE organization_id = ?", [ORG]);
     const r1 = await c.procurementProcess.generateDFDJustification({ processId, expectedContentHash: cur.contentHash, idempotencyKey: key });
     expect(r1.explanation.executionId).toBeTruthy();
-    expect(r1.explanation.promptVersion).toBe("dfd-justificativa/1");
+    expect(r1.explanation.promptVersion).toBe("dfd-justificativa/2");
+    expect(r1.explanation.outputContract).toBe("structured"); // M8-AI-DFD-001: contrato estruturado (provider mock)
+    expect(r1.suggestion.text).not.toMatch(/confian|Fatos utilizados/i);
     expect(r1.suggestion.text.length).toBeGreaterThan(10);
     expect(r1.current).toMatchObject({ origin: "empty", contentHash: cur.contentHash });
     expect(r1).not.toHaveProperty("document");

@@ -10,14 +10,20 @@
  *  - guarda determinística: número citado pela IA que o processo não confirma vira `[REVISAR: …]`
  *    (a IA não inventa quantidade, prazo, orçamento ou fundamento);
  *  - explicabilidade: executionId, provider/modelo, versão do prompt, digest do contexto e do input.
+ *  - M8-AI-DFD-001: CONTRATO DE SAÍDA estruturado (`dfdJustificationContract.ts`) — conteúdo documental, lacunas e
+ *    avisos SEPARADOS; metadado de geração/autoavaliação/lista de fatos nunca chega ao documento; saída fora do
+ *    contrato é validada parágrafo a parágrafo; nada documental ⇒ sem sugestão (fallback seguro).
  */
 import { createHash } from "crypto";
 import { executeCognitiveTask } from "../aiExecutionEngine";
 import { canonicalDigest } from "../../domain/canonicalJson";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
 import { formatQuantity } from "../../domain/dfdPrefill";
+import {
+  DFD_JUSTIFICATION_RESPONSE_SCHEMA, interpretJustificationOutput, type JustificationContractResult,
+} from "../../domain/dfdJustificationContract";
 
-export const DFD_JUSTIFICATION_PROMPT_VERSION = "dfd-justificativa/1";
+export const DFD_JUSTIFICATION_PROMPT_VERSION = "dfd-justificativa/2";
 const DOMAIN = "processo_licitatorio" as const;
 
 export interface DFDJustificationFacts {
@@ -55,9 +61,16 @@ export function buildJustificationPrompt(facts: DFDJustificationFacts): string {
     "Regras obrigatórias:",
     "- Use SOMENTE os fatos abaixo. Não invente fatos, quantidades, prazos, valores, orçamento, fundamento legal específico ou decisão administrativa.",
     "- Não escreva números de quantidade, valores monetários ou datas. As quantidades e valores já constam em outras seções do DFD.",
-    "- Onde faltar informação necessária, escreva [REVISAR: descrever …] em vez de supor.",
+    "- Onde faltar informação necessária, escreva [REVISAR: descrever …] no texto em vez de supor, e registre a lacuna em \"lacunas\".",
     "- Texto corrido em português formal, 2 a 4 parágrafos, sem títulos, sem listas e sem markdown.",
     "- Este texto é um RASCUNHO que será revisado e aprovado por um servidor público.",
+    "",
+    "Formato da resposta (obrigatório): um objeto JSON com exatamente três campos:",
+    "- \"paragrafos\": lista com os parágrafos do texto que irá para o documento — SOMENTE o conteúdo documental;",
+    "- \"lacunas\": lista das informações factuais ausentes que o servidor precisa completar;",
+    "- \"avisos\": lista de ressalvas ao revisor humano.",
+    "Nunca coloque nos parágrafos: pontuação ou grau de confiança, lista dos fatos utilizados, comentários sobre a tarefa,",
+    "explicações sobre como o texto foi gerado, títulos de seção ou numeração.",
     "",
     "Fatos do processo:",
     `- Objeto: ${facts.objeto ?? "[não informado]"}`,
@@ -98,7 +111,16 @@ function normNum(s: string): string {
 }
 
 export interface DFDJustificationDraft {
+  /** Somente o conteúdo DOCUMENTAL validado (parágrafos), já com a guarda de números. */
   text: string;
+  /** Lacunas factuais e avisos ao revisor — apresentados FORA do documento. */
+  gaps: string[];
+  warnings: string[];
+  /** Interpretação da saída: contrato estruturado ou validação de texto fora do contrato. */
+  outputContract: JustificationContractResult["contract"];
+  contractVersion: string;
+  /** Motivos (sem conteúdo) dos trechos descartados por não serem documentais — observabilidade. */
+  discardedReasons: string[];
   executionId: string;
   provider: string | null;
   model: string | null;
@@ -147,7 +169,7 @@ export async function generateDFDJustificationText(p: {
     const execution = await executeCognitiveTask({
       task: "GENERATE_DOCUMENT", tenantId: p.organizationId, userId: String(p.actorUserId),
       correlationId: p.correlationId, businessDomain: DOMAIN, processId: p.processId, stage: "DFD",
-      query: prompt, responseType: "text", maxOutputTokens: 2048,
+      query: prompt, responseType: "text", maxOutputTokens: 2048, responseSchema: DFD_JUSTIFICATION_RESPONSE_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
       idempotencyKey: dfdJustificationExecutionKey(p.idempotencyKey), actorUserId: p.actorUserId,
     });
     raw = execution.response.content ?? "";
@@ -156,10 +178,15 @@ export async function generateDFDJustificationText(p: {
     model = execution.response.model ?? null;
     replayed = execution.replayed === true;
   }
-  const cleaned = raw.replace(/^#+\s.*$/gm, "").replace(/\*\*/g, "").trim();
-  const { text, unverifiedNumbers } = guardJustificationOutput(cleaned, facts);
+  // Validação ANTES da apresentação: só parágrafos documentais seguem; a guarda de números roda apenas neles
+  // (números de metadados — "confiança 0.85", "fatos 1, 3" — nunca viram [REVISAR] dentro do documento).
+  const out = interpretJustificationOutput(raw);
+  const guarded = out.paragraphs.map((para) => guardJustificationOutput(para, facts));
   return {
-    text, executionId, provider, model, promptVersion: DFD_JUSTIFICATION_PROMPT_VERSION,
-    contextDigest: p.ctx.digest, inputDigest, unverifiedNumbers, replayed,
+    text: guarded.map((g) => g.text).join("\n\n"),
+    gaps: [...out.gaps], warnings: [...out.warnings], outputContract: out.contract, contractVersion: out.contractVersion,
+    discardedReasons: out.discarded.map((d) => d.reason),
+    executionId, provider, model, promptVersion: DFD_JUSTIFICATION_PROMPT_VERSION,
+    contextDigest: p.ctx.digest, inputDigest, unverifiedNumbers: [...new Set(guarded.flatMap((g) => g.unverifiedNumbers))], replayed,
   };
 }

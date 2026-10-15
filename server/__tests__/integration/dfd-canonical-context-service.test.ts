@@ -260,7 +260,8 @@ describe("SEM-058 — SUGESTÃO supervisionada de IA da justificativa (nada é g
     expect(r.suggestion.text).toContain("necessita do mobiliário para o funcionamento das salas de aula");
     expect(r.suggestion.textHash).toBe(suggestionTextHash(r.suggestion.text));
     expect(r.current).toMatchObject({ origin: "empty", text: null, contentHash: draftContentHash(row.content) });
-    expect(r.explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/1", actorUserId: 5, correlationId: "corr-1" });
+    expect(r.explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/2", actorUserId: 5, correlationId: "corr-1", outputContract: "text-fallback" });
+    expect(call.responseSchema?.name).toBe("dfd_justificativa"); // M8-AI-DFD-001: structured output pedido ao provider
     expect(r.explanation.contextDigest).toBe(ctxWith().digest.slice(0, 16));
     // ZERO escrita no documento: nem mutação, nem ledger de edição, nem vínculo de proveniência a artefato.
     expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();

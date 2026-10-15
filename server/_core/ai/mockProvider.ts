@@ -41,6 +41,18 @@ export class MockAIProvider implements AIProvider {
 function tryBuildStructuredFromSchema(schema: Record<string, unknown> | undefined, seed: string): string | null {
   if (!schema) return null;
   const props = (schema as { properties?: Record<string, unknown> }).properties;
+  // Contrato documental de parágrafos (ex.: justificativa do DFD — M8-AI-DFD-001): parágrafos de prosa, sem metadados.
+  if (props?.paragrafos && props?.lacunas && props?.avisos) {
+    const tag = sha256(seed).slice(0, 12).replace(/\d/g, (d) => "ghijklmnop"[Number(d)]);
+    return JSON.stringify({
+      paragrafos: [
+        `A presente demanda decorre da necessidade descrita no objeto do processo, conforme os fatos registrados pela unidade demandante (rascunho determinístico de teste ${tag}).`,
+        "A contratação visa assegurar a continuidade e a qualidade dos serviços prestados, cabendo ao servidor revisar e complementar este texto antes da aprovação.",
+      ],
+      lacunas: [],
+      avisos: ["Rascunho gerado pelo provider de teste (mock) — não representa redação real."],
+    });
+  }
   const sections = props?.sections as { items?: { properties?: { key?: { enum?: unknown } } } } | undefined;
   const enumKeys = sections?.items?.properties?.key?.enum;
   if (!Array.isArray(enumKeys) || enumKeys.length === 0) return null;

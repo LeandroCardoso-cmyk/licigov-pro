@@ -620,6 +620,13 @@ export interface DFDAIDraftExplanation {
   contextDigest: string;
   inputDigest: string;
   unverifiedNumbers: string[];
+  /** M8-AI-DFD-001: lacunas factuais e avisos ao revisor — FORA do texto documental. */
+  gaps?: string[];
+  warnings?: string[];
+  /** Interpretação da saída da IA (contrato estruturado ou validação de texto fora do contrato) e trechos descartados. */
+  outputContract?: "structured" | "text-fallback";
+  contractVersion?: string;
+  discardedSegments?: number;
   actorUserId: number;
   correlationId: string;
   generatedAt: string;
@@ -694,7 +701,12 @@ export async function generateDFDJustificationDraft(params: {
         idempotencyKey: params.idempotencyKey, invoke: params.invoke,
       });
       if (!draft.text.trim()) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu uma sugestão utilizável — nada foi alterado." });
+        // Fallback seguro (M8-AI-DFD-001): saída sem nenhum parágrafo documental válido NÃO vira sugestão.
+        log.warn("dfd_ai_suggestion_rejected_by_contract", {
+          organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+          executionId: draft.executionId, outputContract: draft.outputContract, discardedReasons: draft.discardedReasons,
+        });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu um texto documental válido para a justificativa — nada foi alterado. Gere novamente ou redija o texto manualmente." });
       }
       // Cognição real ⇒ proveniência obrigatória (fail-closed: sem rastro da execução não há sugestão aceitável).
       if (params.invoke === undefined && (await listProvenanceByCorrelation(params.organizationId, params.correlationId)).length === 0) {
@@ -709,6 +721,8 @@ export async function generateDFDJustificationDraft(params: {
           field: "justificativa", executionId, provider: draft.provider, model: draft.model,
           promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
           inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers,
+          gaps: draft.gaps, warnings: draft.warnings, outputContract: draft.outputContract,
+          contractVersion: draft.contractVersion, discardedSegments: draft.discardedReasons.length,
           actorUserId: params.actorUserId, correlationId: params.correlationId, generatedAt: new Date().toISOString(),
         },
         current,
@@ -726,6 +740,7 @@ export async function generateDFDJustificationDraft(params: {
             actorUserId: params.actorUserId, field: "justificativa", executionId, provider: draft.provider, model: draft.model,
             promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
             inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers.length,
+            outputContract: draft.outputContract, discardedReasons: draft.discardedReasons, gaps: draft.gaps.length,
             currentOrigin: current.origin, engineReplayed: draft.replayed, persisted: false,
           });
           return out;
