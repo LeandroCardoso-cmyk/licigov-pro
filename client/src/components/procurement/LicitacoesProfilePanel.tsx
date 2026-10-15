@@ -10,7 +10,7 @@ import {
 import {
   STALE_NOTICE, buildSavePlan, executeSavePlan, formatDisplay, isStaleSave, toFormValue, type FormValue, type PlannedWrite, type PrepField, type SectionEdits,
 } from "@/lib/editalPreparation";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 
 const INPUT = "rounded-lg border border-input bg-background px-3 py-2 text-sm";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -73,7 +73,7 @@ export default function LicitacoesProfilePanel() {
   const save = async () => {
     setShowErrors(true);
     if (!validateDecisionForm(decision).valid || total === 0) return;
-    const act = { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() };
+    const act = decisionPayload(decision);   // sem ato formal ⇒ `decision` omitida: o servidor registra com o usuário autenticado
     const key = (id: string) => (keys.current[id] ??= crypto.randomUUID());
     setBusy(true); setNotice(null);
     const isStale = (e: unknown) => isStaleSave((e as { data?: { code?: string } }).data?.code, e instanceof Error ? e.message : String(e));
@@ -82,7 +82,7 @@ export default function LicitacoesProfilePanel() {
       if (plan.writes.length > 0) {
         const out = await executeSavePlan(plan.writes, { organization: revision, process: 0, budget: 0 }, {
           async write(w: PlannedWrite, expectedRevision: number) {
-            const r = await recordOrg.mutateAsync({ confirm: true, idempotencyKey: key(w.id), decision: act, expectedRevision, catalogVersion: state.catalogVersion, source: w.source as "POLICY" | "IDENTITY", fields: w.fields ?? {} });
+            const r = await recordOrg.mutateAsync({ confirm: true, idempotencyKey: key(w.id), ...act, expectedRevision, catalogVersion: state.catalogVersion, source: w.source as "POLICY" | "IDENTITY", fields: w.fields ?? {} });
             revision = r.decision.revision;
             return { revision: r.decision.revision };
           },
@@ -96,7 +96,7 @@ export default function LicitacoesProfilePanel() {
       }
       if (roleBuild.changed.length > 0 || platformBuild.changed.length > 0) {
         const r = await recordProfile.mutateAsync({
-          confirm: true, idempotencyKey: key("roles"), decision: act, expectedRevision: revision, catalogVersion: state.catalogVersion,
+          confirm: true, idempotencyKey: key("roles"), ...act, expectedRevision: revision, catalogVersion: state.catalogVersion,
           ...(roleBuild.changed.length > 0 ? { roles: roleBuild.roles } : {}),
           ...(platformBuild.changed.length > 0 ? { platforms: Object.fromEntries(platformBuild.changed.map((slug) => [slug, platformBuild.profiles[slug]])) } : {}),
         } as never);
@@ -121,7 +121,7 @@ export default function LicitacoesProfilePanel() {
     try {
       await recordProfile.mutateAsync({
         confirm: true, idempotencyKey: crypto.randomUUID(), expectedRevision: state.revision, catalogVersion: state.catalogVersion, defaults: withoutDefault(state.defaults, name),
-        decision: { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() },
+        ...decisionPayload(decision),
       } as never);
       setNotice({ kind: "ok", text: "Padrão institucional removido. Processos futuros voltam a pedir esta decisão." });
     } catch (e) { setNotice({ kind: "error", text: domainErrorMessage(e instanceof Error ? e.message : String(e), "Não foi possível remover o padrão.") }); }
