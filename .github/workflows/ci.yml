@@ -289,6 +289,11 @@ jobs:
       - name: Smoke — jornadas integradas (processo novo, legado→aditivo, monitoramento)
         run: pnpm exec vitest run server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts
 
+      # Executor de homologação — usuário com múltiplas organizações: sem X-Organization-Id ⇒ BAD_REQUEST; tenant sintético
+      # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
+      - name: Smoke — homologação com usuário de múltiplas organizações
+        run: pnpm exec vitest run server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts
+
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
       # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem
