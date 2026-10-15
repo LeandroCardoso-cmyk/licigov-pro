@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  assertAllowedTarget, assertSyntheticCredential, assertSyntheticTenant, looksLike, parseExercicio, pendingMarkers,
+  assertAllowedTarget, assertOrgRoleAtLeast, assertSyntheticCredential, parseOrganizationId, assertSyntheticTenant, looksLike, parseExercicio, pendingMarkers,
   SYNTHETIC_TENANT_SLUG, syntheticDecision, syntheticProcessNumber, technicalResidue,
 } from "../../../scripts/homologation-e2e";
 import { processNumberParts } from "../../domain/institutionalTemplates/processYear";
@@ -58,5 +58,21 @@ describe("executor de homologação — guardas", () => {
     expect(d).toMatchObject({ decidedByName: "Usuária Teste", decidedByUserId: 9, decidedAt: "2026-10-14" });
     expect(d.basisReference).toMatch(/HOMOLOGAÇÃO SINTÉTICA.*sem ato administrativo/);
     expect(JSON.stringify(d)).not.toMatch(/Portaria|Procurador/);
+  });
+
+  it("organização fixada (HOMOLOG_ORGANIZATION_ID): opcional, inteiro positivo, nunca a organização 1", () => {
+    expect(parseOrganizationId(undefined)).toBeNull();
+    expect(parseOrganizationId(" ")).toBeNull();
+    expect(parseOrganizationId("2")).toBe(2);
+    expect(() => parseOrganizationId("1")).toThrow(/organização 1/);
+    expect(() => parseOrganizationId("0")).toThrow(/inválido/);
+    expect(() => parseOrganizationId("dois")).toThrow(/inválido/);
+  });
+
+  it("papel mínimo no tenant sintético: atos governados e emissão exigem manager", () => {
+    expect(() => assertOrgRoleAtLeast("manager", "manager", "u1")).not.toThrow();
+    expect(() => assertOrgRoleAtLeast("owner", "manager", "u1")).not.toThrow();
+    expect(() => assertOrgRoleAtLeast("operator", "manager", "u1")).toThrow(/necessário 'manager'/);
+    expect(() => assertOrgRoleAtLeast(null, "operator", "u2")).toThrow(/papel 'nenhum'/);
   });
 });

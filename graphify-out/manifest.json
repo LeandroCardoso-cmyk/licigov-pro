@@ -14975,18 +14975,18 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1792037119.5079315,
-    "ast_hash": "85e59178218af42a7bb3d1ff6e76ebb8",
+    "mtime": 1792067005.391496,
+    "ast_hash": "7eaed7adad0ebb7cf18a1e543e9113a8",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1792037119.531354,
-    "ast_hash": "6321f4476fa5086c4cfb501ae19c62cb",
+    "mtime": 1792067005.392046,
+    "ast_hash": "2e282b6bfa4dc027c394f155e45b1b93",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
-    "mtime": 1792016861.0804935,
-    "ast_hash": "ca10511c02c492b8f8517e299f133c1e",
+    "mtime": 1792067044.4152324,
+    "ast_hash": "991a73dd2af9f72909a68aa5596b950d",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legacy-import-extraction.test.ts": {
@@ -15032,6 +15032,11 @@
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
     "mtime": 1792060783.6223814,
     "ast_hash": "c9a13170dcf31b3871789202ea994abb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
+    "mtime": 1792067243.1224496,
+    "ast_hash": "3392725f18782dbb1a4186d423a63f90",
     "semantic_hash": ""
   }
 }
