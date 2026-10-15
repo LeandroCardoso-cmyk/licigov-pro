@@ -45,6 +45,28 @@ export function assertSyntheticCredential(me: { role?: string | null } | null, o
   if (orgIds.includes(1)) throw new Error("Credencial recusada: o usuário é membro da organização 1 (referências reais).");
 }
 
+/**
+ * Organização sintética fixada por `HOMOLOG_ORGANIZATION_ID` (opcional). Usuário com MAIS de uma associação ativa precisa do
+ * `X-Organization-Id` já na primeira chamada tenant-scoped (`organizations.listMine`) — sem ele o servidor recusa ("múltiplas
+ * organizações"). O id só escolhe o cabeçalho: o slug `homologacao-sintetica` continua sendo conferido antes de qualquer escrita.
+ */
+export function parseOrganizationId(v: string | undefined): number | null {
+  if (v === undefined || v.trim() === "") return null;
+  if (!/^\d+$/.test(v.trim()) || Number(v.trim()) <= 0) throw new Error(`HOMOLOG_ORGANIZATION_ID inválido: ${v}`);
+  const id = Number(v.trim());
+  if (id === 1) throw new Error("Organização recusada: a organização 1 contém referências reais.");
+  return id;
+}
+
+const ORG_ROLE_RANK: Readonly<Record<string, number>> = { viewer: 1, operator: 2, manager: 3, admin: 4, owner: 5 };
+
+/** Papel mínimo no tenant sintético (atos governados e emissão exigem `manager`). Recusa ANTES de qualquer escrita. */
+export function assertOrgRoleAtLeast(role: string | null | undefined, min: "operator" | "manager", who: string): void {
+  if ((ORG_ROLE_RANK[role ?? ""] ?? 0) < ORG_ROLE_RANK[min]) {
+    throw new Error(`Credencial recusada: ${who} tem papel '${role ?? "nenhum"}' no tenant sintético; é necessário '${min}' ou superior.`);
+  }
+}
+
 /** Exercício explícito (AAAA, 1900–2099). Sem valor válido ⇒ erro: nunca substituído pelo ano corrente. */
 export function parseExercicio(v: string | undefined): number {
   if (!v || !/^(19|20)\d{2}$/.test(v.trim())) throw new Error("Informe HOMOLOG_EXERCICIO (AAAA) — o exercício do processo sintético nunca é presumido.");

@@ -3,7 +3,7 @@
  * HOMOLOGAÇÃO E2E (HTTP real) — tenant `homologacao-sintetica`, pelas APIs OFICIAIS que a tela usa.
  * Pulado sem `HOMOLOG_BASE_URL` (CI e suíte local não o executam). Uso (ver scripts/homologation-e2e.ts):
  *
- *   HOMOLOG_BASE_URL=https://licigov-pro-staging.up.railway.app HOMOLOG_EXERCICIO=2026 \
+ *   HOMOLOG_BASE_URL=https://licigov-pro-staging.up.railway.app HOMOLOG_EXERCICIO=2026 [HOMOLOG_ORGANIZATION_ID=2] \
  *   HOMOLOG_EMAIL=… HOMOLOG_PASSWORD=… HOMOLOG_EMAIL_2=… HOMOLOG_PASSWORD_2=… \
  *   [HOMOLOG_REPORT=relatorio.json] pnpm homolog:e2e
  *
@@ -20,7 +20,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
-  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
+  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
   parseExercicio, pendingMarkers, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
@@ -60,25 +60,30 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
   let k = 0;
   const key = (p: string) => `homolog-${p}-${RUN}-${++k}`;
 
-  async function login(s: ReturnType<typeof homologSession>, email: string | undefined, password: string | undefined) {
+  async function login(s: ReturnType<typeof homologSession>, email: string | undefined, password: string | undefined, who: string) {
     if (!email || !password) throw new Error("Credenciais do tenant sintético ausentes (HOMOLOG_EMAIL/HOMOLOG_PASSWORD e _2).");
+    // Usuário com várias associações: o cabeçalho X-Organization-Id precisa ir já na 1ª chamada tenant-scoped (listMine).
+    const pinned = parseOrganizationId(ENV.HOMOLOG_ORGANIZATION_ID);
+    if (pinned) s.state.orgId = pinned;
     await s.api.auth.login.mutate({ email, password });
     const me = await s.api.auth.me.query();
     const mine = await s.api.organizations.listMine.query();
     assertSyntheticCredential(me as any, mine.map((m) => m.org.id));
     const org = mine.map((m) => m.org).find((o) => o.slug === "homologacao-sintetica");
     assertSyntheticTenant(org);
+    if (pinned && org.id !== pinned) throw new Error(`HOMOLOG_ORGANIZATION_ID=${pinned} não é o tenant sintético (${org.id}).`);
     s.state.orgId = org.id;
     const current = await s.api.organizations.getCurrent.query();
     assertSyntheticTenant(current.org);
+    assertOrgRoleAtLeast(current.role, "manager", who);
     return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role };
   }
 
   beforeAll(async () => {
     assertAllowedTarget(BASE!);
     exercicio = parseExercicio(ENV.HOMOLOG_EXERCICIO);
-    const a = await login(author, ENV.HOMOLOG_EMAIL, ENV.HOMOLOG_PASSWORD);
-    const b = await login(issuer, ENV.HOMOLOG_EMAIL_2, ENV.HOMOLOG_PASSWORD_2);
+    const a = await login(author, ENV.HOMOLOG_EMAIL, ENV.HOMOLOG_PASSWORD, "usuário 1 (elabora)");
+    const b = await login(issuer, ENV.HOMOLOG_EMAIL_2, ENV.HOMOLOG_PASSWORD_2, "usuário 2 (emite)");
     if (a.org.id !== b.org.id) throw new Error("Os dois usuários precisam ser do MESMO tenant sintético.");
     if (a.me.id === b.me.id) throw new Error("Use dois usuários distintos (segregação de funções na emissão do TR).");
     orgId = a.org.id;
