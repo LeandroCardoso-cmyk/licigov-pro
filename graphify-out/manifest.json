@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1791755360.157211,
-    "ast_hash": "661b7514f56a078e26260a86d98a6a3d",
+    "mtime": 1792035794.23254,
+    "ast_hash": "8193397ff9e036ab718a15153d6c9dd4",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.ux.test.ts": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "client/src/procurement-presentation-fallbacks.test.ts": {
-    "mtime": 1791755360.161211,
-    "ast_hash": "e844eb3b63e5e5d87131cc9480c4c799",
+    "mtime": 1792035805.2101839,
+    "ast_hash": "eb4397e764839cb922bc334b1f8f3933",
     "semantic_hash": ""
   },
   "client/src/services/download.ts": {
@@ -5515,8 +5515,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/data039-atomicity-mysql-smoke.test.ts": {
-    "mtime": 1790881396.2808766,
-    "ast_hash": "4b9cec6bf840e05b65d9e4594bf33a4a",
+    "mtime": 1792035939.9754002,
+    "ast_hash": "8a1b131dcd8e345679b86b826ec063dc",
     "semantic_hash": ""
   },
   "server/__tests__/integration/db-users-hardening.test.ts": {
@@ -6035,8 +6035,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-candidate-eligibility-mysql-smoke.test.ts": {
-    "mtime": 1791289215.0081227,
-    "ast_hash": "d3699ae693e6ea2915f00cd21b94b0c7",
+    "mtime": 1792035739.0759845,
+    "ast_hash": "565f80b5a44b4d08f63cb65392e6b359",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-canonical-context-router.test.ts": {
@@ -8325,8 +8325,8 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearch.ts": {
-    "mtime": 1790881396.3048766,
-    "ast_hash": "552dc19e6aab754f3b1bd9f3a5e0bd50",
+    "mtime": 1792035490.8399687,
+    "ast_hash": "e154420c3e7444159be74829157174bb",
     "semantic_hash": ""
   },
   "server/domain/priceResearchReviewGroups.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792016861.0804935,
-    "ast_hash": "7af3366b79c5a94fedc8b60c1acbde23",
+    "mtime": 1792035593.8091602,
+    "ast_hash": "8b5538586ddcf7e8ec65b65d8a00a091",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9500,8 +9500,8 @@
     "semantic_hash": ""
   },
   "server/services/directProcurementService.ts": {
-    "mtime": 1791289219.2641225,
-    "ast_hash": "bc6d0bb1a1195e3c488a289032b52fda",
+    "mtime": 1792035820.529525,
+    "ast_hash": "35e017572251aa9c71c0edb054baf1dd",
     "semantic_hash": ""
   },
   "server/services/disasterRecoveryService.ts": {
@@ -9905,8 +9905,8 @@
     "semantic_hash": ""
   },
   "server/services/itemMaterializationService.ts": {
-    "mtime": 1791289219.7561226,
-    "ast_hash": "7daa17e304328a6f78f4279d8482ed52",
+    "mtime": 1792035590.6953228,
+    "ast_hash": "7c8a37aec8794b1ffbebd6406391e549",
     "semantic_hash": ""
   },
   "server/services/jurisprudenceCorrelationService.ts": {
@@ -12220,7 +12220,7 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792016869.5420125,
+    "mtime": 1792020884.6034052,
     "ast_hash": "722a0e17cfd5159fe056d2e37ac0c172",
     "semantic_hash": ""
   },
@@ -13410,8 +13410,8 @@
     "semantic_hash": ""
   },
   "server/domain/directPriceImport.ts": {
-    "mtime": 1791289212.7601228,
-    "ast_hash": "e5b5af5b517d7998e1d44283c7da8d46",
+    "mtime": 1792035820.5282986,
+    "ast_hash": "8cefc4f6e40d5cba62118d7714715ae7",
     "semantic_hash": ""
   },
   "server/domain/directPriceReference.ts": {
@@ -14997,6 +14997,16 @@
   "server/__tests__/unit/legacy-import-extraction.test.ts": {
     "mtime": 1792016861.0804935,
     "ast_hash": "d5c29b16f79a978a2ee34b023284a172",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-price-research-parser.test.ts": {
+    "mtime": 1792035540.6159675,
+    "ast_hash": "2961df7e0eba4a8736edb65d5e32e638",
+    "semantic_hash": ""
+  },
+  "server/domain/priceResearchParser.ts": {
+    "mtime": 1792035590.6639664,
+    "ast_hash": "58031d2b3c93deff822af42f8e7d290e",
     "semantic_hash": ""
   }
 }

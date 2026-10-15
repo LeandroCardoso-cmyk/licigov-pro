@@ -34,7 +34,9 @@ import { getDb } from "../../db/connection";
 import { importSessions } from "../../../drizzle/schema";
 import { enqueueImport } from "../../services/importQueueService";
 import { getImportSession } from "../../services/fileIngestionService";
-import { insertProcess, listIntelligentItems } from "../../db/procurement";
+import { insertProcess, insertResearch, insertResearchItem, listIntelligentItems } from "../../db/procurement";
+import { createPriceResearchItem, createPriceResearchWorkspace } from "../../domain/priceResearch";
+import { persistResearchAndMaterialize } from "../../services/itemMaterializationService";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { goldenEPdf } from "../fixtures/layoutPdfFixtures";
 
@@ -139,9 +141,19 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
 
   it("1) INCIDENTE: legado sem revisão (qtd 0, R$ 0) + Pesquisa em revisão (5/30 pendentes) ⇒ 0 candidatos; legado preservado", async () => {
     pid = await newProcess(ORG);
-    // Caminho LEGADO real (importação de texto): uma linha vira Item Inteligente sem revisão prévia.
+    // Estado LEGADO (leitor anterior ao M8-PRICE-IMPORT-001: uma linha solta virava Item Inteligente sem revisão).
+    // O leitor atual RECUSA esse texto (ambíguo), então o histórico é semeado pela mesma materialização que ele usava.
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" });
+    await expect(op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(await listIntelligentItems(pid, ORG)).toHaveLength(0); // recusa sem gravação
+    const research = createPriceResearchWorkspace({ processId: pid, organizationId: ORG, source: "pdf", correlationId: "elig-legacy" });
+    const legacyRow = createPriceResearchItem({ researchId: research.id, processId: pid, organizationId: ORG, description: "Fornecedor Exemplo Ltda", source: "colar", index: 0 });
+    await persistResearchAndMaterialize({
+      organizationId: ORG, processId: pid, researchId: research.id, correlationId: "elig-legacy",
+      quotes: [{ quoteId: legacyRow.id, researchId: research.id, description: legacyRow.description, quantity: 0, unit: "un", supplier: "", brand: "", model: "", source: "colar", valueCents: null }],
+      writeResearch: async (tx) => { await insertResearch({ ...research, itemCount: 1 }, tx); await insertResearchItem(legacyRow, tx); },
+    });
     const before = await listIntelligentItems(pid, ORG);
     expect(before).toHaveLength(1);
     legacyId = before[0].id;

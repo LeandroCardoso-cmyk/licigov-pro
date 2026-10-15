@@ -155,7 +155,7 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
   it("insertResearchWithItems: cabeçalho + todos os itens commitam JUNTOS", async () => {
     const research = createPriceResearchWorkspace({ processId: "d039-proc", organizationId: ORG, source: "manual", correlationId: "d039-res" });
     const items = extractItemsFromText(
-      "Caneta esferográfica azul, 100 un, R$ 1,50\nPapel A4 500 folhas, 50 un, R$ 25,00",
+      "Caneta esferográfica azul;100;un;1,50\nPapel A4 500 folhas;50;un;25,00",
       { researchId: research.id, processId: "d039-proc", organizationId: ORG },
     );
     expect(items.length).toBeGreaterThan(0);
@@ -173,7 +173,7 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     // research id = prw:org:processId:source e item id = pri:org:researchId:index:desc — determinísticos.
     const research = createPriceResearchWorkspace({ processId: "d039-retry-proc", organizationId: ORG, source: "manual", correlationId: "d039-res-retry" });
     const items = extractItemsFromText(
-      "Item A, 10 un, R$ 2,00\nItem B, 5 un, R$ 7,00",
+      "Produto A;10;un;2,00\nProduto B;5;un;7,00",
       { researchId: research.id, processId: "d039-retry-proc", organizationId: ORG },
     );
     await insertResearchWithItems({ ...research, itemCount: items.length }, items);
@@ -206,7 +206,7 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     const db = await getDb();
     if (!db) return;
     const research = createPriceResearchWorkspace({ processId: "d039-rb-proc", organizationId: ORG, source: "manual", correlationId: "d039-rb2" });
-    const [item] = extractItemsFromText("Item X, 1 un, R$ 10,00", { researchId: research.id, processId: "d039-rb-proc", organizationId: ORG });
+    const [item] = extractItemsFromText("Produto X;1;un;10,00", { researchId: research.id, processId: "d039-rb-proc", organizationId: ORG });
     await expect(db.transaction(async (tx) => {
       await insertResearch({ ...research, itemCount: 1 }, tx);
       await insertResearchItem(item, tx);
@@ -225,7 +225,7 @@ describe.skipIf(!DB)("DATA-039 — atomicidade de operações compostas (MySQL r
     if (!db) return;
     const research = createPriceResearchWorkspace({ processId: "d039-rb-multi", organizationId: ORG, source: "manual", correlationId: "d039-rb3" });
     const items = extractItemsFromText(
-      "Item 1, 1 un, R$ 1,00\nItem 2, 2 un, R$ 2,00\nItem 3, 3 un, R$ 3,00",
+      "Produto 1;1;un;1,00\nProduto 2;2;un;2,00\nProduto 3;3;un;3,00",
       { researchId: research.id, processId: "d039-rb-multi", organizationId: ORG },
     );
     expect(items.length).toBe(3);

@@ -46,6 +46,7 @@ import {
 import { listContextFacts } from "../db/procurementContext";
 import { getOrganizationById } from "../db/organizations";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
   listIntelligentItems,
@@ -477,6 +478,15 @@ export const procurementProcessRouter = router({
       return { document };
     }),
 
+  // M8-PRICE-IMPORT-001: PRÉVIA sem gravação — o servidor confere itens, cotações, linhas ignoradas e
+  // ambiguidades antes de importar (mesmo leitor da importação; nada é persistido aqui).
+  previewPriceResearch: orgRoleProcedure("operator")
+    .input(z.object({ processId: z.string().min(1), text: z.string().min(1).max(200_000) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireProcess(input.processId, ctx.organizationId!);
+      return previewOfParse(parsePriceResearchText(input.text));
+    }),
+
   importPriceResearch: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
@@ -495,6 +505,10 @@ export const procurementProcessRouter = router({
           actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
         });
       } catch (err) {
+        if (err instanceof PriceResearchAmbiguousError) {
+          // Ambígua ⇒ nada gravado; o cliente mostra a prévia com as pendências.
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message, cause: err });
+        }
         log.error("import_price_research_persist_failed", {
           organizationId: orgId, userId: ctx.user!.id, processId: input.processId,
           source: input.source, correlationId: ctx.correlationId,
@@ -512,7 +526,7 @@ export const procurementProcessRouter = router({
         id: m.id, description: byId.get(m.id)?.description ?? "", suggestedCATMAT: byId.get(m.id)?.suggestedCATMAT ?? null,
       }));
       return {
-        research: imported.research, intelligentItems: enriched,
+        research: imported.research, intelligentItems: enriched, synthetic: imported.synthetic,
         materialization: {
           created: materialized.created.length, updated: materialized.updated.length,
           unchanged: materialized.unchanged.length, preserved: materialized.preserved.length,
