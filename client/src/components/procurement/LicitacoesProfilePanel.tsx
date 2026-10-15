@@ -4,7 +4,7 @@ import PrepFieldControl from "./PrepFieldControl";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildPlatform, buildRoles, changedPlatforms, changedRoles, emptyRoleForm, platformToForm, profileAsPrepView, roleToForm, withoutDefault,
+  buildDefaultsEdit, buildPlatform, buildRoles, changedPlatforms, defaultAsPrepField, changedRoles, emptyRoleForm, platformToForm, profileAsPrepView, roleToForm, withoutDefault,
   type PlatformForm, type ProfileStateView, type RoleAssignmentView, type RoleForm,
 } from "@/lib/contextReuse";
 import {
@@ -33,6 +33,7 @@ export default function LicitacoesProfilePanel() {
   const [roleForms, setRoleForms] = useState<Record<string, RoleForm>>({});
   const [platformForms, setPlatformForms] = useState<Record<string, PlatformForm>>({});
   const [edits, setEdits] = useState<Record<string, SectionEdits>>({});
+  const [defaultEdits, setDefaultEdits] = useState<Record<string, FormValue>>({});
   const [decision, setDecision] = useState<DecisionFormState>(() => emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -59,11 +60,14 @@ export default function LicitacoesProfilePanel() {
   }, [state, platformForms]);
   const plan = useMemo(() => (state ? buildSavePlan(profileAsPrepView(state), { edits }) : { writes: [], errors: {}, decisionCount: 0 }), [state, edits]);
 
+  const defaultsBuild = useMemo(() => (state ? buildDefaultsEdit(state.defaults, defaultEdits) : { defaults: {}, errors: {} as Record<string, string>, changed: [] }), [state, defaultEdits]);
+
   if (!data) return query.isLoading ? <p className="text-sm text-muted-foreground">Carregando o Perfil de Licitações…</p> : null;
   if (!state) return <p className="text-sm text-muted-foreground">{(data as { reason: string }).reason}</p>;
 
-  const total = plan.decisionCount + roleBuild.changed.length + platformBuild.changed.length;
-  const canSave = total > 0 && Object.keys(plan.errors).length === 0 && Object.keys(roleBuild.errors).length === 0 && Object.keys(platformBuild.errors).length === 0 && !busy;
+  const total = plan.decisionCount + roleBuild.changed.length + platformBuild.changed.length + defaultsBuild.changed.length;
+  const canSave = total > 0 && Object.keys(plan.errors).length === 0 && Object.keys(roleBuild.errors).length === 0 && Object.keys(platformBuild.errors).length === 0
+    && Object.keys(defaultsBuild.errors).length === 0 && !busy;
   const needed = state.roles.filter((r) => r.usedBy.length > 0);
   const others = state.roles.filter((r) => r.usedBy.length === 0);
 
@@ -94,15 +98,16 @@ export default function LicitacoesProfilePanel() {
           return;
         }
       }
-      if (roleBuild.changed.length > 0 || platformBuild.changed.length > 0) {
+      if (roleBuild.changed.length > 0 || platformBuild.changed.length > 0 || defaultsBuild.changed.length > 0) {
         const r = await recordProfile.mutateAsync({
           confirm: true, idempotencyKey: key("roles"), ...act, expectedRevision: revision, catalogVersion: state.catalogVersion,
           ...(roleBuild.changed.length > 0 ? { roles: roleBuild.roles } : {}),
+          ...(defaultsBuild.changed.length > 0 ? { defaults: defaultsBuild.defaults } : {}),
           ...(platformBuild.changed.length > 0 ? { platforms: Object.fromEntries(platformBuild.changed.map((slug) => [slug, platformBuild.profiles[slug]])) } : {}),
         } as never);
         revision = r.decision.revision;
       }
-      keys.current = {}; setEdits({}); setRoleForms({}); setPlatformForms({}); setReviewing(false); setDecision((d) => ({ ...d, confirmed: false }));
+      keys.current = {}; setEdits({}); setDefaultEdits({}); setRoleForms({}); setPlatformForms({}); setReviewing(false); setDecision((d) => ({ ...d, confirmed: false }));
       setNotice({ kind: "ok", text: `Perfil registrado (revisão ${revision}). Os próximos Editais reutilizam estes dados; Editais já gerados mantêm a revisão que usaram.` });
     } catch (e) {
       if (isStale(e)) { keys.current = {}; setNotice({ kind: "stale", text: STALE_NOTICE }); }
@@ -215,6 +220,21 @@ export default function LicitacoesProfilePanel() {
         <div className="space-y-2 px-3 pb-3 text-sm">
           <p className="text-xs text-muted-foreground">Criados por você, a partir de um processo ("Usar como padrão institucional"). Valem para os próximos processos e podem ser alterados em cada um.</p>
           {defaultsSet.length === 0 && <p className="text-xs text-muted-foreground">Nenhum padrão definido.</p>}
+          {state.defaults.some((d) => !d.hasValue) && (
+            <div className="space-y-2 border-t border-border pt-2" aria-label="Definir padrões institucionais">
+              <p className="text-xs text-muted-foreground">
+                Você também pode definir os padrões aqui, uma vez para o órgão. Nos próximos processos eles aparecem como PROPOSTA (padrão
+                institucional) e só valem depois de confirmados em cada TR — nunca são aplicados em silêncio.
+              </p>
+              {state.defaults.filter((d) => !d.hasValue).map((d) => {
+                const f = defaultAsPrepField(d);
+                return (
+                  <PrepFieldControl key={d.name} field={f} value={defaultEdits[d.name] ?? toFormValue(f, undefined)} error={showErrors ? defaultsBuild.errors[d.name] : undefined} disabled={busy}
+                    onChange={(v) => setDefaultEdits((p) => ({ ...p, [d.name]: v }))} />
+                );
+              })}
+            </div>
+          )}
           <ul className="space-y-1">
             {defaultsSet.map((d) => (
               <li key={d.name} className="flex flex-wrap items-center gap-2">
@@ -242,6 +262,7 @@ export default function LicitacoesProfilePanel() {
                 {plan.writes.flatMap((w) => w.lines.map((l) => <li key={`${w.id}-${l}`}>{l}</li>))}
                 {roleBuild.changed.map((r) => <li key={r}>Papel {state.roles.find((x) => x.role === r)?.label ?? r}: {roleBuild.roles[r]?.name ?? "removido"}</li>)}
                 {platformBuild.changed.map((slug) => <li key={slug}>Perfil da plataforma {slug.toUpperCase()}</li>)}
+                {defaultsBuild.changed.map((d) => <li key={`def-${d.name}`}>Padrão institucional {d.description}: {formatDisplay(d.type, d.value)}</li>)}
               </ul>
             </>
           )}

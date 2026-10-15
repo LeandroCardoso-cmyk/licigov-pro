@@ -895,8 +895,9 @@ export const procurementProcessRouter = router({
       const sources = doc.sources ?? [];
       const groundingSource = sources.find((s) => s.startsWith("grounding:"))?.slice("grounding:".length) ?? null;
       const evidenceSource = sources.find((s) => s.startsWith("evidencias:"))?.slice("evidencias:".length);
+      // M8 (ETP): fundamentação NORMATIVA ≠ suficiência FACTUAL — lacunas [REVISAR: …] contadas no conteúdo ATUAL (reflete edições humanas).
       const grounding = groundingSource
-        ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0 }
+        ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0, factualGaps: (doc.content.match(/\[REVISAR[^\]]*\]/g) ?? []).length }
         : null;
       // PR-09 (SEM-014) — o conteúdo vigente carrega trabalho HUMANO? (ledger + sources; read-only). A UI
       // pede confirmação explícita antes de regenerar; o servidor recusa sem `confirmReplace` de todo modo.

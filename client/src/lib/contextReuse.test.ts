@@ -90,3 +90,22 @@ describe("Perfil → plano de salvar da preparação; padrões institucionais", 
     expect(defaultConsentText("x", "y", false)).toContain("PRÓXIMOS processos");
   });
 });
+
+describe("M8-TR-UX-001 — padrões institucionais definidos no Perfil (uma vez, em lote)", () => {
+  const defs = [
+    { name: "tr.param.formaPagamento", description: "Forma de pagamento", type: "enum", enumValues: ["ORDEM_BANCARIA", "BOLETO"], value: undefined, hasValue: false },
+    { name: "tr.param.prazoPagamento", description: "Prazo de pagamento", type: "integer", value: undefined, hasValue: false },
+    { name: "tr.param.indiceReajuste", description: "Índice de reajuste", type: "string", value: "IPCA", hasValue: true },
+  ];
+  it("mantém os padrões existentes, acrescenta só os preenchidos e valida o tipo", async () => {
+    const { buildDefaultsEdit } = await import("./contextReuse");
+    const ok = buildDefaultsEdit(defs, { "tr.param.formaPagamento": "ORDEM_BANCARIA", "tr.param.prazoPagamento": "" });
+    expect(ok.defaults).toEqual({ "tr.param.indiceReajuste": "IPCA", "tr.param.formaPagamento": "ORDEM_BANCARIA" });
+    expect(ok.changed.map((c) => c.name)).toEqual(["tr.param.formaPagamento"]);
+    expect(ok.errors).toEqual({});
+    const bad = buildDefaultsEdit(defs, { "tr.param.prazoPagamento": "trinta" });
+    expect(bad.errors["tr.param.prazoPagamento"]).toBeTruthy();
+    expect(bad.changed).toEqual([]);
+    expect(buildDefaultsEdit(defs, {}).changed).toEqual([]); // nada digitado ⇒ nada registrado
+  });
+});

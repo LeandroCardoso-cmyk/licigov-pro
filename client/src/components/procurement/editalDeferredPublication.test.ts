@@ -48,6 +48,20 @@ const deferredState = (over: Partial<PreparationStateView> = {}, withSrp = true)
   sec("CERTAME_CONFIG", PUB.map((p) => pubField(p))),
 ], over);
 
+describe("M8-EDITAL-UX-001 — pendências agrupadas pelo que impedem", () => {
+  it("decisão do certame impede a ELABORAÇÃO; dados de publicação só a PUBLICAÇÃO (podem ser preenchidos depois)", () => {
+    const r = buildEditalReadiness(deferredState());
+    expect(r.pendingByLevel.map((l) => [l.level, l.count])).toEqual([["ELABORACAO", 1], ["PUBLICACAO", 7]]);
+    expect(r.pendingByLevel[1].label).toMatch(/pode ser preenchido depois/);
+    expect(r.steps.find((s) => s.key === "PROCESS_DECISIONS")!.blocks).toBe("ELABORACAO");
+    expect(r.steps.filter((s) => s.done).every((s) => s.blocks === "NENHUM")).toBe(true);
+  });
+  it("sem decisões pendentes: só o nível de publicação aparece (nada impede a elaboração)", () => {
+    const r = buildEditalReadiness(deferredState({}, false));
+    expect(r.pendingByLevel.map((l) => l.level)).toEqual(["PUBLICACAO"]);
+  });
+});
+
 describe("PUB — dados de publicação não são decisões do certame", () => {
   it("PUB9 — DEFERRED fora de PROCESS_DECISIONS_TOTAL; contado à parte em DEFERRED_PUBLICATION_TOTAL; nunca pendência", () => {
     const st = deferredState({}, false);
