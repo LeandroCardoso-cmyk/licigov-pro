@@ -1,0 +1,67 @@
+{
+  "evidenceVersion": 1,
+  "marco": "M8 — Homologação E2E HTTP real",
+  "status": "APROVADO",
+  "origem": "Valores TRANSCRITOS do relatório /tmp/homologacao-m8.json gerado pelo executor oficial no Console do Railway staging e fornecidos pelo Owner na conversa de 15/10/2026. Não houve validação independente adicional por este registro. O relatório original não contém credenciais; e-mails, senhas, cookies e tokens não constam aqui.",
+  "execucao": {
+    "data": "2026-10-15",
+    "runId": "MV9SXMKG",
+    "ambiente": "Railway staging (licigov-pro-staging.up.railway.app)",
+    "codigoEmStaging": "034ce42 (PR #304; deploy Railway 9f783de0 SUCCESS). Inferência: o executor só aceita HOMOLOG_ORGANIZATION_ID a partir deste commit.",
+    "comando": "pnpm exec vitest run server/__tests__/homologation/staging-homologation-e2e.test.ts --maxWorkers=1 --minWorkers=1 --no-file-parallelism",
+    "modo": "HTTP real pelas APIs oficiais; NÃO é homologação visual",
+    "organizacao": { "id": 2, "slug": "homologacao-sintetica" },
+    "papeis": ["manager", "manager"],
+    "vitest": { "testFiles": "1 passed (1)", "tests": "4 passed (4)", "duration": "122.97s" }
+  },
+  "jornadas": {
+    "A_processo_licitatorio": {
+      "status": "PASSED",
+      "processoSintetico": "4256/2026",
+      "fluxo": "Novo processo → DFD → ETP → Pesquisa de Preços → Itens → TR → Edital BLL Revision 2 → DOCX/PDF",
+      "exportacoesBytes": {
+        "DFD": { "docx": 9108, "pdf": 3911 },
+        "ETP": { "docx": 10957, "pdf": 9876 },
+        "TR": { "docx": 11028, "pdf": 9898 },
+        "Edital": { "docx": 37911, "pdf": 87723 }
+      },
+      "observacao": "Artefatos registrados como RASCUNHOS. Não houve publicação oficial do Edital nem aprovação jurídica definitiva."
+    },
+    "B_contratos_aditivos": {
+      "status": "PASSED",
+      "contratoSintetico": "11dc53b1f99127512a03",
+      "aditivosAnterioresReconhecidos": 1,
+      "novoTermino": "2027-11-29",
+      "exportacoesBytes": { "docx": 9031, "pdf": 3731 },
+      "replay": "validado"
+    },
+    "C_monitoramento": {
+      "status": "PASSED",
+      "registroSintetico": "6de147d28fe137a95311",
+      "eventosCalendario": 3,
+      "alertasVencimento": "validados, sem duplicidade",
+      "centroDeOperacoes": "indicadores integrados"
+    },
+    "ISO_isolamento": { "status": "PASSED", "escopo": "acesso entre organizações no cenário coberto pelo executor" }
+  },
+  "metricas": {
+    "PRICE_RESEARCH_M8": { "items": 1, "quotes": 3, "averageCents": 400000, "totalCents": 4000000, "ignoredLines": 7, "ambiguousRefused": true },
+    "DFD_AI": { "outputContract": "structured", "gaps": 7, "warnings": 2, "discarded": 0 },
+    "DFD": { "fields": 11, "prefilled": 6, "unknown": 5, "revisar": 0 },
+    "ETP": { "chars": 6726, "revisar": 11 },
+    "TR": { "structuredActive": 37, "structuredPrefilled": 0, "structuredProposed": 0, "structuredConfirmedByHuman": 21, "revisar": 9 },
+    "EDITAL_PREPARATION": {
+      "EDITAL_TEMPLATE_RESOLUTION": "BOUND",
+      "TOTAL_TEMPLATE_FIELDS": 185, "AUTO_RESOLVED": 20, "ORG_REUSED": 33, "TR_PROJECTED": 1, "DECIDED": 12,
+      "UPSTREAM_TR_REUSED": 21, "TR_PENDING": 0, "PROFILE_INCOMPLETE": 0, "PENDING_IN_SOURCE": 0,
+      "MANUAL_DECISIONS_VISIBLE": 0, "DEFERRED_PUBLICATION": 7
+    },
+    "PUBLICATION": { "complete": false, "total": 7 },
+    "EDITAL": { "chars": 77939, "revisar": 3, "aDefinir": 0, "publicacao": 10 }
+  },
+  "interpretacoesConferidasNoCodigo": {
+    "publicacao_10_x_7": "As 10 ocorrências do texto 'A DEFINIR PARA PUBLICAÇÃO' vêm de 7 variáveis diferidas. O AST do modelo BLL Rev. 2 tem 12 referências a elas, 6 delas ao número do pregão. Ocorrências ≠ campos.",
+    "tr_proposed_0": "Propostas de parâmetros do TR vêm só dos padrões institucionais do Perfil (orgRecord.payload.defaults). O executor registra o Perfil sem padrões e mede o TR antes das confirmações. Por isso 0 pré-preenchidos/propostos é efeito do cenário, não regressão.",
+    "manual_decisions_visible_0": "Estado medido DEPOIS das 12 decisões do certame registradas pelo executor; não indica ausência de trabalho humano."
+  }
+}
