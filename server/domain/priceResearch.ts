@@ -8,7 +8,7 @@
 
 import { createHash } from "crypto";
 import { parseBRL, averageCents, centsToReais } from "./money";
-import { normalizeDecimal } from "./importCorrectionFields";
+import { parsePriceResearchText, type PriceResearchParse } from "./priceResearchParser";
 
 export type PriceResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
 
@@ -99,37 +99,44 @@ export function createPriceResearchItem(params: {
 }
 
 /**
- * Extração determinística de itens a partir de texto colado/CSV simples
- * (uma linha por item: "descrição;quantidade;unidade;valor[;fornecedor]"). Base para itens.
+ * Extração determinística das COTAÇÕES (uma `PriceResearchItem` por cotação, agrupáveis pelo item) a partir de
+ * texto colado/CSV/extraído. M8-PRICE-IMPORT-001: a leitura é ESTRUTURADA (`parsePriceResearchText`) — cabeçalho,
+ * metadados, quantidade, unidade, fornecedor e avisos nunca viram itens; o formato delimitado legado
+ * ("descrição;quantidade;unidade;valor[;fornecedor]") continua aceito com a mesma identidade por linha.
  *
- * P0 piloto — CONTRATO MONETÁRIO: o valor usa `parseBRL` (antes "R$ 18,90" e "1.234,56" viravam 0 em
- * silêncio). Valor ambíguo/inválido fica 0 (sem preço) — nunca um número inventado. Quantidade aceita
- * decimal pt-BR ("1,5"). Valor em REAIS com 2 casas (coluna DECIMAL(14,2)).
+ * P0 piloto — CONTRATO MONETÁRIO: o valor usa `parseBRL`. Valor ambíguo/inválido fica 0 (sem preço) — nunca um
+ * número inventado; quantidade não informada fica 0 (= "não informada" na consolidação, R10/SEM-090).
+ * Valor em REAIS com 2 casas (coluna DECIMAL(14,2)).
  */
 export function extractItemsFromText(
   text: string,
   ctx: { researchId: string; processId: string; organizationId: number },
+  parsed: PriceResearchParse = parsePriceResearchText(text),
 ): PriceResearchItem[] {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const items: PriceResearchItem[] = [];
-  lines.forEach((line, index) => {
-    const parts = line.split(/[;\t]/).map(p => p.trim());
-    if (parts.length === 0 || !parts[0]) return;
-    const qty = parts[1] ? normalizeDecimal(parts[1]) : null;
-    const cents = parts[3] ? parseBRL(parts[3]) : null;
-    items.push(createPriceResearchItem({
-      researchId: ctx.researchId,
-      processId: ctx.processId,
-      organizationId: ctx.organizationId,
-      description: parts[0],
-      quantity: qty !== null ? Number(qty) : 0,
-      unit: parts[2] || "un",
-      value: cents !== null && cents > 0 ? centsToReais(cents) : 0,
-      supplier: parts[4] || "",
-      source: "colar",
-      index,
-    }));
-  });
+  for (const it of parsed.items) {
+    for (const q of it.quotes) {
+      const observations = [
+        it.specification && `Especificação: ${it.specification}`,
+        q.date && `Data: ${q.date}`,
+        q.notes,
+        q.fictitious && "Fonte fictícia/sintética — não constitui cotação válida para fins oficiais",
+      ].filter(Boolean).join(" | ");
+      items.push(createPriceResearchItem({
+        researchId: ctx.researchId,
+        processId: ctx.processId,
+        organizationId: ctx.organizationId,
+        description: it.description,
+        quantity: it.quantity ?? 0,
+        unit: it.unit,
+        value: q.valueCents !== null ? centsToReais(q.valueCents) : 0,
+        supplier: q.supplier,
+        observations: observations.slice(0, 1000),
+        source: "colar",
+        index: q.index,
+      }));
+    }
+  }
   return items;
 }
 

@@ -4,6 +4,7 @@ import { trpc } from "../../lib/trpc";
 import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 import { Spinner } from "@/components/ui/spinner";
+import { formatCentsBRL } from "@shared/money";
 
 /**
  * PesquisaPrecosWorkspace.
@@ -34,18 +35,33 @@ export type PesquisaPrecosWorkspaceProps = {
 };
 
 /**
- * Painel LEGADO (congelado) de importação de pesquisa de preços — extração direta em
- * "Itens Inteligentes" via procurementProcess.importPriceResearch. Mantido intacto: é a entrada
- * "manual" e o comportamento com a flag desligada.
+ * Painel LEGADO de importação de pesquisa de preços — extração direta em "Itens Inteligentes" via
+ * procurementProcess.importPriceResearch (entrada "manual" e comportamento com a flag desligada).
+ * M8-PRICE-IMPORT-001: dois passos — "Conferir extração" (prévia sem gravação) → "Importar".
  */
+const KIND_LABELS: Record<string, string> = {
+  header: "cabeçalho", metadata: "dado do documento", summary: "resumo declarado", note: "observação/aviso", unrecognized: "não reconhecida",
+};
+
 function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: string; onReviewItems?: () => void }) {
   const [source, setSource] = useState<ResearchSource>("colar");
   const [text, setText] = useState("");
+  // M8-PRICE-IMPORT-001: conferir a extração (sem gravar) ANTES de importar — itens, cotações, linhas ignoradas e pendências.
+  const [checkedText, setCheckedText] = useState<string | null>(null);
+  const preview = trpc.procurementProcess.previewPriceResearch.useMutation();
   const importResearch = trpc.procurementProcess.importPriceResearch.useMutation();
   const items = importResearch.data?.intelligentItems ?? [];
+  const p = preview.data;
+  const previewCurrent = checkedText !== null && checkedText === text.trim() && !!p;
 
-  const handleImport = () => {
+  const handlePreview = () => {
     if (!processId || !text.trim()) return;
+    const t = text.trim();
+    importResearch.reset();
+    preview.mutate({ processId, text: t }, { onSuccess: () => setCheckedText(t) });
+  };
+  const handleImport = () => {
+    if (!processId || !previewCurrent || !p?.canImport) return;
     importResearch.mutate({ processId, source, text: text.trim() });
   };
 
@@ -64,8 +80,9 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
         </select>
       </label>
       <p className="mb-3 text-xs text-muted-foreground">
-        Esta entrada recebe texto, não arquivos. Ao importar, a pesquisa e os itens são registrados;
-        depois, revise os Itens Inteligentes antes de aprová-los para uso no TR.
+        Cole a pesquisa como está (blocos "Item 1 — descrição", "Quantidade: 10", "Fornecedor — R$ 3.900,00") ou uma
+        planilha (descrição; quantidade; unidade; valor; fornecedor). Confira a extração antes de importar; depois,
+        revise os Itens Inteligentes antes de aprová-los para uso no TR.
       </p>
       <label className="flex flex-col text-sm">
         <span className="mb-1 font-medium text-foreground">Conteúdo da pesquisa</span>
@@ -77,18 +94,81 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           className="rounded-lg border border-input px-3 py-2 font-mono text-xs focus-visible:ring-2 focus-visible:ring-ring focus:outline-none"
         />
       </label>
-      <button
-        type="button"
-        onClick={handleImport}
-        disabled={!processId || !text.trim() || importResearch.isPending}
-        className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
-      >
-        {importResearch.isPending ? "Processando..." : "Importar e gerar Itens Inteligentes"}
-      </button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={!processId || !text.trim() || preview.isPending}
+          className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+        >
+          {preview.isPending ? "Conferindo..." : "Conferir extração"}
+        </button>
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={!processId || !previewCurrent || !p?.canImport || importResearch.isPending}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+        >
+          {importResearch.isPending ? "Processando..." : "Importar e gerar Itens Inteligentes"}
+        </button>
+      </div>
       {!processId && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
           Selecione um processo para importar a pesquisa.
         </p>
+      )}
+      {preview.isError && (
+        <p className="mt-2 text-sm text-destructive" role="alert">{preview.error.message || "Falha ao conferir a pesquisa."}</p>
+      )}
+      {p && checkedText !== null && !previewCurrent && (
+        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">O texto mudou desde a conferência — confira novamente antes de importar.</p>
+      )}
+      {p && previewCurrent && !importResearch.isSuccess && (
+        <div className="mt-4 space-y-3 border-t border-border pt-4" data-testid="price-research-preview">
+          <p className="text-sm font-medium text-foreground">
+            Extração: {p.items.length} item(ns) · {p.quoteCount} cotação(ões) · {p.ignored.length} linha(s) ignorada(s)
+          </p>
+          {p.synthetic && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Dados sintéticos/fictícios identificados: servem para homologação e não constituem pesquisa de preços válida.
+            </p>
+          )}
+          {p.blocking.length > 0 && (
+            <div role="alert" className="rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive">
+              <p className="mb-1 font-medium">Ambiguidades — nada será importado até corrigir o texto:</p>
+              <ul className="list-disc pl-4">{p.blocking.map((b, i) => <li key={i}>{b.message}</li>)}</ul>
+            </div>
+          )}
+          <ul className="space-y-2">
+            {p.items.map((it, i) => (
+              <li key={i} className="rounded-lg border border-border p-3 text-sm">
+                <p className="font-medium text-foreground">{it.description}</p>
+                {it.specification && <p className="text-xs text-muted-foreground">{it.specification}</p>}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Quantidade: {it.quantity ?? "não informada"} {it.unit} · Média: {it.averageCents !== null ? formatCentsBRL(it.averageCents) : "—"}
+                  {" "}· Total estimado: {it.totalCents !== null ? formatCentsBRL(it.totalCents) : "—"}
+                </p>
+                <ul className="mt-1 text-xs text-foreground">
+                  {it.quotes.map((q) => (
+                    <li key={q.line}>
+                      Linha {q.line}: {q.supplier || "fornecedor não informado"} — {q.valueCents !== null ? formatCentsBRL(q.valueCents) : "sem preço"}
+                      {q.date ? ` — ${q.date}` : ""}{q.fictitious ? " (fonte fictícia)" : ""}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+          {p.warnings.length > 0 && (
+            <ul className="list-disc pl-4 text-xs text-amber-700 dark:text-amber-300">{p.warnings.map((w, i) => <li key={i}>{w.message}</li>)}</ul>
+          )}
+          {p.ignored.length > 0 && (
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer">Linhas ignoradas (não viram item nem cotação)</summary>
+              <ul className="mt-1 space-y-0.5">{p.ignored.map((l) => <li key={l.line}>Linha {l.line} ({KIND_LABELS[l.kind] ?? l.kind}): {l.text}</li>)}</ul>
+            </details>
+          )}
+        </div>
       )}
       {importResearch.isError && (
         <p className="mt-2 text-sm text-destructive" role="alert">{importResearch.error.message || "Falha ao importar a pesquisa."}</p>

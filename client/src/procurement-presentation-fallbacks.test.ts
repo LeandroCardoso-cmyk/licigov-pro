@@ -30,6 +30,7 @@ vi.mock("@/lib/trpc", () => ({
       rejectItem: { useMutation: mutation },
       applyItemSourceUpdate: { useMutation: mutation },
       importPriceResearch: { useMutation: mutation },
+      previewPriceResearch: { useMutation: mutation },
     },
   },
 }));

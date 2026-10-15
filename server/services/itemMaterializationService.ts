@@ -48,6 +48,7 @@ import {
   type ProcurementExecutor,
 } from "../db/procurement";
 import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchSource, type PriceResearchWorkspace } from "../domain/priceResearch";
+import { isCatalogItemCandidate, parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { catmatCandidates, suggestSpecifications } from "./itemIntelligenceService";
 import { serviceLogger } from "./observabilityService";
 import { assertKernelAccess } from "./kernelAccessService";
@@ -547,10 +548,12 @@ export async function enrichMaterializedItems(params: {
       assertKernelAccess("processo_licitatorio", "procurement_knowledge_graph");
       const description = it.description ?? "";
       const suppliers = parseSuppliers(it.suppliers);
-      const matches = rankCATMAT({
+      // M8-PRICE-IMPORT-001: catálogo só para item real (nunca metadado/aviso/fragmento ou item sem preço).
+      const catalogCandidate = isCatalogItemCandidate({ description, pricedQuotes: suppliers.filter((s) => s.value > 0).length });
+      const matches = catalogCandidate ? rankCATMAT({
         itemId: it.id, organizationId: params.organizationId, description,
         candidates: catmatCandidates(description), correlationId: params.correlationId,
-      });
+      }) : [];
       const { suggested, alternatives } = suggestedAndAlternatives(matches);
       const values = suppliers.map((s) => s.value).filter((v) => v > 0);
       const risks = [];
@@ -679,9 +682,12 @@ export async function persistResearchAndMaterialize(params: {
  */
 export async function importManualPriceResearch(p: {
   organizationId: number; processId: string; source: PriceResearchSource; text: string; actorUserId: number; correlationId: string;
-}): Promise<{ research: PriceResearchWorkspace; quoteCount: number; result: MaterializationResult }> {
+}): Promise<{ research: PriceResearchWorkspace; quoteCount: number; synthetic: boolean; result: MaterializationResult }> {
+  // M8-PRICE-IMPORT-001: leitura estruturada; ambiguidade ⇒ recusa ANTES de qualquer escrita (o servidor revisa a prévia).
+  const parsed = parsePriceResearchText(p.text);
+  if (parsed.blocking.length > 0) throw new PriceResearchAmbiguousError(parsed.blocking);
   const research = createPriceResearchWorkspace({ processId: p.processId, organizationId: p.organizationId, source: p.source, correlationId: p.correlationId });
-  const rawItems = extractItemsFromText(p.text, { researchId: research.id, processId: p.processId, organizationId: p.organizationId });
+  const rawItems = extractItemsFromText(p.text, { researchId: research.id, processId: p.processId, organizationId: p.organizationId }, parsed);
   const result = await persistResearchAndMaterialize({
     organizationId: p.organizationId, processId: p.processId, researchId: research.id, correlationId: p.correlationId,
     quotes: rawItems.map((it) => ({
@@ -697,8 +703,8 @@ export async function importManualPriceResearch(p: {
   await recordMaterializationSignals({ organizationId: p.organizationId, processId: p.processId, result, actorUserId: p.actorUserId, correlationId: p.correlationId });
   await recordProcessEvent({
     organizationId: p.organizationId, processId: p.processId, eventType: "change", actor: String(p.actorUserId),
-    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s).`,
+    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s) [${parsed.version}; ${parsed.lines.length - parsed.quoteCount} linha(s) não-cotação ignorada(s)]${parsed.synthetic ? " — DADOS SINTÉTICOS/FICTÍCIOS: não constituem pesquisa de preços válida" : ""}.`,
     refId: research.id, correlationId: p.correlationId,
   }).catch(() => {});
-  return { research: { ...research, itemCount: rawItems.length }, quoteCount: rawItems.length, result };
+  return { research: { ...research, itemCount: rawItems.length }, quoteCount: rawItems.length, synthetic: parsed.synthetic, result };
 }

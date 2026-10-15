@@ -139,6 +139,10 @@ export async function importDirectPriceResearch(params: {
   if (plan.items.length === 0) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Nenhuma cotação reconhecida no conteúdo informado (use: descrição;qtd;un;valor[;fornecedor])." });
   }
+  if (plan.blocking.length > 0) {
+    // M8-PRICE-IMPORT-001: leitura ambígua ⇒ nada gravado (nunca itens/cotações por presunção).
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Pesquisa de preços ambígua — nada foi importado. ${plan.blocking.slice(0, 5).map((b) => b.message).join(" ")}`.slice(0, 900) });
+  }
   const payloadHash = computeDirectPriceImportPayloadHash({
     operation: DIRECT_PRICE_IMPORT_OP, organizationId: params.organizationId, workspaceId: params.workspaceId,
     source: params.source, contentHash: plan.contentHash,

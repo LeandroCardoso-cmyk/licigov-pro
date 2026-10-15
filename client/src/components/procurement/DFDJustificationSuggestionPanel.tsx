@@ -67,8 +67,21 @@ export function DFDJustificationSuggestionView({
           Trechos marcados com [REVISAR: …] não foram confirmados pelo processo: {unverified.join(", ")}.
         </p>
       )}
+      {(suggestion.explanation.gaps?.length ?? 0) > 0 && (
+        <div data-testid="suggestion-gaps" className="text-xs text-foreground">
+          <p className="font-medium">Informações que faltam (complete antes de aceitar ou depois, no texto):</p>
+          <ul className="list-disc pl-4">{suggestion.explanation.gaps!.map((g, i) => <li key={i}>{g}</li>)}</ul>
+        </div>
+      )}
+      {(suggestion.explanation.warnings?.length ?? 0) > 0 && (
+        <div data-testid="suggestion-warnings" className="text-xs text-amber-700 dark:text-amber-300">
+          <p className="font-medium">Avisos ao revisor (não fazem parte do documento):</p>
+          <ul className="list-disc pl-4">{suggestion.explanation.warnings!.map((w, i) => <li key={i}>{w}</li>)}</ul>
+        </div>
+      )}
       <p className="text-[11px] text-muted-foreground">
         Gerado por {suggestion.explanation.provider ?? "IA"}{suggestion.explanation.model ? ` (${suggestion.explanation.model})` : ""} · prompt {suggestion.explanation.promptVersion} · execução {suggestion.explanation.executionId.slice(0, 12)}
+        {suggestion.explanation.discardedSegments ? ` · ${suggestion.explanation.discardedSegments} trecho(s) não documental(is) descartado(s) pela validação` : ""}
       </p>
       {replacing && block === null && (
         <p className="text-xs text-foreground">Ao aceitar, o texto atual acima será substituído; ele permanece no histórico de edições do DFD.</p>

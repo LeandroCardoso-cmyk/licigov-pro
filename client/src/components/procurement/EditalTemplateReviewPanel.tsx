@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import DecisionFieldset from "./DecisionFieldset";
 import { DEVIATION_LABEL, pendingDeviations, reviewReadiness, summarizeAcks, type AckOutcome, type ReviewStateView } from "@/lib/editalPreparation";
 
 export interface ReviewViewProps {
@@ -92,7 +93,7 @@ export default function EditalTemplateReviewPanel({ processId, contentKey }: { p
   const q = trpc.procurementProcess.editalTemplateReviewState.useQuery({ processId }, { enabled: !!processId });
   const state = q.data as ReviewStateView | undefined;
   const ack = trpc.institutionalTemplates.reviews.acknowledgeDeviation.useMutation();
-  const [decision, setDecision] = useState<DecisionFormState>(() => ({ ...emptyDecisionForm(today()), basisReference: "Revisão do documento composto" }));
+  const [decision, setDecision] = useState<DecisionFormState>(() => emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [outcomes, setOutcomes] = useState<AckOutcome[]>([]);
@@ -102,9 +103,10 @@ export default function EditalTemplateReviewPanel({ processId, contentKey }: { p
   useEffect(() => { if (processId) void utils.procurementProcess.editalTemplateReviewState.invalidate({ processId }); }, [contentKey, processId]);
   if (!state) return null;
 
+  /** Sem ato formal ⇒ `decision` omitida: o servidor registra o reconhecimento com o usuário autenticado (LICIGOV-FAST). */
   const act = () => {
     const v = validateDecisionForm(decision); setShowErrors(true);
-    return v.valid ? { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() } : null;
+    return v.valid ? decisionPayload(decision) : null;
   };
   /** Um write por desvio (idempotência própria por bloco); falha de um não desfaz os outros. */
   const run = async (blockIds: readonly string[]) => {
@@ -116,7 +118,7 @@ export default function EditalTemplateReviewPanel({ processId, contentKey }: { p
       const dev = state.structuralDeviations.find((x) => x.blockId === blockId);
       if (!dev || dev.acknowledged) continue;
       try {
-        await ack.mutateAsync({ manifestId: state.generationManifestId, blockId, kind: dev.kind, confirm: true, idempotencyKey: (keys.current[blockId] ??= crypto.randomUUID()), decision: d });
+        await ack.mutateAsync({ manifestId: state.generationManifestId, blockId, kind: dev.kind, confirm: true, idempotencyKey: (keys.current[blockId] ??= crypto.randomUUID()), ...d });
         delete keys.current[blockId];
         out.push({ blockId, ok: true });
       } catch (e) { out.push({ blockId, ok: false, error: domainErrorMessage((e as Error).message, "falha") }); }
@@ -125,26 +127,11 @@ export default function EditalTemplateReviewPanel({ processId, contentKey }: { p
     await Promise.all([utils.procurementProcess.editalTemplateReviewState.invalidate({ processId }), utils.procurementProcess.officialSummary.invalidate()]);
     setBusy(false);
   };
-  const dErr = validateDecisionForm(decision).errors;
   const authority = (
-    <fieldset className="space-y-2 rounded-lg border border-border p-3 text-xs">
-      <legend className="px-1 font-medium">Autoridade e confirmação do reconhecimento</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {([["decidedByName", "Nome da autoridade", "text"], ["decidedByRole", "Cargo / função", "text"], ["decidedAt", "Data do ato", "date"], ["basisReference", "Referência do ato", "text"]] as const).map(([k, label, type]) => (
-          <label key={k} className="flex flex-col"><span className="mb-1 font-medium">{label}</span>
-            <input type={type} value={decision[k]} className="rounded-lg border border-input px-3 py-2 text-sm" onChange={(e) => setDecision({ ...decision, [k]: e.target.value })} />
-            {showErrors && dErr[k] && <span role="alert" className="text-destructive">{dErr[k]}</span>}
-          </label>
-        ))}
-      </div>
-      <label className="flex flex-col"><span className="mb-1 font-medium">Justificativa (mín. 10 caracteres)</span>
-        <textarea rows={2} value={decision.reason} className="rounded-lg border border-input px-3 py-2 text-sm" onChange={(e) => setDecision({ ...decision, reason: e.target.value })} />
-        {showErrors && dErr.reason && <span role="alert" className="text-destructive">{dErr.reason}</span>}
-      </label>
-      <label className="flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={decision.confirmed} onChange={(e) => setDecision({ ...decision, confirmed: e.target.checked })} />
-        <span>Confirmo que revisei o desvio e o reconheço como decisão humana.</span></label>
-      {showErrors && dErr.confirmed && <p role="alert" className="text-destructive">{dErr.confirmed}</p>}
-    </fieldset>
+    <div className="rounded-lg border border-border p-3">
+      <DecisionFieldset decision={decision} onDecision={setDecision} showErrors={showErrors} legend="Registro do reconhecimento"
+        consent="Confirmo que revisei o desvio e o reconheço como decisão humana." />
+    </div>
   );
   return (
     <EditalTemplateReviewView state={state} selected={selected} busy={busy} outcomes={outcomes} authority={authority}

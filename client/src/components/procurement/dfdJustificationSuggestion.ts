@@ -12,6 +12,8 @@ export interface JustificationSuggestionUI {
   suggestion: { text: string; textHash: string };
   explanation: {
     executionId: string; provider: string | null; model: string | null; promptVersion: string; unverifiedNumbers: string[];
+    /** M8-AI-DFD-001: lacunas factuais e avisos ao revisor — exibidos FORA do texto (nunca entram no DFD). */
+    gaps?: string[]; warnings?: string[]; outputContract?: "structured" | "text-fallback"; discardedSegments?: number;
   };
   current: { text: string | null; origin: JustificationOriginUI; originLabel: string; contentHash: string };
 }

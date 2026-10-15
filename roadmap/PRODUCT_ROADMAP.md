@@ -70,6 +70,23 @@ Homologação visual: **não realizada**.
 | M9 — Regras/roadmap/integração | 5 | 95 | #298–#301 integrados por squash; conflitos só em artefatos do Graphify (regenerados) | — |
 | **Global ponderado** | 100 | **83,75** | Σ(peso × %) / 100; cada entrega contada num único marco | — |
 
+### Rodada M8 — correções da homologação real em staging (15/10/2026)
+
+Origem: homologação manual do Owner no tenant sintético (org 2 "Prefeitura Sintética — Homologação", processo 2026/0001 —
+histórico preservado; a validação desta rodada usa processo sintético NOVO). Branch `fix/m8-homologation-round` → PR para `staging`.
+
+| ID | Defeito / melhoria | Correção | Evidência |
+|---|---|---|---|
+| M8-PRICE-IMPORT-001 | 1 item com 3 cotações virou 36 itens / 46 cotações (leitor "uma linha = um item"); CATMAT para metadados | Leitor estruturado (cabeçalho/metadado/item/quantidade/unidade/cotação/aviso), prévia sem gravação, ambiguidade recusada sem escrita, fonte fictícia sinalizada, CATMAT só para item real, resíduos antigos sinalizados para rejeição humana | Unit + SMOKE J4 (1 item, 3 cotações, média R$ 4.000,00, total R$ 40.000,00, reimportação idempotente, isolamento) |
+| M8-AI-DFD-001 | Metadados da IA ("Pontuação de confiança", "Fatos utilizados") no texto do DFD | Contrato estruturado {parágrafos, lacunas, avisos}, validação por parágrafo antes da apresentação, fallback seguro, inserção sem título duplicado | Unit + SMOKE (provider mock no contrato) |
+| M8-UX-GOV-001 | Redigitação de autoridade/cargo/ato em cada campo governado | Autoridade eletrônica do usuário autenticado por padrão; ato formal opcional e completo; evidência jurídica inalterada | Unit (router) + SMOKE FAST-6 |
+| M8-TR-UX-001 | TR sem reuso de padrões institucionais em tenant novo | Padrões elegíveis definidos uma vez no Perfil (proposta confirmada por processo; nada aplicado em silêncio); métrica `structuredProposed` | Unit (view-model) |
+| M8-EDITAL-UX-001 | Pendências sem indicar o que bloqueiam | Nível de bloqueio por pendência (elaboração × só publicação) + resumo; configuração única explicitada | Unit (view-model) |
+| ETP coerência | "Fundamentado" com fatos insuficientes | Fundamentação normativa × suficiência factual; viabilidade preliminar com lacunas; divergência texto × base legal estruturada como ressalva | Unit |
+
+Percentuais da tabela acima **mantidos** (83,75% como referência histórica): a rodada corrige defeitos achados em homologação;
+M8 só sobe com execução registrada em STAGING (`pnpm homolog:e2e` com processo sintético novo).
+
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).
 - Motor documental reutilizado; jornada DFD → ETP → TR → Edital com placeholders contextuais, elaboração e exportação.

@@ -20,7 +20,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
-  MARK, assertAllowedTarget, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
+  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
   parseExercicio, pendingMarkers, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
@@ -106,6 +106,19 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     expect(pid, "processo criado").toBeTruthy();
     const h: ReuseHarness = { org: orgId, proc: () => directCallAdapter(op.procurementProcess, decisionA), tpl: () => directCallAdapter(op.institutionalTemplates, decisionA), ws: WS, processId: pid, key };
 
+    // 1b) M8-PRICE-IMPORT-001 — prévia (sem gravação) do texto documental do caso real; texto ambíguo é recusado sem escrita.
+    const prev: any = await op.procurementProcess.previewPriceResearch.mutate({ processId: pid, text: M8_PRICE_RESEARCH_TEXT });
+    expect(prev.canImport).toBe(true);
+    expect(prev.items).toHaveLength(1);
+    expect(prev.items[0]).toMatchObject({ quantity: 10, unit: "UN", averageCents: 400000, totalCents: 4000000 });
+    expect(prev.quoteCount).toBe(3);
+    expect(prev.synthetic).toBe(true);
+    let ambiguousCode = "";
+    try { await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" }); } catch (e) { ambiguousCode = trpcCode(e); }
+    expect(ambiguousCode, "importação ambígua recusada").toBe("PRECONDITION_FAILED");
+    expect((await op.procurementProcess.listItems.query({ processId: pid })).items, "recusa sem gravação").toHaveLength(0);
+    REPORT.metrics.PRICE_RESEARCH_M8 = { items: prev.items.length, quotes: prev.quoteCount, averageCents: prev.items[0].averageCents, totalCents: prev.items[0].totalCents, ignoredLines: prev.ignored.length, ambiguousRefused: true };
+
     // 2) Itens: Pesquisa de preços → itens aprovados → Itens da contratação com quantidade prevista (rotas da tela).
     await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
       text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício A`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício B`]).join("\n") });
@@ -121,6 +134,16 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     expect(dfdAgain.document.content, "replay do DFD").toBe(dfd.content);
     const dfdState = await op.procurementProcess.dfdAssistState.query({ processId: pid });
     REPORT.metrics.DFD = { fields: dfdState.fields.length, byState: dfdState.summary, ...pendingMarkers(dfd.content) };
+    // 3b) M8-AI-DFD-001 — sugestão de IA da justificativa (provider real do ambiente): só conteúdo documental; nada é gravado sem aceite.
+    try {
+      const sug: any = await op.procurementProcess.generateDFDJustification.mutate({ processId: pid, expectedContentHash: draftContentHash(dfd.content), idempotencyKey: key("dfd-ai") });
+      expect(sug.suggestion.text).not.toMatch(AI_META_RESIDUE);
+      REPORT.metrics.DFD_AI = { outputContract: sug.explanation.outputContract, gaps: sug.explanation.gaps?.length ?? 0, warnings: sug.explanation.warnings?.length ?? 0, discarded: sug.explanation.discardedSegments ?? 0 };
+    } catch (e) {
+      // Fallback seguro: saída sem conteúdo documental válido NÃO vira sugestão (erro explícito, DFD intacto).
+      expect(String((e as Error).message)).toMatch(/texto documental válido/);
+      REPORT.metrics.DFD_AI = { rejectedByContract: true };
+    }
 
     // 4) ETP (reutiliza DFD + itens) e TR (DFD + ETP + itens + parâmetros estruturados confirmados uma vez).
     const { document: etp } = await op.procurementProcess.generateETP.mutate({ processId: pid, object: OBJ, idempotencyKey: key("etp") });
@@ -132,6 +155,7 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     REPORT.metrics.TR = {
       structuredActive: trBefore.fields.filter((f: any) => f.active).length,
       structuredPrefilled: trBefore.fields.filter((f: any) => f.active && f.status === "SET").length,
+      structuredProposed: trBefore.fields.filter((f: any) => f.active && f.proposal).length,
       structuredConfirmedByHuman: trTyped.length, ...pendingMarkers(trDraft.content),
     };
 

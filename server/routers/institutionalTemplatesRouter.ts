@@ -148,17 +148,21 @@ const importInput = z.object({
 
 const acceptAiNarrativeInput = z.object({
   manifestId: id, slotKey: z.string().min(1).max(80), executionId: z.string().min(1).max(64), outputHash: z.string().length(64),
-  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema,
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
 }).strict();
 
 const acknowledgeDeviationInput = z.object({
   manifestId: id, blockId: z.string().min(1).max(80), kind: z.enum(["INCLUDED_BLOCK_REMOVED", "EXCLUDED_BLOCK_INSERTED"]),
-  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema,
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
 }).strict();
 
 const officialPin = z.object({ documentId: id, version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
 const expectedRevision = z.number().int().min(0).max(1_000_000);
-const actBase = { confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema, expectedRevision };
+/**
+ * Ato sobre fonte governada (TR/certame/Perfil/orçamento/itens/"usar como padrão"). LICIGOV-FAST: `decision` OPCIONAL — ausente ⇒ registro ELETRÔNICO com o
+ * usuário autenticado (nome, papel, data do servidor; nenhum ato inventado). Informada, precisa estar COMPLETA (parcial é recusada pelo schema estrito).
+ */
+const actBase = { confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema.optional(), note: z.string().max(2000).optional(), expectedRevision };
 const governedFieldsBase = { catalogVersion: z.string().min(3).max(120), fields: z.record(z.string().min(1).max(200), z.unknown()), participation: z.unknown().optional(), ...actBase };
 const processFieldsInput = z.object({ processId: z.string().min(1).max(20), source: z.enum(["PROCESS", "TR", "ITEMS", "CERTAME_CONFIG", "NORMATIVE", "BUDGET", "LIFECYCLE"]), ...governedFieldsBase }).strict();
 const orgFieldsInput = z.object({ source: z.enum(["POLICY", "IDENTITY"]), ...governedFieldsBase }).strict();
@@ -380,52 +384,54 @@ export const institutionalTemplatesRouter = router({
 
   /**
    * Revisão HUMANA do documento composto (M1). A IA nunca aceita narrativa nem reconhece desvio: ator humano + confirmação
-   * explícita; o aceite é EXATO (slot + execução + hash do texto registrados no M1).
+   * explícita; o aceite é EXATO (slot + execução + hash do texto registrados no M1). LICIGOV-FAST: a autoridade é o usuário autenticado
+   * (registro eletrônico) salvo quando um ato formal COMPLETO é informado.
    */
   reviews: router({
     acceptAiNarrative: templatesProcedure("review").input(acceptAiNarrativeInput)
-      .mutation(({ ctx, input }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acceptAiNarrative(ctx.wctx, input))),
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acceptAiNarrative(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Aceite de narrativa de IA no documento composto", decision, note) }))),
     acknowledgeDeviation: templatesProcedure("review").input(acknowledgeDeviationInput)
-      .mutation(({ ctx, input }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctx.wctx, input))),
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Reconhecimento de desvio estrutural do documento composto", decision, note) }))),
   }),
 
   /**
    * Campos das fontes canônicas governados por DECISÃO humana (ledger institucional existente). A evidência de aprovação
-   * jurídica do modelo está em `governance.*` (uma só). Piso técnico `manager`; ator humano + confirmação explícita; sem defaults de resultado/autoridade/parecer.
+   * jurídica do modelo está em `governance.*` (uma só). Piso técnico `manager`; ator humano + confirmação explícita; sem defaults de resultado/parecer.
+   * LICIGOV-FAST (M8-UX-GOV-001): sem `decision` ⇒ autoridade ELETRÔNICA do usuário autenticado (nome, papel, data do servidor); ato formal completo prevalece.
    */
   governed: router({
     recordProcessFields: templatesProcedure("govern").input(processFieldsInput)
-      .mutation(({ ctx, input }) => guarded(async () => {
-        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
-        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordProcessFields(ctx.wctx, input);
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordProcessFields(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro de dados do processo", decision, note) });
       })),
     /** CertameConfig: decisões tomadas UMA vez por processo (escrita semântica; o Edital apenas as consome). */
     recordCertameConfig: templatesProcedure("govern").input(processFieldsInput)
-      .mutation(({ ctx, input }) => guarded(async () => {
-        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
-        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordCertameConfig(ctx.wctx, input);
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordCertameConfig(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro das decisões do certame", decision, note) });
       })),
     /** Regime de participação dos Itens (item > lote > padrão): a configuração canônica da qual o Edital DERIVA o regime. */
     recordItemsParticipation: templatesProcedure("govern").input(participationInput)
-      .mutation(({ ctx, input }) => guarded(async () => {
-        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
-        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordItemsParticipation(ctx.wctx, input);
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordItemsParticipation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro do regime de participação dos itens", decision, note) });
       })),
     recordOrganizationFields: templatesProcedure("govern").input(orgFieldsInput)
-      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationFields(ctx.wctx, input))),
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationFields(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro de dados institucionais do órgão", decision, note) }))),
     /** Perfil institucional de Licitações (órgão): papéis + padrões institucionais EXPLÍCITOS. Nova revisão a cada gravação (CAS). */
     recordLicitacoesProfile: templatesProcedure("govern").input(profileInput)
-      .mutation(({ ctx, input }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationProfile(ctx.wctx, input))),
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordOrganizationProfile(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro do Perfil de Licitações do órgão", decision, note) }))),
     /** Data-base do orçamento: registrada UMA vez na Pesquisa de Preços (ledger governado, seção BUDGET); o Edital só consome. */
     recordBudgetBaseDate: templatesProcedure("govern").input(baseDateInput)
-      .mutation(({ ctx, input }) => guarded(async () => {
-        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
-        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetBaseDate(ctx.wctx, input);
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetBaseDate(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro da data-base do orçamento", decision, note) });
       })),
     recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
-      .mutation(({ ctx, input }) => guarded(async () => {
-        await assertProcessInTenant(input.processId, ctx.wctx.organizationId);
-        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetDisclosure(ctx.wctx, input);
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetDisclosure(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro da divulgação do orçamento", decision, note) });
       })),
   }),
 

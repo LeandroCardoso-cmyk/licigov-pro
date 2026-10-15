@@ -33,6 +33,7 @@ import { createCanonicalManualItem, confirmCanonicalItemsFromResearch } from "..
 import * as mammoth from "mammoth";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { buildDFDPrefill, computeDFDFieldStates } from "../../domain/dfdPrefill";
+import { M8_PRICE_RESEARCH_TEXT } from "../../../scripts/homologation-e2e";
 import { resolveProcurementContext } from "../../services/canonicalContextService";
 import { saveInstitutionalIdentity } from "../../services/institutionalIdentityService";
 import { createTemplateCompositionPorts, createTemplateWorkflowPorts } from "../../services/institutionalTemplates/integration";
@@ -83,6 +84,8 @@ async function cleanup() {
       ["procurement_lots", "organization_id"], ["procurement_context_facts", "organization_id"], ["generated_document_edits", "organization_id"],
       ["generated_documents", "organization_id"], ["process_timeline", "organization_id"], ["procurement_processes", "organization_id"],
       ["idempotency_keys", "organizationId"], ["organization_members", "organizationId"],
+      ["item_recommendations", "organization_id"], ["item_risks", "organization_id"], ["intelligent_items", "organization_id"],
+      ["price_research_items", "organization_id"], ["price_research", "organization_id"],
     ] as const) {
       await conn.execute(`DELETE FROM ${t} WHERE ${col} = ?`, [org]).catch(() => {});
     }
@@ -216,6 +219,36 @@ describe.skipIf(!DB)("LICIGOV-FAST — jornadas integradas (MySQL real, tenant s
     expect(minuta.workspace.status).toBe("minuta");
     expect((await err(mgr.contractWorkspace.createAddendum({ idempotencyKey: `ij-admin-${RUN}`, contractId: minuta.workspace.id, addendumType: "prazo", justification: "x", newTerm: "1 mês" })))?.code).toBe("BAD_REQUEST");
   }, 300_000);
+
+  it("J4 — M8-PRICE-IMPORT-001: pesquisa colada como documento ⇒ 1 item, 3 cotações, média R$ 4.000,00; ambígua recusada; reimportação idempotente", async () => {
+    const api = await caller(U.operator);
+    const { process } = await api.procurementProcess.createProcess({ processNumber: `IJ4-${RUN}`, object: "Aquisição de 10 computadores desktop completos", startOption: "iniciar_pesquisa" });
+    const pid = process.id;
+    // Ambígua (valor sem item) ⇒ PRECONDITION_FAILED e ZERO escrita.
+    expect((await err(api.procurementProcess.importPriceResearch({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" })))?.code).toBe("PRECONDITION_FAILED");
+    expect(await n("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).toBe(0);
+    // Prévia (sem gravação) = o que será importado.
+    const prev = await api.procurementProcess.previewPriceResearch({ processId: pid, text: M8_PRICE_RESEARCH_TEXT });
+    expect(prev).toMatchObject({ canImport: true, quoteCount: 3, synthetic: true });
+    expect(await n("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).toBe(0);
+    const out = await api.procurementProcess.importPriceResearch({ processId: pid, source: "colar", text: M8_PRICE_RESEARCH_TEXT });
+    expect(out.synthetic).toBe(true);
+    const items = (await api.procurementProcess.listItems({ processId: pid })).items as any[];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ description: "Computador desktop completo", unit: "UN", suspectedFragment: false });
+    expect(Number(items[0].quantity)).toBe(10);
+    expect(await n("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).toBe(3);
+    const [avg] = await rows<{ p: string }>("SELECT average_price p FROM intelligent_items WHERE organization_id = ? AND process_id = ?", [ORG, pid]);
+    expect(Number(avg.p)).toBe(4000);
+    // Linha do tempo sinaliza dado sintético; reimportação idêntica não duplica nada.
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE ?", [ORG, pid, "%DADOS SINTÉTICOS%"])).toBe(1);
+    const again = await api.procurementProcess.importPriceResearch({ processId: pid, source: "colar", text: M8_PRICE_RESEARCH_TEXT });
+    expect(again.materialization.created).toBe(0);
+    expect((await api.procurementProcess.listItems({ processId: pid })).items).toHaveLength(1);
+    expect(await n("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).toBe(3);
+    // Outro órgão não vê nem importa no processo.
+    expect((await err((await caller(U.ownerB, ORG_B)).procurementProcess.previewPriceResearch({ processId: pid, text: M8_PRICE_RESEARCH_TEXT })))?.code).toBe("NOT_FOUND");
+  }, 120_000);
 
   it("J3 — monitoramento: contrato externo com término ⇒ vencimento e alertas no calendário; indicador por contrato; sem vigência ⇒ recusa", async () => {
     const api = await caller(U.operator);
@@ -367,6 +400,7 @@ describe.skipIf(!DB)("J1-BLL — DFD → ETP → TR (emitido) → Edital BLL Rev
     J1B_METRICS.TR = {
       structuredTotal: (trParamsBefore.fields as any[]).filter((f) => f.active).length,
       structuredPrefilled: (trParamsBefore.fields as any[]).filter((f) => f.active && f.status === "SET").length,
+      structuredProposed: (trParamsBefore.fields as any[]).filter((f) => f.active && f.proposal).length,
       structuredConfirmedByHuman: trTyped.length, structuredConfirmedNames: trTyped, usedSources: trCtx.usedSources, missing: trCtx.missing,
     };
     // Revisão humana do TR (marcadores [REVISAR] resolvidos por um editor) → emissão oficial por terceiro (SoD).

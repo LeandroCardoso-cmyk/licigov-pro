@@ -137,3 +137,31 @@ export function directCallAdapter(node: unknown, decision: Record<string, unknow
   });
   return wrap(node);
 }
+
+/**
+ * M8-PRICE-IMPORT-001 — a pesquisa de preços do caso real de homologação (1 item, 10 computadores, UN, 3 cotações
+ * R$ 3.900,00 / R$ 4.100,00 / R$ 4.000,00), no formato documental em que foi colada. Esperado: 1 item lógico, 3 cotações,
+ * média R$ 4.000,00, total R$ 40.000,00 — nunca dezenas de itens/cotações formados por cabeçalho, metadados ou avisos.
+ */
+export const M8_PRICE_RESEARCH_TEXT = [
+  `PESQUISA DE PREÇOS — ${MARK}`,
+  "Prefeitura Sintética — Homologação",
+  "Objeto: Aquisição de 10 computadores desktop completos",
+  "Data da pesquisa: 10/10/2026",
+  "",
+  "Item 1 — Computador desktop completo",
+  "Descrição: processador de 8 núcleos, 16 GB de RAM, SSD 512 GB, monitor, teclado e mouse",
+  "Quantidade: 10",
+  "Unidade: UN",
+  "",
+  "Cotação 1 — Fornecedor Fictício Alfa — R$ 3.900,00 — 05/10/2026",
+  "Cotação 2 — Fornecedor Fictício Beta — R$ 4.100,00 — 06/10/2026",
+  "Cotação 3 — Fornecedor Fictício Gama — R$ 4.000,00 — 07/10/2026",
+  "",
+  "Preço médio: R$ 4.000,00",
+  "Valor total estimado: R$ 40.000,00",
+  "Observação: dados fictícios, exclusivamente para homologação.",
+].join("\n");
+
+/** Saída da IA contaminada com metadados de geração (o defeito M8-AI-DFD-001) — nunca pode chegar ao documento. */
+export const AI_META_RESIDUE = /pontua[çc][ãa]o de confian[çc]a|fatos utilizados|\[REVISAR:\s*0[.,]\d+\]/i;

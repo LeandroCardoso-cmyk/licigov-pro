@@ -6,8 +6,8 @@
 import { describe, it, expect } from "vitest";
 import {
   ACTION_COPY, AST_SNIPPETS, STATUS_EXPLANATION, STATUS_LABEL, STATUS_ORDER, appendSnippet, describeResolutionView, emptyDecisionForm,
-  formatIssues, hasRoleAtLeast, makeIdempotencyKey, nextLifecycleAction, outlineOf, revisionLabel, sampleValuesFromText, scopeLabel,
-  validateDecisionForm, type ResolutionView,
+  decisionPayload, formalDecisionUsed, formatIssues, hasRoleAtLeast, makeIdempotencyKey, nextLifecycleAction, outlineOf, revisionLabel,
+  sampleValuesFromText, scopeLabel, validateDecisionForm, type ResolutionView,
 } from "./institutionalTemplatesView";
 
 const FLOORS = { read: "viewer", draft: "operator", approve: "manager", publish: "manager", deprecate: "manager", bind: "manager", available: "manager" };
@@ -57,18 +57,48 @@ describe("ação de ciclo de vida (affordance; o servidor reautoriza)", () => {
   });
 });
 
-describe("formulário da decisão: autoridade declarada + confirmação explícita", () => {
-  const valid = { decidedByName: "Maria Souza", decidedByRole: "Procuradora-Geral", decidedAt: "2026-10-06", basisReference: "Portaria 12/2026", reason: "Conferido pela assessoria.", confirmed: true };
+describe("formulário da decisão (M8-UX-GOV-001): registro eletrônico por padrão; ato formal opcional e completo; confirmação explícita", () => {
+  const valid = { decidedByName: "Maria Souza", decidedByRole: "Procuradora-Geral", decidedAt: "2026-10-06", basisReference: "Portaria 12/2026", reason: "Conferido pela assessoria.", confirmed: true, formal: true };
 
-  it("começa SEM confirmação marcada e inválido (nada pré-aceito)", () => {
+  it("começa SEM confirmação marcada e inválido (nada pré-aceito); o ÚNICO pedido é a confirmação — nome/cargo/ato não são exigidos", () => {
     const f = emptyDecisionForm("2026-10-06");
     expect(f.confirmed).toBe(false);
+    expect(f.formal).toBe(false);
     const v = validateDecisionForm(f);
     expect(v.valid).toBe(false);
-    expect(Object.keys(v.errors).sort()).toEqual(["basisReference", "confirmed", "decidedByName", "decidedByRole", "reason"]);
+    expect(Object.keys(v.errors)).toEqual(["confirmed"]);
+    expect(validateDecisionForm({ ...f, confirmed: true }).valid).toBe(true);
   });
 
-  it("válido só com todos os campos do ato, justificativa ≥ 10 e confirmação", () => {
+  it("padrão: o payload OMITE `decision` (o servidor registra eletronicamente com o usuário autenticado)", () => {
+    const f = { ...emptyDecisionForm("2026-10-06"), confirmed: true };
+    expect(decisionPayload(f)).toEqual({});
+    expect("decision" in decisionPayload(f)).toBe(false);
+    expect(formalDecisionUsed(f)).toBe(false);
+    // área do ato formal aberta mas vazia ⇒ nada a enviar (sem erro, sem burocracia)
+    expect(decisionPayload({ ...f, formal: true })).toEqual({});
+    expect(validateDecisionForm({ ...f, formal: true }).valid).toBe(true);
+    // dados digitados e depois a área FECHADA ⇒ ignorados (o que não está visível não é enviado)
+    const closed = { ...valid, formal: false };
+    expect(decisionPayload(closed)).toEqual({});
+    expect(validateDecisionForm(closed).valid).toBe(true);
+  });
+
+  it("ato formal PARCIAL ⇒ erro nos campos faltantes (o servidor recusaria ato parcial)", () => {
+    const partial = { ...emptyDecisionForm("2026-10-06"), confirmed: true, formal: true, decidedByName: "Ana" };
+    const v = validateDecisionForm(partial);
+    expect(v.valid).toBe(false);
+    expect(Object.keys(v.errors).sort()).toEqual(["basisReference", "decidedByRole", "reason"]);
+    expect(validateDecisionForm({ ...valid, basisReference: "  " }).errors.basisReference).toBeTruthy();
+  });
+
+  it("ato formal COMPLETO ⇒ enviado (aparado) como `decision`", () => {
+    expect(decisionPayload({ ...valid, decidedByName: "  Maria Souza ", reason: " Conferido pela assessoria. " })).toEqual({
+      decision: { decidedByName: "Maria Souza", decidedByRole: "Procuradora-Geral", decidedAt: "2026-10-06", basisReference: "Portaria 12/2026", reason: "Conferido pela assessoria." },
+    });
+  });
+
+  it("ato formal usado: válido só com todos os campos do ato, justificativa ≥ 10 e confirmação", () => {
     expect(validateDecisionForm(valid).valid).toBe(true);
     expect(validateDecisionForm({ ...valid, confirmed: false }).errors.confirmed).toBeTruthy();
     expect(validateDecisionForm({ ...valid, reason: "curto" }).errors.reason).toBeTruthy();
