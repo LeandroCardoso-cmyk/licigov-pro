@@ -3,15 +3,19 @@
  *
  * Fluxo: pesquisa → matching → ranking → alternativas → SERVIDOR escolhe.
  * NUNCA substitui automaticamente. Sempre permite aceitar/rejeitar/pesquisar de
- * novo/informar manual. Determinístico (sem chamadas reais à API neste domínio).
+ * novo/informar manual. Determinístico (sem chamadas reais à API neste domínio): os candidatos
+ * vêm do catálogo oficial (`itemCatalogClassificationService`), nunca são gerados aqui.
  */
 
 import { createHash } from "crypto";
 
 export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual";
 
-/** Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. */
-export type CATMATSource = "catalogo-interno" | "api-comprasgov" | "sugestao-ia" | "manual" | (string & {});
+/**
+ * Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. O catálogo oficial é
+ * `api-comprasgov:catmat` / `api-comprasgov:catser`; sem fonte declarada ⇒ `sem-proveniencia` (nunca "catálogo").
+ */
+export type CATMATSource = "catalogo-interno" | "api-comprasgov" | "sugestao-ia" | "manual" | "sem-proveniencia" | (string & {});
 
 export interface CATMATMatch {
   readonly id: string;
@@ -98,7 +102,7 @@ export function rankCATMAT(params: {
     score: c.score,
     rank: i,
     decision: "sugerido" as CATMATDecision,
-    source: c.source ?? params.defaultSource ?? "catalogo-interno",
+    source: c.source ?? params.defaultSource ?? "sem-proveniencia",
     correlationId: params.correlationId,
     createdAt: params.createdAt ?? new Date().toISOString(),
   }));

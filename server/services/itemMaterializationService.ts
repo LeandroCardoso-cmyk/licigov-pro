@@ -28,7 +28,7 @@ import { createHash } from "crypto";
 import { and, eq, inArray, lt, or, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
-  intelligentItemsTable, catmatDecisionsTable, intelligentItemIdentityAliasesTable, priceResearchItemsTable,
+  intelligentItemsTable, intelligentItemIdentityAliasesTable, priceResearchItemsTable,
 } from "../../drizzle/schema";
 import { getDb } from "../db/connection";
 import { toDbDatetime } from "../db/institutionalConsultations";
@@ -41,15 +41,14 @@ import {
   buildSourceUpdatePreview, parseSourceUpdateToken, sourceUpdateTargetHash, type SourceUpdatePreview,
 } from "../domain/itemSourceUpdate";
 import type { IntelligentItemSupplier } from "../domain/intelligentItem";
-import { rankCATMAT, suggestedAndAlternatives } from "../domain/catmatMatching";
-import { createItemRecommendation, createItemRisk, detectPriceOutlier } from "../domain/itemRecommendation";
+import { createItemRisk, detectPriceOutlier } from "../domain/itemRecommendation";
 import {
-  insertCatmatMatch, insertItemRecommendation, insertItemRisk, recordProcessEvent, insertResearch, insertResearchItem,
+  insertItemRisk, recordProcessEvent, insertResearch, insertResearchItem,
   type ProcurementExecutor,
 } from "../db/procurement";
 import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchSource, type PriceResearchWorkspace } from "../domain/priceResearch";
-import { isCatalogItemCandidate, parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
-import { catmatCandidates, suggestSpecifications } from "./itemIntelligenceService";
+import { parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { suggestSpecifications } from "./itemIntelligenceService";
 import { serviceLogger } from "./observabilityService";
 import { assertKernelAccess } from "./kernelAccessService";
 
@@ -548,13 +547,9 @@ export async function enrichMaterializedItems(params: {
       assertKernelAccess("processo_licitatorio", "procurement_knowledge_graph");
       const description = it.description ?? "";
       const suppliers = parseSuppliers(it.suppliers);
-      // M8-PRICE-IMPORT-001: catálogo só para item real (nunca metadado/aviso/fragmento ou item sem preço).
-      const catalogCandidate = isCatalogItemCandidate({ description, pricedQuotes: suppliers.filter((s) => s.value > 0).length });
-      const matches = catalogCandidate ? rankCATMAT({
-        itemId: it.id, organizationId: params.organizationId, description,
-        candidates: catmatCandidates(description), correlationId: params.correlationId,
-      }) : [];
-      const { suggested, alternatives } = suggestedAndAlternatives(matches);
+      // CATMAT/CATSER: o enriquecimento NÃO gera candidatos (nem consulta a API externa, para não prender a importação de
+      // preços à latência do catálogo). A classificação fica pendente até "Buscar classificação" no catálogo oficial e a
+      // decisão humana. Sugestões, códigos e decisões já registrados não são tocados (nem limpos).
       const values = suppliers.map((s) => s.value).filter((v) => v > 0);
       const risks = [];
       const outlier = detectPriceOutlier(values);
@@ -572,25 +567,9 @@ export async function enrichMaterializedItems(params: {
           explanation: "Amostra pequena pode comprometer a estimativa. Recomenda-se ampliar as fontes.", correlationId: params.correlationId,
         }));
       }
-      const recs = [];
-      if (suggested) {
-        recs.push(createItemRecommendation({
-          itemId: it.id, organizationId: params.organizationId, type: "catmat",
-          summary: `Sugestão de CATMAT ${suggested.catmatCode}.`,
-          reasoning: `Maior aderência de descrição (score ${suggested.score.toFixed(2)}) entre os candidatos.`,
-          explainability: "Similaridade textual (palavras em comum com a descrição) entre candidatos gerados localmente — NÃO consulta o catálogo oficial CATMAT/CATSER e não valida o código; SUGESTÃO — o servidor decide (confirmar/rejeitar/substituir).",
-          provenance: "catmat_matching", confidence: suggested.score, correlationId: params.correlationId,
-        }));
-      }
-      for (const m of matches) await insertCatmatMatch(m);
       for (const risk of risks) await insertItemRisk(risk);
-      for (const rec of recs) await insertItemRecommendation(rec);
 
-      const decidedCatalog = await db.select({ id: catmatDecisionsTable.id }).from(catmatDecisionsTable)
-        .where(and(eq(catmatDecisionsTable.organizationId, params.organizationId), eq(catmatDecisionsTable.itemId, it.id))).limit(1);
       await db.update(intelligentItemsTable).set({
-        ...(decidedCatalog.length === 0 && !it.suggestedCatmat ? { suggestedCatmat: suggested?.catmatCode ?? null } : {}),
-        alternativeCatmat: JSON.stringify(alternatives.map((a) => a.catmatCode)),
         specifications: JSON.stringify(suggestSpecifications(description)),
         risks: JSON.stringify(risks.map((x) => x.description)),
         enrichmentStatus: "done", enrichmentErrorCode: null,

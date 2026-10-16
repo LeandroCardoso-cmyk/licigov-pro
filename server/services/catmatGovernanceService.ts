@@ -27,13 +27,18 @@ import {
   type CatmatDecisionRecord,
 } from "../db/catmatGovernance";
 
-/** Sugestão real disponível para o item (proveniência do domínio determinístico). */
+/** Sugestão persistida do item, com o estado de verificação contra a evidência oficial do órgão. */
 export interface AvailableSuggestion {
   readonly id: string;
   readonly catmatCode: string;
   readonly catmatDescription: string;
   readonly score: number;
   readonly source?: string | null;
+  /**
+   * true SÓ quando o código consta de consulta oficial registrada (catálogo CATMAT/CATSER) com a mesma descrição e
+   * situação ativa. Ausente/false ⇒ não pode ser CONFIRMADO como classificação oficial (fail-closed).
+   */
+  readonly verified?: boolean;
 }
 
 export interface DecideCatmatParams {
@@ -71,6 +76,25 @@ function payloadHashOf(p: DecideCatmatParams): string {
     justification: (p.justification ?? "").trim() || null,
   });
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
+ * Confirmar exige PROVENIÊNCIA OFICIAL: pertencer à lista de sugestões não basta (sugestão legada/gerada localmente,
+ * descrição divergente ou código inativo ⇒ recusa sem efeito). O limiar institucional não substitui esta verificação.
+ * Avaliada DENTRO da execução idempotente: uma decisão nova sem verificação é recusada; o replay de uma decisão já
+ * registrada devolve o registro original (a classificação não muda por mudança posterior da evidência).
+ */
+export function assertConfirmableSuggestion(
+  decision: CATMATGovernanceDecision, decided: Pick<AvailableSuggestion, "verified"> | null,
+): void {
+  if (decision === "confirmado" && decided?.verified !== true) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "CATMAT_SUGGESTION_UNVERIFIED: esta sugestão não tem verificação no catálogo oficial CATMAT/CATSER e não pode ser "
+        + "confirmada como classificação oficial. Use \"Buscar classificação\" para consultar o catálogo oficial, ou registre a "
+        + "substituição manual (com justificativa) ou \"sem correspondência segura\". Nada foi gravado.",
+    });
+  }
 }
 
 /**
@@ -127,7 +151,12 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
         : null;
 
   const resolvedScore = params.decision === "confirmado" ? decided?.score ?? null : null;
-  const source = decisionSource(params.decision, decided?.source ?? null);
+  // Substituição manual: declarada pelo servidor; só leva a fonte oficial no rótulo quando o MESMO código tem evidência
+  // oficial verificada neste item (nunca apresenta a declaração do usuário como consulta oficial).
+  const manualEvidence = params.decision === "substituido"
+    ? params.suggestions.find((s) => s.verified === true && s.catmatCode === resolvedCode)?.source ?? null
+    : null;
+  const source = decisionSource(params.decision, decided?.source ?? null, manualEvidence);
 
   const { result, replayed } = await runWithIdempotency(
     {
@@ -138,6 +167,7 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
       payloadHash: payloadHashOf(params),
     },
     async () => {
+      assertConfirmableSuggestion(params.decision, decided);
       const record = await insertCatmatDecision({
         organizationId: params.organizationId,
         processId: params.processId,

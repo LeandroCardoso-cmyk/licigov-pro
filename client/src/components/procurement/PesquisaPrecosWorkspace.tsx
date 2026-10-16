@@ -189,7 +189,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
               <li key={it.id} className="flex items-center justify-between py-2">
                 <span className="text-sm text-foreground">{it.description}</span>
                 <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                  CATMAT sugerido: {it.suggestedCATMAT ?? "—"}
+                  CATMAT/CATSER: {it.suggestedCATMAT ?? "pendente (buscar classificação)"}
                 </span>
               </li>
             ))}

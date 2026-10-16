@@ -116,7 +116,7 @@ export default function ItemIntelligenceWorkspace({
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Un.</th>
                 <th className="px-4 py-3">Preço médio</th>
-                <th className="px-4 py-3">CATMAT sugerido</th>
+                <th className="px-4 py-3" title="Classificação só é oficial após a decisão registrada no item (Inteligência do Item).">CATMAT/CATSER</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>

@@ -289,6 +289,12 @@ jobs:
       - name: Smoke — jornadas integradas (processo novo, legado→aditivo, monitoramento)
         run: pnpm exec vitest run server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts
 
+      # CATMAT/CATSER sobre o catálogo OFICIAL (transporte injetado, fixtures contratuais — sem chamada externa no CI):
+      # importação M8 sem candidato fabricado → "Buscar classificação" → evidência (catalog_snapshots/entries) → confirmação
+      # governada + replay; hash/legado não confirmável com limiar configurado; indisponível sem fabricação; tenant.
+      - name: Smoke — CATMAT/CATSER oficial nos Itens Inteligentes
+        run: pnpm exec vitest run server/__tests__/integration/catalog-official-classification-mysql-smoke.test.ts
+
       # Executor de homologação — usuário com múltiplas organizações: sem X-Organization-Id ⇒ BAD_REQUEST; tenant sintético
       # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
       - name: Smoke — homologação com usuário de múltiplas organizações

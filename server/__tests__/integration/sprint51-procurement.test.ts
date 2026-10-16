@@ -28,7 +28,7 @@ import { createItemRecommendation, acceptRecommendation, rejectRecommendation, c
 import { createGeneratedDocument, validateEdital, defaultPresencialJustification, approveDocument } from "../../domain/generatedDocument";
 
 // Services
-import { catmatCandidates, suggestSpecifications, enrichItem, getItemPanel } from "../../services/itemIntelligenceService";
+import { suggestSpecifications, enrichItem, getItemPanel } from "../../services/itemIntelligenceService";
 import { generateDocument, generateNotice } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
 
@@ -271,11 +271,9 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
   // ─── itemIntelligenceService (o diferencial) ─────────────────────────────────
 
   describe("itemIntelligenceService", () => {
-    it("catmatCandidates gera 3 candidatos determinísticos", () => {
-      const a = catmatCandidates("caneta azul");
-      const b = catmatCandidates("caneta azul");
-      expect(a).toHaveLength(3);
-      expect(a.map(c => c.code)).toEqual(b.map(c => c.code));
+    it("CATMAT/CATSER oficial — o gerador local de candidatos por hash foi retirado do serviço", async () => {
+      const mod = await import("../../services/itemIntelligenceService");
+      expect("catmatCandidates" in mod).toBe(false);
     });
 
     it("suggestSpecifications sugere mínima + equivalente + alerta de excesso", () => {
@@ -284,13 +282,16 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
       expect(specs.join(" ")).toContain("equivalente");
     });
 
-    it("enrichItem produz item + CATMAT sugerido + recomendações + riscos (graceful)", async () => {
+    it("enrichItem produz item + recomendações + riscos, SEM CATMAT fabricado (classificação pendente) (graceful)", async () => {
       const e = await enrichItem({
         organizationId: ORG_ID, processId: PID, researchId: "r1", description: "Notebook i5 8GB",
         quantity: 10, unit: "un", supplierValues: [{ name: "A", value: 3000 }, { name: "B", value: 3200 }], correlationId: CORR,
       });
-      expect(e.item.suggestedCATMAT).not.toBeNull();
-      expect(e.item.alternativeCATMAT.length).toBeGreaterThanOrEqual(1);
+      // Nenhum código sem fonte verificável: a classificação vem do catálogo oficial + decisão humana.
+      expect(e.item.suggestedCATMAT).toBeNull();
+      expect(e.item.alternativeCATMAT).toEqual([]);
+      expect(e.catmatMatches).toEqual([]);
+      expect(e.recommendations.some(r => r.type === "catmat")).toBe(false);
       expect(e.recommendations.length).toBeGreaterThanOrEqual(1);
       // Menos de 3 fornecedores → risco de baixa competitividade
       expect(e.risks.some(r => r.type === "baixa_competitividade")).toBe(true);

@@ -112,17 +112,31 @@ insumos da próxima simplificação. Não é preciso abrir uma rodada de correç
   - CATMAT: o valor aparece como "similaridade textual", não como confiança.
   - Detalhes no Roadmap Mestre, seção "Rodada M8 — homologação visual".
 
+**Catálogo oficial CATMAT/CATSER — conferência real (uma vez, depois do deploy do PR em staging):** no Console do Railway
+staging (`/app`), rode `pnpm catalog:smoke`. Ele é somente leitura: não usa banco nem credencial.
+- Esperado: `[CATALOGO-OFICIAL-SMOKE] CATMAT=OK CATSER=OK`.
+- O relatório também mostra:
+  - as chaves do envelope;
+  - quantas linhas contêm o termo (confirma se o filtro por descrição funciona);
+  - a consulta por código.
+- Se aparecer `FALHA`, envie a saída: ela indica o ajuste de parâmetro ou de campo necessário. Nada é gravado.
+
 **Retomada (depois do deploy do PR em staging), num processo NOVO da org 2:**
 - O `2026/9001` fica preservado como evidência desta rodada.
 - Repita a pesquisa e o item com o mesmo texto do caso.
 1. **DFD:** gere a sugestão de IA.
    - Confira se o texto vem sem `[REVISAR]` e se as lacunas aparecem listadas abaixo dele.
-2. **ETP:** abra "O que falta completar" e resolva as lacunas no editor.
+2. **Item → classificação:** na Inteligência do Item, clique em "Buscar no CATMAT (material)".
+   - Confira se as alternativas aparecem como "Verificado no catálogo oficial", com a data da consulta.
+   - Confirmar exige o limiar institucional. Se ele não estiver configurado, a recusa é esperada: não configure um valor só para
+     testar.
+   - Se o catálogo estiver indisponível, confira a mensagem "Nenhum código foi sugerido nem alterado".
+3. **ETP:** abra "O que falta completar" e resolva as lacunas no editor.
    - Confira se "v1 · gerado" aparece só em "Versões técnicas", e não entre as emitidas.
-3. **TR:** gere o rascunho.
+4. **TR:** gere o rascunho.
    - Se houver recusa, siga o "Onde complementar" da mensagem.
    - Anote as pendências restantes. A referência atual é 12.
-4. **Edital:** escolha Pregão · Eletrônico · BLL e confirme que a Preparação do Edital (Rev. 2, BOUND) aparece sem os
+5. **Edital:** escolha Pregão · Eletrônico · BLL e confirme que a Preparação do Edital (Rev. 2, BOUND) aparece sem os
    campos legados.
    - Anote as decisões novas do certame.
    - Deixe os 7 dados de publicação para depois.

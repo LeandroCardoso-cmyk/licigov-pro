@@ -32,6 +32,7 @@
     "templates:compile-master": "tsx scripts/templates-compile-master.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "catalog:smoke": "tsx scripts/catalog-official-smoke.ts",
     "homolog:e2e": "vitest run server/__tests__/homologation/staging-homologation-e2e.test.ts",
     "ops:schedule-backfill": "tsx scripts/operation-record-schedule-backfill.ts"
   },

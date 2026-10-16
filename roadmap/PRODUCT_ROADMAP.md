@@ -184,7 +184,7 @@ R$ 40.000,00 e 7 linhas ignoradas; item aprovado (CATMAT não confirmado) e inco
 | P1 Edital — formulário da aba × fluxo BLL Rev. 2 | **Confirmado (UX)** | Os campos legados (critério/regime) apareciam antes de saber se havia modelo vinculado | Campos legados só aparecem quando não há modelo vinculado; antes disso, orientação única. Nenhum padrão assumido; Rev. 2, binding, `DEFERRED_PUBLICATION` e preflight inalterados |
 | P2 indicador de itens sem atualizar após incorporar | **Confirmado** | Invalidação de cache incompleta | Invalida participação dos itens e preparação/preflight do Edital |
 | P2 botão "Aprovar item" após aprovado | **Confirmado** | Rótulo não refletia o estado | "Item aprovado" desabilitado com fonte vigente; aprovação desatualizada continua mostrando o motivo. Idempotência do backend inalterada |
-| P2 CATMAT "confiança 80%" | **Confirmado** | Candidatos gerados localmente (código derivado da descrição) e pontuados por palavras em comum — não há consulta ao catálogo oficial | Rotulado como "similaridade textual", com aviso de que não é validação oficial. Limiar não configurado; decisões intactas. **Decisão do Owner pendente:** consultar o catálogo oficial (dadosabertos.compras.gov.br) ou deixar de sugerir códigos |
+| P2 CATMAT "confiança 80%" | **Confirmado** | Candidatos gerados localmente (código derivado da descrição) e pontuados por palavras em comum — não há consulta ao catálogo oficial | **Resolvido na reconciliação abaixo** (decisão do Owner: reutilizar a integração oficial existente). Limiar não configurado; decisões intactas |
 | P2 ETP — conclusões (lote único, benefícios) sem análise | **Confirmado** | Prompt não distinguia fato × conclusão | Regra de inferência no prompt (conclusão sem análise ⇒ `[REVISAR: decisão/análise necessária]`); lista "O que falta completar" por seção no ETP/TR, sem caçar marcadores |
 | `Load failed` na 1ª criação do `2026/9001` | **Não reproduzido** | Intermitente de rede/cliente; sem evidência no servidor | Registrado; nenhuma correção especulativa |
 | Edital — modalidade/forma vazias após recarregar | **Comportamento conhecido** | O rascunho institucional não persiste esses parâmetros | Documentado para rodada futura (fallback pelo processo/manifesto) |
@@ -194,6 +194,60 @@ lint dos arquivos alterados e build limpos.
 
 **Percentuais mantidos (M8 80%, global 88,25%).** Os 20% restantes do M8 exigem a homologação visual completa — TR gerado
 e Edital BLL alcançado na tela —, o que ainda não ocorreu.
+
+#### Reconciliação CATMAT/CATSER com o catálogo oficial (16/10/2026, mesmo PR #306)
+
+**Diagnóstico (Graphify + código):**
+- A integração oficial já existia: `catmatRouter`, com consulta a `dadosabertos.compras.gov.br`. Só a busca pública do
+  modal legado do TR a usava, e esse modal está fora da navegação.
+- Os Itens Inteligentes usavam `catmatCandidates()`: códigos de 6 dígitos derivados de SHA-256 da descrição, sem existência
+  comprovada. Esse gerador era chamado em três pontos: enriquecimento pós-importação, `resolveAvailableSuggestions` e
+  `searchCATMAT`.
+- A tabela `item_catmat_matches` não guarda a fonte da sugestão. Por isso o ledger registrava `catalogo-interno` por padrão.
+- **Brecha confirmada:** com o limiar configurado, um código gerado por hash podia ser confirmado como `catalogo-interno`.
+  - O limiar só era exigido como existente, nunca comparado ao score.
+  - A exposição real não foi medida: esta sessão não tem acesso aos bancos de staging e produção. Decisões já registradas
+    não foram alteradas.
+  - Na homologação visual do `2026/9001`, o limiar não estava configurado, e nenhuma confirmação foi feita.
+- A infraestrutura `catalog_snapshots` / `catalog_entries` (migrations 0070/0071) existia sem nenhum gravador em runtime.
+
+**Fluxo único:**
+1. Item: a importação de preços não gera nem consulta catálogo, para não prender a pesquisa à latência da API externa.
+2. "Buscar classificação": o servidor indica a natureza (CATMAT = material, CATSER = serviço), e o mesmo cliente do
+   `catmatRouter` consulta o catálogo oficial.
+3. Evidência por órgão: snapshot imutável com fonte, URL, consulta, instante, checksum e correlationId, mais as entradas com a
+   descrição oficial e a situação.
+4. Ranking textual, aplicado só aos códigos retornados.
+5. Decisão humana no ledger. Confirmar exige sugestão **verificada** (mesmo código, mesma descrição oficial, ativa), e a fonte
+   gravada é `api-comprasgov:catmat|catser`.
+
+**Garantias:**
+- Sugestão legada ou gerada por hash continua visível, mas marcada "sem proveniência" e **não confirmável**, mesmo com limiar
+  configurado (`CATMAT_SUGGESTION_UNVERIFIED`, nada gravado).
+- A verificação roda dentro da execução idempotente: o replay devolve a decisão original mesmo que a fonte mude depois.
+- Nova consulta não substitui a decisão humana.
+- Substituição manual continua permitida, com justificativa. Ela recebe o rótulo `manual+api-comprasgov:…` só se o mesmo código
+  tiver evidência oficial.
+- Catálogo indisponível (desligado, timeout, HTTP, rede ou resposta malformada) resulta em "indisponível": nenhum código, nada
+  gravado, classificação pendente, falha registrada na linha do tempo e retentativa possível.
+- Sem migration. Histórico (sugestões, decisões, `suggestedCatmat` antigo) preservado, sem reescrita.
+
+**Evidência:**
+- Unit: catálogo oficial 17 testes (parser, timeout real, cache, indisponibilidade, código inexistente/inativo, verificação
+  adversarial).
+- SMOKE novo `catalog-official-classification-mysql-smoke`: 6 testes (importação M8 preservada, hash não confirmável com
+  limiar, busca → evidência → confirmação → replay, CATSER, indisponível, tenant).
+- Smokes CATMAT existentes adaptados ao fluxo oficial, sem afrouxar asserções.
+- Suíte completa sem banco: 545 arquivos, sem falhas.
+- Smoke de segurança: 39 arquivos / 408 testes.
+- `tsc`, lint dos arquivos alterados e build limpos.
+
+**Limite declarado:** a API oficial **não foi validada em runtime nesta rodada**. O egresso da sessão é bloqueado (403 no
+proxy), então as fixtures são contratuais, não capturadas. Pontos a confirmar:
+- se `descricaoItem` filtra de fato a busca por descrição;
+- os nomes dos campos de serviço.
+
+O smoke real `pnpm catalog:smoke` (somente leitura) faz essa conferência num ambiente com saída HTTPS.
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).
