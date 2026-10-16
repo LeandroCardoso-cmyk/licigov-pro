@@ -130,6 +130,13 @@ insumos da próxima simplificação. Não é preciso abrir uma rodada de correç
    - Dimensionamento: ≈ 31 páginas de 100.
    - Publicação atômica num índice versionado sob a organização global 0. Nenhum órgão é alterado.
    - Falha ou concorrência não publica nada.
+   - Integridade fail-closed: se um registro for descartado pelo leitor, se `totalRegistros` faltar ou mudar entre páginas,
+     se um código se repetir, ou se os códigos únicos ≠ `totalRegistros`, a operação falha sem publicar nada. Sem banco,
+     também falha (nunca sucesso sem `snapshotId`).
+   - Antes e depois da operação: `pnpm catalog:preflight`, só leitura. Ele recusa produção e banco fora de
+     `*.railway.internal`, e usa transação `READ ONLY` com `ROLLBACK`.
+   - Sucesso exige a linha `RESULTADO: COMPLETO` (exit 0), `entries == total`, e o preflight posterior mostrando o
+     snapshot vigente com `entradas_gravadas == total_oficial`, com a impressão digital fora do índice inalterada.
 
 **Retomada (depois do deploy do PR em staging), num processo NOVO da org 2:**
 - O `2026/9001` fica preservado como evidência desta rodada.

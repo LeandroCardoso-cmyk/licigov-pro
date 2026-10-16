@@ -34,6 +34,7 @@
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "catalog:smoke": "tsx scripts/catalog-official-smoke.ts",
     "catalog:sync": "tsx scripts/catalog-official-sync.ts",
+    "catalog:preflight": "tsx scripts/catalog-index-preflight.ts",
     "homolog:e2e": "vitest run server/__tests__/homologation/staging-homologation-e2e.test.ts",
     "ops:schedule-backfill": "tsx scripts/operation-record-schedule-backfill.ts"
   },

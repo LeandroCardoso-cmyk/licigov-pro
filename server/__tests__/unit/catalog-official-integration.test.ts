@@ -16,7 +16,8 @@ import {
   searchOfficialCatalog, lookupOfficialCode, listOfficialCatalogPage, buildCatalogParams, OFFICIAL_CATALOG_CONTRACTS,
   __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests,
 } from "../../services/officialCatalogService";
-import { rankRelevant } from "../../services/itemCatalogClassificationService";
+import { rankRelevant, syncCatalogIndex, type CatalogIndexSyncResult } from "../../services/itemCatalogClassificationService";
+import { syncExitCode, SYNC_EXIT } from "../../../scripts/catalog-official-sync";
 import { rankCATMAT } from "../../domain/catmatMatching";
 
 export const CATMAT_NOTEBOOK = {
@@ -253,5 +254,95 @@ describe("serviço — consulta oficial com transporte injetado", () => {
     __clearOfficialCatalogCacheForTests();
     __setOfficialCatalogFetchForTests(async () => okJson(CATMAT_NOTEBOOK)); // ignora o filtro e devolve a lista
     expect(await lookupOfficialCode({ catalogType: "catmat", code: "583920" })).toMatchObject({ status: "not_found" });
+  });
+});
+
+describe("sincronização do índice CATSER — integridade fail-closed (sem banco: nada pode ser publicado)", () => {
+  const svc = (code: number | string, name = `SERVIÇO SINTÉTICO ${code}`) => ({ codigoServico: code, nomeServico: name, statusServico: true });
+  const catalog = (n: number) => Array.from({ length: n }, (_, i) => svc(20000 + i));
+  /** Página do envelope real; `total` e `paginasRestantes` coerentes com a listagem, salvo quando o cenário diz o contrário. */
+  const pageOf = (rows: unknown[], page: number, size: number, total: number | null = rows.length) => ({
+    resultado: rows.slice((page - 1) * size, page * size),
+    ...(total === null ? {} : { totalRegistros: total, paginasRestantes: Math.max(0, Math.ceil(total / size) - page) }),
+  });
+  const urls: string[] = [];
+  function servePages(build: (page: number, size: number) => unknown) {
+    __clearOfficialCatalogCacheForTests();
+    __setOfficialCatalogFetchForTests(async (url) => {
+      urls.push(url);
+      const q = new URL(url).searchParams;
+      return okJson(build(Number(q.get("pagina")), Number(q.get("tamanhoPagina"))));
+    });
+  }
+  const sync = (maxPages = 10) => syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages, correlationId: "unit-sync" });
+  const expectNothingPublished = (r: CatalogIndexSyncResult, reason: RegExp) => {
+    expect(r).toMatchObject({ status: "failed", complete: false, snapshotId: null, replayed: false });
+    expect(r.publication).toBeUndefined();
+    expect(r.reason).toMatch(reason);
+    expect(syncExitCode(r)).toBe(SYNC_EXIT.failed);
+  };
+  beforeEach(() => { urls.length = 0; });
+  afterEach(() => { __setOfficialCatalogFetchForTests(null); __clearOfficialCatalogCacheForTests(); });
+
+  it("página CHEIA com um registro descartado pelo leitor ⇒ falha na própria página (antes: encerraria a leitura e marcaria 'completo')", async () => {
+    const rows: unknown[] = catalog(25);
+    rows[3] = svc("SRV-INVALIDO"); // código não numérico ⇒ descartado ⇒ página 1 teria 9 entradas < 10
+    servePages((page, size) => pageOf(rows, page, size));
+    const r = await sync();
+    expectNothingPublished(r, /1 registro\(s\) da página 1 descartado/);
+    expect(urls).toHaveLength(1); // interrompe na página do problema
+    // Descrição vazia também é descarte (não só código inválido).
+    const rows2: unknown[] = catalog(25);
+    rows2[14] = svc(20014, "   ");
+    servePages((page, size) => pageOf(rows2, page, size));
+    expectNothingPublished(await sync(), /página 2 descartado/);
+  });
+
+  it("DUPLICIDADE entre páginas (paginação instável) reduz os códigos únicos ⇒ falha, mesmo com total e contagem de linhas coerentes", async () => {
+    const rows: unknown[] = catalog(25);
+    rows[12] = svc(20001); // código da página 1 reaparece na página 2; o 20012 nunca é lido
+    servePages((page, size) => pageOf(rows, page, size));
+    const r = await sync();
+    expectNothingPublished(r, /1 código\(s\) repetido\(s\) entre páginas \(25 linha\(s\), 24 código\(s\) único\(s\)\)/);
+    expect(r).toMatchObject({ pages: 3, total: 25, entries: 24 });
+  });
+
+  it("DIVERGÊNCIA entre total declarado e coletado (fonte declara 30, entrega 25) ⇒ falha; nunca 'completo'", async () => {
+    const rows = catalog(25);
+    servePages((page, size) => ({ ...pageOf(rows, page, size, 30), paginasRestantes: page < 3 ? 1 : 0 }));
+    const r = await sync();
+    expectNothingPublished(r, /25 código\(s\) único\(s\) coletado\(s\) × totalRegistros oficial 30/);
+  });
+
+  it("totalRegistros AUSENTE ⇒ completude não comprovável ⇒ falha já na 1ª página", async () => {
+    const rows = catalog(25);
+    servePages((page, size) => pageOf(rows, page, size, null)); // sem totalRegistros nem paginasRestantes
+    expectNothingPublished(await sync(), /não informou totalRegistros \(página 1\)/);
+    expect(urls).toHaveLength(1);
+  });
+
+  it("totalRegistros ALTERADO durante a paginação (catálogo mudou na fonte) ⇒ falha", async () => {
+    const rows = catalog(25);
+    servePages((page, size) => pageOf(rows, page, size, page === 2 ? 26 : 25));
+    expectNothingPublished(await sync(), /totalRegistros mudou durante a paginação \(25 → 26, página 2\)/);
+  });
+
+  it.skipIf(!!process.env.DATABASE_URL)("catálogo VÁLIDO e completo, mas banco INDISPONÍVEL ⇒ falha explícita, sem snapshotId nem sucesso operacional", async () => {
+    const rows = catalog(25);
+    servePages((page, size) => pageOf(rows, page, size));
+    const r = await sync();
+    expect(r).toMatchObject({ status: "failed", snapshotId: null, replayed: false, pages: 3, entries: 25, total: 25 });
+    expect(r.reason).toMatch(/banco de dados indisponível — nenhum snapshot publicado/);
+    expect(r.publication).toBeUndefined();
+    expect(syncExitCode(r)).toBe(SYNC_EXIT.failed);
+  });
+
+  it("CLI: exit 0 SÓ para sincronização COMPLETA publicada; parcial ⇒ 2; falha ou sucesso sem snapshot ⇒ 1", () => {
+    const base = { catalogType: "catser" as const, pages: 31, entries: 3022, total: 3022, replayed: false };
+    expect(syncExitCode({ ...base, status: "synced", complete: true, snapshotId: "s1", publication: "published" })).toBe(0);
+    expect(syncExitCode({ ...base, status: "synced", complete: true, snapshotId: "s1", replayed: true, publication: "replayed" })).toBe(0);
+    expect(syncExitCode({ ...base, status: "synced", complete: false, snapshotId: "s2", publication: "published" })).toBe(2);
+    expect(syncExitCode({ ...base, status: "synced", complete: true, snapshotId: null })).toBe(1);
+    expect(syncExitCode({ ...base, status: "failed", complete: false, snapshotId: null, reason: "x" })).toBe(1);
   });
 });

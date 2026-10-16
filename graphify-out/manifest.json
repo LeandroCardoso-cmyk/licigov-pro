@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792170866.3584282,
-    "ast_hash": "c807a61e653629672ecf06b0815f659d",
+    "mtime": 1792184623.3213742,
+    "ast_hash": "7329eed6f6d3f44e5e4db309d55af137",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -15030,8 +15030,8 @@
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
-    "mtime": 1792175836.0135174,
-    "ast_hash": "362ef22b8d5ffb0ac2019386a8e9501c",
+    "mtime": 1792184707.3647108,
+    "ast_hash": "03d66236c47f98ee78298f6120819215",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
@@ -15080,13 +15080,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/catalog-official-classification-mysql-smoke.test.ts": {
-    "mtime": 1792178471.0576844,
-    "ast_hash": "5021b5917941a63f68ec3763a0cb416a",
+    "mtime": 1792184529.9567149,
+    "ast_hash": "35b78f82c3703e9c661b8af0517b1093",
     "semantic_hash": ""
   },
   "server/__tests__/unit/catalog-official-integration.test.ts": {
-    "mtime": 1792170946.7479305,
-    "ast_hash": "b9201870328d30a66e1cba0688450fd0",
+    "mtime": 1792184499.0778413,
+    "ast_hash": "4a1f6afb2a3cae16f15c43fd607b59c3",
     "semantic_hash": ""
   },
   "server/config/catalog.ts": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792178386.9483867,
-    "ast_hash": "4d05c3ada62cd2fe67b39864cd29c19f",
+    "mtime": 1792184512.2268565,
+    "ast_hash": "e5f24d62b1e9734303dcbc9f922af169",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {
@@ -15115,8 +15115,8 @@
     "semantic_hash": ""
   },
   "scripts/catalog-official-sync.ts": {
-    "mtime": 1792171193.526043,
-    "ast_hash": "635dc3c890a827ce5fda47b1e5a98375",
+    "mtime": 1792184651.4422355,
+    "ast_hash": "3443e6efbc991970391b43ecdc2f1b33",
     "semantic_hash": ""
   },
   "server/services/catalogRelevance.ts": {
@@ -15127,6 +15127,16 @@
   ".github/workflows/catalog-official-smoke.yml": {
     "mtime": 1792175640.85611,
     "ast_hash": "0f4d8f27a92a2107ed6f632ab50eb8f5",
+    "semantic_hash": ""
+  },
+  "scripts/catalog-index-preflight.ts": {
+    "mtime": 1792184651.442816,
+    "ast_hash": "7eccd065cf4a2438a86d40a6c630dcc4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/catalog-index-preflight.test.ts": {
+    "mtime": 1792184623.3287127,
+    "ast_hash": "e846158746be351e591b7aa24914b6cf",
     "semantic_hash": ""
   }
 }
