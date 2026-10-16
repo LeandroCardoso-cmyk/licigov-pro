@@ -83,20 +83,24 @@ describe("M8-AI-DFD-001 — contrato estruturado", () => {
 describe("M8-AI-DFD-001 — geração ponta a ponta (seam)", () => {
   const gen = (raw: string) => generateDFDJustificationText({ organizationId: 2, processId: "p1", ctx, correlationId: "c", actorUserId: 3, idempotencyKey: "k", invoke: async () => raw });
 
-  it("números de METADADOS (0.85; 1, 3) nunca viram [REVISAR] no documento; números no texto documental continuam guardados", async () => {
+  it("números de METADADOS (0.85; 1, 3) nunca chegam ao documento; frase com número não confirmado sai do texto e vira lacuna", async () => {
     const r = await gen(`${P1}\n\nSão necessárias 25 unidades adicionais para o setor de protocolo e atendimento.\n\nPontuação de confiança: 0.85\nFatos utilizados: 1, 3`);
-    expect(r.text).not.toMatch(/0[.,]85|confian|Fatos utilizados/i);
-    expect(r.text).toContain("[REVISAR: 25]");
+    expect(r.text).toBe(P1);
+    expect(r.text).not.toMatch(/0[.,]85|confian|Fatos utilizados|REVISAR|\b25\b/i);
     expect(r.unverifiedNumbers).toEqual(["25"]);
+    expect(r.gaps.some((g) => /Confirmar o número 25/.test(g))).toBe(true);
+    expect(r.movedToGaps).toBe(1);
     expect(r.outputContract).toBe("text-fallback");
     expect(r.discardedReasons).toEqual(expect.arrayContaining(["autoavaliacao", "lista_de_fatos"]));
-    expect(r.promptVersion).toBe("dfd-justificativa/2");
+    expect(r.promptVersion).toBe("dfd-justificativa/3");
   });
 
   it("contrato estruturado: texto = parágrafos unidos; lacunas/avisos devolvidos à parte", async () => {
     const r = await gen(JSON.stringify({ paragrafos: [P1, P2], lacunas: ["prazo"], avisos: ["revisar PCA"] }));
-    expect(r.text).toBe(`${P1}\n\n${P2}`);
-    expect(r.gaps).toContain("prazo");
+    // A frase de P2 depende de uma lacuna ([REVISAR: …]): sai do texto e a lacuna fica listada (visível, não escondida).
+    expect(r.text).toBe(P1);
+    expect(r.text).not.toContain("[REVISAR");
+    expect(r.gaps).toEqual(expect.arrayContaining(["prazo", "descrever o impacto da indisponibilidade"]));
     expect(r.warnings).toEqual(["revisar PCA"]);
     expect(r.outputContract).toBe("structured");
   });
@@ -125,5 +129,25 @@ describe("M8-AI-DFD-001 — inserção sem duplicação", () => {
     expect(out.match(/## 2\./g)).toHaveLength(1);
     expect(out).toContain(P1);
     expect(out).toContain("## 3. Quantidades");
+  });
+});
+
+describe("homologação visual M8 — lacunas fora do texto", () => {
+  it("frase com marcador sai INTEIRA (nunca cortada no meio); as demais frases do parágrafo ficam; parágrafo vazio some", async () => {
+    const { moveInlineGapsOutOfText } = await import("../../domain/dfdJustificationContract");
+    const r = moveInlineGapsOutOfText([
+      "A unidade necessita dos equipamentos para o atendimento ao público. A motivação é [REVISAR: descrever a motivação específica]. O objeto atende ao art. 18 da Lei 14.133/2021.",
+      "Serão [REVISAR: 25] unidades.",
+    ]);
+    expect(r.paragraphs).toEqual(["A unidade necessita dos equipamentos para o atendimento ao público. O objeto atende ao art. 18 da Lei 14.133/2021."]);
+    expect(r.gaps[0]).toBe("descrever a motivação específica");
+    expect(r.gaps[1]).toMatch(/^Confirmar o número 25 citado pela IA/);
+    expect(r.movedSentences).toBe(2);
+  });
+
+  it("prompt v3 proíbe marcadores no texto e hipóteses administrativas não informadas", () => {
+    const prompt = buildJustificationPrompt(justificationFacts(ctx));
+    expect(prompt).toContain("sem marcadores no texto");
+    expect(prompt).toMatch(/Não presuma motivação, problemas atuais/);
   });
 });

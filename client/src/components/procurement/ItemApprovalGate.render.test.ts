@@ -104,6 +104,12 @@ describe("R9 / SEM-054 — ItemIntelligenceWorkspace: Aprovar bloqueado com font
     expect(html).toContain("Aprovação bloqueada: A identidade deste item precisa ser revisada");
   });
 
+  it("homologação visual M8: item já aprovado com fonte vigente ⇒ botão mostra 'Aprovado ✓' desabilitado (sem ação pendente)", () => {
+    withItems(item({ status: "aprovado", sourceState: "current" }));
+    const html = render(ItemIntelligenceWorkspace, { processId: "p1" });
+    expect(button(html, "Aprovado ✓")).toContain('disabled=""');
+  });
+
   it("fonte vigente ⇒ Aprovar habilitado; média em CENTAVOS como referência canônica; outliers exibidos", () => {
     withItems(item({ averagePriceCents: 123456, priceOutliers: [{ name: "Móveis C", valueCents: 40000, deviationPercent: 100 }] }));
     const html = render(ItemIntelligenceWorkspace, { processId: "p1" });

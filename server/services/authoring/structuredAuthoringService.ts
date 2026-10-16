@@ -238,8 +238,16 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
 function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
+  const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
   const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
-    `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.`;
+    `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.\n` +
+    // Homologação visual M8: a IA real omitia seção de MÍNIMO LEGAL sem fatos (ex.: fundamentação do TR) e o rascunho era recusado.
+    `Seções de MÍNIMO LEGAL — sempre contentMode "provided", NUNCA omitidas nem "não aplicável": ${mandatory}. ` +
+    `Se faltar fato para elas, redija o que o contexto sustenta e marque o que falta com '[REVISAR: <o que falta>]'.\n` +
+    // ETP/TR: fato × hipótese × decisão humana — nada de conclusões sem análise demonstrada.
+    `Distinga fato do processo, fundamentação normativa e conclusão: NÃO afirme como conclusão (ex.: parcelamento ou lote único, economicidade, ` +
+    `vantajosidade, benefícios) o que não estiver demonstrado no contexto; quando depender de análise ou decisão humana, escreva ` +
+    `'[REVISAR: decisão/análise necessária — <qual>]'.`;
   if (!sourceContext) return base;
   // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
   return [

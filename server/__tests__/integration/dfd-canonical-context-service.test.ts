@@ -260,7 +260,7 @@ describe("SEM-058 — SUGESTÃO supervisionada de IA da justificativa (nada é g
     expect(r.suggestion.text).toContain("necessita do mobiliário para o funcionamento das salas de aula");
     expect(r.suggestion.textHash).toBe(suggestionTextHash(r.suggestion.text));
     expect(r.current).toMatchObject({ origin: "empty", text: null, contentHash: draftContentHash(row.content) });
-    expect(r.explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/2", actorUserId: 5, correlationId: "corr-1", outputContract: "text-fallback" });
+    expect(r.explanation).toMatchObject({ executionId: "exec-abc", provider: "mock", model: "mock-1", promptVersion: "dfd-justificativa/3", actorUserId: 5, correlationId: "corr-1", outputContract: "text-fallback" });
     expect(call.responseSchema?.name).toBe("dfd_justificativa"); // M8-AI-DFD-001: structured output pedido ao provider
     expect(r.explanation.contextDigest).toBe(ctxWith().digest.slice(0, 16));
     // ZERO escrita no documento: nem mutação, nem ledger de edição, nem vínculo de proveniência a artefato.
@@ -320,13 +320,24 @@ describe("SEM-058 — SUGESTÃO supervisionada de IA da justificativa (nada é g
     expect(procDb.recordProcessEvent).not.toHaveBeenCalled();
   });
 
-  it("número não confirmado pelo processo vira [REVISAR: …] (IA não inventa quantidade/prazo/valor)", async () => {
+  it("número não confirmado pelo processo NÃO entra no texto: a frase vira lacuna (IA não inventa quantidade/prazo/valor)", async () => {
     const row = await settledDFD();
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
-    vi.mocked(engine.executeCognitiveTask).mockResolvedValue({ response: { content: "Serão adquiridas 75 cadeiras em 90 dias.", provider: "mock", model: "m" }, context: { id: "e2" } } as any);
+    vi.mocked(engine.executeCognitiveTask).mockResolvedValue({ response: { content: "A Secretaria de Educação necessita do mobiliário para o funcionamento das salas de aula. Serão adquiridas 75 cadeiras em 90 dias.", provider: "mock", model: "m" }, context: { id: "e2" } } as any);
     const { suggestion, explanation } = await generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-8" });
-    expect(suggestion.text).toContain("Serão adquiridas [REVISAR: 75] cadeiras em [REVISAR: 90] dias.");
+    expect(suggestion.text).toBe("A Secretaria de Educação necessita do mobiliário para o funcionamento das salas de aula.");
     expect(explanation.unverifiedNumbers).toEqual(["75", "90"]);
+    expect(explanation.gaps?.some((g) => /Confirmar o número 75/.test(g))).toBe(true);
+    expect(explanation.movedToGaps).toBe(1);
+  });
+
+  it("sem nenhum fato que sustente o texto: nenhuma sugestão, e a mensagem lista as informações necessárias", async () => {
+    const row = await settledDFD();
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(row as any);
+    vi.mocked(engine.executeCognitiveTask).mockResolvedValue({ response: { content: "Serão adquiridas 75 cadeiras em 90 dias.", provider: "mock", model: "m" }, context: { id: "e3" } } as any);
+    await expect(generateDFDJustificationDraft({ ...base, expectedContentHash: draftContentHash(row.content), idempotencyKey: "ai-9" }))
+      .rejects.toThrow(/Informações necessárias: Confirmar o número 75/);
+    expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });
 });
 

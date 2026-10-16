@@ -30,7 +30,7 @@ describe("DFD — autoria supervisionada da justificativa", () => {
     const prompt = buildJustificationPrompt(f);
     expect(prompt).not.toMatch(/R\$|450|Fulana/);
     expect(prompt).toContain("Não invente fatos, quantidades, prazos, valores");
-    expect(prompt).toContain("[REVISAR:");
+    expect(prompt).toContain("lacunas");
     expect(prompt).toContain("art. 12");
   });
 
@@ -48,7 +48,9 @@ describe("DFD — autoria supervisionada da justificativa", () => {
       invoke: async (p) => { seen = p; return "## Título\n**A demanda** decorre da necessidade de 200 cadeiras."; },
     });
     expect(seen).toContain("Mobiliário escolar");
-    expect(r.text).toBe("A demanda decorre da necessidade de [REVISAR: 200] cadeiras.");
+    // Número não confirmado: a frase sai do texto e vira lacuna listada ao servidor (homologação visual M8).
+    expect(r.text).toBe("");
+    expect(r.gaps.some((g) => /Confirmar o número 200/.test(g))).toBe(true);
     expect(r.executionId).toMatch(/^seam-[a-f0-9]{16}$/);
     expect(r.provider).toBeNull();
     expect(r.contextDigest).toBe(ctx.digest);

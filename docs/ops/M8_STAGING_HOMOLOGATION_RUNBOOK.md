@@ -91,3 +91,38 @@ Sem isso, o TR não terá propostas.
 
 **Saída esperada:** os números de cada bloco e a lista do que ainda parece repetido ou desnecessário. Esses são os
 insumos da próxima simplificação. Não é preciso abrir uma rodada de correção antes de ter esses números.
+
+## Homologação visual — resultado parcial (16/10/2026) e retomada
+- **Percorrido:** processo `2026/9001` (org 2), com Perfil revisão 5 e 9 padrões do TR.
+  - DFD: sugestão de IA aceita.
+  - Pesquisa: importação correta.
+  - Itens: aprovado e incorporado.
+  - ETP: rascunho gerado com 8 lacunas.
+  - Padrões do TR: pendências de 21 para 12.
+- **Interrompido:**
+  - TR: recusa "Autoria estruturada inválida (fail-closed) … Fundamentação".
+  - Edital BLL: não alcançado.
+- **Correções (PR `fix/m8-visual-round`):**
+  - DFD: o texto sai sem `[REVISAR]` e as lacunas ficam listadas fora dele.
+  - TR: a recusa diz o motivo, onde complementar e a próxima ação. O prompt também declara as seções de mínimo legal.
+  - ETP/TR: lista "O que falta completar", organizada por seção.
+  - Painel oficial: separa as versões emitidas dos snapshots técnicos.
+  - Edital: a tela não mostra mais critério e regime antes de saber se há modelo vinculado.
+  - Itens: o botão mostra "Item aprovado" e o indicador se atualiza sem F5.
+  - CATMAT: o valor aparece como "similaridade textual", não como confiança.
+  - Detalhes no Roadmap Mestre, seção "Rodada M8 — homologação visual".
+
+**Retomada (depois do deploy do PR em staging), num processo NOVO da org 2:**
+- O `2026/9001` fica preservado como evidência desta rodada.
+- Repita a pesquisa e o item com o mesmo texto do caso.
+1. **DFD:** gere a sugestão de IA.
+   - Confira se o texto vem sem `[REVISAR]` e se as lacunas aparecem listadas abaixo dele.
+2. **ETP:** abra "O que falta completar" e resolva as lacunas no editor.
+   - Confira se "v1 · gerado" aparece só em "Versões técnicas", e não entre as emitidas.
+3. **TR:** gere o rascunho.
+   - Se houver recusa, siga o "Onde complementar" da mensagem.
+   - Anote as pendências restantes. A referência atual é 12.
+4. **Edital:** escolha Pregão · Eletrônico · BLL e confirme que a Preparação do Edital (Rev. 2, BOUND) aparece sem os
+   campos legados.
+   - Anote as decisões novas do certame.
+   - Deixe os 7 dados de publicação para depois.

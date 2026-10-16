@@ -578,7 +578,7 @@ export async function enrichMaterializedItems(params: {
           itemId: it.id, organizationId: params.organizationId, type: "catmat",
           summary: `Sugestão de CATMAT ${suggested.catmatCode}.`,
           reasoning: `Maior aderência de descrição (score ${suggested.score.toFixed(2)}) entre os candidatos.`,
-          explainability: "Ranking por interseção de tokens; SUGESTÃO — o servidor decide (confirmar/rejeitar/substituir).",
+          explainability: "Similaridade textual (palavras em comum com a descrição) entre candidatos gerados localmente — NÃO consulta o catálogo oficial CATMAT/CATSER e não valida o código; SUGESTÃO — o servidor decide (confirmar/rejeitar/substituir).",
           provenance: "catmat_matching", confidence: suggested.score, correlationId: params.correlationId,
         }));
       }

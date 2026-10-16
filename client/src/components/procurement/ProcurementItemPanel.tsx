@@ -7,7 +7,7 @@ import {
 import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary } from "./itemSourceUpdateView";
 import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
 
 /**
@@ -171,7 +171,7 @@ export default function ProcurementItemPanel({
   const [confirmingSourceUpdate, setConfirmingSourceUpdate] = React.useState<boolean>(false);
   // R9 / SEM-054 — o que a aprovação confirmaria (servidor): bloqueio da fonte, referência canônica e outliers.
   const governance = data?.governance ?? null;
-  const approve = approveButtonState(governance?.sourceState, approveItem.isPending);
+  const approve = approveAction(governance?.sourceState, item?.status, approveItem.isPending);
   const outliers = outlierSummary(governance?.priceOutliers);
 
   return (
@@ -214,7 +214,7 @@ export default function ProcurementItemPanel({
                   "bg-muted text-foreground"
                 }`}
               >
-                {item.status}
+                {ITEM_STATUS_LABELS[item.status] ?? item.status}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -264,8 +264,13 @@ export default function ProcurementItemPanel({
 
           {/* 3. CATMAT sugerido + alternativas (servidor decide) */}
           <Block title="CATMAT (decisão do servidor)">
+            {/* Homologação visual M8 (P2): os candidatos NÃO vêm de consulta ao catálogo oficial — honestidade na tela. */}
+            <p data-testid="catmat-provenance-notice" className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              Candidatos gerados localmente por similaridade de palavras da descrição — <strong>não foram consultados no catálogo oficial CATMAT/CATSER</strong>.
+              Confira o código no catálogo oficial antes de qualquer decisão; a similaridade não é validação.
+            </p>
             <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 p-3">
-              <p className="text-xs text-indigo-600 dark:text-indigo-400">Sugerido</p>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400">Sugerido (não verificado no catálogo oficial)</p>
               <p className="font-mono text-sm font-semibold text-indigo-900 dark:text-indigo-200">
                 {item.suggestedCATMAT ?? "—"}
               </p>
@@ -316,7 +321,7 @@ export default function ProcurementItemPanel({
                         #{c.rank} {c.catmatCode}
                       </span>
                       <span className="text-muted-foreground">
-                        score {c.score.toFixed(2)}
+                        similaridade textual {Math.round(c.score * 100)}%
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
@@ -514,7 +519,7 @@ export default function ProcurementItemPanel({
                         {r.type}
                       </span>
                       <span className="rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-blue-700 dark:text-blue-300">
-                        confiança {Math.round(r.confidence * 100)}%
+                        {r.type === "catmat" ? "similaridade textual" : "confiança"} {Math.round(r.confidence * 100)}%
                       </span>
                     </div>
                     <p className="text-foreground">{r.summary}</p>
@@ -601,7 +606,7 @@ export default function ProcurementItemPanel({
               title={approve.block?.reason}
               className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
-              {approveItem.isPending ? "Aprovando..." : "Aprovar item"}
+              {approve.label}
             </button>
           </div>
         </div>

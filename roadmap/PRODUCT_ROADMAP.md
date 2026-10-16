@@ -54,7 +54,9 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 
 Legenda de evidência: **SMOKE** = MySQL real + IA mock (CI) · **HTTP-LOCAL** = executor oficial `pnpm homolog:e2e` contra o
 MESMO middleware tRPC do servidor (login/cookie/RBAC reais, IA mock, storage em memória) · **STAGING** = execução no staging.
-Homologação visual: **não realizada** (roteiro mínimo em `docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`).
+Homologação visual: **parcial** em 16/10/2026 (processo `2026/9001`, org 2) — DFD, pesquisa, itens e ETP percorridos; TR
+bloqueado e Edital BLL não alcançado. Achados e correções na seção "Rodada M8 — homologação visual" abaixo; roteiro em
+`docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`.
 
 | Marco | Peso | % | Evidência | Próxima ação / bloqueador |
 |---|---|---|---|---|
@@ -162,6 +164,36 @@ Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O ma
   - Esse recurso **não foi exercitado** na execução. Medir na homologação visual quanto ele reduz os 21 campos manuais.
 - **Edital:** `MANUAL_DECISIONS_VISIBLE: 0` é o estado medido **depois** das 12 decisões registradas pelo executor, não
   ausência de trabalho humano.
+
+### Rodada M8 — homologação visual (parcial) e correções direcionadas (16/10/2026)
+
+Origem: homologação visual do Owner no staging (`4c4b17d`, deploy `961c848c`), org 2, processo `2026/9001`, Perfil revisão 5
+com 9 padrões do TR. Branch `fix/m8-visual-round` → PR para `staging` (sem merge automático). Nenhuma migration; nenhum
+processo histórico, binding ou decisão registrada alterados.
+
+**Comprovado na tela (preservado):** padrões do TR reduziram as pendências de 21 para 12 (−42,9%); sugestão de IA do DFD
+editada e aceita ("Alterado por você"); importação de preços com 1 item, 3 cotações, 10 unidades, média R$ 4.000,00, total
+R$ 40.000,00 e 7 linhas ignoradas; item aprovado (CATMAT não confirmado) e incorporado; ETP com 6 evidências normativas,
+8 lacunas factuais e emissão bloqueada por `[REVISAR]`; Edital pedindo modalidade/forma.
+
+| Achado | Classificação | Causa (código) | Tratamento |
+|---|---|---|---|
+| P1 DFD — `[REVISAR: …]` e hipóteses não fundamentadas na justificativa | **Confirmado** | Prompt mandava marcar lacunas no texto e não proibia presumir motivação/impactos | Prompt `dfd-justificativa/3` + contrato `/2`: frase com marcador sai do texto e vira lacuna listada; recusa explícita quando nada sobra, dizendo o que falta. Lacunas continuam visíveis; aceite humano; histórico intacto |
+| P1 TR — "Autoria estruturada inválida (fail-closed) … Fundamentação" | **Confirmado** | O prompt do TR não declarava as seções de mínimo legal; a IA as omitia e a validação (correta) recusava com mensagem técnica | Validação **inalterada**. Prompt declara as seções de mínimo legal (redigir com `[REVISAR]` o que faltar). Recusa traduzida: motivo, onde complementar (ex.: Fundamentação → ETP), próxima ação, e distinção rascunho × emissão. Proveniência `failed` continua gravada; nada é gravado no documento (SMOKE J5) |
+| P1 ETP "v1 · gerado" em "Documentos oficiais (versões emitidas)" | **Confirmado (apresentação)** | Cada geração grava um snapshot técnico `gerado` no ledger oficial (append-only, usado no replay); o painel listava tudo | Painel separa versões **emitidas** de "Versões técnicas (snapshots — não emitidas)", recolhidas. Ledger, numeração, hashes e replay inalterados |
+| P1 Edital — formulário da aba × fluxo BLL Rev. 2 | **Confirmado (UX)** | Os campos legados (critério/regime) apareciam antes de saber se havia modelo vinculado | Campos legados só aparecem quando não há modelo vinculado; antes disso, orientação única. Nenhum padrão assumido; Rev. 2, binding, `DEFERRED_PUBLICATION` e preflight inalterados |
+| P2 indicador de itens sem atualizar após incorporar | **Confirmado** | Invalidação de cache incompleta | Invalida participação dos itens e preparação/preflight do Edital |
+| P2 botão "Aprovar item" após aprovado | **Confirmado** | Rótulo não refletia o estado | "Item aprovado" desabilitado com fonte vigente; aprovação desatualizada continua mostrando o motivo. Idempotência do backend inalterada |
+| P2 CATMAT "confiança 80%" | **Confirmado** | Candidatos gerados localmente (código derivado da descrição) e pontuados por palavras em comum — não há consulta ao catálogo oficial | Rotulado como "similaridade textual", com aviso de que não é validação oficial. Limiar não configurado; decisões intactas. **Decisão do Owner pendente:** consultar o catálogo oficial (dadosabertos.compras.gov.br) ou deixar de sugerir códigos |
+| P2 ETP — conclusões (lote único, benefícios) sem análise | **Confirmado** | Prompt não distinguia fato × conclusão | Regra de inferência no prompt (conclusão sem análise ⇒ `[REVISAR: decisão/análise necessária]`); lista "O que falta completar" por seção no ETP/TR, sem caçar marcadores |
+| `Load failed` na 1ª criação do `2026/9001` | **Não reproduzido** | Intermitente de rede/cliente; sem evidência no servidor | Registrado; nenhuma correção especulativa |
+| Edital — modalidade/forma vazias após recarregar | **Comportamento conhecido** | O rascunho institucional não persiste esses parâmetros | Documentado para rodada futura (fallback pelo processo/manifesto) |
+
+**Evidência:** client 79 arquivos / 951 testes; servidor afetado 18 / 264; smokes MySQL 16 / 112 (incl. J5 novo); `tsc`,
+lint dos arquivos alterados e build limpos.
+
+**Percentuais mantidos (M8 80%, global 88,25%).** Os 20% restantes do M8 exigem a homologação visual completa — TR gerado
+e Edital BLL alcançado na tela —, o que ainda não ocorreu.
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).

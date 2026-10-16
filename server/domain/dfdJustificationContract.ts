@@ -19,7 +19,7 @@
  */
 import { z } from "zod";
 
-export const DFD_JUSTIFICATION_CONTRACT_VERSION = "dfd-justificativa-contrato/1";
+export const DFD_JUSTIFICATION_CONTRACT_VERSION = "dfd-justificativa-contrato/2";
 export const MAX_PARAGRAPHS = 4;
 const MAX_NOTES = 10;
 const MIN_PARAGRAPH = 40;
@@ -177,6 +177,37 @@ export function interpretJustificationOutput(raw: string): JustificationContract
     contractVersion: DFD_JUSTIFICATION_CONTRACT_VERSION, contract, paragraphs, gaps, warnings, discarded,
     accepted: paragraphs.length > 0,
   };
+}
+
+/**
+ * Homologação visual M8 (P1) — lacunas FORA do texto documental. A frase que depende de uma lacuna (marcador
+ * `[REVISAR: …]` escrito pela IA ou número não confirmado pela guarda) sai INTEIRA do texto — nunca é cortada no
+ * meio — e a lacuna vai para a lista apresentada ao servidor. Nada é escondido: o texto fica só com o que os fatos
+ * sustentam, e cada lacuna continua visível (e auditável) fora dele. Parágrafo que fica vazio é descartado.
+ */
+const SENTENCE_SPLIT = /(?<=[.!?…])\s+(?=[\p{Lu}"“(])/u;
+const MARKER = /\[REVISAR:\s*([^\]]+)\]/g;
+
+export function moveInlineGapsOutOfText(paragraphs: readonly string[]): { paragraphs: string[]; gaps: string[]; movedSentences: number } {
+  const out: string[] = [];
+  const gaps: string[] = [];
+  let movedSentences = 0;
+  for (const p of paragraphs) {
+    const kept: string[] = [];
+    for (const sentence of p.split(SENTENCE_SPLIT)) {
+      const markers = [...sentence.matchAll(MARKER)].map((m) => m[1].trim());
+      if (markers.length === 0) { kept.push(sentence); continue; }
+      movedSentences++;
+      const plain = sentence.replace(MARKER, (_m, x: string) => x.trim()).replace(/\s{2,}/g, " ").trim();
+      for (const m of markers) {
+        // Marcador só numérico = número citado pela IA sem confirmação no processo: a lacuna mostra o trecho.
+        pushNotes(gaps, [/^[\d.,]+$/.test(m) ? `Confirmar o número ${m} citado pela IA (trecho retirado do texto: "${plain.slice(0, 160)}")` : m]);
+      }
+    }
+    const text = kept.join(" ").trim();
+    if (text) out.push(text);
+  }
+  return { paragraphs: out, gaps, movedSentences };
 }
 
 function mergeWrappedLines(lines: readonly string[]): string[] {
