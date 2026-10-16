@@ -17,7 +17,8 @@ import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
 import { insertCatmatMatch } from "../../db/procurement";
 import { __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests } from "../../services/officialCatalogService";
 import { syncCatalogIndex, searchCatalogIndex, __clearCatalogIndexCacheForTests } from "../../services/itemCatalogClassificationService";
-import { __setCatalogIndexWriteFaultForTests, catalogIndexLockKey, getLatestCatalogIndex } from "../../db/catalogEvidence";
+import { __setCatalogIndexWriteFaultForTests, catalogIndexLockKey, getLatestCatalogIndex, recordCatalogIndexSnapshot } from "../../db/catalogEvidence";
+import type { OfficialCatalogEntry } from "../../domain/officialCatalog";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 996601;
@@ -103,6 +104,7 @@ async function cleanup() {
   // Índice de pesquisa (org GLOBAL 0): só as linhas deste smoke.
   await conn.query("DELETE FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser' AND code IN (?)", [[...CATSER_ALL.map((r) => String(r.codigoServico)), "29999"]]).catch(() => {});
   await conn.query("DELETE FROM catalog_snapshots WHERE organization_id = 0 AND correlation_id LIKE 'cat-smoke-%'").catch(() => {});
+  await conn.query("DELETE FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catmat' AND code LIKE '88%'").catch(() => {});
   __clearCatalogIndexCacheForTests();
 }
 
@@ -278,7 +280,7 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     // Publicação concorrente (lock do catálogo ocupado) ⇒ recusada, nada gravado.
     await conn.query("SELECT GET_LOCK(?, 0)", [catalogIndexLockKey("catser")]);
     try {
-      const busy = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-c-${RUN}` });
+      const busy = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-c-${RUN}`, lockWaitSeconds: 1 });
       expect(busy).toMatchObject({ status: "failed", reason: expect.stringContaining("CATALOG_INDEX_SYNC_IN_PROGRESS") });
       expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser'")).toBe(snapsBefore);
     } finally {
@@ -299,6 +301,77 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     catserListing = CATSER_ALL;
     serveFixtures();
     expect((await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-b-${RUN}` })).status).toBe("synced");
+  }, 120_000);
+
+  it("CONCORRÊNCIA REAL: lock retido até o COMMIT; parcial × completo revalidado na serialização; vigente segue a política após commits concorrentes", async () => {
+    // Namespace isolado do teste: índice CATMAT da org global (o app não usa índice CATMAT).
+    const entries = (n: number, tag: string): OfficialCatalogEntry[] =>
+      Array.from({ length: n }, (_, i) => ({ catalogType: "catmat", code: `88${tag}${String(i).padStart(3, "0")}`, description: `ITEM SINTÉTICO ${tag} ${i}`, active: true, group: null }));
+    const publish = (tag: string, n: number, complete: boolean) => recordCatalogIndexSnapshot({
+      catalogType: "catmat", entries: entries(n, tag), checksum: `ck-${tag}-${RUN}`, retrievedAt: new Date().toISOString(),
+      sourceUrl: "https://dadosabertos.compras.gov.br/teste", pages: 1, total: n, complete, pageSize: 10, correlationId: `cat-smoke-cc-${tag}-${RUN}`,
+    });
+    const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    /** Pausa a 1ª publicação DENTRO da transação (lock retido, nada commitado) até `release()`. */
+    function pauseFirst() {
+      let release!: () => void; let entered!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      const reached = new Promise<void>((r) => { entered = r; });
+      let used = false;
+      __setCatalogIndexWriteFaultForTests(async () => { if (used) return; used = true; entered(); await gate; });
+      return { release, reached };
+    }
+    const lockHolder = async () => {
+      const [r] = await conn.query<mysql.RowDataPacket[]>("SELECT IS_USED_LOCK(?) AS h", [catalogIndexLockKey("catmat")]);
+      return r[0].h as number | null;
+    };
+
+    // Ordem 1 — PARCIAL inicia primeiro (sem índice vigente) e é pausada; COMPLETO concorre.
+    expect(await getLatestCatalogIndex("catmat")).toBeNull();
+    let g = pauseFirst();
+    const pPartial = publish("01", 5, false);
+    await g.reached;
+    let completeDone = false;
+    const pComplete = publish("02", 7, true).then((r) => { completeDone = true; return r; });
+    await tick(600);
+    expect(completeDone).toBe(false);                               // bloqueado: exclusividade até o commit
+    expect(await lockHolder()).not.toBeNull();                       // lock retido pela 1ª conexão
+    expect(await getLatestCatalogIndex("catmat")).toBeNull();        // nada commitado ainda ⇒ nada vigente
+    g.release();
+    const [r1, r2] = await Promise.all([pPartial, pComplete]);
+    __setCatalogIndexWriteFaultForTests(null);
+    expect(r1).toMatchObject({ status: "published" });
+    expect(r2).toMatchObject({ status: "published" });               // completo depois de parcial ⇒ publica
+    const v1 = await getLatestCatalogIndex("catmat");
+    expect(v1).toMatchObject({ snapshotId: r2!.snapshotId, complete: true, entries: 7 });
+    expect(await lockHolder()).toBeNull();                           // liberado após o commit
+
+    // Ordem 2 — COMPLETO (novo conteúdo) pausado; PARCIAL concorre ⇒ revalidado DENTRO da serialização ⇒ recusado.
+    g = pauseFirst();
+    const pComplete2 = publish("03", 8, true);
+    await g.reached;
+    let partialDone = false;
+    const pPartial2 = publish("04", 3, false).then((r) => { partialDone = true; return r; });
+    await tick(600);
+    expect(partialDone).toBe(false);
+    expect((await getLatestCatalogIndex("catmat"))?.snapshotId).toBe(r2!.snapshotId); // vigente anterior intacto
+    g.release();
+    const [r3, r4] = await Promise.all([pComplete2, pPartial2]);
+    __setCatalogIndexWriteFaultForTests(null);
+    expect(r3).toMatchObject({ status: "published" });
+    expect(r4).toMatchObject({ status: "refused_partial", currentSnapshotId: r3!.snapshotId });
+    expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE id = ?", [r4!.snapshotId])).toBe(0); // nada gravado
+    expect((await getLatestCatalogIndex("catmat"))).toMatchObject({ snapshotId: r3!.snapshotId, complete: true, entries: 8 });
+
+    // Replay e recondução: mesmo conteúdo do vigente ⇒ sem escrita; conteúdo anterior ⇒ volta a vigente (entradas intactas).
+    expect(await publish("03", 8, true)).toMatchObject({ status: "replayed", snapshotId: r3!.snapshotId });
+    expect(await publish("02", 7, true)).toMatchObject({ status: "republished", snapshotId: r2!.snapshotId });
+    expect((await getLatestCatalogIndex("catmat"))?.snapshotId).toBe(r2!.snapshotId);
+    for (const [id, nEnt] of [[r1!.snapshotId, 5], [r2!.snapshotId, 7], [r3!.snapshotId, 8]] as const) {
+      expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND snapshot_id = ?", [id])).toBe(nEnt); // imutáveis
+    }
+    // O índice CATSER do app não foi tocado pela concorrência no CATMAT (lock e snapshots por catálogo).
+    expect((await getLatestCatalogIndex("catser"))?.complete).toBe(true);
   }, 120_000);
 
   it("CATSER — busca no índice + verificação POR CÓDIGO (codigoServico) na fonte; confirma com fonte oficial; isolado do órgão", async () => {

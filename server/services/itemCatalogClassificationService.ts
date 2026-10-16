@@ -275,6 +275,8 @@ export interface CatalogIndexSyncResult {
   readonly catalogType: OfficialCatalogType;
   readonly pages: number; readonly entries: number; readonly total: number | null; readonly complete: boolean;
   readonly snapshotId: string | null; readonly replayed: boolean; readonly reason?: string;
+  /** Resultado da publicação serializada: novo snapshot, replay sem escrita ou reconduzido a vigente. */
+  readonly publication?: "published" | "replayed" | "republished";
 }
 
 /**
@@ -287,6 +289,8 @@ export interface CatalogIndexSyncResult {
 export async function syncCatalogIndex(p: {
   catalogType: OfficialCatalogType; pageSize: number; maxPages: number; correlationId: string;
   onPage?: (page: number, rows: number) => void;
+  /** Espera máxima pelo lock de publicação do catálogo (outra sincronização em curso). */
+  lockWaitSeconds?: number;
 }): Promise<CatalogIndexSyncResult> {
   const pageSize = Math.max(MIN_PAGE_SIZE, Math.floor(p.pageSize));
   const maxPages = Math.max(1, Math.min(2000, Math.floor(p.maxPages)));
@@ -308,6 +312,7 @@ export async function syncCatalogIndex(p: {
     if (res.entries.length < pageSize || res.remainingPages === 0) { complete = true; break; }
   }
   // Parcial (limite de páginas) nunca substitui um índice COMPLETO já publicado — a cobertura não pode regredir.
+  // Checagem antecipada (evita trabalho); a AUTORITATIVA é refeita dentro da publicação serializada.
   if (!complete && (await getLatestCatalogIndex(p.catalogType))?.complete) {
     return {
       status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, replayed: false,
@@ -321,11 +326,22 @@ export async function syncCatalogIndex(p: {
   try {
     rec = await recordCatalogIndexSnapshot({
       catalogType: p.catalogType, entries, checksum, retrievedAt, sourceUrl, pages, total, complete, pageSize, correlationId: p.correlationId,
+      lockWaitSeconds: p.lockWaitSeconds,
     });
   } catch (err) {
     // Rollback: nenhum snapshot novo publicado; o índice anterior continua valendo.
     return { status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false, reason: `persistência: ${String((err as Error)?.message ?? err).slice(0, 200)}` };
   }
   indexCache.delete(p.catalogType);
-  return { status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null, replayed: rec?.replayed ?? false };
+  if (rec?.status === "refused_partial") {
+    // Revalidado DENTRO da serialização: um índice completo foi publicado enquanto esta leitura acontecia.
+    return {
+      status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false,
+      reason: `parcial recusado: índice completo vigente ${rec.currentSnapshotId} preservado.`,
+    };
+  }
+  return {
+    status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null,
+    replayed: rec?.status === "replayed", publication: rec?.status,
+  };
 }

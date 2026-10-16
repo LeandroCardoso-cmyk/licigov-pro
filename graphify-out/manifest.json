@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792175836.0129788,
-    "ast_hash": "05e8ca13ebfc7ba8feebeb58bc65f273",
+    "mtime": 1792178649.0191193,
+    "ast_hash": "0f5093c95735cb7e038e5e828e4a2e5b",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -15080,8 +15080,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/catalog-official-classification-mysql-smoke.test.ts": {
-    "mtime": 1792175255.841283,
-    "ast_hash": "ae978759383741bbe333c4101d8f8989",
+    "mtime": 1792178471.0576844,
+    "ast_hash": "5021b5917941a63f68ec3763a0cb416a",
     "semantic_hash": ""
   },
   "server/__tests__/unit/catalog-official-integration.test.ts": {
@@ -15095,8 +15095,8 @@
     "semantic_hash": ""
   },
   "server/db/catalogEvidence.ts": {
-    "mtime": 1792175025.302525,
-    "ast_hash": "53f2dd31d8d40a1de52e555065587583",
+    "mtime": 1792178331.556783,
+    "ast_hash": "e92625a5f6da7a0294ef09652bcd12ff",
     "semantic_hash": ""
   },
   "server/domain/officialCatalog.ts": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792175796.2016284,
-    "ast_hash": "9d8f1341c969c377fe9e8378729058ae",
+    "mtime": 1792178386.9483867,
+    "ast_hash": "4d05c3ada62cd2fe67b39864cd29c19f",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {

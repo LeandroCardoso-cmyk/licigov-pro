@@ -278,14 +278,23 @@ e Edital BLL alcançado na tela —, o que ainda não ocorreu.
   inativa; CATMAT vazio e filtro ignorado; verificar código; confirmação; replay; tenant).
 - Smokes CATMAT, jornadas e isolamento verdes.
 
-**Atomicidade do índice (revisão do Owner):**
-- A publicação é **uma transação**, serializada por lock nomeado do catálogo (`GET_LOCK` sem espera; concorrente ⇒ recusada).
+**Atomicidade e exclusividade do índice (revisões do Owner):**
+- A publicação usa **uma conexão dedicada**, porque o `GET_LOCK` pertence à conexão. A ordem é GET_LOCK, transação nessa
+  conexão, commit ou rollback, RELEASE_LOCK e devolução da conexão.
+  - O lock fica retido até o commit efetivo.
+  - A espera pelo lock é limitada (30 s, configurável). Esgotada, a publicação é recusada e nada é gravado.
+- As regras são revalidadas **dentro** da serialização:
+  - parcial sobre completo vigente ⇒ recusado;
+  - conteúdo igual ao vigente ⇒ replay sem escrita;
+  - conteúdo de um snapshot anterior ⇒ reconduzido a vigente, alterando só o metadado.
+- O snapshot vigente é o de maior `publishedAt`, tirado do relógio do MySQL dentro da serialização (segue a ordem dos commits).
 - As entradas são versionadas **por snapshot**: o índice publicado nunca é reescrito.
-- A leitura usa só o último snapshot `synced`.
-- Falha no meio da gravação (teste adversarial com falha injetada após o 1º lote) ⇒ rollback: nenhum snapshot novo visível,
-  índice anterior intacto, nada desativado.
-- Mesmo conteúdo já publicado ⇒ replay sem escrita.
-- Parcial (limite de páginas) nunca substitui um índice completo.
+- Falha no meio da gravação ⇒ rollback: nada visível, índice anterior intacto.
+- Testes MySQL de concorrência real nas duas ordens. A 1ª publicação fica pausada dentro da transação e a 2ª fica comprovadamente
+  bloqueada até o commit.
+  - Parcial → completo: o completo publica e vira vigente.
+  - Completo → parcial: o parcial é recusado.
+  - Replay e recondução verificados.
 
 **Smoke real PRÉ-MERGE:** workflow manual `catalog-official-smoke.yml`, disparado pela label `catalog-smoke` no PR ou por
 `workflow_dispatch`.
