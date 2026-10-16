@@ -1,28 +1,46 @@
 /**
  * Classificação CATMAT/CATSER dos Itens Inteligentes sobre o catálogo OFICIAL.
  *
- * Fluxo: item → "Buscar classificação" (o servidor indica material = CATMAT ou serviço = CATSER) → consulta oficial
- * (`officialCatalogService`) → evidência por órgão (`db/catalogEvidence`) → ranking textual SÓ sobre códigos retornados
- * pela fonte → sugestões persistidas (`item_catmat_matches`) → decisão humana no ledger (`catmatGovernanceService`).
- *
- * Nunca fabrica código: indisponibilidade ⇒ "indisponível", nada gravado, classificação pendente. Nada é aplicado ao
- * item automaticamente (nem o código "sugerido"): a classificação só existe após a decisão humana registrada.
+ * Estratégia POR CATÁLOGO (contratos reais da API, validados no Console do Railway staging):
+ *   - CATMAT: busca textual oficial (`descricaoItem`) → filtro de RELEVÂNCIA local (`catalogSearchEngine`) sobre o que a
+ *     fonte devolveu. Vazio é resposta legítima; linhas sem relação com o termo ⇒ "filtro possivelmente ignorado", nada
+ *     sugerido.
+ *   - CATSER: a API não tem filtro textual ⇒ busca no ÍNDICE sincronizado (cópia versionada do catálogo público, org 0)
+ *     com o mesmo motor local; os melhores (≤ VERIFY_TOP_K) são VERIFICADOS um a um por código na fonte.
+ *   - Os dois: "Verificar código" — o servidor informa o código; a fonte confirma existência, descrição e situação.
+ * Toda sugestão persistida tem evidência oficial por órgão (`db/catalogEvidence`); nada é aplicado ao item; a
+ * classificação só existe após a decisão humana no ledger (`catmatGovernanceService`). Nunca fabrica código.
  */
 import { TRPCError } from "@trpc/server";
-import { rankCATMAT } from "../domain/catmatMatching";
+import { matchesFromRanked } from "../domain/catmatMatching";
 import {
-  officialSourceLabel, verifySuggestionAgainstEvidence,
-  type CatalogEvidence, type OfficialCatalogType,
+  catalogEvidenceChecksum, officialSourceLabel, verifySuggestionAgainstEvidence,
+  type CatalogEvidence, type OfficialCatalogEntry, type OfficialCatalogType,
 } from "../domain/officialCatalog";
 import type { AvailableSuggestion } from "./catmatGovernanceService";
-import { searchOfficialCatalog, UNAVAILABLE_MESSAGES, type CatalogUnavailableReason } from "./officialCatalogService";
-import { getOfficialCatalogEvidence, recordOfficialCatalogEvidence } from "../db/catalogEvidence";
+import {
+  listOfficialCatalogPage, lookupOfficialCode, searchOfficialCatalog, MIN_PAGE_SIZE, UNAVAILABLE_MESSAGES,
+  type CatalogUnavailableReason,
+} from "./officialCatalogService";
+import { normalizeCatalogEntry, type CatalogEntry } from "./catalogIntegrationService";
+import { searchAll, type MatchSource } from "./catalogSearchEngine";
+import {
+  getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
+  recordOfficialCatalogEvidence, GLOBAL_CATALOG_ORG, type CatalogIndexInfo,
+} from "../db/catalogEvidence";
 import { getIntelligentItem, insertCatmatMatch, listCatmatMatches, recordProcessEvent } from "../db/procurement";
 
 /** Máximo de alternativas oficiais apresentadas por consulta. */
 const MAX_CANDIDATES = 10;
+/** CATSER: candidatos do índice verificados por código na fonte, por busca (controle de custo). */
+export const VERIFY_TOP_K = 5;
+/** CATMAT: linhas pedidas à busca textual oficial (≥ mínimo da API). */
+const CATMAT_SEARCH_PAGE_SIZE = 50;
 
 export const CATALOG_LABEL: Record<OfficialCatalogType, string> = { catmat: "CATMAT (material)", catser: "CATSER (serviço)" };
+
+/** Natureza da correspondência apresentada ao servidor (explicabilidade). */
+export type MatchMethod = "busca-textual-oficial" | "indice-sincronizado" | "codigo-informado";
 
 export interface VerifiedSuggestion extends AvailableSuggestion {
   readonly rank: number;
@@ -49,62 +67,267 @@ export async function listVerifiedSuggestions(itemId: string, organizationId: nu
   });
 }
 
-export type ItemClassificationSearch =
-  | {
-      readonly status: "ok"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly retrievedAt: string;
-      readonly snapshotId: string | null; readonly candidates: VerifiedSuggestion[]; readonly returned: number;
-      readonly discarded: { inactive: number; noTextualMatch: number; invalidRows: number };
-    }
-  | { readonly status: "unavailable"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly reason: CatalogUnavailableReason; readonly message: string };
+// ─── Relevância local (motor existente) ──────────────────────────────────────
+
+export interface RelevantEntry {
+  readonly entry: OfficialCatalogEntry;
+  readonly score: number;
+  readonly matchSource: MatchSource;
+  readonly matchedTokens: string[];
+}
 
 /**
- * "Buscar classificação": consulta o catálogo oficial com a descrição do item (ou termo ajustado pelo servidor),
- * registra a evidência e persiste as alternativas reais. Nada é decidido aqui.
+ * Relevância do termo sobre entradas OFICIAIS com o `catalogSearchEngine` (exata/normalizada/token/semântica/aproximada).
+ * Só conta o que casou ao menos um termo significativo — candidatos sem relação nunca viram sugestão.
  */
-export async function searchItemClassification(p: {
-  organizationId: number; itemId: string; catalogType: OfficialCatalogType; term?: string | null;
-  actorUserId: number; correlationId: string;
-}): Promise<ItemClassificationSearch> {
+export function rankRelevant(term: string, entries: readonly OfficialCatalogEntry[], topK: number): RelevantEntry[] {
+  const byCode = new Map(entries.map((e) => [e.code, e]));
+  const normalized: CatalogEntry[] = entries.map((e) => normalizeCatalogEntry({ code: e.code, catalogType: e.catalogType, description: e.description, active: e.active === true }, GLOBAL_CATALOG_ORG));
+  return searchAll(term, normalized, topK)
+    .filter((r) => r.matchedTokens.length > 0 && byCode.has(r.entry.code))
+    .map((r) => ({ entry: byCode.get(r.entry.code)!, score: r.score, matchSource: r.matchSource, matchedTokens: r.matchedTokens }));
+}
+
+// Índice em memória por snapshot (recarrega só quando há nova sincronização).
+const indexCache = new Map<OfficialCatalogType, { snapshotId: string; entries: OfficialCatalogEntry[] }>();
+export function __clearCatalogIndexCacheForTests(): void { indexCache.clear(); }
+
+async function indexEntries(catalogType: OfficialCatalogType): Promise<{ info: CatalogIndexInfo; entries: OfficialCatalogEntry[] } | null> {
+  const info = await getLatestCatalogIndex(catalogType);
+  if (!info) return null;
+  const hit = indexCache.get(catalogType);
+  if (hit && hit.snapshotId === info.snapshotId) return { info, entries: hit.entries };
+  const entries = await loadCatalogIndexEntries(catalogType);
+  indexCache.set(catalogType, { snapshotId: info.snapshotId, entries });
+  return { info, entries };
+}
+
+/** Pesquisa SOMENTE LEITURA no índice (sem persistir) — base da busca pública de serviços. */
+export async function searchCatalogIndex(catalogType: OfficialCatalogType, term: string, topK = MAX_CANDIDATES): Promise<
+  { status: "ok"; index: CatalogIndexInfo; results: RelevantEntry[] } | { status: "index_unavailable" }
+> {
+  const idx = await indexEntries(catalogType);
+  if (!idx || idx.entries.length === 0) return { status: "index_unavailable" };
+  return { status: "ok", index: idx.info, results: rankRelevant(term, idx.entries, topK) };
+}
+
+// ─── Busca de classificação do item ──────────────────────────────────────────
+
+export interface ClassificationCandidate extends VerifiedSuggestion {
+  readonly matchSource: MatchSource | "codigo";
+  readonly matchedTokens: string[];
+}
+
+export type ItemClassificationSearch =
+  | {
+      readonly status: "ok"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly method: MatchMethod;
+      readonly retrievedAt: string; readonly snapshotId: string | null; readonly candidates: ClassificationCandidate[];
+      readonly returned: number;
+      /** A fonte devolveu linhas sem relação com o termo (filtro ignorado/interpretado) — nada sugerido. */
+      readonly filterIgnoredSuspected: boolean;
+      readonly index: { retrievedAt: string; complete: boolean; entries: number } | null;
+      readonly discarded: { inactive: number; irrelevant: number; invalidRows: number; unverified: number };
+    }
+  | { readonly status: "unavailable"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly reason: CatalogUnavailableReason; readonly message: string }
+  | { readonly status: "index_unavailable"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly message: string };
+
+type ItemCtx = { organizationId: number; itemId: string; actorUserId: number; correlationId: string };
+
+async function loadItem(p: ItemCtx) {
   const item = await getIntelligentItem(p.itemId, p.organizationId);
   if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-  const term = (p.term ?? "").replace(/\s+/g, " ").trim() || item.description.replace(/\s+/g, " ").trim();
-  if (term.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um termo de busca com pelo menos 2 caracteres." });
-
-  const res = await searchOfficialCatalog({ catalogType: p.catalogType, term });
   const event = (summary: string) => recordProcessEvent({
     organizationId: p.organizationId, processId: item.processId, eventType: "catalog_lookup", actor: String(p.actorUserId),
     summary, refId: item.id, correlationId: p.correlationId,
   });
-  if (res.status === "unavailable") {
-    await event(`Consulta ${CATALOG_LABEL[p.catalogType]} indisponível (${res.reason}) — nada gravado; classificação pendente.`);
+  return { item, event };
+}
+
+const unavailableMessage = (reason: CatalogUnavailableReason) =>
+  `${UNAVAILABLE_MESSAGES[reason]} Nenhum código foi sugerido nem alterado; a classificação continua pendente. Tente novamente mais tarde.`;
+
+/** Persiste candidatos já verificados (com evidência registrada) como sugestões do item. */
+type RankedForPersist = Omit<RelevantEntry, "matchSource"> & { matchSource: MatchSource | "codigo" };
+
+async function persistCandidates(p: ItemCtx, catalogType: OfficialCatalogType, ranked: readonly RankedForPersist[], at: string): Promise<ClassificationCandidate[]> {
+  const matches = matchesFromRanked({
+    itemId: p.itemId, organizationId: p.organizationId, correlationId: p.correlationId, createdAt: at,
+    ranked: ranked.map((r) => ({ code: r.entry.code, description: r.entry.description, score: r.score, source: officialSourceLabel(catalogType) })),
+  });
+  for (const m of matches) await insertCatmatMatch(m);
+  const verifiedById = new Map((await listVerifiedSuggestions(p.itemId, p.organizationId)).map((s) => [s.id, s]));
+  return matches.flatMap((m, i): ClassificationCandidate[] => {
+    const s = verifiedById.get(m.id);
+    return s ? [{ ...s, matchSource: ranked[i].matchSource, matchedTokens: ranked[i].matchedTokens }] : [];
+  });
+}
+
+/**
+ * "Buscar classificação": consulta conforme o contrato do catálogo indicado pelo servidor e persiste só alternativas
+ * REAIS e RELEVANTES, com evidência oficial por órgão. Não decide nada.
+ */
+export async function searchItemClassification(p: ItemCtx & { catalogType: OfficialCatalogType; term?: string | null }): Promise<ItemClassificationSearch> {
+  const { item, event } = await loadItem(p);
+  const term = (p.term ?? "").replace(/\s+/g, " ").trim() || item.description.replace(/\s+/g, " ").trim();
+  if (term.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um termo de busca com pelo menos 2 caracteres." });
+  const label = CATALOG_LABEL[p.catalogType];
+
+  if (p.catalogType === "catmat") {
+    const res = await searchOfficialCatalog({ catalogType: "catmat", term, pageSize: CATMAT_SEARCH_PAGE_SIZE });
+    if (res.status === "unavailable") {
+      await event(`Consulta ${label} indisponível (${res.reason}) — nada gravado; classificação pendente.`);
+      return { status: "unavailable", catalogType: "catmat", term, reason: res.reason, message: unavailableMessage(res.reason) };
+    }
+    const active = res.entries.filter((e) => e.active === true);
+    const relevant = rankRelevant(term, active, MAX_CANDIDATES);
+    const filterIgnoredSuspected = res.entries.length > 0 && rankRelevant(term, res.entries, 1).length === 0;
+    const evidence = res.entries.length > 0 ? await recordOfficialCatalogEvidence({
+      organizationId: p.organizationId, catalogType: "catmat", entries: res.entries, checksum: res.checksum,
+      retrievedAt: res.retrievedAt, sourceUrl: res.sourceUrl, query: res.query, correlationId: p.correlationId,
+    }) : null;
+    const candidates = relevant.length > 0 ? await persistCandidates(p, "catmat", relevant, res.retrievedAt) : [];
+    await event(
+      `Consulta ${label} ("${term.slice(0, 80)}"): ${res.entries.length} retornado(s), ${candidates.length} alternativa(s) relevante(s)` +
+      `${filterIgnoredSuspected ? " — linhas sem relação com o termo (filtro possivelmente ignorado), nada sugerido" : ""}` +
+      `${evidence ? ` · evidência ${evidence.snapshotId}` : ""}.`,
+    );
     return {
-      status: "unavailable", catalogType: p.catalogType, term, reason: res.reason,
-      message: `${UNAVAILABLE_MESSAGES[res.reason]} Nenhum código foi sugerido nem alterado; a classificação continua pendente. Tente novamente mais tarde.`,
+      status: "ok", catalogType: "catmat", term, method: "busca-textual-oficial", retrievedAt: res.retrievedAt,
+      snapshotId: evidence?.snapshotId ?? null, candidates, returned: res.entries.length, filterIgnoredSuspected, index: null,
+      discarded: { inactive: res.entries.length - active.length, irrelevant: active.length - relevant.length, invalidRows: res.discardedRows, unverified: 0 },
     };
   }
 
-  const active = res.entries.filter((e) => e.active === true);
-  const evidence = await recordOfficialCatalogEvidence({
-    organizationId: p.organizationId, catalogType: p.catalogType, entries: res.entries, checksum: res.checksum,
-    retrievedAt: res.retrievedAt, sourceUrl: res.sourceUrl, query: res.query, correlationId: p.correlationId,
-  });
-  // Ranking textual SÓ entre códigos retornados pela fonte (nunca candidatos gerados localmente).
-  const ranked = rankCATMAT({
-    itemId: item.id, organizationId: p.organizationId, description: term,
-    candidates: active.map((e) => ({ code: e.code, description: e.description, source: officialSourceLabel(p.catalogType) })),
-    correlationId: p.correlationId, createdAt: res.retrievedAt,
-  });
-  const kept = ranked.filter((m) => m.score > 0).slice(0, MAX_CANDIDATES);
-  for (const m of kept) await insertCatmatMatch(m);
+  // CATSER — índice sincronizado + verificação por código na fonte (a API não tem filtro textual).
+  const idx = await searchCatalogIndex("catser", term, VERIFY_TOP_K);
+  if (idx.status === "index_unavailable") {
+    await event(`Busca ${label} sem índice sincronizado — nada sugerido; use "Verificar código".`);
+    return {
+      status: "index_unavailable", catalogType: "catser", term,
+      message: "A API oficial do CATSER não oferece busca por descrição e o índice de serviços ainda não foi sincronizado neste ambiente. "
+        + "Informe o código CATSER em \"Verificar código\" (consulta oficial por código) ou declare \"sem correspondência segura\".",
+    };
+  }
+  const verified: RelevantEntry[] = [];
+  let unverified = 0;
+  let lastUnavailable: CatalogUnavailableReason | null = null;
+  let snapshotId: string | null = null;
+  let retrievedAt = new Date().toISOString();
+  for (const r of idx.results) {
+    const look = await lookupOfficialCode({ catalogType: "catser", code: r.entry.code });
+    if (look.status === "unavailable") { lastUnavailable = look.reason; unverified++; continue; }
+    if (look.status === "not_found" || look.entry.active !== true) { unverified++; continue; }
+    // Relevância recalculada sobre a descrição OFICIAL atual (o índice pode estar defasado).
+    const [rel] = rankRelevant(term, [look.entry], 1);
+    if (!rel) { unverified++; continue; }
+    const ev = await recordOfficialCatalogEvidence({
+      organizationId: p.organizationId, catalogType: "catser", entries: [look.entry], checksum: look.result.checksum,
+      retrievedAt: look.result.retrievedAt, sourceUrl: look.result.sourceUrl, query: look.result.query, correlationId: p.correlationId,
+    });
+    snapshotId = ev?.snapshotId ?? snapshotId;
+    retrievedAt = look.result.retrievedAt;
+    verified.push({ ...rel, matchSource: r.matchSource, matchedTokens: r.matchedTokens });
+  }
+  if (idx.results.length > 0 && verified.length === 0 && lastUnavailable) {
+    await event(`Verificação ${label} por código indisponível (${lastUnavailable}) — nada gravado; classificação pendente.`);
+    return { status: "unavailable", catalogType: "catser", term, reason: lastUnavailable, message: unavailableMessage(lastUnavailable) };
+  }
+  const candidates = verified.length > 0 ? await persistCandidates(p, "catser", verified, retrievedAt) : [];
   await event(
-    `Consulta ${CATALOG_LABEL[p.catalogType]} ("${term.slice(0, 80)}"): ${res.entries.length} retornado(s), ${kept.length} alternativa(s) oficial(is)` +
-    `${evidence ? ` · evidência ${evidence.snapshotId}` : ""}.`,
+    `Busca ${label} ("${term.slice(0, 80)}") no índice de ${idx.index.retrievedAt.slice(0, 10)}: ${idx.results.length} candidato(s), ` +
+    `${candidates.length} verificado(s) por código na fonte${unverified ? `, ${unverified} não verificado(s)` : ""}.`,
   );
-  const verifiedById = new Map((await listVerifiedSuggestions(item.id, p.organizationId)).map((s) => [s.id, s]));
   return {
-    status: "ok", catalogType: p.catalogType, term, retrievedAt: res.retrievedAt, snapshotId: evidence?.snapshotId ?? null,
-    candidates: kept.map((m) => verifiedById.get(m.id)).filter((s): s is VerifiedSuggestion => !!s),
-    returned: res.entries.length,
-    discarded: { inactive: res.entries.length - active.length, noTextualMatch: ranked.length - ranked.filter((m) => m.score > 0).length, invalidRows: res.discardedRows },
+    status: "ok", catalogType: "catser", term, method: "indice-sincronizado", retrievedAt, snapshotId, candidates,
+    returned: idx.results.length, filterIgnoredSuspected: false,
+    index: { retrievedAt: idx.index.retrievedAt, complete: idx.index.complete, entries: idx.index.entries },
+    discarded: { inactive: 0, irrelevant: 0, invalidRows: 0, unverified },
   };
+}
+
+// ─── Verificar código informado pelo servidor ────────────────────────────────
+
+export type CodeVerification =
+  | { readonly status: "verified"; readonly catalogType: OfficialCatalogType; readonly candidate: ClassificationCandidate }
+  | { readonly status: "not_found" | "inactive"; readonly catalogType: OfficialCatalogType; readonly code: string; readonly message: string; readonly officialDescription?: string }
+  | { readonly status: "unavailable"; readonly catalogType: OfficialCatalogType; readonly code: string; readonly reason: CatalogUnavailableReason; readonly message: string };
+
+/** Consulta oficial POR CÓDIGO (parâmetro do catálogo) e, se ativo, registra como alternativa verificada do item. */
+export async function verifyItemCode(p: ItemCtx & { catalogType: OfficialCatalogType; code: string }): Promise<CodeVerification> {
+  const { item, event } = await loadItem(p);
+  const code = p.code.trim();
+  const label = CATALOG_LABEL[p.catalogType];
+  const look = await lookupOfficialCode({ catalogType: p.catalogType, code });
+  if (look.status === "unavailable") {
+    await event(`Verificação ${label} do código ${code.slice(0, 12)} indisponível (${look.reason}) — nada gravado.`);
+    return { status: "unavailable", catalogType: p.catalogType, code, reason: look.reason, message: unavailableMessage(look.reason) };
+  }
+  if (look.status === "not_found") {
+    await event(`Código ${code.slice(0, 12)} não encontrado no ${label} — nada gravado.`);
+    return { status: "not_found", catalogType: p.catalogType, code, message: `O código ${code} não foi encontrado no ${label}. Confira o código e o catálogo (material × serviço).` };
+  }
+  await recordOfficialCatalogEvidence({
+    organizationId: p.organizationId, catalogType: p.catalogType, entries: [look.entry], checksum: look.result.checksum,
+    retrievedAt: look.result.retrievedAt, sourceUrl: look.result.sourceUrl, query: look.result.query, correlationId: p.correlationId,
+  });
+  if (look.entry.active !== true) {
+    await event(`Código ${code} do ${label} consultado: ${look.entry.active === false ? "inativo" : "situação não informada"} — não sugerido.`);
+    return {
+      status: "inactive", catalogType: p.catalogType, code, officialDescription: look.entry.description,
+      message: `O código ${code} existe no ${label} ("${look.entry.description.slice(0, 120)}"), mas ${look.entry.active === false ? "está inativo" : "a fonte não informou a situação"} — não pode ser confirmado.`,
+    };
+  }
+  const [rel] = rankRelevant(item.description, [look.entry], 1);
+  const ranked = { entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, matchedTokens: rel?.matchedTokens ?? [] };
+  const [candidate] = await persistCandidates(p, p.catalogType, [ranked], look.result.retrievedAt);
+  await event(`Código ${code} verificado no ${label} ("${look.entry.description.slice(0, 80)}") — alternativa registrada, sem decisão.`);
+  if (!candidate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao registrar a alternativa verificada." });
+  return { status: "verified", catalogType: p.catalogType, candidate };
+}
+
+// ─── Sincronização do índice (operação explícita, limitada) ──────────────────
+
+export interface CatalogIndexSyncResult {
+  readonly status: "synced" | "failed";
+  readonly catalogType: OfficialCatalogType;
+  readonly pages: number; readonly entries: number; readonly total: number | null; readonly complete: boolean;
+  readonly snapshotId: string | null; readonly deactivated: number; readonly reason?: string;
+}
+
+/**
+ * Sincroniza o índice de pesquisa de um catálogo (operação de plataforma, nunca por busca de usuário). Limites:
+ * `maxPages` × `pageSize` linhas; uma leitura por página, sem cache. Falha no meio ⇒ NADA gravado (índice anterior
+ * preservado). Atingir `maxPages` ⇒ snapshot PARCIAL (marcado; não desativa nada).
+ */
+export async function syncCatalogIndex(p: {
+  catalogType: OfficialCatalogType; pageSize: number; maxPages: number; correlationId: string;
+  onPage?: (page: number, rows: number) => void;
+}): Promise<CatalogIndexSyncResult> {
+  const pageSize = Math.max(MIN_PAGE_SIZE, Math.floor(p.pageSize));
+  const maxPages = Math.max(1, Math.min(2000, Math.floor(p.maxPages)));
+  const all = new Map<string, OfficialCatalogEntry>();
+  let total: number | null = null;
+  let complete = false;
+  let pages = 0;
+  let sourceUrl = "";
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await listOfficialCatalogPage({ catalogType: p.catalogType, page, pageSize, activeOnly: true });
+    if (res.status === "unavailable") {
+      return { status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, deactivated: 0, reason: `${res.reason}: ${res.detail} (página ${page})` };
+    }
+    pages = page;
+    total = res.total ?? total;
+    sourceUrl = sourceUrl || res.sourceUrl;
+    for (const e of res.entries) all.set(e.code, e);
+    p.onPage?.(page, res.entries.length);
+    if (res.entries.length < pageSize || res.remainingPages === 0) { complete = true; break; }
+  }
+  const entries = [...all.values()];
+  const retrievedAt = new Date().toISOString();
+  const checksum = catalogEvidenceChecksum({ catalogType: p.catalogType, query: { page: 1, pageSize }, entries });
+  const rec = await recordCatalogIndexSnapshot({
+    catalogType: p.catalogType, entries, checksum, retrievedAt, sourceUrl, pages, total, complete, pageSize, correlationId: p.correlationId,
+  });
+  indexCache.delete(p.catalogType);
+  return { status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null, deactivated: rec?.deactivated ?? 0 };
 }

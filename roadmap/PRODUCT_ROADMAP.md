@@ -242,12 +242,45 @@ e Edital BLL alcançado na tela —, o que ainda não ocorreu.
 - Smoke de segurança: 39 arquivos / 408 testes.
 - `tsc`, lint dos arquivos alterados e build limpos.
 
-**Limite declarado:** a API oficial **não foi validada em runtime nesta rodada**. O egresso da sessão é bloqueado (403 no
-proxy), então as fixtures são contratuais, não capturadas. Pontos a confirmar:
-- se `descricaoItem` filtra de fato a busca por descrição;
-- os nomes dos campos de serviço.
+**Validação real (Owner, Console do Railway staging, 16/10/2026) — o 1º contrato estava incorreto:**
+- CATMAT `descricaoItem=notebook`: HTTP 200, `resultado: []`, `totalRegistros: 0`.
+- CATSER `descricaoItem=limpeza`: HTTP 200, mas devolveu endoscopia e outros serviços hospitalares. O filtro textual não
+  existe nesse endpoint e foi ignorado. O payload usa `codigoServico`/`nomeServico`/`statusServico`.
+- As duas APIs exigem `tamanhoPagina` ≥ 10.
+- O 1º commit usava `descricaoItem`/`statusItem`/`codigoItem` nos dois catálogos. **Merge suspenso pelo Owner.**
 
-O smoke real `pnpm catalog:smoke` (somente leitura) faz essa conferência num ambiente com saída HTTPS.
+**Emenda (mesmo PR #306) — estratégia que funciona com a API real:**
+- **Contratos HTTP separados** no mesmo cliente (`OFFICIAL_CATALOG_CONTRACTS`):
+  - CATMAT `codigoItem`/`statusItem`/`descricaoItem`;
+  - CATSER `codigoServico`/`statusServico`, sem parâmetro textual. Enviar um é recusado no próprio código;
+  - `pagina` + `tamanhoPagina` (≥ 10) sempre enviados.
+- **CATMAT:** a busca textual oficial passa sempre pelo filtro de relevância local (`catalogSearchEngine`, que já existia).
+  - Vazio é resposta legítima.
+  - Linhas sem relação com o termo são tratadas como filtro possivelmente ignorado, e nada é sugerido.
+  - O comportamento real de `descricaoItem` (exato × parcial × maiúsculas) é **medido** pelo `catalog:smoke`, não presumido.
+- **CATSER:** índice de pesquisa sincronizado reaproveitando `catalog_snapshots`/`catalog_entries` (organização global 0,
+  convenção existente de `normalizeCatalogEntry`), sem migration.
+  - A sincronização é explícita e limitada (`pnpm catalog:sync -- catser`). Tem limite de páginas, uma leitura por página e
+    snapshot versionado com checksum. Falha não grava nada; atingir o limite gera snapshot parcial.
+  - A busca usa o mesmo motor local.
+  - Os ≤ 5 melhores candidatos são **verificados um a um por `codigoServico`** na fonte, e só os ativos e relevantes viram
+    sugestão.
+  - Sem índice, a resposta é "busca indisponível", com orientação para verificar o código.
+- **Verificar código** (CATMAT/CATSER): o servidor informa o código e a fonte confirma existência, descrição e situação.
+  Inexistente ou inativo não gera sugestão.
+- **Preservado:** verificação oficial por código, evidência por órgão, snapshots imutáveis, replay, isolamento (o índice
+  global só encontra candidatos; a evidência é do órgão) e decisão humana no ledger.
+
+**Evidência da emenda:**
+- Unit do catálogo: 22 (contratos por catálogo, paginação, vazio legítimo, filtro ignorado, "limpeza" × serviços
+  hospitalares, timeout, cache, código).
+- SMOKE do fluxo: 11 (sincronização paginada, parcial e com falha; CATSER por índice + `codigoServico`; defasagem
+  inativa; CATMAT vazio e filtro ignorado; verificar código; confirmação; replay; tenant).
+- Smokes CATMAT, jornadas e isolamento verdes.
+
+**Pendente (checkpoint único do Owner):** rodar `pnpm catalog:smoke` no Console do Railway staging. Ele mede o
+comportamento real (código por catálogo, `descricaoItem`, limite de página, tamanho do CATSER). Se o código CATSER
+estiver OK, rodar `pnpm catalog:sync -- catser` para criar o índice. **Merge só após essas evidências.**
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).

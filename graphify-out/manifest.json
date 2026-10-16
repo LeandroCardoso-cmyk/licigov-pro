@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792159061.9150612,
-    "ast_hash": "559983d3aa2a50daec97e0c0f050a1a1",
+    "mtime": 1792170798.898999,
+    "ast_hash": "e8668ed2ce3981d202ef3a25224b7c69",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792159656.503148,
-    "ast_hash": "79355c4841e3b26476e6cd34c3d601d9",
+    "mtime": 1792170866.3584282,
+    "ast_hash": "c807a61e653629672ecf06b0815f659d",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -7270,8 +7270,8 @@
     "semantic_hash": ""
   },
   "server/domain/catmatMatching.ts": {
-    "mtime": 1792158779.1667943,
-    "ast_hash": "e4beedd4a8b14c4c124223c08da91abc",
+    "mtime": 1792170493.6208773,
+    "ast_hash": "5c3af45a4b5d2650fc4d9a564ea526be",
     "semantic_hash": ""
   },
   "server/domain/clauseIntelligence.ts": {
@@ -8680,8 +8680,8 @@
     "semantic_hash": ""
   },
   "server/routers/catmatRouter.ts": {
-    "mtime": 1792158987.3323958,
-    "ast_hash": "080bf9cb06c41a511e489e996debfe23",
+    "mtime": 1792170739.2914271,
+    "ast_hash": "bed005f25dcfb6b6d7284b1ee324dd8d",
     "semantic_hash": ""
   },
   "server/routers/clauseRouter.ts": {
@@ -8845,8 +8845,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1792158924.7411606,
-    "ast_hash": "a113a0b7ae00275e03caec74a80c10b0",
+    "mtime": 1792170683.9238636,
+    "ast_hash": "ffe4d89221c9812b8786f1c21faad3bf",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792160487.3852491,
-    "ast_hash": "f0fb4b25d9bd9005f2a79147494d6cf9",
+    "mtime": 1792171185.3030531,
+    "ast_hash": "80ff9a0849ecb06715b41f6fe132e99a",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -12995,8 +12995,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemApprovalGate.render.test.ts": {
-    "mtime": 1792159702.7949586,
-    "ast_hash": "378b8ae69308784b2f4a63d1969af3f2",
+    "mtime": 1792171100.5611522,
+    "ast_hash": "8ecbe5b180a7e7b63583cb01536cdf26",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemSourceUpdateConfirm.tsx": {
@@ -15030,8 +15030,8 @@
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
-    "mtime": 1792159775.8209927,
-    "ast_hash": "79655a745075c255db03ea084ab9f8d1",
+    "mtime": 1792171185.303513,
+    "ast_hash": "7ffcd7e7b90450878dcebb4ee607b49e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
@@ -15070,8 +15070,8 @@
     "semantic_hash": ""
   },
   "scripts/catalog-official-smoke.ts": {
-    "mtime": 1792159905.5082047,
-    "ast_hash": "3d2a4d1929e4b63c7d73e2ade2adddae",
+    "mtime": 1792170887.8909516,
+    "ast_hash": "2c795fcf39f881b68784e576300afbd3",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/officialCatalogFixtures.ts": {
@@ -15080,13 +15080,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/catalog-official-classification-mysql-smoke.test.ts": {
-    "mtime": 1792159364.1187809,
-    "ast_hash": "dc335ab2a3baaf6054438b8883b6e4cb",
+    "mtime": 1792171020.2140565,
+    "ast_hash": "ca84f5a2ca528753f5a3b383aaa5a952",
     "semantic_hash": ""
   },
   "server/__tests__/unit/catalog-official-integration.test.ts": {
-    "mtime": 1792159274.150783,
-    "ast_hash": "08751e6c56da14beb98c845d9c84265a",
+    "mtime": 1792170946.7479305,
+    "ast_hash": "b9201870328d30a66e1cba0688450fd0",
     "semantic_hash": ""
   },
   "server/config/catalog.ts": {
@@ -15095,8 +15095,8 @@
     "semantic_hash": ""
   },
   "server/db/catalogEvidence.ts": {
-    "mtime": 1792158724.5507956,
-    "ast_hash": "50a78c38900b9abe51e5d7d26202f4aa",
+    "mtime": 1792170522.9258823,
+    "ast_hash": "2c12e65f90380ee40799309343409c6c",
     "semantic_hash": ""
   },
   "server/domain/officialCatalog.ts": {
@@ -15105,13 +15105,18 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792158755.1867948,
-    "ast_hash": "03d0f363e210f977c6ac0223ccc35a42",
+    "mtime": 1792170739.2908738,
+    "ast_hash": "ca409ed5eceab353e3498314617e0072",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {
-    "mtime": 1792158679.5947967,
-    "ast_hash": "5f19b52e747990ba0f4a3bc90c612084",
+    "mtime": 1792170481.8056228,
+    "ast_hash": "10e30dc96c395e57bef350a41cad3083",
+    "semantic_hash": ""
+  },
+  "scripts/catalog-official-sync.ts": {
+    "mtime": 1792171193.526043,
+    "ast_hash": "635dc3c890a827ce5fda47b1e5a98375",
     "semantic_hash": ""
   }
 }

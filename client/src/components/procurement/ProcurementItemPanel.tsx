@@ -129,17 +129,36 @@ export default function ProcurementItemPanel({
   // "Buscar classificação": consulta o catálogo oficial e persiste as alternativas REAIS (nada decidido aqui).
   const buscar = trpc.itemIntelligence.buscarClassificacaoOficial.useMutation({
     onSuccess: (res) => {
-      if (res.status === "unavailable") {
+      if (res.status === "unavailable" || res.status === "index_unavailable") {
         setSearchMsg({ tone: "warn", text: res.message });
         return;
       }
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
       setSearchMsg(res.candidates.length > 0
-        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}". Revise e confirme a que corresponde ao item.` }
-        : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}" (${res.returned} registro(s) retornado(s)). Ajuste o termo, busque no outro catálogo, informe um código ou declare "sem correspondência segura".` });
+        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.` }
+        : res.filterIgnoredSuspected
+          ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
+          : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` });
       invalidate();
     },
     onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao consultar o catálogo oficial." }),
+  });
+
+  // "Verificar código": consulta oficial POR CÓDIGO (o servidor informa o código; a fonte confirma).
+  const [verifyCode, setVerifyCode] = React.useState<string>("");
+  const verificar = trpc.itemIntelligence.verificarCodigoOficial.useMutation({
+    onSuccess: (res) => {
+      const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      if (res.status === "verified") {
+        setSearchMsg({ tone: "ok", text: `Código ${res.candidate.catmatCode} verificado no ${label}: "${res.candidate.catmatDescription}". Confirme abaixo se corresponde ao item.` });
+        setVerifyCode("");
+        invalidate();
+        return;
+      }
+      setSearchMsg({ tone: "warn", text: res.message });
+    },
+    onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao verificar o código no catálogo oficial." }),
   });
 
   const decide = (opts: {
@@ -305,6 +324,27 @@ export default function ProcurementItemPanel({
                     className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                   >
                     {buscar.isPending && buscar.variables?.catalogType === t ? "Consultando…" : t === "catmat" ? "Buscar no CATMAT (material)" : "Buscar no CATSER (serviço)"}
+                  </button>
+                ))}
+              </div>
+              <div data-testid="catmat-verify-code" className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Código CATMAT/CATSER"
+                  className="w-36 rounded border border-border px-2 py-1 font-mono text-xs"
+                />
+                {(["catmat", "catser"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => verificar.mutate({ itemId: item.id, catalogType: t, code: verifyCode })}
+                    disabled={verificar.isPending || verifyCode.length === 0}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                  >
+                    {t === "catmat" ? "Verificar código no CATMAT" : "Verificar código no CATSER"}
                   </button>
                 ))}
               </div>

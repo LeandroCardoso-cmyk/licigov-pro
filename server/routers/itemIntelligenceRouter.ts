@@ -12,7 +12,7 @@ import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { getItemPanel } from "../services/itemIntelligenceService";
-import { listVerifiedSuggestions, searchItemClassification } from "../services/itemCatalogClassificationService";
+import { listVerifiedSuggestions, searchItemClassification, searchCatalogIndex, verifyItemCode } from "../services/itemCatalogClassificationService";
 import { searchOfficialCatalog, UNAVAILABLE_MESSAGES } from "../services/officialCatalogService";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
@@ -125,6 +125,21 @@ export const itemIntelligenceRouter = router({
     })),
 
   /**
+   * "Verificar código": o servidor informa o código; a fonte oficial confirma existência, descrição e situação (parâmetro
+   * de código DO catálogo). Ativo ⇒ alternativa verificada do item (sem decisão). Inexistente/inativo ⇒ nada sugerido.
+   */
+  verificarCodigoOficial: orgRoleProcedure("operator").use(rateLimitMiddleware("catmat"))
+    .input(z.object({
+      itemId: z.string().min(1),
+      catalogType: z.enum(["catmat", "catser"]),
+      code: z.string().trim().regex(/^\d{1,9}$/, "Informe só os dígitos do código CATMAT/CATSER."),
+    }))
+    .mutation(async ({ input, ctx }) => verifyItemCode({
+      organizationId: ctx.organizationId!, itemId: input.itemId, catalogType: input.catalogType, code: input.code,
+      actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+    })),
+
+  /**
    * R9 / SEM-035 — confirmação de uma SUGESTÃO existente pelo LEDGER governado (`catmat_decisions`), nunca código livre
    * do cliente: `matchId` é a sugestão decidida; `catmatCode` (compatibilidade) precisa ser o código DELA, senão
    * BAD_REQUEST `CATMAT_CODE_MISMATCH` sem escrita. Chave de idempotência explícita ou derivada da sugestão.
@@ -151,7 +166,16 @@ export const itemIntelligenceRouter = router({
   searchCATMAT: tenantProcedure.use(rateLimitMiddleware("catmat"))
     .input(z.object({ query: z.string().min(2).max(200), catalogType: z.enum(["catmat", "catser"]).default("catmat") }))
     .query(async ({ input }) => {
-      const res = await searchOfficialCatalog({ catalogType: input.catalogType, term: input.query });
+      // CATSER não tem filtro textual na API: pesquisa no índice sincronizado (candidatos a verificar por código).
+      if (input.catalogType === "catser") {
+        const idx = await searchCatalogIndex("catser", input.query);
+        if (idx.status === "index_unavailable") return { status: "index_unavailable" as const, message: "Índice de serviços (CATSER) não sincronizado.", results: [] };
+        return {
+          status: "ok" as const, message: null, retrievedAt: idx.index.retrievedAt,
+          results: idx.results.map((r) => ({ catmatCode: r.entry.code, catmatDescription: r.entry.description, catalogType: "catser" as const, source: "indice-sincronizado" })),
+        };
+      }
+      const res = await searchOfficialCatalog({ catalogType: "catmat", term: input.query });
       if (res.status === "unavailable") return { status: "unavailable" as const, message: UNAVAILABLE_MESSAGES[res.reason], results: [] };
       return {
         status: "ok" as const, message: null, retrievedAt: res.retrievedAt,

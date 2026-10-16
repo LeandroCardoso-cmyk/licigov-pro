@@ -112,21 +112,27 @@ insumos da próxima simplificação. Não é preciso abrir uma rodada de correç
   - CATMAT: o valor aparece como "similaridade textual", não como confiança.
   - Detalhes no Roadmap Mestre, seção "Rodada M8 — homologação visual".
 
-**Catálogo oficial CATMAT/CATSER — conferência real (uma vez, depois do deploy do PR em staging):** no Console do Railway
-staging (`/app`), rode `pnpm catalog:smoke`. Ele é somente leitura: não usa banco nem credencial.
-- Esperado: `[CATALOGO-OFICIAL-SMOKE] CATMAT=OK CATSER=OK`.
-- O relatório também mostra:
-  - as chaves do envelope;
-  - quantas linhas contêm o termo (confirma se o filtro por descrição funciona);
-  - a consulta por código.
-- Se aparecer `FALHA`, envie a saída: ela indica o ajuste de parâmetro ou de campo necessário. Nada é gravado.
+**Catálogo oficial CATMAT/CATSER — conferência real (depois do deploy do PR em staging), no Console do Railway (`/app`):**
+1. `pnpm catalog:smoke`: somente leitura, sem banco e sem credencial.
+   - Saída 0 = consulta por código OK nos dois catálogos.
+   - O relatório também classifica:
+     - o filtro `descricaoItem` do CATMAT (exato, parcial, maiúsculas, ignorado);
+     - o parâmetro textual não documentado do CATSER (esperado: ignorado);
+     - o limite de `tamanhoPagina`;
+     - o tamanho do CATSER.
+   - Envie a saída completa.
+2. Se o código CATSER estiver OK: `pnpm catalog:sync -- catser`.
+   - Use o tamanho de página que o smoke indicar, por exemplo `--page-size 100`.
+   - Grava no banco do staging um índice versionado sob a organização global 0. Nenhum órgão é alterado.
+   - Falha não grava nada.
 
 **Retomada (depois do deploy do PR em staging), num processo NOVO da org 2:**
 - O `2026/9001` fica preservado como evidência desta rodada.
 - Repita a pesquisa e o item com o mesmo texto do caso.
 1. **DFD:** gere a sugestão de IA.
    - Confira se o texto vem sem `[REVISAR]` e se as lacunas aparecem listadas abaixo dele.
-2. **Item → classificação:** na Inteligência do Item, clique em "Buscar no CATMAT (material)".
+2. **Item → classificação:** na Inteligência do Item, clique em "Buscar no CATMAT (material)". Se nada aparecer, use
+   "Verificar código" com um código conhecido.
    - Confira se as alternativas aparecem como "Verificado no catálogo oficial", com a data da consulta.
    - Confirmar exige o limiar institucional. Se ele não estiver configurado, a recusa é esperada: não configure um valor só para
      testar.

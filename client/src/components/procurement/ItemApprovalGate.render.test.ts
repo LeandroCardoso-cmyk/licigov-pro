@@ -44,6 +44,7 @@ vi.mock("@/lib/trpc", () => ({
       getItem: { useQuery: () => st.panel },
       decidirCATMAT: { useMutation: mutation },
       buscarClassificacaoOficial: { useMutation: mutation },
+      verificarCodigoOficial: { useMutation: mutation },
       getCATMATDecisions: { useQuery: () => ({ data: { current: null, history: [] }, isLoading: false, refetch: () => Promise.resolve() }) },
       getCATMATThreshold: { useQuery: () => ({ data: { configured: true, minScore: 0.5, version: 1 } }) },
     },
@@ -233,6 +234,10 @@ describe("CATMAT/CATSER oficial — ProcurementItemPanel: buscar classificação
     expect(button(html, "Buscar no CATMAT \\(material\\)")).not.toContain('disabled=""');
     expect(button(html, "Buscar no CATSER \\(serviço\\)")).not.toContain('disabled=""');
     expect(html).not.toContain("Candidatos gerados localmente");
+    // Verificação oficial POR CÓDIGO nos dois catálogos (desabilitada até o servidor informar o código).
+    expect(html).toContain('data-testid="catmat-verify-code"');
+    expect(button(html, "Verificar código no CATMAT")).toContain('disabled=""');
+    expect(button(html, "Verificar código no CATSER")).toContain('disabled=""');
   });
 
   it("candidato verificado ⇒ proveniência oficial e Confirmar habilitado; legado sem proveniência ⇒ Confirmar desabilitado com motivo", () => {

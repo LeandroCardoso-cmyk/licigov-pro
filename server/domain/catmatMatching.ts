@@ -92,14 +92,28 @@ export function rankCATMAT(params: {
   const scored = params.candidates
     .map(c => ({ ...c, score: scoreMatch(params.description, c.description) }))
     .sort((a, b) => b.score - a.score || (a.code < b.code ? -1 : 1));
+  return matchesFromRanked({ ...params, ranked: scored });
+}
 
-  return scored.map((c, i) => ({
+/**
+ * Converte candidatos JÁ ranqueados (ex.: motor de busca local sobre o catálogo oficial) em sugestões, preservando a
+ * ordem e o score recebidos. Mesmos ids determinísticos de `rankCATMAT`. Nunca marca como aceito.
+ */
+export function matchesFromRanked(params: {
+  itemId: string;
+  organizationId: number;
+  ranked: ReadonlyArray<{ code: string; description: string; score: number; source?: CATMATSource }>;
+  correlationId: string;
+  createdAt?: string;
+  defaultSource?: CATMATSource;
+}): CATMATMatch[] {
+  return params.ranked.map((c, i) => ({
     id: createHash("sha256").update(`cmm:${params.organizationId}:${params.itemId}:${c.code}`).digest("hex").slice(0, 20),
     itemId: params.itemId,
     organizationId: params.organizationId,
     catmatCode: c.code,
     catmatDescription: c.description,
-    score: c.score,
+    score: Math.max(0, Math.min(1, c.score)),
     rank: i,
     decision: "sugerido" as CATMATDecision,
     source: c.source ?? params.defaultSource ?? "sem-proveniencia",

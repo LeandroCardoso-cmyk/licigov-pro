@@ -2,7 +2,8 @@
 /**
  * CATMAT/CATSER sobre o catálogo OFICIAL — fluxo único dos Itens Inteligentes contra MySQL REAL (appRouter, RBAC, tenant).
  *
- * Transporte do catálogo INJETADO com fixtures contratuais (o CI não depende da API externa; o smoke real é separado).
+ * Transporte do catálogo INJETADO com fixtures nos campos REAIS da API (o CI não depende dela; smoke real: `catalog:smoke`):
+ * CATSER paginado (`codigoServico`/`nomeServico`/`statusServico`, sem filtro textual), CATMAT `codigoItem`/`descricaoItem`.
  * Cobre: importação M8 (1 item, 3 cotações, R$ 4.000,00) SEM candidato fabricado → "Buscar classificação" (CATMAT/CATSER)
  * → evidência (catalog_snapshots/catalog_entries) → confirmação governada (ledger) → replay; e os casos adversariais:
  * código gerado por hash/legado não confirmável mesmo com limiar configurado, indisponibilidade sem fabricação,
@@ -15,6 +16,7 @@ import { M8_PRICE_RESEARCH_TEXT } from "../../../scripts/homologation-e2e";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
 import { insertCatmatMatch } from "../../db/procurement";
 import { __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests } from "../../services/officialCatalogService";
+import { syncCatalogIndex, __clearCatalogIndexCacheForTests } from "../../services/itemCatalogClassificationService";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 996601;
@@ -34,14 +36,37 @@ const CATMAT_FIXTURE = {
   ],
   totalRegistros: 4,
 };
-const CATSER_FIXTURE = { resultado: [{ codigoServico: 27502, nomeServico: "Manutenção de computadores desktop", statusServico: true }], totalRegistros: 1 };
+/** Catálogo de serviços (23 linhas ⇒ 3 páginas de 10), com serviços hospitalares como os que a API devolveu a "limpeza". */
+const CATSER_ALL = [
+  { codigoServico: 27502, nomeServico: "Manutenção de computadores desktop", statusServico: true },
+  { codigoServico: 24961, nomeServico: "Limpeza e conservação predial", statusServico: true },
+  { codigoServico: 13056, nomeServico: "ENDOSCOPIA DIGESTIVA ALTA", statusServico: true },
+  { codigoServico: 13057, nomeServico: "COLONOSCOPIA", statusServico: true },
+  ...Array.from({ length: 19 }, (_, i) => ({ codigoServico: 15000 + i, nomeServico: `EXAME HOSPITALAR DE ROTINA ${i + 1}`, statusServico: true })),
+];
+/** Situação ATUAL na fonte por código (pode divergir do índice: defasagem). */
+let catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r]));
 
 let lastUrls: string[] = [];
 function serveFixtures(catmat: unknown = CATMAT_FIXTURE) {
   __clearOfficialCatalogCacheForTests();
   __setOfficialCatalogFetchForTests(async (url) => {
     lastUrls.push(url);
-    return { ok: true, status: 200, json: async () => (url.includes("modulo-servico") ? CATSER_FIXTURE : catmat) };
+    const q = new URL(url).searchParams;
+    let body: unknown = catmat;
+    if (url.includes("modulo-servico")) {
+      const code = q.get("codigoServico");
+      if (code) body = { resultado: catserByCode.has(code) ? [catserByCode.get(code)] : [], totalRegistros: catserByCode.has(code) ? 1 : 0 };
+      else {
+        const page = Number(q.get("pagina")); const size = Number(q.get("tamanhoPagina"));
+        const rowsP = CATSER_ALL.slice((page - 1) * size, page * size);
+        body = { resultado: rowsP, totalRegistros: CATSER_ALL.length, paginasRestantes: Math.max(0, Math.ceil(CATSER_ALL.length / size) - page) };
+      }
+    } else if (q.get("codigoItem")) {
+      const all = (CATMAT_FIXTURE.resultado as Array<{ codigoItem: number }>);
+      body = { resultado: all.filter((r) => String(r.codigoItem) === q.get("codigoItem")), totalRegistros: 1 };
+    }
+    return { ok: true, status: 200, json: async () => body };
   });
 }
 
@@ -72,6 +97,10 @@ async function cleanup() {
       await conn.execute(`DELETE FROM ${t} WHERE ${col} = ?`, [org]).catch(() => {});
     }
   }
+  // Índice de pesquisa (org GLOBAL 0): só as linhas deste smoke.
+  await conn.query("DELETE FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser' AND code IN (?)", [CATSER_ALL.map((r) => String(r.codigoServico))]).catch(() => {});
+  await conn.query("DELETE FROM catalog_snapshots WHERE organization_id = 0 AND correlation_id LIKE 'cat-smoke-%'").catch(() => {});
+  __clearCatalogIndexCacheForTests();
 }
 
 async function newProcessWithItem(tag: string): Promise<{ pid: string; itemId: string }> {
@@ -100,7 +129,7 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     for (const org of [ORG, ORG_B]) await setCatmatThresholdConfig({ organizationId: org, minScore: 0.1, reason: "smoke sintético", actorUserId: 1, correlationId: `cat-thr-${org}` });
   }, 300_000);
 
-  afterEach(() => { __setOfficialCatalogFetchForTests(null); lastUrls = []; });
+  afterEach(() => { __setOfficialCatalogFetchForTests(null); lastUrls = []; catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r])); });
 
   afterAll(async () => {
     if (!conn) return;
@@ -153,7 +182,8 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     // Inativo e sem correspondência textual ficam fora; os demais são códigos da fonte, verificados.
     expect(res.candidates.map((c) => c.catmatCode).sort()).toEqual(["482201", "482202"]);
     expect(res.candidates.every((c) => c.verified && c.source === "api-comprasgov:catmat" && c.catalogType === "catmat")).toBe(true);
-    expect(res.discarded).toMatchObject({ inactive: 1, noTextualMatch: 1 });
+    expect(res.discarded).toMatchObject({ inactive: 1, irrelevant: 1 });
+    expect(res.filterIgnoredSuspected).toBe(false);
     // Evidência persistida por órgão: snapshot com fonte/checksum + entradas com a descrição oficial.
     const [snap] = await rows<{ id: string; checksum: string; integrity_metadata: any }>("SELECT id, checksum, integrity_metadata FROM catalog_snapshots WHERE organization_id = ?", [ORG]);
     const meta = typeof snap.integrity_metadata === "string" ? JSON.parse(snap.integrity_metadata) : snap.integrity_metadata;
@@ -188,12 +218,102 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = ?", [ORG])).toBe(2);
   }, 120_000);
 
-  it("CATSER usa o catálogo de serviços; tipo registrado na fonte (não aplica CATMAT a serviço)", async () => {
+  it("CATSER sem índice sincronizado ⇒ index_unavailable, nenhum parâmetro textual enviado, nada gravado", async () => {
+    const { itemId } = await newProcessWithItem("noidx");
+    serveFixtures();
+    const res = await (await caller(U.operator)).itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "limpeza" });
+    expect(res.status).toBe("index_unavailable");
+    expect(res.status === "index_unavailable" && res.message).toMatch(/não oferece busca por descrição/);
+    expect(lastUrls).toEqual([]); // nenhuma chamada com filtro ignorado
+    expect(await n("SELECT COUNT(*) n FROM item_catmat_matches WHERE organization_id = ? AND item_id = ?", [ORG, itemId])).toBe(0);
+  }, 120_000);
+
+  it("CATSER — sincronização LIMITADA do índice: paginação com tamanhoPagina ≥ 10, snapshot versionado, sem parâmetro textual", async () => {
+    serveFixtures();
+    const partial = await syncCatalogIndex({ catalogType: "catser", pageSize: 5, maxPages: 2, correlationId: `cat-smoke-p-${RUN}` });
+    expect(partial).toMatchObject({ status: "synced", pages: 2, entries: 20, complete: false, deactivated: 0 }); // limite de páginas ⇒ parcial
+    lastUrls = [];
+    const full = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-${RUN}` });
+    expect(full).toMatchObject({ status: "synced", pages: 3, entries: 23, total: 23, complete: true });
+    expect(lastUrls).toHaveLength(3);
+    expect(lastUrls.every((u) => u.includes("/modulo-servico/") && /tamanhoPagina=10/.test(u) && !u.includes("descricaoItem") && u.includes("statusServico=true"))).toBe(true);
+    const [snap] = await rows<{ integrity_metadata: any }>("SELECT integrity_metadata FROM catalog_snapshots WHERE id = ?", [full.snapshotId]);
+    const meta = typeof snap.integrity_metadata === "string" ? JSON.parse(snap.integrity_metadata) : snap.integrity_metadata;
+    expect(meta).toMatchObject({ kind: "indice", source: "api-comprasgov", complete: true, entries: 23 });
+    // Falha no meio ⇒ nada gravado; índice anterior preservado.
+    __setOfficialCatalogFetchForTests(async () => { throw new Error("ECONNRESET"); });
+    expect(await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 5, correlationId: `cat-smoke-f-${RUN}` })).toMatchObject({ status: "failed" });
+    expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND correlation_id = ?", [`cat-smoke-f-${RUN}`])).toBe(0);
+  }, 120_000);
+
+  it("CATSER — busca no índice + verificação POR CÓDIGO (codigoServico) na fonte; confirma com fonte oficial; isolado do órgão", async () => {
     const { itemId } = await newProcessWithItem("ser");
     serveFixtures();
-    const res = await (await caller(U.operator)).itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "manutenção computadores desktop" });
-    expect(res.status === "ok" && res.candidates.map((c) => [c.catmatCode, c.catalogType, c.source])).toEqual([["27502", "catser", "api-comprasgov:catser"]]);
-    expect(lastUrls.every((u) => u.includes("/modulo-servico/"))).toBe(true);
+    const api = await caller(U.operator);
+    const res = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "manutenção de computadores desktop" });
+    expect(res.status).toBe("ok");
+    if (res.status !== "ok") return;
+    expect(res.method).toBe("indice-sincronizado");
+    expect(res.candidates.map((c) => [c.catmatCode, c.catalogType, c.source, c.verified])).toEqual([["27502", "catser", "api-comprasgov:catser", true]]);
+    // Só consultas por código ao CATSER (≤ VERIFY_TOP_K), nunca filtro textual.
+    expect(lastUrls.length).toBeGreaterThan(0);
+    expect(lastUrls.length).toBeLessThanOrEqual(5);
+    expect(lastUrls.every((u) => u.includes("/modulo-servico/") && u.includes("codigoServico=") && !u.includes("descricaoItem"))).toBe(true);
+    const out = await api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: res.candidates[0].id, idempotencyKey: `ser-${RUN}` });
+    expect(out.decision).toMatchObject({ catmatCode: "27502", source: "api-comprasgov:catser" });
+    // Evidência por código registrada no ÓRGÃO (não na org global do índice).
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = ? AND code = '27502'", [ORG])).toBe(1);
+  }, 120_000);
+
+  it("ADVERSARIAL CATSER: termo sem correspondência ('limpeza hospitalar de jardins') ou índice defasado (inativo na fonte) ⇒ nada sugerido", async () => {
+    const { itemId } = await newProcessWithItem("seradv");
+    serveFixtures();
+    const api = await caller(U.operator);
+    const none = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "jardinagem paisagismo" });
+    expect(none.status === "ok" && none.candidates).toEqual([]);
+    // Serviços hospitalares (o que a API devolveu a "limpeza") nunca viram sugestão de limpeza.
+    const limpeza = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "limpeza" });
+    expect(limpeza.status === "ok" && limpeza.candidates.map((c) => c.catmatCode)).toEqual(["24961"]);
+    // Defasagem: o código saiu da fonte (inativo) depois da sincronização ⇒ não verificado, não sugerido.
+    catserByCode.set("27502", { codigoServico: 27502, nomeServico: "Manutenção de computadores desktop", statusServico: false });
+    serveFixtures();
+    const { itemId: it2 } = await newProcessWithItem("serstale");
+    const stale = await api.itemIntelligence.buscarClassificacaoOficial({ itemId: it2, catalogType: "catser", term: "manutenção de computadores desktop" });
+    expect(stale.status === "ok" && [stale.candidates.length, stale.discarded.unverified]).toEqual([0, 1]);
+  }, 120_000);
+
+  it("CATMAT: vazio é legítimo; linhas sem relação com o termo ⇒ filtro possivelmente ignorado, nada sugerido", async () => {
+    const { itemId } = await newProcessWithItem("matadv");
+    const api = await caller(U.operator);
+    serveFixtures({ resultado: [], totalRegistros: 0 });
+    const empty = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat", term: "notebook" });
+    expect(empty).toMatchObject({ status: "ok", returned: 0, filterIgnoredSuspected: false, candidates: [] });
+    serveFixtures({ resultado: [{ codigoItem: 222333, descricaoItem: "CANETA ESFEROGRÁFICA AZUL", statusItem: true }], totalRegistros: 1 });
+    const ignored = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat", term: "computador desktop" });
+    expect(ignored).toMatchObject({ status: "ok", returned: 1, filterIgnoredSuspected: true, candidates: [] });
+    expect(await n("SELECT COUNT(*) n FROM item_catmat_matches WHERE organization_id = ? AND item_id = ?", [ORG, itemId])).toBe(0);
+  }, 120_000);
+
+  it("Verificar código: CATMAT (codigoItem) encontrado ⇒ alternativa verificada e confirmável; inexistente/inativo ⇒ nada sugerido; CATSER por codigoServico", async () => {
+    const { itemId } = await newProcessWithItem("code");
+    serveFixtures();
+    const api = await caller(U.operator);
+    const ok = await api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catmat", code: "482201" });
+    expect(ok.status).toBe("verified");
+    if (ok.status !== "verified") return;
+    expect(ok.candidate).toMatchObject({ catmatCode: "482201", catmatDescription: DESKTOP, verified: true, source: "api-comprasgov:catmat", matchSource: "codigo" });
+    expect(lastUrls.at(-1)).toMatch(/codigoItem=482201/);
+    const missing = await api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catmat", code: "999999" });
+    expect(missing.status).toBe("not_found");
+    const inactive = await api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catmat", code: "300777" });
+    expect(inactive.status).toBe("inactive");
+    expect((await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions.map((x) => x.catmatCode)).toEqual(["482201"]);
+    const svc = await api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catser", code: "24961" });
+    expect(svc.status === "verified" && svc.candidate.source).toBe("api-comprasgov:catser");
+    expect(lastUrls.at(-1)).toMatch(/modulo-servico\/6_consultarItemServico\?pagina=1&tamanhoPagina=10&codigoServico=24961$/);
+    const out = await api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: ok.candidate.id, idempotencyKey: `code-${RUN}` });
+    expect(out.decision).toMatchObject({ catmatCode: "482201", source: "api-comprasgov:catmat" });
+    expect((await err(api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catmat", code: "48A201" })))?.code).toBe("BAD_REQUEST");
   }, 120_000);
 
   it("catálogo INDISPONÍVEL: nenhuma sugestão/evidência criada, classificação pendente, falha registrada na linha do tempo; retentativa funciona", async () => {

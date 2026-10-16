@@ -1,9 +1,10 @@
 /**
  * CATMAT/CATSER — integração com o catálogo OFICIAL (Compras.gov.br), sem rede e sem banco.
  *
- * Fixtures CONTRATUAIS (formato do envelope `resultado` da API de Dados Abertos e nomes de campo de material/serviço),
- * montadas à mão: NÃO são respostas capturadas em runtime (o egresso desta suíte é bloqueado e o CI não pode depender da
- * API externa). O smoke real é separado (`scripts/catalog-official-smoke.ts`).
+ * Fixtures CONTRATUAIS montadas com os campos REAIS observados na API oficial (Console do Railway staging, 16/10/2026):
+ * envelope `resultado`/`totalRegistros`; CATSER `codigoServico`/`nomeServico`/`statusServico`; `tamanhoPagina` ≥ 10;
+ * CATMAT `descricaoItem=notebook` ⇒ `resultado: []` (vazio legítimo); CATSER ignora filtro textual e devolve serviços
+ * sem relação (ex.: endoscopia para "limpeza"). Valores sintéticos; o CI não chama a API. Smoke real: `catalog:smoke`.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
@@ -12,8 +13,10 @@ import {
 } from "../../domain/officialCatalog";
 import { resolveCatalogConfig, CATALOG_CONFIG } from "../../config/catalog";
 import {
-  searchOfficialCatalog, lookupOfficialCode, __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests,
+  searchOfficialCatalog, lookupOfficialCode, listOfficialCatalogPage, buildCatalogParams, OFFICIAL_CATALOG_CONTRACTS,
+  __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests,
 } from "../../services/officialCatalogService";
+import { rankRelevant } from "../../services/itemCatalogClassificationService";
 import { rankCATMAT } from "../../domain/catmatMatching";
 
 export const CATMAT_NOTEBOOK = {
@@ -33,6 +36,18 @@ export const CATSER_LIMPEZA = {
   ],
   totalRegistros: 2,
 };
+
+/** Como a API REAL respondeu a `descricaoItem=limpeza` no CATSER: filtro ignorado, serviços sem relação. */
+export const CATSER_IGNORED_FILTER = {
+  resultado: [
+    { codigoServico: 13056, nomeServico: "ENDOSCOPIA DIGESTIVA ALTA", statusServico: true },
+    { codigoServico: 13057, nomeServico: "COLONOSCOPIA", statusServico: true },
+    { codigoServico: 13090, nomeServico: "EXAME DE ULTRASSONOGRAFIA HOSPITALAR", statusServico: true },
+  ],
+  totalRegistros: 3,
+};
+/** Como a API REAL respondeu a `descricaoItem=notebook` no CATMAT. */
+export const CATMAT_EMPTY = { resultado: [], totalRegistros: 0, totalPaginas: 0, paginasRestantes: 0 };
 
 type Resp = { ok: boolean; status: number; json: () => Promise<unknown> };
 const okJson = (body: unknown): Resp => ({ ok: true, status: 200, json: async () => body });
@@ -115,6 +130,28 @@ describe("domínio — verificação de sugestão contra a evidência oficial (a
   });
 });
 
+describe("relevância local (catalogSearchEngine) — candidatos sem relação nunca viram sugestão", () => {
+  it("ADVERSARIAL (comportamento real): 'limpeza' contra serviços hospitalares ⇒ nenhuma relevante", () => {
+    const p = parseOfficialCatalogPayload(CATSER_IGNORED_FILTER, "catser");
+    if (!p.ok) throw new Error("fixture");
+    expect(rankRelevant("limpeza", p.entries, 10)).toEqual([]);
+    expect(rankRelevant("serviço de limpeza predial", p.entries, 10)).toEqual([]);
+  });
+
+  it("correspondência real é encontrada e explicada (tipo de correspondência + termos casados)", () => {
+    const p = parseOfficialCatalogPayload(CATSER_LIMPEZA, "catser");
+    const m = parseOfficialCatalogPayload(CATMAT_NOTEBOOK, "catmat");
+    if (!p.ok || !m.ok) throw new Error("fixture");
+    const [r] = rankRelevant("limpeza", p.entries, 5);
+    expect(r).toMatchObject({ entry: { code: "24961" }, matchedTokens: ["limpeza"] });
+    expect(["exact", "alias", "normalized", "token", "semantic", "fuzzy"]).toContain(r.matchSource);
+    // "notebook" casa a descrição oficial "COMPUTADOR PORTÁTIL (NOTEBOOK)…"; a caneta não aparece.
+    const codes = rankRelevant("notebook", m.entries.filter((e) => e.active), 10).map((x) => x.entry.code);
+    expect(codes).toEqual(expect.arrayContaining(["451868", "451869"]));
+    expect(codes).not.toContain("222333");
+  });
+});
+
 describe("config — catálogo oficial", () => {
   it("desligado por padrão na suíte de testes; ligado fora dela; endereço-base sem barra final", () => {
     expect(resolveCatalogConfig({}, { isTest: true }).enabled).toBe(false);
@@ -150,11 +187,38 @@ describe("serviço — consulta oficial com transporte injetado", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("busca CATSER usa o endpoint de serviço (cache separado por catálogo)", async () => {
-    __setOfficialCatalogFetchForTests(async (url) => { calls.push(url); return okJson(CATSER_LIMPEZA); });
-    const r = await searchOfficialCatalog({ catalogType: "catser", term: "notebook" });
-    expect(r.status === "ok" && r.catalogType).toBe("catser");
+  it("CONTRATOS SEPARADOS: CATSER nunca envia filtro textual; código por codigoServico; paginação sempre com tamanhoPagina ≥ 10", () => {
+    expect(OFFICIAL_CATALOG_CONTRACTS.catser).toMatchObject({ codeParam: "codigoServico", statusParam: "statusServico", textParam: null });
+    expect(OFFICIAL_CATALOG_CONTRACTS.catmat).toMatchObject({ codeParam: "codigoItem", statusParam: "statusItem", textParam: "descricaoItem" });
+    expect(() => buildCatalogParams("catser", { term: "limpeza" })).toThrow(/não tem filtro textual/);
+    expect(buildCatalogParams("catser", { code: "24961" })).toEqual({ pagina: "1", tamanhoPagina: "10", codigoServico: "24961" });
+    expect(buildCatalogParams("catmat", { code: "451868" })).toEqual({ pagina: "1", tamanhoPagina: "10", codigoItem: "451868" });
+    expect(buildCatalogParams("catser", { page: 3, pageSize: 5, activeOnly: true })).toEqual({ pagina: "3", tamanhoPagina: "10", statusServico: "true" });
+    expect(buildCatalogParams("catmat", { term: "notebook", activeOnly: true })).toEqual({ pagina: "1", tamanhoPagina: "10", descricaoItem: "notebook", statusItem: "true" });
+  });
+
+  it("CATSER: consulta por código usa codigoServico (+ paginação) e lê nomeServico/statusServico", async () => {
+    __setOfficialCatalogFetchForTests(async (url) => { calls.push(url); return okJson({ resultado: [CATSER_LIMPEZA.resultado[0]] }); });
+    const r = await lookupOfficialCode({ catalogType: "catser", code: "24961" });
+    expect(r.status === "found" && [r.entry.code, r.entry.description, r.entry.active]).toEqual(["24961", "Limpeza e conservação predial", true]);
     expect(calls[0]).toContain("/modulo-servico/6_consultarItemServico?");
+    expect(calls[0]).toContain("codigoServico=24961");
+    expect(calls[0]).toContain("tamanhoPagina=10");
+    expect(calls[0]).not.toContain("codigoItem");
+    expect(calls[0]).not.toContain("descricaoItem");
+  });
+
+  it("listagem paginada (sincronização do índice): sem cache, só parâmetros documentados", async () => {
+    __setOfficialCatalogFetchForTests(async (url) => { calls.push(url); return okJson(CATSER_LIMPEZA); });
+    await listOfficialCatalogPage({ catalogType: "catser", page: 2, pageSize: 100 });
+    await listOfficialCatalogPage({ catalogType: "catser", page: 2, pageSize: 100 });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/pagina=2&tamanhoPagina=100&statusServico=true$/);
+  });
+
+  it("CATMAT vazio é resposta LEGÍTIMA (nenhuma correspondência), não erro", async () => {
+    __setOfficialCatalogFetchForTests(async () => okJson(CATMAT_EMPTY));
+    expect(await searchOfficialCatalog({ catalogType: "catmat", term: "notebook" })).toMatchObject({ status: "ok", entries: [], total: 0 });
   });
 
   it("API indisponível (HTTP 503 / erro de rede) ⇒ indisponível; falha NÃO é cacheada (retentativa consulta de novo)", async () => {
@@ -185,9 +249,9 @@ describe("serviço — consulta oficial com transporte injetado", () => {
     expect(found.status === "found" && found.entry.active).toBe(true);
     const inactive = await lookupOfficialCode({ catalogType: "catmat", code: "300100" });
     expect(inactive.status === "found" && inactive.entry.active).toBe(false);
-    expect(await lookupOfficialCode({ catalogType: "catmat", code: "999999" })).toEqual({ status: "not_found" });
+    expect(await lookupOfficialCode({ catalogType: "catmat", code: "999999" })).toMatchObject({ status: "not_found" });
     __clearOfficialCatalogCacheForTests();
     __setOfficialCatalogFetchForTests(async () => okJson(CATMAT_NOTEBOOK)); // ignora o filtro e devolve a lista
-    expect(await lookupOfficialCode({ catalogType: "catmat", code: "583920" })).toEqual({ status: "not_found" });
+    expect(await lookupOfficialCode({ catalogType: "catmat", code: "583920" })).toMatchObject({ status: "not_found" });
   });
 });

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { tenantProcedure, router } from "../_core/trpc";
 import { rateLimitMiddleware } from "../services/rateLimiter";
-import { fetchOfficialCatalogRaw } from "../services/officialCatalogService";
+import { buildCatalogParams, fetchOfficialCatalogRaw } from "../services/officialCatalogService";
+import { searchCatalogIndex } from "../services/itemCatalogClassificationService";
 import type { OfficialCatalogType } from "../domain/officialCatalog";
 
 /**
@@ -68,9 +69,9 @@ export const catmatRouter = router({
       const cacheKey = `materials:${input.searchTerm}:${input.page}:${input.pageSize}`;
       const cachedData = getCachedData(cacheKey);
       if (cachedData) return cachedData;
-      const data = await fetchCatalog("catmat", {
-        descricaoItem: input.searchTerm, pagina: input.page.toString(), tamanhoPagina: input.pageSize.toString(), statusItem: "true",
-      }, "Erro ao buscar materiais no CATMAT. Tente novamente.");
+      const data = await fetchCatalog("catmat", buildCatalogParams("catmat", {
+        term: input.searchTerm, page: input.page, pageSize: input.pageSize, activeOnly: true,
+      }), "Erro ao buscar materiais no CATMAT. Tente novamente.");
       setCachedData(cacheKey, data);
       return data;
     }),
@@ -84,9 +85,13 @@ export const catmatRouter = router({
       const cacheKey = `services:${input.searchTerm}:${input.page}:${input.pageSize}`;
       const cachedData = getCachedData(cacheKey);
       if (cachedData) return cachedData;
-      const data = await fetchCatalog("catser", {
-        descricaoItem: input.searchTerm, pagina: input.page.toString(), tamanhoPagina: input.pageSize.toString(), statusItem: "true",
-      }, "Erro ao buscar serviços no CATSER. Tente novamente.");
+      // A API do CATSER não tem filtro textual: busca no índice sincronizado (envelope no formato da fonte).
+      const idx = await searchCatalogIndex("catser", input.searchTerm, input.pageSize);
+      if (idx.status === "index_unavailable") throw new Error("Busca de serviços indisponível: o índice do CATSER ainda não foi sincronizado. Informe o código.");
+      const data: RawCatalogPayload = {
+        resultado: idx.results.map((r) => ({ codigoServico: Number(r.entry.code), nomeServico: r.entry.description, statusServico: true })),
+        totalRegistros: idx.results.length, fonte: "indice-sincronizado", indiceAtualizadoEm: idx.index.retrievedAt,
+      };
       setCachedData(cacheKey, data);
       return data;
     }),
@@ -100,7 +105,7 @@ export const catmatRouter = router({
       const cacheKey = `material:${input.code}`;
       const cachedData = getCachedData(cacheKey);
       if (cachedData) return firstRow(cachedData);
-      const data = await fetchCatalog("catmat", { codigoItem: input.code.toString() }, "Erro ao buscar material no CATMAT. Tente novamente.");
+      const data = await fetchCatalog("catmat", buildCatalogParams("catmat", { code: input.code.toString() }), "Erro ao buscar material no CATMAT. Tente novamente.");
       setCachedData(cacheKey, data);
       return firstRow(data);
     }),
@@ -114,7 +119,7 @@ export const catmatRouter = router({
       const cacheKey = `service:${input.code}`;
       const cachedData = getCachedData(cacheKey);
       if (cachedData) return firstRow(cachedData);
-      const data = await fetchCatalog("catser", { codigoItem: input.code.toString() }, "Erro ao buscar serviço no CATSER. Tente novamente.");
+      const data = await fetchCatalog("catser", buildCatalogParams("catser", { code: input.code.toString() }), "Erro ao buscar serviço no CATSER. Tente novamente.");
       setCachedData(cacheKey, data);
       return firstRow(data);
     }),
