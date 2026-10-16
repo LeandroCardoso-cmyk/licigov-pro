@@ -25,6 +25,7 @@ import {
 } from "./officialCatalogService";
 import type { MatchSource } from "./catalogSearchEngine";
 import { rankRelevant, type RelevantEntry } from "./catalogRelevance";
+import { sanitizeFailureMessage } from "../domain/cognitiveProvenance";
 import {
   getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
   recordOfficialCatalogEvidence, type CatalogIndexInfo,
@@ -285,6 +286,13 @@ export interface CatalogIndexSyncResult {
  * (transação única; índice anterior preservado). Atingir `maxPages` ⇒ snapshot PARCIAL (marcado), publicado só se não houver
  * índice completo (parcial nunca substitui completo). Sincronização
  * concorrente do mesmo catálogo ⇒ recusada. Mesmo conteúdo já publicado ⇒ replay sem escrita.
+ *
+ * Integridade (fail-closed — nada publicado, índice anterior preservado):
+ *   - registro descartado pelo leitor em qualquer página (código/descrição inválidos) ⇒ falha;
+ *   - `totalRegistros` ausente ou alterado entre páginas ⇒ completude não comprovável ⇒ falha;
+ *   - código repetido entre páginas (paginação instável) ⇒ falha;
+ *   - "completo" só quando os códigos ÚNICOS coletados == `totalRegistros` oficial; divergência ⇒ falha;
+ *   - banco indisponível (publicação não confirmada) ⇒ falha, nunca sucesso sem `snapshotId`.
  */
 export async function syncCatalogIndex(p: {
   catalogType: OfficialCatalogType; pageSize: number; maxPages: number; correlationId: string;
@@ -299,17 +307,35 @@ export async function syncCatalogIndex(p: {
   let complete = false;
   let pages = 0;
   let sourceUrl = "";
+  let rowsRead = 0;
+  const fail = (reason: string): CatalogIndexSyncResult => ({
+    status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, replayed: false, reason,
+  });
   for (let page = 1; page <= maxPages; page++) {
     const res = await listOfficialCatalogPage({ catalogType: p.catalogType, page, pageSize, activeOnly: true });
-    if (res.status === "unavailable") {
-      return { status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, replayed: false, reason: `${res.reason}: ${res.detail} (página ${page})` };
+    if (res.status === "unavailable") return fail(`${res.reason}: ${res.detail} (página ${page})`);
+    if (res.discardedRows > 0) {
+      return fail(`integridade: ${res.discardedRows} registro(s) da página ${page} descartado(s) pelo leitor (código ou descrição inválidos) — catálogo não comprovável; nada publicado.`);
+    }
+    if (res.total === null) {
+      return fail(`integridade: a fonte não informou totalRegistros (página ${page}) — completude não comprovável; nada publicado.`);
+    }
+    if (total !== null && res.total !== total) {
+      return fail(`integridade: totalRegistros mudou durante a paginação (${total} → ${res.total}, página ${page}) — catálogo alterado na fonte; nada publicado, repita a sincronização.`);
     }
     pages = page;
-    total = res.total ?? total;
+    total = res.total;
     sourceUrl = sourceUrl || res.sourceUrl;
+    rowsRead += res.entries.length;
     for (const e of res.entries) all.set(e.code, e);
     p.onPage?.(page, res.entries.length);
     if (res.entries.length < pageSize || res.remainingPages === 0) { complete = true; break; }
+  }
+  if (all.size !== rowsRead) {
+    return fail(`integridade: ${rowsRead - all.size} código(s) repetido(s) entre páginas (${rowsRead} linha(s), ${all.size} código(s) único(s)) — paginação instável; nada publicado.`);
+  }
+  if (complete && all.size !== total) {
+    return fail(`integridade: ${all.size} código(s) único(s) coletado(s) × totalRegistros oficial ${total} — sincronização completa não comprovada; nada publicado.`);
   }
   // Parcial (limite de páginas) nunca substitui um índice COMPLETO já publicado — a cobertura não pode regredir.
   // Checagem antecipada (evita trabalho); a AUTORITATIVA é refeita dentro da publicação serializada.
@@ -330,10 +356,14 @@ export async function syncCatalogIndex(p: {
     });
   } catch (err) {
     // Rollback: nenhum snapshot novo publicado; o índice anterior continua valendo.
-    return { status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false, reason: `persistência: ${String((err as Error)?.message ?? err).slice(0, 200)}` };
+    return { status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false, reason: `persistência: ${sanitizeFailureMessage(String((err as Error)?.message ?? err)).slice(0, 200)}` };
+  }
+  if (!rec) {
+    // Sem banco não há publicação: nunca devolver sucesso sem snapshot persistido.
+    return { status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false, reason: "persistência: banco de dados indisponível — nenhum snapshot publicado." };
   }
   indexCache.delete(p.catalogType);
-  if (rec?.status === "refused_partial") {
+  if (rec.status === "refused_partial") {
     // Revalidado DENTRO da serialização: um índice completo foi publicado enquanto esta leitura acontecia.
     return {
       status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false,
@@ -341,7 +371,7 @@ export async function syncCatalogIndex(p: {
     };
   }
   return {
-    status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null,
-    replayed: rec?.status === "replayed", publication: rec?.status,
+    status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec.snapshotId,
+    replayed: rec.status === "replayed", publication: rec.status,
   };
 }

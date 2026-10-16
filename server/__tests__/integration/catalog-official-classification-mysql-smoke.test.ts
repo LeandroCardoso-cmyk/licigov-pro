@@ -303,6 +303,55 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     expect((await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-b-${RUN}` })).status).toBe("synced");
   }, 120_000);
 
+  it("INTEGRIDADE fail-closed sobre índice vigente: descarte, duplicidade, total divergente/ausente/alterado ⇒ nada gravado, snapshot anterior vigente; replay sem escrita", async () => {
+    serveFixtures();
+    const base = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-i0-${RUN}` });
+    expect(base).toMatchObject({ status: "synced", complete: true, entries: 23, total: 23 });
+    const vigente = (await getLatestCatalogIndex("catser"))!;
+    expect(vigente.snapshotId).toBe(base.snapshotId);
+    const snaps = () => n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser'");
+    const ents = () => n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser'");
+    const [snapsBefore, entsBefore] = [await snaps(), await ents()];
+
+    /** Listagem paginada com uma adulteração por cenário (sobre o catálogo-base de 23 serviços). */
+    const serveListing = (mutate: (body: Record<string, unknown>, page: number) => Record<string, unknown>) => {
+      __clearOfficialCatalogCacheForTests();
+      __setOfficialCatalogFetchForTests(async (url) => {
+        const q = new URL(url).searchParams;
+        const page = Number(q.get("pagina")); const size = Number(q.get("tamanhoPagina"));
+        const body = { resultado: CATSER_ALL.slice((page - 1) * size, page * size) as unknown[], totalRegistros: CATSER_ALL.length, paginasRestantes: Math.max(0, Math.ceil(CATSER_ALL.length / size) - page) };
+        return { ok: true, status: 200, json: async () => mutate(body, page) };
+      });
+    };
+    const scenarios: Array<[string, (b: Record<string, unknown>, page: number) => Record<string, unknown>, RegExp]> = [
+      ["descarte", (b, page) => (page === 1 ? { ...b, resultado: [...(b.resultado as unknown[]).slice(0, 9), { codigoServico: "X1", nomeServico: "INVÁLIDO", statusServico: true }] } : b), /descartado/],
+      ["duplicidade", (b, page) => (page === 2 ? { ...b, resultado: [CATSER_ALL[0], ...(b.resultado as unknown[]).slice(1)] } : b), /repetido/],
+      ["total-divergente", (b) => ({ ...b, totalRegistros: 40, paginasRestantes: undefined }), /totalRegistros oficial 40/],
+      ["total-ausente", (b) => ({ resultado: b.resultado }), /não informou totalRegistros/],
+      ["total-alterado", (b, page) => (page === 3 ? { ...b, totalRegistros: 24 } : b), /totalRegistros mudou/],
+    ];
+    for (const [tag, mutate, reason] of scenarios) {
+      serveListing(mutate);
+      const r = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-i-${tag}-${RUN}` });
+      expect(r, tag).toMatchObject({ status: "failed", snapshotId: null, complete: false });
+      expect(r.reason, tag).toMatch(reason);
+      expect(await snaps(), tag).toBe(snapsBefore);
+      expect(await ents(), tag).toBe(entsBefore);
+      expect((await getLatestCatalogIndex("catser"))?.snapshotId, tag).toBe(vigente.snapshotId);
+    }
+    expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE correlation_id LIKE ?", [`cat-smoke-i-%-${RUN}`])).toBe(0);
+    // O snapshot vigente continua íntegro e servindo a busca.
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND snapshot_id = ?", [vigente.snapshotId])).toBe(23);
+    __clearCatalogIndexCacheForTests();
+    const found = await searchCatalogIndex("catser", "limpeza");
+    expect(found.status === "ok" && found.results.map((x) => x.entry.code)).toContain("24961");
+    // Fonte normalizada ⇒ mesmo conteúdo ⇒ replay sem nenhuma escrita.
+    serveFixtures();
+    const again = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-i9-${RUN}` });
+    expect(again).toMatchObject({ status: "synced", complete: true, replayed: true, publication: "replayed", snapshotId: vigente.snapshotId });
+    expect([await snaps(), await ents()]).toEqual([snapsBefore, entsBefore]);
+  }, 120_000);
+
   it("CONCORRÊNCIA REAL: lock retido até o COMMIT; parcial × completo revalidado na serialização; vigente segue a política após commits concorrentes", async () => {
     // Namespace isolado do teste: índice CATMAT da org global (o app não usa índice CATMAT).
     const entries = (n: number, tag: string): OfficialCatalogEntry[] =>
