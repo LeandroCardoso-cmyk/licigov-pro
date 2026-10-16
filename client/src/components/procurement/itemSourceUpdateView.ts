@@ -82,6 +82,18 @@ export function approveButtonState(sourceState: string | null | undefined, isPen
   return { disabled: isPending || block !== null, block };
 }
 
+/**
+ * Homologação visual M8 (P2): o botão reflete a decisão JÁ registrada — item aprovado mostra "Item aprovado" e fica
+ * desabilitado (o servidor já ignora aprovação repetida; isto só evita a impressão de ação pendente).
+ */
+export function approveAction(sourceState: string | null | undefined, status: string | null | undefined, isPending: boolean, compact = false): ApproveButtonState & { alreadyApproved: boolean; label: string } {
+  const base = approveButtonState(sourceState, isPending);
+  // Fonte não vigente (alterada/identidade a revisar): a decisão anterior precisa ser revista — mantém "Aprovar" com o motivo.
+  const alreadyApproved = status === "aprovado" && base.block === null;
+  const label = isPending ? "Aprovando..." : alreadyApproved ? (compact ? "Aprovado ✓" : "Item aprovado") : (compact ? "Aprovar" : "Aprovar item");
+  return { ...base, disabled: base.disabled || alreadyApproved, alreadyApproved, label };
+}
+
 /** Texto curto das cotações fora da curva (valores em CENTAVOS). */
 export function outlierSummary(outliers: readonly PriceOutlier[] | null | undefined): string[] {
   return (outliers ?? []).map((o) => `${o.name || "Fornecedor não identificado"} — ${formatCentsBRL(o.valueCents)} (${o.deviationPercent > 0 ? "+" : ""}${o.deviationPercent}% da média)`);

@@ -81,6 +81,9 @@ describe("b) CATMAT 'Confirmar' gateado pela decisão vigente do ledger", () => 
   const base = { candidateCode: "123456", currentLoaded: true, thresholdConfigured: true as boolean | undefined, pending: false };
   it("sem limiar ou carregando ⇒ desabilitado com motivo; pendente ⇒ desabilitado", () => {
     expect(confirmGate({ ...base, current: null, thresholdConfigured: false })).toMatchObject({ enabled: false, reason: expect.stringContaining("Limiar institucional não configurado") });
+    // CATMAT/CATSER oficial: sem verificação no catálogo oficial ⇒ nunca confirmável (mesmo com limiar configurado).
+    expect(confirmGate({ ...base, current: null, thresholdConfigured: true, verified: false })).toMatchObject({ enabled: false, reason: expect.stringContaining("Sem verificação no catálogo oficial") });
+    expect(confirmGate({ ...base, current: null, thresholdConfigured: true, verified: true })).toMatchObject({ enabled: true });
     expect(confirmGate({ ...base, current: null, thresholdConfigured: undefined })).toMatchObject({ enabled: false });
     expect(confirmGate({ ...base, current: null, currentLoaded: false })).toMatchObject({ enabled: false });
     expect(confirmGate({ ...base, current: null, pending: true }).enabled).toBe(false);

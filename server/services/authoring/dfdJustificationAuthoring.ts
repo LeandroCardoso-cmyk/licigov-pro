@@ -7,7 +7,8 @@
  *  - chamada EXCLUSIVAMENTE via AIExecutionEngine (`executeCognitiveTask`) — nunca provider direto;
  *  - contexto GOVERNADO: só fatos canônicos resolvidos (sem preços, sem dados pessoais, sem valores);
  *  - saída é RASCUNHO: nunca decisão, nunca aprovação, nunca documento oficial;
- *  - guarda determinística: número citado pela IA que o processo não confirma vira `[REVISAR: …]`
+ *  - guarda determinística: número citado pela IA que o processo não confirma vira lacuna — a frase sai do texto
+ *    e a lacuna é listada ao servidor (homologação visual M8; nunca escondida)
  *    (a IA não inventa quantidade, prazo, orçamento ou fundamento);
  *  - explicabilidade: executionId, provider/modelo, versão do prompt, digest do contexto e do input.
  *  - M8-AI-DFD-001: CONTRATO DE SAÍDA estruturado (`dfdJustificationContract.ts`) — conteúdo documental, lacunas e
@@ -20,10 +21,10 @@ import { canonicalDigest } from "../../domain/canonicalJson";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
 import { formatQuantity } from "../../domain/dfdPrefill";
 import {
-  DFD_JUSTIFICATION_RESPONSE_SCHEMA, interpretJustificationOutput, type JustificationContractResult,
+  DFD_JUSTIFICATION_RESPONSE_SCHEMA, interpretJustificationOutput, moveInlineGapsOutOfText, type JustificationContractResult,
 } from "../../domain/dfdJustificationContract";
 
-export const DFD_JUSTIFICATION_PROMPT_VERSION = "dfd-justificativa/2";
+export const DFD_JUSTIFICATION_PROMPT_VERSION = "dfd-justificativa/3";
 const DOMAIN = "processo_licitatorio" as const;
 
 export interface DFDJustificationFacts {
@@ -61,7 +62,8 @@ export function buildJustificationPrompt(facts: DFDJustificationFacts): string {
     "Regras obrigatórias:",
     "- Use SOMENTE os fatos abaixo. Não invente fatos, quantidades, prazos, valores, orçamento, fundamento legal específico ou decisão administrativa.",
     "- Não escreva números de quantidade, valores monetários ou datas. As quantidades e valores já constam em outras seções do DFD.",
-    "- Onde faltar informação necessária, escreva [REVISAR: descrever …] no texto em vez de supor, e registre a lacuna em \"lacunas\".",
+    "- Onde faltar informação necessária, NÃO a suponha: registre-a em \"lacunas\" e escreva os parágrafos só com o que os fatos sustentam (sem marcadores no texto).",
+    "- Não presuma motivação, problemas atuais (ex.: equipamentos obsoletos, falhas, demanda reprimida), impactos ou benefícios que não constem dos fatos; se a motivação específica não estiver nos fatos, ela é uma lacuna.",
     "- Texto corrido em português formal, 2 a 4 parágrafos, sem títulos, sem listas e sem markdown.",
     "- Este texto é um RASCUNHO que será revisado e aprovado por um servidor público.",
     "",
@@ -121,6 +123,8 @@ export interface DFDJustificationDraft {
   contractVersion: string;
   /** Motivos (sem conteúdo) dos trechos descartados por não serem documentais — observabilidade. */
   discardedReasons: string[];
+  /** Frases retiradas do texto por dependerem de lacuna (listadas em `gaps`). */
+  movedToGaps: number;
   executionId: string;
   provider: string | null;
   model: string | null;
@@ -179,13 +183,17 @@ export async function generateDFDJustificationText(p: {
     replayed = execution.replayed === true;
   }
   // Validação ANTES da apresentação: só parágrafos documentais seguem; a guarda de números roda apenas neles
-  // (números de metadados — "confiança 0.85", "fatos 1, 3" — nunca viram [REVISAR] dentro do documento).
+  // (números de metadados — "confiança 0.85", "fatos 1, 3" — nunca chegam ao documento).
   const out = interpretJustificationOutput(raw);
   const guarded = out.paragraphs.map((para) => guardJustificationOutput(para, facts));
+  // Frases que dependem de lacuna (marcador da IA ou número não confirmado) saem do texto e viram lacunas listadas.
+  const moved = moveInlineGapsOutOfText(guarded.map((g) => g.text));
+  const gaps = [...out.gaps];
+  for (const g of moved.gaps) if (!gaps.includes(g)) gaps.push(g);
   return {
-    text: guarded.map((g) => g.text).join("\n\n"),
-    gaps: [...out.gaps], warnings: [...out.warnings], outputContract: out.contract, contractVersion: out.contractVersion,
-    discardedReasons: out.discarded.map((d) => d.reason),
+    text: moved.paragraphs.join("\n\n"),
+    gaps, warnings: [...out.warnings], outputContract: out.contract, contractVersion: out.contractVersion,
+    discardedReasons: out.discarded.map((d) => d.reason), movedToGaps: moved.movedSentences,
     executionId, provider, model, promptVersion: DFD_JUSTIFICATION_PROMPT_VERSION,
     contextDigest: p.ctx.digest, inputDigest, unverifiedNumbers: [...new Set(guarded.flatMap((g) => g.unverifiedNumbers))], replayed,
   };

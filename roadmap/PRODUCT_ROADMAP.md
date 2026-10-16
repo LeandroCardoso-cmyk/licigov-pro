@@ -54,7 +54,9 @@ existente (REUTILIZAR → INTEGRAR → CORRIGIR → ESTENDER → CRIAR), homolog
 
 Legenda de evidência: **SMOKE** = MySQL real + IA mock (CI) · **HTTP-LOCAL** = executor oficial `pnpm homolog:e2e` contra o
 MESMO middleware tRPC do servidor (login/cookie/RBAC reais, IA mock, storage em memória) · **STAGING** = execução no staging.
-Homologação visual: **não realizada** (roteiro mínimo em `docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`).
+Homologação visual: **parcial** em 16/10/2026 (processo `2026/9001`, org 2) — DFD, pesquisa, itens e ETP percorridos; TR
+bloqueado e Edital BLL não alcançado. Achados e correções na seção "Rodada M8 — homologação visual" abaixo; roteiro em
+`docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md`.
 
 | Marco | Peso | % | Evidência | Próxima ação / bloqueador |
 |---|---|---|---|---|
@@ -162,6 +164,168 @@ Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O ma
   - Esse recurso **não foi exercitado** na execução. Medir na homologação visual quanto ele reduz os 21 campos manuais.
 - **Edital:** `MANUAL_DECISIONS_VISIBLE: 0` é o estado medido **depois** das 12 decisões registradas pelo executor, não
   ausência de trabalho humano.
+
+### Rodada M8 — homologação visual (parcial) e correções direcionadas (16/10/2026)
+
+Origem: homologação visual do Owner no staging (`4c4b17d`, deploy `961c848c`), org 2, processo `2026/9001`, Perfil revisão 5
+com 9 padrões do TR. Branch `fix/m8-visual-round` → PR para `staging` (sem merge automático). Nenhuma migration; nenhum
+processo histórico, binding ou decisão registrada alterados.
+
+**Comprovado na tela (preservado):** padrões do TR reduziram as pendências de 21 para 12 (−42,9%); sugestão de IA do DFD
+editada e aceita ("Alterado por você"); importação de preços com 1 item, 3 cotações, 10 unidades, média R$ 4.000,00, total
+R$ 40.000,00 e 7 linhas ignoradas; item aprovado (CATMAT não confirmado) e incorporado; ETP com 6 evidências normativas,
+8 lacunas factuais e emissão bloqueada por `[REVISAR]`; Edital pedindo modalidade/forma.
+
+| Achado | Classificação | Causa (código) | Tratamento |
+|---|---|---|---|
+| P1 DFD — `[REVISAR: …]` e hipóteses não fundamentadas na justificativa | **Confirmado** | Prompt mandava marcar lacunas no texto e não proibia presumir motivação/impactos | Prompt `dfd-justificativa/3` + contrato `/2`: frase com marcador sai do texto e vira lacuna listada; recusa explícita quando nada sobra, dizendo o que falta. Lacunas continuam visíveis; aceite humano; histórico intacto |
+| P1 TR — "Autoria estruturada inválida (fail-closed) … Fundamentação" | **Confirmado** | O prompt do TR não declarava as seções de mínimo legal; a IA as omitia e a validação (correta) recusava com mensagem técnica | Validação **inalterada**. Prompt declara as seções de mínimo legal (redigir com `[REVISAR]` o que faltar). Recusa traduzida: motivo, onde complementar (ex.: Fundamentação → ETP), próxima ação, e distinção rascunho × emissão. Proveniência `failed` continua gravada; nada é gravado no documento (SMOKE J5) |
+| P1 ETP "v1 · gerado" em "Documentos oficiais (versões emitidas)" | **Confirmado (apresentação)** | Cada geração grava um snapshot técnico `gerado` no ledger oficial (append-only, usado no replay); o painel listava tudo | Painel separa versões **emitidas** de "Versões técnicas (snapshots — não emitidas)", recolhidas. Ledger, numeração, hashes e replay inalterados |
+| P1 Edital — formulário da aba × fluxo BLL Rev. 2 | **Confirmado (UX)** | Os campos legados (critério/regime) apareciam antes de saber se havia modelo vinculado | Campos legados só aparecem quando não há modelo vinculado; antes disso, orientação única. Nenhum padrão assumido; Rev. 2, binding, `DEFERRED_PUBLICATION` e preflight inalterados |
+| P2 indicador de itens sem atualizar após incorporar | **Confirmado** | Invalidação de cache incompleta | Invalida participação dos itens e preparação/preflight do Edital |
+| P2 botão "Aprovar item" após aprovado | **Confirmado** | Rótulo não refletia o estado | "Item aprovado" desabilitado com fonte vigente; aprovação desatualizada continua mostrando o motivo. Idempotência do backend inalterada |
+| P2 CATMAT "confiança 80%" | **Confirmado** | Candidatos gerados localmente (código derivado da descrição) e pontuados por palavras em comum — não há consulta ao catálogo oficial | **Resolvido na reconciliação abaixo** (decisão do Owner: reutilizar a integração oficial existente). Limiar não configurado; decisões intactas |
+| P2 ETP — conclusões (lote único, benefícios) sem análise | **Confirmado** | Prompt não distinguia fato × conclusão | Regra de inferência no prompt (conclusão sem análise ⇒ `[REVISAR: decisão/análise necessária]`); lista "O que falta completar" por seção no ETP/TR, sem caçar marcadores |
+| `Load failed` na 1ª criação do `2026/9001` | **Não reproduzido** | Intermitente de rede/cliente; sem evidência no servidor | Registrado; nenhuma correção especulativa |
+| Edital — modalidade/forma vazias após recarregar | **Comportamento conhecido** | O rascunho institucional não persiste esses parâmetros | Documentado para rodada futura (fallback pelo processo/manifesto) |
+
+**Evidência:** client 79 arquivos / 951 testes; servidor afetado 18 / 264; smokes MySQL 16 / 112 (incl. J5 novo); `tsc`,
+lint dos arquivos alterados e build limpos.
+
+**Percentuais mantidos (M8 80%, global 88,25%).** Os 20% restantes do M8 exigem a homologação visual completa — TR gerado
+e Edital BLL alcançado na tela —, o que ainda não ocorreu.
+
+#### Reconciliação CATMAT/CATSER com o catálogo oficial (16/10/2026, mesmo PR #306)
+
+**Diagnóstico (Graphify + código):**
+- A integração oficial já existia: `catmatRouter`, com consulta a `dadosabertos.compras.gov.br`. Só a busca pública do
+  modal legado do TR a usava, e esse modal está fora da navegação.
+- Os Itens Inteligentes usavam `catmatCandidates()`: códigos de 6 dígitos derivados de SHA-256 da descrição, sem existência
+  comprovada. Esse gerador era chamado em três pontos: enriquecimento pós-importação, `resolveAvailableSuggestions` e
+  `searchCATMAT`.
+- A tabela `item_catmat_matches` não guarda a fonte da sugestão. Por isso o ledger registrava `catalogo-interno` por padrão.
+- **Brecha confirmada:** com o limiar configurado, um código gerado por hash podia ser confirmado como `catalogo-interno`.
+  - O limiar só era exigido como existente, nunca comparado ao score.
+  - A exposição real não foi medida: esta sessão não tem acesso aos bancos de staging e produção. Decisões já registradas
+    não foram alteradas.
+  - Na homologação visual do `2026/9001`, o limiar não estava configurado, e nenhuma confirmação foi feita.
+- A infraestrutura `catalog_snapshots` / `catalog_entries` (migrations 0070/0071) existia sem nenhum gravador em runtime.
+
+**Fluxo único:**
+1. Item: a importação de preços não gera nem consulta catálogo, para não prender a pesquisa à latência da API externa.
+2. "Buscar classificação": o servidor indica a natureza (CATMAT = material, CATSER = serviço), e o mesmo cliente do
+   `catmatRouter` consulta o catálogo oficial.
+3. Evidência por órgão: snapshot imutável com fonte, URL, consulta, instante, checksum e correlationId, mais as entradas com a
+   descrição oficial e a situação.
+4. Ranking textual, aplicado só aos códigos retornados.
+5. Decisão humana no ledger. Confirmar exige sugestão **verificada** (mesmo código, mesma descrição oficial, ativa), e a fonte
+   gravada é `api-comprasgov:catmat|catser`.
+
+**Garantias:**
+- Sugestão legada ou gerada por hash continua visível, mas marcada "sem proveniência" e **não confirmável**, mesmo com limiar
+  configurado (`CATMAT_SUGGESTION_UNVERIFIED`, nada gravado).
+- A verificação roda dentro da execução idempotente: o replay devolve a decisão original mesmo que a fonte mude depois.
+- Nova consulta não substitui a decisão humana.
+- Substituição manual continua permitida, com justificativa. Ela recebe o rótulo `manual+api-comprasgov:…` só se o mesmo código
+  tiver evidência oficial.
+- Catálogo indisponível (desligado, timeout, HTTP, rede ou resposta malformada) resulta em "indisponível": nenhum código, nada
+  gravado, classificação pendente, falha registrada na linha do tempo e retentativa possível.
+- Sem migration. Histórico (sugestões, decisões, `suggestedCatmat` antigo) preservado, sem reescrita.
+
+**Evidência:**
+- Unit: catálogo oficial 17 testes (parser, timeout real, cache, indisponibilidade, código inexistente/inativo, verificação
+  adversarial).
+- SMOKE novo `catalog-official-classification-mysql-smoke`: 6 testes (importação M8 preservada, hash não confirmável com
+  limiar, busca → evidência → confirmação → replay, CATSER, indisponível, tenant).
+- Smokes CATMAT existentes adaptados ao fluxo oficial, sem afrouxar asserções.
+- Suíte completa sem banco: 545 arquivos, sem falhas.
+- Smoke de segurança: 39 arquivos / 408 testes.
+- `tsc`, lint dos arquivos alterados e build limpos.
+
+**Validação real (Owner, Console do Railway staging, 16/10/2026) — o 1º contrato estava incorreto:**
+- CATMAT `descricaoItem=notebook`: HTTP 200, `resultado: []`, `totalRegistros: 0`.
+- CATSER `descricaoItem=limpeza`: HTTP 200, mas devolveu endoscopia e outros serviços hospitalares. O filtro textual não
+  existe nesse endpoint e foi ignorado. O payload usa `codigoServico`/`nomeServico`/`statusServico`.
+- As duas APIs exigem `tamanhoPagina` ≥ 10.
+- O 1º commit usava `descricaoItem`/`statusItem`/`codigoItem` nos dois catálogos. **Merge suspenso pelo Owner.**
+
+**Emenda (mesmo PR #306) — estratégia que funciona com a API real:**
+- **Contratos HTTP separados** no mesmo cliente (`OFFICIAL_CATALOG_CONTRACTS`):
+  - CATMAT `codigoItem`/`statusItem`/`descricaoItem`;
+  - CATSER `codigoServico`/`statusServico`, sem parâmetro textual. Enviar um é recusado no próprio código;
+  - `pagina` + `tamanhoPagina` (≥ 10) sempre enviados.
+- **CATMAT:** a busca textual oficial passa sempre pelo filtro de relevância local (`catalogSearchEngine`, que já existia).
+  - Vazio é resposta legítima.
+  - Linhas sem relação com o termo são tratadas como filtro possivelmente ignorado, e nada é sugerido.
+  - O comportamento real de `descricaoItem` (exato × parcial × maiúsculas) é **medido** pelo `catalog:smoke`, não presumido.
+- **CATSER:** índice de pesquisa sincronizado reaproveitando `catalog_snapshots`/`catalog_entries` (organização global 0,
+  convenção existente de `normalizeCatalogEntry`), sem migration.
+  - A sincronização é explícita e limitada (`pnpm catalog:sync -- catser`). Tem limite de páginas, uma leitura por página e
+    snapshot versionado com checksum. Falha não grava nada; atingir o limite gera snapshot parcial.
+  - A busca usa o mesmo motor local.
+  - Os ≤ 5 melhores candidatos são **verificados um a um por `codigoServico`** na fonte, e só os ativos e relevantes viram
+    sugestão.
+  - Sem índice, a resposta é "busca indisponível", com orientação para verificar o código.
+- **Verificar código** (CATMAT/CATSER): o servidor informa o código e a fonte confirma existência, descrição e situação.
+  Inexistente ou inativo não gera sugestão.
+- **Preservado:** verificação oficial por código, evidência por órgão, snapshots imutáveis, replay, isolamento (o índice
+  global só encontra candidatos; a evidência é do órgão) e decisão humana no ledger.
+
+**Evidência da emenda:**
+- Unit do catálogo: 22 (contratos por catálogo, paginação, vazio legítimo, filtro ignorado, "limpeza" × serviços
+  hospitalares, timeout, cache, código).
+- SMOKE do fluxo: 11 (sincronização paginada, parcial e com falha; CATSER por índice + `codigoServico`; defasagem
+  inativa; CATMAT vazio e filtro ignorado; verificar código; confirmação; replay; tenant).
+- Smokes CATMAT, jornadas e isolamento verdes.
+
+**Atomicidade e exclusividade do índice (revisões do Owner):**
+- A publicação usa **uma conexão dedicada**, porque o `GET_LOCK` pertence à conexão. A ordem é GET_LOCK, transação nessa
+  conexão, commit ou rollback, RELEASE_LOCK e devolução da conexão.
+  - O lock fica retido até o commit efetivo.
+  - A espera pelo lock é limitada (30 s, configurável). Esgotada, a publicação é recusada e nada é gravado.
+- As regras são revalidadas **dentro** da serialização:
+  - parcial sobre completo vigente ⇒ recusado;
+  - conteúdo igual ao vigente ⇒ replay sem escrita;
+  - conteúdo de um snapshot anterior ⇒ reconduzido a vigente, alterando só o metadado.
+- O snapshot vigente é o de maior `publishedAt`, tirado do relógio do MySQL dentro da serialização (segue a ordem dos commits).
+- As entradas são versionadas **por snapshot**: o índice publicado nunca é reescrito.
+- Falha no meio da gravação ⇒ rollback: nada visível, índice anterior intacto.
+- Testes MySQL de concorrência real nas duas ordens. A 1ª publicação fica pausada dentro da transação e a 2ª fica comprovadamente
+  bloqueada até o commit.
+  - Parcial → completo: o completo publica e vira vigente.
+  - Completo → parcial: o parcial é recusado.
+  - Replay e recondução verificados.
+
+**Smoke real PRÉ-MERGE:** workflow manual `catalog-official-smoke.yml`, disparado pela label `catalog-smoke` no PR ou por
+`workflow_dispatch`.
+- Roda `pnpm catalog:smoke` sobre o HEAD exato do PR.
+- Sem segredos e sem banco, com token só de leitura.
+- O relatório fica nos logs e no artefato `catalog-smoke-<sha>`.
+
+**Smoke real PRÉ-MERGE — RESULTADO** (GitHub Actions run `38948484321`, HEAD `16e80d4`, 16/10/2026, sem segredos e sem
+banco; saída 0):
+- **CATMAT:**
+  - Envelope `resultado/totalRegistros/totalPaginas/paginasRestantes`; total **250.034** itens.
+  - `codigoItem=206504` encontrado, descrição idêntica, ativo.
+  - `descricaoItem` = **descrição oficial COMPLETA**: 1 linha, que contém a amostra.
+  - `descricaoItem` = 1ª palavra (maiúsculas ou minúsculas), "notebook", "NOTEBOOK" ou termo inexistente: **0 linhas**.
+  - ⇒ O filtro é aplicado, mas só como **correspondência exata da descrição completa**. Não serve como busca livre.
+  - `tamanhoPagina=9` ⇒ HTTP 400 (mínimo 10 confirmado).
+- **CATSER:**
+  - Mesmo envelope; total **3.022** serviços.
+  - `codigoServico=7250` encontrado, descrição idêntica, ativo.
+  - `descricaoItem` (não documentado) **ignorado** (devolve linhas), como previsto.
+  - `tamanhoPagina` 100 e 500 aceitos ⇒ sincronização ≈ 31 páginas de 100 (ou 7 de 500).
+- **Conclusões:**
+  - Contratos por catálogo e consulta por código **confirmados em runtime**.
+  - Busca CATSER por índice + `codigoServico` **viável e dimensionada** (3.022 linhas).
+  - No CATMAT, o caminho prático é **"Verificar código"**. A busca textual oficial só acha a descrição exata, e a tela agora diz
+    isso.
+  - Busca livre no CATMAT exigiria índice próprio (250 mil itens ≈ 500 páginas de 500) ou a hierarquia PDM. **Decisão do
+    Owner, fora deste PR.**
+
+**Sincronização `catalog:sync` NÃO executada.** Ela só pode ocorrer após a validação real, o dimensionamento pelo smoke e a
+autorização expressa do Owner.
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).

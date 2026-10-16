@@ -7,7 +7,6 @@
  * Acesso ao Kernel (RAG/KG) exclusivamente via kernelAccessService. Graceful sem DB.
  */
 
-import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { assertKernelAccess } from "./kernelAccessService";
@@ -20,7 +19,8 @@ import {
   type IntelligentProcurementItem,
   type ItemStatus,
 } from "../domain/intelligentItem";
-import { rankCATMAT, suggestedAndAlternatives, type CATMATMatch } from "../domain/catmatMatching";
+import { suggestedAndAlternatives, type CATMATMatch } from "../domain/catmatMatching";
+import { listVerifiedSuggestions, type VerifiedSuggestion } from "./itemCatalogClassificationService";
 import {
   createItemRecommendation,
   createItemRisk,
@@ -37,7 +37,6 @@ import {
   transitionItemStatusCAS,
   getIntelligentItemSourceState,
   recordProcessEvent,
-  listCatmatMatches,
   listRecommendations,
   listItemRisks,
   listItemHistory,
@@ -133,19 +132,10 @@ export async function applyGovernedItemTransition(params: {
 }
 
 /**
- * Gera candidatos CATMAT determinísticos para a descrição (stub — integração real
- * é do Kernel/CATMAT Engine em sprint futura). Nunca escolhe automaticamente.
+ * Candidatos CATMAT/CATSER NÃO são gerados aqui: vêm SÓ do catálogo oficial, pela ação "Buscar classificação"
+ * (`itemCatalogClassificationService`). O gerador local por hash (códigos de formato CATMAT sem existência comprovada)
+ * foi retirado do fluxo operacional.
  */
-export function catmatCandidates(description: string): Array<{ code: string; description: string }> {
-  const base = createHash("sha256").update(description.toLowerCase().trim()).digest("hex");
-  const codeFrom = (salt: string) => (parseInt(createHash("sha256").update(`${base}:${salt}`).digest("hex").slice(0, 8), 16) % 900000 + 100000).toString();
-  const words = description.trim().split(/\s+/).slice(0, 4).join(" ");
-  return [
-    { code: codeFrom("a"), description: `${words} — especificação padrão` },
-    { code: codeFrom("b"), description: `${words} — especificação alternativa` },
-    { code: codeFrom("c"), description: `${words} — especificação equivalente` },
-  ];
-}
 
 /** Sugere especificações mínimas/equivalentes de forma determinística. */
 export function suggestSpecifications(description: string): string[] {
@@ -182,11 +172,9 @@ export async function enrichItem(params: {
     unit: params.unit, supplier: s.name, brand: "", model: "", value: s.value, observations: "", source: "", createdAt: "",
   } as PriceResearchItem)));
 
-  // CATMAT ranking (sugerido, nunca automático)
-  const matches = rankCATMAT({
-    itemId: "pending", organizationId: params.organizationId, description: params.description,
-    candidates: catmatCandidates(params.description), correlationId: params.correlationId,
-  });
+  // CATMAT/CATSER: nenhum candidato no enriquecimento — a classificação fica pendente até "Buscar classificação"
+  // (catálogo oficial) e decisão humana. Nada é sugerido sem fonte verificável.
+  const matches: CATMATMatch[] = [];
   const { suggested, alternatives } = suggestedAndAlternatives(matches);
 
   // Riscos: preço fora da curva
@@ -221,15 +209,6 @@ export async function enrichItem(params: {
 
   // Recomendações fundamentadas (reasoning/explainability/provenance/confidence/rejectable)
   const recommendations: ItemRecommendation[] = [];
-  if (suggested) {
-    recommendations.push(createItemRecommendation({
-      itemId: item.id, organizationId: params.organizationId, type: "catmat",
-      summary: `Sugestão de CATMAT ${suggested.catmatCode}.`,
-      reasoning: `Maior aderência de descrição (score ${suggested.score.toFixed(2)}) entre os candidatos.`,
-      explainability: "Ranking por interseção de tokens; o servidor decide aceitar/rejeitar/pesquisar/informar manual.",
-      provenance: "catmat_matching", confidence: suggested.score, correlationId: params.correlationId,
-    }));
-  }
   recommendations.push(createItemRecommendation({
     itemId: item.id, organizationId: params.organizationId, type: "especificacao",
     summary: "Usar especificação mínima com equivalentes.",
@@ -255,7 +234,8 @@ export async function enrichItem(params: {
  */
 export async function getItemPanel(itemId: string, organizationId: number): Promise<{
   item: IntelligentProcurementItem | null;
-  catmat: Array<{ id: string; catmatCode: string; catmatDescription: string; score: number; rank: number; decision: string }>;
+  /** Sugestões persistidas com verificação contra a evidência oficial (`verified`, fonte, tipo, data da consulta). */
+  catmat: VerifiedSuggestion[];
   recommendations: Array<{ id: string; type: string; summary: string; reasoning: string; explainability: string; provenance: string; confidence: number; accepted: boolean | null }>;
   risks: Array<{ id: string; type: string; severity: string; description: string; explanation: string }>;
   history: Array<{ id: string; object: string; year: number; winningSupplier: string; homologatedPrice: number; catmatUsed: string; outcome: string }>;
@@ -271,7 +251,7 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
 }> {
   const item = await getIntelligentItem(itemId, organizationId);
   const [catmat, recommendations, risks] = await Promise.all([
-    listCatmatMatches(itemId, organizationId),
+    listVerifiedSuggestions(itemId, organizationId),
     listRecommendations(itemId, organizationId),
     listItemRisks(itemId, organizationId),
   ]);

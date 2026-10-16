@@ -84,14 +84,17 @@ export function validateDecision(input: DecisionValidationInput): DecisionValida
 
 /**
  * Proveniência a registrar no ledger para cada decisão. `confirmado` herda a fonte
- * da sugestão decidida; `substituido` é sempre override MANUAL; rejeição e
- * sem-correspondência não carregam código (sem proveniência de código).
+ * da sugestão decidida (o serviço só confirma sugestão VERIFICADA no catálogo oficial);
+ * `substituido` é override MANUAL — `manual+<fonte>` quando o mesmo código tem evidência
+ * oficial verificada; rejeição e sem-correspondência não carregam código.
+ * Nunca declara uma fonte sem evidência: sem fonte conhecida ⇒ `sem-proveniencia`.
  */
 export function decisionSource(
   decision: CATMATGovernanceDecision,
   suggestionSource?: string | null,
+  manualEvidenceSource?: string | null,
 ): string | null {
-  if (decision === "confirmado") return suggestionSource ?? "catalogo-interno";
-  if (decision === "substituido") return "manual";
+  if (decision === "confirmado") return suggestionSource ?? "sem-proveniencia";
+  if (decision === "substituido") return manualEvidenceSource ? `manual+${manualEvidenceSource}`.slice(0, 40) : "manual";
   return null;
 }

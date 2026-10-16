@@ -43,6 +43,8 @@ vi.mock("@/lib/trpc", () => ({
     itemIntelligence: {
       getItem: { useQuery: () => st.panel },
       decidirCATMAT: { useMutation: mutation },
+      buscarClassificacaoOficial: { useMutation: mutation },
+      verificarCodigoOficial: { useMutation: mutation },
       getCATMATDecisions: { useQuery: () => ({ data: { current: null, history: [] }, isLoading: false, refetch: () => Promise.resolve() }) },
       getCATMATThreshold: { useQuery: () => ({ data: { configured: true, minScore: 0.5, version: 1 } }) },
     },
@@ -102,6 +104,12 @@ describe("R9 / SEM-054 — ItemIntelligenceWorkspace: Aprovar bloqueado com font
     const html = render(ItemIntelligenceWorkspace, { processId: "p1" });
     expect(button(html, "Aprovar")).toContain('disabled=""');
     expect(html).toContain("Aprovação bloqueada: A identidade deste item precisa ser revisada");
+  });
+
+  it("homologação visual M8: item já aprovado com fonte vigente ⇒ botão mostra 'Aprovado ✓' desabilitado (sem ação pendente)", () => {
+    withItems(item({ status: "aprovado", sourceState: "current" }));
+    const html = render(ItemIntelligenceWorkspace, { processId: "p1" });
+    expect(button(html, "Aprovado ✓")).toContain('disabled=""');
   });
 
   it("fonte vigente ⇒ Aprovar habilitado; média em CENTAVOS como referência canônica; outliers exibidos", () => {
@@ -201,5 +209,45 @@ describe("R9 / SEM-054 — ProcurementItemPanel: impacto da aprovação e bloque
     expect(button(html, "Aprovar item")).toContain('disabled=""');
     expect(html).toContain("A identidade deste item precisa ser revisada");
     expect(html).not.toContain("Revisar cotações atualizadas");
+  });
+});
+
+describe("CATMAT/CATSER oficial — ProcurementItemPanel: buscar classificação e confirmar só código verificado", () => {
+  const base = {
+    item: {
+      id: "i1", organizationId: 1, processId: "p1", sourceResearchId: "r1", description: "Notebook", quantity: 10, unit: "un",
+      averagePrice: 4000, suppliers: [], suggestedCATMAT: null, alternativeCATMAT: [], specifications: [], risks: [], recommendations: [],
+      status: "aprovado", approvedBy: 1, correlationId: "c", createdAt: "", updatedAt: "",
+    },
+    recommendations: [], risks: [], history: [], graphNodeIds: [],
+    governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 400000, validQuoteCount: 3, priceOutliers: [] },
+  };
+  const cand = (over: Record<string, unknown>) => ({
+    id: "m1", catmatCode: "451868", catmatDescription: "COMPUTADOR PORTÁTIL (NOTEBOOK)", score: 0.5, rank: 0, decision: "sugerido",
+    source: "api-comprasgov:catmat", verified: true, catalogType: "catmat", retrievedAt: "2026-10-16T12:00:00.000Z", evidenceSnapshotId: "s1", verificationNote: null, ...over,
+  });
+
+  it("oferece a busca no CATMAT (material) e no CATSER (serviço); sem aviso de candidatos locais", () => {
+    st.panel = { data: { ...base, catmat: [] }, isLoading: false };
+    const html = render(ProcurementItemPanel, { itemId: "i1" });
+    expect(html).toContain('data-testid="catmat-official-search"');
+    expect(button(html, "Buscar no CATMAT \\(material\\)")).not.toContain('disabled=""');
+    expect(button(html, "Buscar no CATSER \\(serviço\\)")).not.toContain('disabled=""');
+    expect(html).not.toContain("Candidatos gerados localmente");
+    // Verificação oficial POR CÓDIGO nos dois catálogos (desabilitada até o servidor informar o código).
+    expect(html).toContain('data-testid="catmat-verify-code"');
+    expect(button(html, "Verificar código no CATMAT")).toContain('disabled=""');
+    expect(button(html, "Verificar código no CATSER")).toContain('disabled=""');
+  });
+
+  it("candidato verificado ⇒ proveniência oficial e Confirmar habilitado; legado sem proveniência ⇒ Confirmar desabilitado com motivo", () => {
+    st.panel = { data: { ...base, catmat: [cand({})] }, isLoading: false };
+    const ok = render(ProcurementItemPanel, { itemId: "i1" });
+    expect(ok).toContain("Verificado no catálogo oficial CATMAT");
+    expect(button(ok, "Confirmar")).not.toContain('disabled=""');
+    st.panel = { data: { ...base, catmat: [cand({ catmatCode: "583920", verified: false, source: "sem-proveniencia", catalogType: null, retrievedAt: null, verificationNote: "Código sem consulta oficial registrada para este órgão." })] }, isLoading: false };
+    const legacy = render(ProcurementItemPanel, { itemId: "i1" });
+    expect(legacy).toContain("Sem proveniência verificável");
+    expect(button(legacy, "Confirmar")).toContain('disabled=""');
   });
 });

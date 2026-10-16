@@ -5,6 +5,7 @@
  * número de evidências normativas reais usadas no rascunho. NÃO expõe prompt, payload, raciocínio bruto
  * nem segredos. Reforça a supervisão humana (o rascunho nunca é "aprovado" automaticamente).
  */
+import { listFactualGaps } from "./factualGaps";
 
 export type GroundingDescriptor = {
   state: string;
@@ -26,9 +27,10 @@ const TONE_CLASS: Record<"ok" | "warn" | "muted", string> = {
   muted: "border-border bg-muted text-muted-foreground",
 };
 
-export default function GroundingNotice({ grounding }: { grounding: GroundingDescriptor | null }) {
+export default function GroundingNotice({ grounding, content }: { grounding: GroundingDescriptor | null; content?: string | null }) {
   if (!grounding) return null;
   const meta = LABELS[grounding.state] ?? { label: grounding.state, tone: "muted" as const };
+  const gaps = listFactualGaps(content);
   return (
     <div
       className={`mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2 text-sm ${TONE_CLASS[meta.tone]}`}
@@ -57,6 +59,22 @@ export default function GroundingNotice({ grounding }: { grounding: GroundingDes
         <span className="basis-full text-xs opacity-90">
           Fundamentação incompleta — complementação e revisão obrigatórias pelo servidor competente.
         </span>
+      )}
+      {gaps.length > 0 && (
+        <details data-testid="factual-gap-list" className="basis-full text-xs">
+          <summary className="cursor-pointer font-medium">
+            O que falta completar ({gaps.length}) — fatos do processo ou decisões humanas; a IA não os presume
+          </summary>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            {gaps.map((g, i) => (
+              <li key={i}>
+                {g.section ? <span className="font-medium">{g.section}: </span> : null}
+                {g.text}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-1 opacity-90">Substitua cada trecho [REVISAR: …] no editor abaixo pelo texto revisado e salve.</p>
+        </details>
       )}
     </div>
   );

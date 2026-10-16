@@ -250,6 +250,25 @@ describe.skipIf(!DB)("LICIGOV-FAST — jornadas integradas (MySQL real, tenant s
     expect((await err((await caller(U.ownerB, ORG_B)).procurementProcess.previewPriceResearch({ processId: pid, text: M8_PRICE_RESEARCH_TEXT })))?.code).toBe("NOT_FOUND");
   }, 120_000);
 
+  it("J5 — homologação visual M8: TR com seção de mínimo legal omitida pela IA ⇒ recusa com orientação operacional; nada gravado", async () => {
+    const api = await caller(U.owner);
+    const { process } = await api.procurementProcess.createProcess({ processNumber: `IJ5-${RUN}`, object: OBJ, startOption: "iniciar_pesquisa" });
+    const pid = process.id;
+    await createCanonicalManualItem({ organizationId: ORG, processId: pid, actorUserId: U.owner, description: "Papel A4 75g", unit: "resma", plannedQuantity: "10" });
+    const omitted =buildMockProviderAuthoring("tr", { fundamentacao: { contentMode: "not_applicable_with_justification", prose: "", omissionJustification: "Sem ETP emitido." } });
+    const err = await (async () => {
+      try {
+        await generateDocument({ organizationId: ORG, processId: pid, kind: "tr", object: OBJ, correlationId: "ij5", idempotencyKey: `ij5-${RUN}`, actorUserId: U.owner, invoke: async () => omitted });
+        return null;
+      } catch (e: any) { return { code: e?.code, message: String(e?.message) }; }
+    })();
+    expect(err?.code).toBe("PRECONDITION_FAILED");
+    expect(err?.message).toMatch(/Rascunho do Termo de Referência não gerado — nada foi gravado/);
+    expect(err?.message).toMatch(/Fundamentação da contratação.*Onde complementar: no ETP do processo/s);
+    expect(await n("SELECT COUNT(*) n FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'tr'", [ORG, pid])).toBe(0);
+    expect(await n("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND origin = ? AND document_type = 'tr'", [ORG, pid])).toBe(0);
+  }, 120_000);
+
   it("J3 — monitoramento: contrato externo com término ⇒ vencimento e alertas no calendário; indicador por contrato; sem vigência ⇒ recusa", async () => {
     const api = await caller(U.operator);
     const end = plusDays(20);

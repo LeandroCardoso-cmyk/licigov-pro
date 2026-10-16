@@ -4,7 +4,7 @@ import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import CatmatThresholdConfig from "./CatmatThresholdConfig";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { ITEM_STATUS_LABELS, approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary } from "./itemSourceUpdateView";
 
 /**
  * ItemIntelligenceWorkspace — REAL (wired to tRPC). *** NÚCLEO DO DOMÍNIO ***
@@ -116,7 +116,7 @@ export default function ItemIntelligenceWorkspace({
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Un.</th>
                 <th className="px-4 py-3">Preço médio</th>
-                <th className="px-4 py-3">CATMAT sugerido</th>
+                <th className="px-4 py-3" title="Classificação só é oficial após a decisão registrada no item (Inteligência do Item).">CATMAT/CATSER</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
@@ -124,7 +124,7 @@ export default function ItemIntelligenceWorkspace({
             <tbody className="divide-y divide-border">
               {items.map((it) => {
                 // R9 / SEM-054 — mesma regra do servidor: fonte não vigente ⇒ "Aprovar" bloqueado com motivo.
-                const approve = approveButtonState(it.sourceState, approveItem.isPending);
+                const approve = approveAction(it.sourceState, it.status, approveItem.isPending, true);
                 const outliers = outlierSummary(it.priceOutliers);
                 const confirming = confirmingId === it.id;
                 return (
@@ -207,7 +207,7 @@ export default function ItemIntelligenceWorkspace({
                             title={approve.block?.reason}
                             className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                           >
-                            Aprovar
+                            {approve.label}
                           </button>
                           <button
                             type="button"

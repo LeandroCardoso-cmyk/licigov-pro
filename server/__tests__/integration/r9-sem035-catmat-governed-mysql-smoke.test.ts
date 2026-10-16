@@ -13,6 +13,7 @@ import { runMigrations, validateSchema } from "../../bootstrap";
 import { createIntelligentItem } from "../../domain/intelligentItem";
 import { insertIntelligentItem, getIntelligentItem } from "../../db/procurement";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
+import { serveOfficialCatalogFixture, restoreOfficialCatalog } from "../helpers/officialCatalogFixtures";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 960871;
@@ -38,7 +39,7 @@ describe.skipIf(!DB)("R9 / SEM-035 — CATMAT só pelo ledger governado (MySQL 8
     return rows as Array<{ decision: string; catmatCode: string | null; actorUserId: number; correlationId: string }>;
   };
   async function cleanup() {
-    for (const t of ["intelligent_items", "process_timeline", "catmat_matches"]) await conn.query(`DELETE FROM \`${t}\` WHERE organization_id IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
+    for (const t of ["intelligent_items", "process_timeline", "catmat_matches", "item_catmat_matches", "catalog_entries", "catalog_snapshots"]) await conn.query(`DELETE FROM \`${t}\` WHERE organization_id IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
     for (const t of ["catmat_decisions", "catmat_threshold_config", "organization_members", "idempotency_keys"]) await conn.query(`DELETE FROM \`${t}\` WHERE organizationId IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
   }
   async function seed(tag: string) {
@@ -65,6 +66,7 @@ describe.skipIf(!DB)("R9 / SEM-035 — CATMAT só pelo ledger governado (MySQL 8
   }, 300_000);
 
   afterAll(async () => {
+    restoreOfficialCatalog();
     if (!conn) return;
     await cleanup().catch(() => {});
     await conn.query("DELETE FROM users WHERE id IN (?, ?)", [operator, ownerB]).catch(() => {});
@@ -75,7 +77,12 @@ describe.skipIf(!DB)("R9 / SEM-035 — CATMAT só pelo ledger governado (MySQL 8
   it("K1/K2) aceitar só a sugestão REAL, pelo ledger; código divergente ⇒ CATMAT_CODE_MISMATCH sem escrita; repetir = replay", async () => {
     const it0 = await seed("k1");
     const c = await caller(operator, ORG);
+    // Sugestões REAIS vêm do catálogo oficial ("Buscar classificação", transporte com fixture sintética) — nunca geradas localmente.
+    serveOfficialCatalogFixture();
+    await c.itemIntelligence.buscarClassificacaoOficial({ itemId: it0.id, catalogType: "catmat" });
+    restoreOfficialCatalog();
     const { suggestions } = await c.itemIntelligence.getCATMATSuggestions({ itemId: it0.id });
+    expect(suggestions.every((x) => x.verified)).toBe(true);
     expect(suggestions.length).toBeGreaterThan(0);
     const s = suggestions[0];
     const bad = await err(c.itemIntelligence.acceptCATMAT({ itemId: it0.id, matchId: s.id, catmatCode: "999999999" }));

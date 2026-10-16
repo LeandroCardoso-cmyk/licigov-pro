@@ -7,7 +7,7 @@ import {
 import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary } from "./itemSourceUpdateView";
 import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
 
 /**
@@ -84,6 +84,8 @@ export default function ProcurementItemPanel({
   const [manualCode, setManualCode] = React.useState<string>("");
   const [manualDesc, setManualDesc] = React.useState<string>("");
   const [justification, setJustification] = React.useState<string>("");
+  const [searchTerm, setSearchTerm] = React.useState<string>("");
+  const [searchMsg, setSearchMsg] = React.useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const keyStateRef = React.useRef<CatmatKeyState | null>(null);
   const lastRetryableRef = React.useRef<boolean>(false);
 
@@ -122,6 +124,43 @@ export default function ProcurementItemPanel({
           : msg,
       );
     },
+  });
+
+  // "Buscar classificação": consulta o catálogo oficial e persiste as alternativas REAIS (nada decidido aqui).
+  const buscar = trpc.itemIntelligence.buscarClassificacaoOficial.useMutation({
+    onSuccess: (res) => {
+      if (res.status === "unavailable" || res.status === "index_unavailable") {
+        setSearchMsg({ tone: "warn", text: res.message });
+        return;
+      }
+      const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
+      setSearchMsg(res.candidates.length > 0
+        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.` }
+        : res.filterIgnoredSuspected
+          ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
+          : res.catalogType === "catmat"
+            ? { tone: "warn", text: `Nenhuma correspondência no CATMAT para "${res.term}". A busca oficial do CATMAT só encontra a descrição oficial completa e exata do item — informe o código em "Verificar código", busque no outro catálogo ou declare "sem correspondência segura".` }
+            : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` });
+      invalidate();
+    },
+    onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao consultar o catálogo oficial." }),
+  });
+
+  // "Verificar código": consulta oficial POR CÓDIGO (o servidor informa o código; a fonte confirma).
+  const [verifyCode, setVerifyCode] = React.useState<string>("");
+  const verificar = trpc.itemIntelligence.verificarCodigoOficial.useMutation({
+    onSuccess: (res) => {
+      const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      if (res.status === "verified") {
+        setSearchMsg({ tone: "ok", text: `Código ${res.candidate.catmatCode} verificado no ${label}: "${res.candidate.catmatDescription}". Confirme abaixo se corresponde ao item.` });
+        setVerifyCode("");
+        invalidate();
+        return;
+      }
+      setSearchMsg({ tone: "warn", text: res.message });
+    },
+    onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao verificar o código no catálogo oficial." }),
   });
 
   const decide = (opts: {
@@ -171,7 +210,7 @@ export default function ProcurementItemPanel({
   const [confirmingSourceUpdate, setConfirmingSourceUpdate] = React.useState<boolean>(false);
   // R9 / SEM-054 — o que a aprovação confirmaria (servidor): bloqueio da fonte, referência canônica e outliers.
   const governance = data?.governance ?? null;
-  const approve = approveButtonState(governance?.sourceState, approveItem.isPending);
+  const approve = approveAction(governance?.sourceState, item?.status, approveItem.isPending);
   const outliers = outlierSummary(governance?.priceOutliers);
 
   return (
@@ -214,7 +253,7 @@ export default function ProcurementItemPanel({
                   "bg-muted text-foreground"
                 }`}
               >
-                {item.status}
+                {ITEM_STATUS_LABELS[item.status] ?? item.status}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -264,27 +303,59 @@ export default function ProcurementItemPanel({
 
           {/* 3. CATMAT sugerido + alternativas (servidor decide) */}
           <Block title="CATMAT (decisão do servidor)">
-            <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 p-3">
-              <p className="text-xs text-indigo-600 dark:text-indigo-400">Sugerido</p>
-              <p className="font-mono text-sm font-semibold text-indigo-900 dark:text-indigo-200">
-                {item.suggestedCATMAT ?? "—"}
+            {/* Classificação sobre o catálogo OFICIAL: o servidor indica a natureza (material/serviço) e o sistema consulta o
+                CATMAT/CATSER; só códigos retornados pela fonte viram alternativas confirmáveis. Nada é fabricado. */}
+            <div data-testid="catmat-official-search" className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Buscar a classificação no catálogo oficial (Compras.gov.br) com a descrição do item. Indique a natureza:
               </p>
-            </div>
-            {item.alternativeCATMAT.length > 0 && (
-              <div className="mt-2">
-                <p className="mb-1 text-xs text-muted-foreground">Alternativas</p>
-                <div className="flex flex-wrap gap-1">
-                  {item.alternativeCATMAT.map((c) => (
-                    <span
-                      key={c}
-                      className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Termo de busca (opcional — padrão: descrição do item)"
+                className="mt-2 w-full rounded border border-border px-2 py-1 text-xs"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(["catmat", "catser"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => buscar.mutate({ itemId: item.id, catalogType: t, term: searchTerm.trim() || undefined })}
+                    disabled={buscar.isPending}
+                    className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                  >
+                    {buscar.isPending && buscar.variables?.catalogType === t ? "Consultando…" : t === "catmat" ? "Buscar no CATMAT (material)" : "Buscar no CATSER (serviço)"}
+                  </button>
+                ))}
               </div>
-            )}
+              <div data-testid="catmat-verify-code" className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Código CATMAT/CATSER"
+                  className="w-36 rounded border border-border px-2 py-1 font-mono text-xs"
+                />
+                {(["catmat", "catser"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => verificar.mutate({ itemId: item.id, catalogType: t, code: verifyCode })}
+                    disabled={verificar.isPending || verifyCode.length === 0}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                  >
+                    {t === "catmat" ? "Verificar código no CATMAT" : "Verificar código no CATSER"}
+                  </button>
+                ))}
+              </div>
+              {searchMsg && (
+                <p data-testid="catmat-search-result" role="status" className={`mt-2 text-xs ${searchMsg.tone === "warn" ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
+                  {searchMsg.text}
+                </p>
+              )}
+            </div>
             {/* Justificativa humana — OBRIGATÓRIA para rejeitar / substituir / sem correspondência segura
                 (o domínio exige; confirmar dispensa). */}
             <div className="mt-3">
@@ -316,15 +387,20 @@ export default function ProcurementItemPanel({
                         #{c.rank} {c.catmatCode}
                       </span>
                       <span className="text-muted-foreground">
-                        score {c.score.toFixed(2)}
+                        similaridade textual {Math.round(c.score * 100)}%
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
-                    <p className="mt-0.5 text-muted-foreground">sugestão do sistema (ainda não é decisão)</p>
+                    <p data-testid="catmat-candidate-provenance" className={`mt-0.5 ${c.verified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                      {c.verified
+                        ? `Verificado no catálogo oficial ${c.catalogType === "catser" ? "CATSER" : "CATMAT"}${c.retrievedAt ? ` · consultado em ${new Date(c.retrievedAt).toLocaleDateString("pt-BR")}` : ""} — ainda não é decisão`
+                        : `Sem proveniência verificável (${c.verificationNote ?? "não consta de consulta oficial"}) — não pode ser confirmado`}
+                    </p>
                     {(() => {
                       const gate = confirmGate({
                         candidateCode: c.catmatCode, current: currentDecision, currentLoaded: !decisionsQuery.isLoading,
                         thresholdConfigured: thresholdQuery.data?.configured, pending: decidirCATMAT.isPending,
+                        verified: c.verified, verificationNote: c.verificationNote,
                       });
                       return (<>
                     {gate.note && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{gate.note}</p>}
@@ -367,6 +443,10 @@ export default function ProcurementItemPanel({
             <div className="mt-3 rounded-md border border-border p-2">
               <p className="mb-1 text-xs font-medium text-muted-foreground">
                 Substituir por código manual
+              </p>
+              <p className="mb-1 text-[11px] text-muted-foreground">
+                Código declarado pelo servidor, com justificativa e responsabilidade registradas. Só aparece como verificado se o
+                mesmo código constar de uma consulta oficial deste item.
               </p>
               <div className="flex flex-col gap-1">
                 <input
@@ -514,7 +594,7 @@ export default function ProcurementItemPanel({
                         {r.type}
                       </span>
                       <span className="rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-blue-700 dark:text-blue-300">
-                        confiança {Math.round(r.confidence * 100)}%
+                        {r.type === "catmat" ? "similaridade textual" : "confiança"} {Math.round(r.confidence * 100)}%
                       </span>
                     </div>
                     <p className="text-foreground">{r.summary}</p>
@@ -601,7 +681,7 @@ export default function ProcurementItemPanel({
               title={approve.block?.reason}
               className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
-              {approveItem.isPending ? "Aprovando..." : "Aprovar item"}
+              {approve.label}
             </button>
           </div>
         </div>

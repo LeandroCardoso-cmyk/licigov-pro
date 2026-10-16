@@ -350,6 +350,14 @@ export default function EditalWorkspace({
               {" "}O regime de execução não é variável do modelo institucional{persisted?.executionRegime ? <> (histórico legado: {persisted.executionRegime})</> : null}.
             </p>
           </div>
+        ) : !coreComplete || !resolution ? (
+          // Homologação visual M8 (P1): antes de saber se há modelo institucional vinculado, não se pede critério/regime
+          // do caminho legado — evita dois fluxos paralelos. Pregão + Eletrônico + BLL leva ao modelo do órgão quando vinculado.
+          <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground" data-testid="edital-flow-hint">
+            Escolha modalidade, forma{form === "eletronico" ? " e plataforma" : ""}. Quando o órgão tem modelo institucional vinculado para a escolha
+            (ex.: Pregão · Eletrônico · BLL), o Edital é preparado pelo modelo: critério de julgamento e demais decisões ficam na
+            Preparação do Edital, uma vez. Nenhum padrão é assumido.
+          </p>
         ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col text-sm">

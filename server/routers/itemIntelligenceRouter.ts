@@ -11,38 +11,29 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
-import { getItemPanel, catmatCandidates } from "../services/itemIntelligenceService";
-import { rankCATMAT } from "../domain/catmatMatching";
+import { getItemPanel } from "../services/itemIntelligenceService";
+import { listVerifiedSuggestions, searchItemClassification, searchCatalogIndex, verifyItemCode } from "../services/itemCatalogClassificationService";
+import { searchOfficialCatalog, UNAVAILABLE_MESSAGES } from "../services/officialCatalogService";
+import { rateLimitMiddleware } from "../services/rateLimiter";
 import { CATMAT_GOVERNANCE_DECISIONS, type CATMATGovernanceDecision } from "../domain/catmatGovernance";
 import { decideCatmat, type AvailableSuggestion } from "../services/catmatGovernanceService";
 import {
   getActiveCatmatThreshold, setCatmatThresholdConfig, listCatmatDecisions, getLatestCatmatDecision, summarizeCatmatThresholdImpact,
 } from "../db/catmatGovernance";
 import {
-  getIntelligentItem, listItemHistory, listCatmatMatches, updateMatchDecision,
+  getIntelligentItem, listItemHistory, updateMatchDecision,
   updateItemCatmat, listRecommendations, recordProcessEvent,
 } from "../db/procurement";
 
 /**
- * Resolve as sugestões CATMAT/CATSER REAIS de um item (persistidas ou, na ausência,
- * as determinísticas do domínio). Base para decisões supervisionadas — o código de
- * uma confirmação SEMPRE provém daqui, nunca é fabricado.
+ * Sugestões PERSISTIDAS do item, cada uma com o estado de verificação contra a evidência oficial do órgão
+ * (catálogo CATMAT/CATSER). Sem sugestão persistida ⇒ lista vazia: nenhum candidato é gerado localmente.
+ * Base das decisões supervisionadas — confirmar exige sugestão VERIFICADA (o serviço recusa as demais).
  */
-async function resolveAvailableSuggestions(
-  itemId: string,
-  orgId: number,
-  correlationId: string,
-): Promise<AvailableSuggestion[]> {
-  const persisted = await listCatmatMatches(itemId, orgId);
-  if (persisted.length > 0) {
-    return persisted.map(m => ({ id: m.id, catmatCode: m.catmatCode, catmatDescription: m.catmatDescription, score: m.score }));
-  }
-  const item = await getIntelligentItem(itemId, orgId);
-  if (!item) return [];
-  return rankCATMAT({
-    itemId: item.id, organizationId: orgId, description: item.description,
-    candidates: catmatCandidates(item.description), correlationId,
-  }).map(m => ({ id: m.id, catmatCode: m.catmatCode, catmatDescription: m.catmatDescription, score: m.score, source: m.source }));
+async function resolveAvailableSuggestions(itemId: string, orgId: number): Promise<AvailableSuggestion[]> {
+  return (await listVerifiedSuggestions(itemId, orgId)).map((s) => ({
+    id: s.id, catmatCode: s.catmatCode, catmatDescription: s.catmatDescription, score: s.score, source: s.source, verified: s.verified,
+  }));
 }
 
 type CatmatCtx = { organizationId?: number | null; user?: { id: number } | null; correlationId: string };
@@ -66,7 +57,7 @@ async function governedCatmatDecision(ctx: CatmatCtx, p: {
   const orgId = ctx.organizationId!;
   const item = await getIntelligentItem(p.itemId, orgId);
   if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
-  const suggestions = await resolveAvailableSuggestions(p.itemId, orgId, ctx.correlationId);
+  const suggestions = await resolveAvailableSuggestions(p.itemId, orgId);
   if (p.expectedCode !== undefined) {
     const s = suggestions.find((x) => x.id === p.suggestionId);
     if (!s) throw new TRPCError({ code: "BAD_REQUEST", message: "Sugestão CATMAT inexistente para este item; nada foi gravado (CATMAT_SUGGESTION_NOT_FOUND)." });
@@ -86,7 +77,7 @@ async function governedCatmatDecision(ctx: CatmatCtx, p: {
     }
     await recordProcessEvent({
       organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user!.id),
-      summary: `CATMAT/CATSER — decisão do servidor: ${p.decision}${record.catmatCode ? ` (${record.catmatCode})` : ""}.`,
+      summary: `CATMAT/CATSER — decisão do servidor: ${p.decision}${record.catmatCode ? ` (${record.catmatCode})` : ""}${record.source ? ` · fonte ${record.source}` : ""}.`,
       refId: p.itemId, correlationId: ctx.correlationId,
     });
   }
@@ -109,19 +100,44 @@ export const itemIntelligenceRouter = router({
       return { history };
     }),
 
+  /** Sugestões persistidas do item, com verificação contra a evidência oficial (nenhuma é gerada localmente). */
   getCATMATSuggestions: tenantProcedure
     .input(z.object({ itemId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const item = await getIntelligentItem(input.itemId, orgId);
-      const persisted = await listCatmatMatches(input.itemId, orgId);
-      // Se ainda não há matches persistidos (sem DB), calcula sugestões determinísticas.
-      const computed = item
-        ? rankCATMAT({ itemId: item.id, organizationId: orgId, description: item.description, candidates: catmatCandidates(item.description), correlationId: ctx.correlationId })
-            .map(m => ({ id: m.id, catmatCode: m.catmatCode, catmatDescription: m.catmatDescription, score: m.score, rank: m.rank, decision: m.decision }))
-        : [];
-      return { suggestions: persisted.length > 0 ? persisted : computed };
+      return { suggestions: await listVerifiedSuggestions(input.itemId, orgId) };
     }),
+
+  /**
+   * "Buscar classificação": consulta o catálogo OFICIAL (CATMAT = material, CATSER = serviço — indicado pelo servidor),
+   * registra a evidência e persiste as alternativas reais do item. Não decide nada. Indisponível ⇒ `status: "unavailable"`,
+   * nada gravado, classificação pendente (nunca código substituto).
+   */
+  buscarClassificacaoOficial: orgRoleProcedure("operator").use(rateLimitMiddleware("catmat"))
+    .input(z.object({
+      itemId: z.string().min(1),
+      catalogType: z.enum(["catmat", "catser"]),
+      term: z.string().max(200).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => searchItemClassification({
+      organizationId: ctx.organizationId!, itemId: input.itemId, catalogType: input.catalogType, term: input.term ?? null,
+      actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+    })),
+
+  /**
+   * "Verificar código": o servidor informa o código; a fonte oficial confirma existência, descrição e situação (parâmetro
+   * de código DO catálogo). Ativo ⇒ alternativa verificada do item (sem decisão). Inexistente/inativo ⇒ nada sugerido.
+   */
+  verificarCodigoOficial: orgRoleProcedure("operator").use(rateLimitMiddleware("catmat"))
+    .input(z.object({
+      itemId: z.string().min(1),
+      catalogType: z.enum(["catmat", "catser"]),
+      code: z.string().trim().regex(/^\d{1,9}$/, "Informe só os dígitos do código CATMAT/CATSER."),
+    }))
+    .mutation(async ({ input, ctx }) => verifyItemCode({
+      organizationId: ctx.organizationId!, itemId: input.itemId, catalogType: input.catalogType, code: input.code,
+      actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+    })),
 
   /**
    * R9 / SEM-035 — confirmação de uma SUGESTÃO existente pelo LEDGER governado (`catmat_decisions`), nunca código livre
@@ -146,12 +162,26 @@ export const itemIntelligenceRouter = router({
       return { success: true, matchId: input.matchId, decision: "rejeitado" as const };
     }),
 
-  searchCATMAT: tenantProcedure
-    .input(z.object({ query: z.string().min(1) }))
-    .query(async ({ input, ctx }) => {
-      const orgId = ctx.organizationId!;
-      const matches = rankCATMAT({ itemId: "search", organizationId: orgId, description: input.query, candidates: catmatCandidates(input.query), correlationId: ctx.correlationId });
-      return { results: matches.map(m => ({ catmatCode: m.catmatCode, catmatDescription: m.catmatDescription, score: m.score, rank: m.rank })) };
+  /** Consulta livre ao catálogo OFICIAL (somente leitura, sem persistir). Indisponível ⇒ lista vazia + motivo. */
+  searchCATMAT: tenantProcedure.use(rateLimitMiddleware("catmat"))
+    .input(z.object({ query: z.string().min(2).max(200), catalogType: z.enum(["catmat", "catser"]).default("catmat") }))
+    .query(async ({ input }) => {
+      // CATSER não tem filtro textual na API: pesquisa no índice sincronizado (candidatos a verificar por código).
+      if (input.catalogType === "catser") {
+        const idx = await searchCatalogIndex("catser", input.query);
+        if (idx.status === "index_unavailable") return { status: "index_unavailable" as const, message: "Índice de serviços (CATSER) não sincronizado.", results: [] };
+        return {
+          status: "ok" as const, message: null, retrievedAt: idx.index.retrievedAt,
+          results: idx.results.map((r) => ({ catmatCode: r.entry.code, catmatDescription: r.entry.description, catalogType: "catser" as const, source: "indice-sincronizado" })),
+        };
+      }
+      const res = await searchOfficialCatalog({ catalogType: "catmat", term: input.query });
+      if (res.status === "unavailable") return { status: "unavailable" as const, message: UNAVAILABLE_MESSAGES[res.reason], results: [] };
+      return {
+        status: "ok" as const, message: null, retrievedAt: res.retrievedAt,
+        results: res.entries.filter((e) => e.active === true)
+          .map((e) => ({ catmatCode: e.code, catmatDescription: e.description, catalogType: e.catalogType, source: "api-comprasgov" })),
+      };
     }),
 
   /**

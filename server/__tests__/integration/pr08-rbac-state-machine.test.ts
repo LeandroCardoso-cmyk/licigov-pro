@@ -186,7 +186,8 @@ describe("SEM-026 — itemIntelligence.decidirCATMAT exige operator (paridade RB
     await ii().getCATMATDecisions({ itemId: "i1" }).catch(() => undefined);
     const e = await err(ii().getCATMATSuggestions({ itemId: "i1" }));
     expect(e).toBeNull();
-    expect(item.getIntelligentItem).toHaveBeenCalledWith("i1", 1);
+    // Leitura escopada ao tenant do viewer (só sugestões persistidas — nenhuma gerada localmente).
+    expect(item.listCatmatMatches).toHaveBeenCalledWith("i1", 1);
   });
 });
 

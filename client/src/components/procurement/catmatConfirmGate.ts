@@ -27,9 +27,18 @@ export interface ConfirmGate { enabled: boolean; reason: string | null; label: s
 export function confirmGate(p: {
   candidateCode: string; current: CurrentCatmatDecisionUI | null | undefined; currentLoaded: boolean;
   thresholdConfigured: boolean | undefined; pending: boolean;
+  /** Verificação no catálogo oficial (servidor). `false` ⇒ nunca confirmável como classificação oficial. */
+  verified?: boolean;
+  verificationNote?: string | null;
 }): ConfirmGate {
   const base = "Confirmar";
   if (p.pending) return { enabled: false, reason: null, label: base, note: null };
+  if (p.verified === false) {
+    return {
+      enabled: false, label: base, note: null,
+      reason: `Sem verificação no catálogo oficial${p.verificationNote ? ` (${p.verificationNote})` : ""} — use "Buscar classificação"; a confirmação só vale para códigos oficiais.`,
+    };
+  }
   if (!p.currentLoaded || p.thresholdConfigured === undefined) return { enabled: false, reason: "Carregando o estado governado do item…", label: base, note: null };
   if (!p.thresholdConfigured) {
     return { enabled: false, reason: "Limiar institucional não configurado: um gestor precisa configurá-lo antes de qualquer decisão de CATMAT/CATSER.", label: base, note: null };

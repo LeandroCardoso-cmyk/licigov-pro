@@ -11,6 +11,7 @@ import { runMigrations, validateSchema } from "../../bootstrap";
 import { createIntelligentItem } from "../../domain/intelligentItem";
 import { insertIntelligentItem } from "../../db/procurement";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
+import { serveOfficialCatalogFixture, restoreOfficialCatalog } from "../helpers/officialCatalogFixtures";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 961061;
@@ -33,7 +34,7 @@ describe.skipIf(!DB)("R10 / SEM-061 — impacto org-wide do limiar CATMAT (MySQL
   }
   const count = async (sql: string, params: unknown[]) => Number(((await conn.execute<mysql.RowDataPacket[]>(sql, params as never[]))[0][0] as { n: number }).n);
   async function cleanup() {
-    for (const t of ["intelligent_items", "process_timeline", "catmat_matches"]) await conn.query(`DELETE FROM \`${t}\` WHERE organization_id IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
+    for (const t of ["intelligent_items", "process_timeline", "catmat_matches", "item_catmat_matches", "catalog_entries", "catalog_snapshots"]) await conn.query(`DELETE FROM \`${t}\` WHERE organization_id IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
     for (const t of ["catmat_decisions", "catmat_threshold_config", "organization_members", "idempotency_keys"]) await conn.query(`DELETE FROM \`${t}\` WHERE organizationId IN (?, ?)`, [ORG, ORG_B]).catch(() => {});
   }
   async function seed(tag: string) {
@@ -60,6 +61,7 @@ describe.skipIf(!DB)("R10 / SEM-061 — impacto org-wide do limiar CATMAT (MySQL
   }, 300_000);
 
   afterAll(async () => {
+    restoreOfficialCatalog();
     if (!conn) return;
     await cleanup().catch(() => {});
     await conn.query("DELETE FROM users WHERE id IN (?, ?, ?)", [manager, operator, managerB]).catch(() => {});
@@ -70,7 +72,12 @@ describe.skipIf(!DB)("R10 / SEM-061 — impacto org-wide do limiar CATMAT (MySQL
   it("T1) conta a decisão VIGENTE por item, separa as tomadas sob outro limiar e não grava nada", async () => {
     const a = await seed("a"); const b = await seed("b");
     const c = await caller(manager, ORG);
+    // Sugestões REAIS vêm do catálogo oficial ("Buscar classificação", transporte com fixture sintética) — nunca geradas localmente.
+    serveOfficialCatalogFixture();
+    await c.itemIntelligence.buscarClassificacaoOficial({ itemId: a.id, catalogType: "catmat" });
+    restoreOfficialCatalog();
     const { suggestions } = await c.itemIntelligence.getCATMATSuggestions({ itemId: a.id });
+    expect(suggestions.every((x) => x.verified)).toBe(true);
     await c.itemIntelligence.acceptCATMAT({ itemId: a.id, matchId: suggestions[0].id, catmatCode: suggestions[0].catmatCode });
     await c.itemIntelligence.manualCATMAT({ itemId: a.id, catmatCode: "123456", justification: "Supera a confirmação anterior." }); // a: vigente = substituido
     await c.itemIntelligence.manualCATMAT({ itemId: b.id, catmatCode: "654321", justification: "Código conferido no catálogo." });
