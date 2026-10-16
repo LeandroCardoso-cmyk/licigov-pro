@@ -139,7 +139,9 @@ export default function ProcurementItemPanel({
         ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.` }
         : res.filterIgnoredSuspected
           ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
-          : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` });
+          : res.catalogType === "catmat"
+            ? { tone: "warn", text: `Nenhuma correspondência no CATMAT para "${res.term}". A busca oficial do CATMAT só encontra a descrição oficial completa e exata do item — informe o código em "Verificar código", busque no outro catálogo ou declare "sem correspondência segura".` }
+            : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` });
       invalidate();
     },
     onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao consultar o catálogo oficial." }),

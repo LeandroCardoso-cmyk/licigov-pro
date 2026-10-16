@@ -293,6 +293,28 @@ e Edital BLL alcançado na tela —, o que ainda não ocorreu.
 - Sem segredos e sem banco, com token só de leitura.
 - O relatório fica nos logs e no artefato `catalog-smoke-<sha>`.
 
+**Smoke real PRÉ-MERGE — RESULTADO** (GitHub Actions run `38948484321`, HEAD `16e80d4`, 16/10/2026, sem segredos e sem
+banco; saída 0):
+- **CATMAT:**
+  - Envelope `resultado/totalRegistros/totalPaginas/paginasRestantes`; total **250.034** itens.
+  - `codigoItem=206504` encontrado, descrição idêntica, ativo.
+  - `descricaoItem` = **descrição oficial COMPLETA**: 1 linha, que contém a amostra.
+  - `descricaoItem` = 1ª palavra (maiúsculas ou minúsculas), "notebook", "NOTEBOOK" ou termo inexistente: **0 linhas**.
+  - ⇒ O filtro é aplicado, mas só como **correspondência exata da descrição completa**. Não serve como busca livre.
+  - `tamanhoPagina=9` ⇒ HTTP 400 (mínimo 10 confirmado).
+- **CATSER:**
+  - Mesmo envelope; total **3.022** serviços.
+  - `codigoServico=7250` encontrado, descrição idêntica, ativo.
+  - `descricaoItem` (não documentado) **ignorado** (devolve linhas), como previsto.
+  - `tamanhoPagina` 100 e 500 aceitos ⇒ sincronização ≈ 31 páginas de 100 (ou 7 de 500).
+- **Conclusões:**
+  - Contratos por catálogo e consulta por código **confirmados em runtime**.
+  - Busca CATSER por índice + `codigoServico` **viável e dimensionada** (3.022 linhas).
+  - No CATMAT, o caminho prático é **"Verificar código"**. A busca textual oficial só acha a descrição exata, e a tela agora diz
+    isso.
+  - Busca livre no CATMAT exigiria índice próprio (250 mil itens ≈ 500 páginas de 500) ou a hierarquia PDM. **Decisão do
+    Owner, fora deste PR.**
+
 **Sincronização `catalog:sync` NÃO executada.** Ela só pode ocorrer após a validação real, o dimensionamento pelo smoke e a
 autorização expressa do Owner.
 

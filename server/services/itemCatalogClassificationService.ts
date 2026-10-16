@@ -4,7 +4,8 @@
  * Estratégia POR CATÁLOGO (contratos reais da API, validados no Console do Railway staging):
  *   - CATMAT: busca textual oficial (`descricaoItem`) → filtro de RELEVÂNCIA local (`catalogSearchEngine`) sobre o que a
  *     fonte devolveu. Vazio é resposta legítima; linhas sem relação com o termo ⇒ "filtro possivelmente ignorado", nada
- *     sugerido.
+ *     sugerido. Smoke real (16/10/2026): `descricaoItem` só casa a descrição oficial COMPLETA e exata (palavra isolada ⇒
+ *     0) — o caminho prático do CATMAT é "Verificar código".
  *   - CATSER: a API não tem filtro textual ⇒ busca no ÍNDICE sincronizado (cópia versionada do catálogo público, org 0)
  *     com o mesmo motor local; os melhores (≤ VERIFY_TOP_K) são VERIFICADOS um a um por código na fonte.
  *   - Os dois: "Verificar código" — o servidor informa o código; a fonte confirma existência, descrição e situação.

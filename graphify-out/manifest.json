@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792170798.898999,
-    "ast_hash": "e8668ed2ce3981d202ef3a25224b7c69",
+    "mtime": 1792175796.2008502,
+    "ast_hash": "352eefe79e5739e9d3f0533c28935b6e",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -12220,8 +12220,8 @@
     "semantic_hash": ""
   },
   "roadmap/PRODUCT_ROADMAP.md": {
-    "mtime": 1792175498.7828162,
-    "ast_hash": "80f4d3001c98bb49b46274e539b1f72d",
+    "mtime": 1792175836.0129788,
+    "ast_hash": "05e8ca13ebfc7ba8feebeb58bc65f273",
     "semantic_hash": ""
   },
   "roadmap/TECHNICAL_DEBT.md": {
@@ -15030,8 +15030,8 @@
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
-    "mtime": 1792175498.783288,
-    "ast_hash": "68e7f24c09c37e0240d27d6feff94900",
+    "mtime": 1792175836.0135174,
+    "ast_hash": "362ef22b8d5ffb0ac2019386a8e9501c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792175188.4684265,
-    "ast_hash": "79f2ff74842a4e7cece35f80b73e04e6",
+    "mtime": 1792175796.2016284,
+    "ast_hash": "9d8f1341c969c377fe9e8378729058ae",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {

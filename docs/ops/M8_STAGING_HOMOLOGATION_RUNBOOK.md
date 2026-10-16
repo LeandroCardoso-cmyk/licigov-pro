@@ -122,7 +122,12 @@ insumos da próxima simplificação. Não é preciso abrir uma rodada de correç
      - o limite de `tamanhoPagina`;
      - o tamanho do CATSER.
    - Relatório no log e no artefato do job.
+   - Resultado de 16/10/2026 (HEAD `16e80d4`):
+     - Código OK nos dois catálogos.
+     - CATMAT `descricaoItem` só casa a descrição completa e exata.
+     - CATSER com 3.022 serviços; `tamanhoPagina` 100 e 500 aceitos.
 2. `pnpm catalog:sync -- catser`: **só com autorização expressa do Owner**, depois do merge e do dimensionamento.
+   - Dimensionamento: ≈ 31 páginas de 100.
    - Publicação atômica num índice versionado sob a organização global 0. Nenhum órgão é alterado.
    - Falha ou concorrência não publica nada.
 
