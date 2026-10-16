@@ -53,7 +53,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Registrar o código testado
-        run: echo "HEAD testado: $(git rev-parse HEAD)"
+        run: |
+          echo "HEAD testado: $(git rev-parse HEAD)"
 
       - name: Smoke real (sondas de contrato da API oficial)
         run: |
