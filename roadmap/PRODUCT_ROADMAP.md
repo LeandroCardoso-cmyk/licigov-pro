@@ -99,7 +99,7 @@ histórico preservado; a validação desta rodada usa processo sintético NOVO).
 
 Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O marco só subiu com a evidência registrada a seguir.
 
-**Histórico de integração em `staging` (15/10/2026):**
+**Histórico de integração em `staging` (15–16/10/2026):**
 - PR #302 integrado em `staging` por squash (`af0aa48`), com os 5 gates do CI verdes.
 - Deploy Railway staging `45831881` **SUCCESS**. Predeploy em 124 ms: migrations já em dia, nenhuma nova; reference
   set em noop. Boot `APP_ENV=staging`, S3 ✓, IA ✓, schema validado, sem erros nem avisos após a inicialização.
@@ -110,6 +110,19 @@ Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O ma
   - Primeira tentativa no staging: falhou antes das jornadas com "múltiplas organizações". Esta foi a causa da correção.
 - O processo 2026/0001 fica preservado como evidência histórica, com os 36 itens do leitor antigo mantidos e sinalizados.
   Nenhuma limpeza foi feita nem é exigida.
+- PR #305 (`4c4b17d`): evidência E2E 4/4, Roadmap Mestre e roteiro visual. Deploy `961c848c` SUCCESS.
+- **PR #306 (`4f79127`, 16/10/2026):** correções da homologação visual + CATMAT/CATSER sobre o catálogo oficial.
+  - Squash autorizado pelo Owner com HEAD `1a930c8`, CI 5/5 verde e sem conflitos.
+  - Smoke real pré-merge OK: GitHub Actions run `38948484321`, consulta por código nos dois catálogos.
+  - Deploy Railway staging `6cd34c68` **SUCCESS**:
+    - predeploy em 51 ms, com migrations já em dia (nenhuma nova) e reference set em noop;
+    - boot `APP_ENV=staging`, S3 ✓, IA ✓, schema validado sem mutação em runtime, servidor pronto;
+    - 1 réplica online, 0 falhas, 0 erros ou avisos de runtime;
+    - recuperação de importação sem pendências.
+  - Nenhum dado modificado.
+  - `catalog:sync` **não executado**: a sincronização inicial do CATSER é operação institucional separada, sob autorização
+    expressa do Owner.
+  - Produção e `main` não tocadas. Percentuais inalterados (M8 80%, global 88,25%).
 
 #### Marco M8 — Homologação E2E HTTP real: **APROVADO (4/4)**
 
