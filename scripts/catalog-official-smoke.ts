@@ -12,7 +12,7 @@
  */
 import { fetchOfficialCatalogRaw, buildCatalogParams, OFFICIAL_CATALOG_CONTRACTS } from "../server/services/officialCatalogService";
 import { parseOfficialCatalogPayload, normalizeCatalogDescription, type OfficialCatalogEntry, type OfficialCatalogType } from "../server/domain/officialCatalog";
-import { rankRelevant } from "../server/services/itemCatalogClassificationService";
+import { rankRelevant } from "../server/services/catalogRelevance";
 import { CATALOG_CONFIG } from "../server/config/catalog";
 
 const NONSENSE = "ZZQXKWVJ";

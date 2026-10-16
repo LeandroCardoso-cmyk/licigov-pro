@@ -16,7 +16,8 @@ import { M8_PRICE_RESEARCH_TEXT } from "../../../scripts/homologation-e2e";
 import { setCatmatThresholdConfig } from "../../db/catmatGovernance";
 import { insertCatmatMatch } from "../../db/procurement";
 import { __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests } from "../../services/officialCatalogService";
-import { syncCatalogIndex, __clearCatalogIndexCacheForTests } from "../../services/itemCatalogClassificationService";
+import { syncCatalogIndex, searchCatalogIndex, __clearCatalogIndexCacheForTests } from "../../services/itemCatalogClassificationService";
+import { __setCatalogIndexWriteFaultForTests, catalogIndexLockKey, getLatestCatalogIndex } from "../../db/catalogEvidence";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 996601;
@@ -44,6 +45,8 @@ const CATSER_ALL = [
   { codigoServico: 13057, nomeServico: "COLONOSCOPIA", statusServico: true },
   ...Array.from({ length: 19 }, (_, i) => ({ codigoServico: 15000 + i, nomeServico: `EXAME HOSPITALAR DE ROTINA ${i + 1}`, statusServico: true })),
 ];
+/** Conteúdo da LISTAGEM paginada (alterável para gerar uma nova versão do catálogo). */
+let catserListing: typeof CATSER_ALL = CATSER_ALL;
 /** Situação ATUAL na fonte por código (pode divergir do índice: defasagem). */
 let catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r]));
 
@@ -59,8 +62,8 @@ function serveFixtures(catmat: unknown = CATMAT_FIXTURE) {
       if (code) body = { resultado: catserByCode.has(code) ? [catserByCode.get(code)] : [], totalRegistros: catserByCode.has(code) ? 1 : 0 };
       else {
         const page = Number(q.get("pagina")); const size = Number(q.get("tamanhoPagina"));
-        const rowsP = CATSER_ALL.slice((page - 1) * size, page * size);
-        body = { resultado: rowsP, totalRegistros: CATSER_ALL.length, paginasRestantes: Math.max(0, Math.ceil(CATSER_ALL.length / size) - page) };
+        const rowsP = catserListing.slice((page - 1) * size, page * size);
+        body = { resultado: rowsP, totalRegistros: catserListing.length, paginasRestantes: Math.max(0, Math.ceil(catserListing.length / size) - page) };
       }
     } else if (q.get("codigoItem")) {
       const all = (CATMAT_FIXTURE.resultado as Array<{ codigoItem: number }>);
@@ -98,7 +101,7 @@ async function cleanup() {
     }
   }
   // Índice de pesquisa (org GLOBAL 0): só as linhas deste smoke.
-  await conn.query("DELETE FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser' AND code IN (?)", [CATSER_ALL.map((r) => String(r.codigoServico))]).catch(() => {});
+  await conn.query("DELETE FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser' AND code IN (?)", [[...CATSER_ALL.map((r) => String(r.codigoServico)), "29999"]]).catch(() => {});
   await conn.query("DELETE FROM catalog_snapshots WHERE organization_id = 0 AND correlation_id LIKE 'cat-smoke-%'").catch(() => {});
   __clearCatalogIndexCacheForTests();
 }
@@ -129,7 +132,7 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     for (const org of [ORG, ORG_B]) await setCatmatThresholdConfig({ organizationId: org, minScore: 0.1, reason: "smoke sintético", actorUserId: 1, correlationId: `cat-thr-${org}` });
   }, 300_000);
 
-  afterEach(() => { __setOfficialCatalogFetchForTests(null); lastUrls = []; catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r])); });
+  afterEach(() => { __setOfficialCatalogFetchForTests(null); __setCatalogIndexWriteFaultForTests(null); catserListing = CATSER_ALL; lastUrls = []; catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r])); });
 
   afterAll(async () => {
     if (!conn) return;
@@ -231,7 +234,7 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
   it("CATSER — sincronização LIMITADA do índice: paginação com tamanhoPagina ≥ 10, snapshot versionado, sem parâmetro textual", async () => {
     serveFixtures();
     const partial = await syncCatalogIndex({ catalogType: "catser", pageSize: 5, maxPages: 2, correlationId: `cat-smoke-p-${RUN}` });
-    expect(partial).toMatchObject({ status: "synced", pages: 2, entries: 20, complete: false, deactivated: 0 }); // limite de páginas ⇒ parcial
+    expect(partial).toMatchObject({ status: "synced", pages: 2, entries: 20, complete: false, replayed: false }); // limite de páginas ⇒ parcial (sem índice completo ainda)
     lastUrls = [];
     const full = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-${RUN}` });
     expect(full).toMatchObject({ status: "synced", pages: 3, entries: 23, total: 23, complete: true });
@@ -244,6 +247,58 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     __setOfficialCatalogFetchForTests(async () => { throw new Error("ECONNRESET"); });
     expect(await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 5, correlationId: `cat-smoke-f-${RUN}` })).toMatchObject({ status: "failed" });
     expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND correlation_id = ?", [`cat-smoke-f-${RUN}`])).toBe(0);
+    // Parcial NUNCA substitui o completo publicado.
+    serveFixtures();
+    const regress = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 1, correlationId: `cat-smoke-r-${RUN}` });
+    expect(regress).toMatchObject({ status: "failed", reason: expect.stringContaining("índice completo anterior preservado") });
+    expect((await getLatestCatalogIndex("catser"))?.snapshotId).toBe(full.snapshotId);
+  }, 120_000);
+
+  it("ATOMICIDADE do índice: falha NO MEIO da persistência ⇒ rollback (nenhum snapshot novo visível, índice anterior intacto); replay idempotente; publicação concorrente recusada", async () => {
+    serveFixtures();
+    const before = await getLatestCatalogIndex("catser");
+    expect(before?.complete).toBe(true);
+    const snapsBefore = await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser'");
+    const entriesBefore = await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser'");
+
+    // Nova versão do catálogo (um serviço a mais) + falha injetada DEPOIS de gravar o 1º lote de entradas.
+    catserListing = [...CATSER_ALL, { codigoServico: 29999, nomeServico: "Limpeza de caixas d'água", statusServico: true }];
+    serveFixtures();
+    __setCatalogIndexWriteFaultForTests((written) => { if (written > 0) throw new Error("falha simulada no meio da persistência"); });
+    const failed = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-x-${RUN}` });
+    expect(failed).toMatchObject({ status: "failed", reason: expect.stringContaining("falha simulada") });
+    __setCatalogIndexWriteFaultForTests(null);
+    expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser'")).toBe(snapsBefore);
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND catalog_type = 'catser'")).toBe(entriesBefore);
+    expect((await getLatestCatalogIndex("catser"))?.snapshotId).toBe(before!.snapshotId);
+    __clearCatalogIndexCacheForTests();
+    const stillOld = await searchCatalogIndex("catser", "caixas d'água");
+    expect(stillOld.status === "ok" && stillOld.results.map((r) => r.entry.code)).not.toContain("29999");
+
+    // Publicação concorrente (lock do catálogo ocupado) ⇒ recusada, nada gravado.
+    await conn.query("SELECT GET_LOCK(?, 0)", [catalogIndexLockKey("catser")]);
+    try {
+      const busy = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-c-${RUN}` });
+      expect(busy).toMatchObject({ status: "failed", reason: expect.stringContaining("CATALOG_INDEX_SYNC_IN_PROGRESS") });
+      expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser'")).toBe(snapsBefore);
+    } finally {
+      await conn.query("SELECT RELEASE_LOCK(?)", [catalogIndexLockKey("catser")]);
+    }
+
+    // Retentativa sem falha ⇒ publica a nova versão por inteiro; o snapshot anterior e suas entradas permanecem.
+    const ok = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-y-${RUN}` });
+    expect(ok).toMatchObject({ status: "synced", entries: 24, complete: true, replayed: false });
+    expect((await getLatestCatalogIndex("catser"))?.snapshotId).toBe(ok.snapshotId);
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND snapshot_id = ?", [ok.snapshotId])).toBe(24);
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = 0 AND snapshot_id = ?", [before!.snapshotId])).toBe(23);
+    // Replay: mesmo conteúdo ⇒ nenhuma escrita.
+    const again = await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-z-${RUN}` });
+    expect(again).toMatchObject({ status: "synced", snapshotId: ok.snapshotId, replayed: true });
+    expect(await n("SELECT COUNT(*) n FROM catalog_snapshots WHERE organization_id = 0 AND catalog_type = 'catser' AND id = ?", [ok.snapshotId])).toBe(1);
+    // Volta ao catálogo-base para os próximos cenários.
+    catserListing = CATSER_ALL;
+    serveFixtures();
+    expect((await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-b-${RUN}` })).status).toBe("synced");
   }, 120_000);
 
   it("CATSER — busca no índice + verificação POR CÓDIGO (codigoServico) na fonte; confirma com fonte oficial; isolado do órgão", async () => {

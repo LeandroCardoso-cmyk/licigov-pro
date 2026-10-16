@@ -278,9 +278,23 @@ e Edital BLL alcançado na tela —, o que ainda não ocorreu.
   inativa; CATMAT vazio e filtro ignorado; verificar código; confirmação; replay; tenant).
 - Smokes CATMAT, jornadas e isolamento verdes.
 
-**Pendente (checkpoint único do Owner):** rodar `pnpm catalog:smoke` no Console do Railway staging. Ele mede o
-comportamento real (código por catálogo, `descricaoItem`, limite de página, tamanho do CATSER). Se o código CATSER
-estiver OK, rodar `pnpm catalog:sync -- catser` para criar o índice. **Merge só após essas evidências.**
+**Atomicidade do índice (revisão do Owner):**
+- A publicação é **uma transação**, serializada por lock nomeado do catálogo (`GET_LOCK` sem espera; concorrente ⇒ recusada).
+- As entradas são versionadas **por snapshot**: o índice publicado nunca é reescrito.
+- A leitura usa só o último snapshot `synced`.
+- Falha no meio da gravação (teste adversarial com falha injetada após o 1º lote) ⇒ rollback: nenhum snapshot novo visível,
+  índice anterior intacto, nada desativado.
+- Mesmo conteúdo já publicado ⇒ replay sem escrita.
+- Parcial (limite de páginas) nunca substitui um índice completo.
+
+**Smoke real PRÉ-MERGE:** workflow manual `catalog-official-smoke.yml`, disparado pela label `catalog-smoke` no PR ou por
+`workflow_dispatch`.
+- Roda `pnpm catalog:smoke` sobre o HEAD exato do PR.
+- Sem segredos e sem banco, com token só de leitura.
+- O relatório fica nos logs e no artefato `catalog-smoke-<sha>`.
+
+**Sincronização `catalog:sync` NÃO executada.** Ela só pode ocorrer após a validação real, o dimensionamento pelo smoke e a
+autorização expressa do Owner.
 
 ### P0 — disponibilização funcional
 - ✅ Staging alinhado à baseline de produção (branch `staging`, banco/secrets/storage próprios) — 14/10/2026. ⏳ Homologação integrada pelas telas (tenant sintético).

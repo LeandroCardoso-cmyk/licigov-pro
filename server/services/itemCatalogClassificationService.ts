@@ -22,11 +22,11 @@ import {
   listOfficialCatalogPage, lookupOfficialCode, searchOfficialCatalog, MIN_PAGE_SIZE, UNAVAILABLE_MESSAGES,
   type CatalogUnavailableReason,
 } from "./officialCatalogService";
-import { normalizeCatalogEntry, type CatalogEntry } from "./catalogIntegrationService";
-import { searchAll, type MatchSource } from "./catalogSearchEngine";
+import type { MatchSource } from "./catalogSearchEngine";
+import { rankRelevant, type RelevantEntry } from "./catalogRelevance";
 import {
   getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
-  recordOfficialCatalogEvidence, GLOBAL_CATALOG_ORG, type CatalogIndexInfo,
+  recordOfficialCatalogEvidence, type CatalogIndexInfo,
 } from "../db/catalogEvidence";
 import { getIntelligentItem, insertCatmatMatch, listCatmatMatches, recordProcessEvent } from "../db/procurement";
 
@@ -67,26 +67,8 @@ export async function listVerifiedSuggestions(itemId: string, organizationId: nu
   });
 }
 
-// ─── Relevância local (motor existente) ──────────────────────────────────────
-
-export interface RelevantEntry {
-  readonly entry: OfficialCatalogEntry;
-  readonly score: number;
-  readonly matchSource: MatchSource;
-  readonly matchedTokens: string[];
-}
-
-/**
- * Relevância do termo sobre entradas OFICIAIS com o `catalogSearchEngine` (exata/normalizada/token/semântica/aproximada).
- * Só conta o que casou ao menos um termo significativo — candidatos sem relação nunca viram sugestão.
- */
-export function rankRelevant(term: string, entries: readonly OfficialCatalogEntry[], topK: number): RelevantEntry[] {
-  const byCode = new Map(entries.map((e) => [e.code, e]));
-  const normalized: CatalogEntry[] = entries.map((e) => normalizeCatalogEntry({ code: e.code, catalogType: e.catalogType, description: e.description, active: e.active === true }, GLOBAL_CATALOG_ORG));
-  return searchAll(term, normalized, topK)
-    .filter((r) => r.matchedTokens.length > 0 && byCode.has(r.entry.code))
-    .map((r) => ({ entry: byCode.get(r.entry.code)!, score: r.score, matchSource: r.matchSource, matchedTokens: r.matchedTokens }));
-}
+// Relevância local (motor existente) — módulo puro, reexportado para os chamadores atuais.
+export { rankRelevant, type RelevantEntry } from "./catalogRelevance";
 
 // Índice em memória por snapshot (recarrega só quando há nova sincronização).
 const indexCache = new Map<OfficialCatalogType, { snapshotId: string; entries: OfficialCatalogEntry[] }>();
@@ -97,7 +79,7 @@ async function indexEntries(catalogType: OfficialCatalogType): Promise<{ info: C
   if (!info) return null;
   const hit = indexCache.get(catalogType);
   if (hit && hit.snapshotId === info.snapshotId) return { info, entries: hit.entries };
-  const entries = await loadCatalogIndexEntries(catalogType);
+  const entries = await loadCatalogIndexEntries(catalogType, info.snapshotId);
   indexCache.set(catalogType, { snapshotId: info.snapshotId, entries });
   return { info, entries };
 }
@@ -291,13 +273,15 @@ export interface CatalogIndexSyncResult {
   readonly status: "synced" | "failed";
   readonly catalogType: OfficialCatalogType;
   readonly pages: number; readonly entries: number; readonly total: number | null; readonly complete: boolean;
-  readonly snapshotId: string | null; readonly deactivated: number; readonly reason?: string;
+  readonly snapshotId: string | null; readonly replayed: boolean; readonly reason?: string;
 }
 
 /**
  * Sincroniza o índice de pesquisa de um catálogo (operação de plataforma, nunca por busca de usuário). Limites:
- * `maxPages` × `pageSize` linhas; uma leitura por página, sem cache. Falha no meio ⇒ NADA gravado (índice anterior
- * preservado). Atingir `maxPages` ⇒ snapshot PARCIAL (marcado; não desativa nada).
+ * `maxPages` × `pageSize` linhas; uma leitura por página, sem cache. Falha na leitura OU na gravação ⇒ NADA publicado
+ * (transação única; índice anterior preservado). Atingir `maxPages` ⇒ snapshot PARCIAL (marcado), publicado só se não houver
+ * índice completo (parcial nunca substitui completo). Sincronização
+ * concorrente do mesmo catálogo ⇒ recusada. Mesmo conteúdo já publicado ⇒ replay sem escrita.
  */
 export async function syncCatalogIndex(p: {
   catalogType: OfficialCatalogType; pageSize: number; maxPages: number; correlationId: string;
@@ -313,7 +297,7 @@ export async function syncCatalogIndex(p: {
   for (let page = 1; page <= maxPages; page++) {
     const res = await listOfficialCatalogPage({ catalogType: p.catalogType, page, pageSize, activeOnly: true });
     if (res.status === "unavailable") {
-      return { status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, deactivated: 0, reason: `${res.reason}: ${res.detail} (página ${page})` };
+      return { status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, replayed: false, reason: `${res.reason}: ${res.detail} (página ${page})` };
     }
     pages = page;
     total = res.total ?? total;
@@ -322,12 +306,25 @@ export async function syncCatalogIndex(p: {
     p.onPage?.(page, res.entries.length);
     if (res.entries.length < pageSize || res.remainingPages === 0) { complete = true; break; }
   }
+  // Parcial (limite de páginas) nunca substitui um índice COMPLETO já publicado — a cobertura não pode regredir.
+  if (!complete && (await getLatestCatalogIndex(p.catalogType))?.complete) {
+    return {
+      status: "failed", catalogType: p.catalogType, pages, entries: all.size, total, complete: false, snapshotId: null, replayed: false,
+      reason: `limite de ${maxPages} página(s) atingido antes do fim do catálogo — índice completo anterior preservado; aumente --max-pages.`,
+    };
+  }
   const entries = [...all.values()];
   const retrievedAt = new Date().toISOString();
   const checksum = catalogEvidenceChecksum({ catalogType: p.catalogType, query: { page: 1, pageSize }, entries });
-  const rec = await recordCatalogIndexSnapshot({
-    catalogType: p.catalogType, entries, checksum, retrievedAt, sourceUrl, pages, total, complete, pageSize, correlationId: p.correlationId,
-  });
+  let rec: Awaited<ReturnType<typeof recordCatalogIndexSnapshot>>;
+  try {
+    rec = await recordCatalogIndexSnapshot({
+      catalogType: p.catalogType, entries, checksum, retrievedAt, sourceUrl, pages, total, complete, pageSize, correlationId: p.correlationId,
+    });
+  } catch (err) {
+    // Rollback: nenhum snapshot novo publicado; o índice anterior continua valendo.
+    return { status: "failed", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: null, replayed: false, reason: `persistência: ${String((err as Error)?.message ?? err).slice(0, 200)}` };
+  }
   indexCache.delete(p.catalogType);
-  return { status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null, deactivated: rec?.deactivated ?? 0 };
+  return { status: "synced", catalogType: p.catalogType, pages, entries: entries.length, total, complete, snapshotId: rec?.snapshotId ?? null, replayed: rec?.replayed ?? false };
 }

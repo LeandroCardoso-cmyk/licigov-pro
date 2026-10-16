@@ -12,8 +12,10 @@
  * ÍNDICE DE PESQUISA (CATSER — a API não tem filtro textual): cópia versionada do catálogo público sob a organização
  * GLOBAL 0 (convenção existente de `normalizeCatalogEntry`; nenhum órgão tem id 0 e nenhuma leitura de tenant consulta
  * a org 0). Serve só para ENCONTRAR candidatos; a verificação oficial continua por código, por órgão, na fonte.
+ * PUBLICAÇÃO ATÔMICA: snapshot + entradas (versionadas POR SNAPSHOT) numa única transação, serializada por lock nomeado;
+ * a leitura usa só o último snapshot PUBLICADO — o índice anterior vale até o novo ser publicado por inteiro.
  */
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getDb } from "./connection";
 import { catalogEntriesTable, catalogSnapshotsTable } from "../../drizzle/schema";
@@ -108,94 +110,133 @@ export async function getOfficialCatalogEvidence(organizationId: number, codes: 
 
 export const GLOBAL_CATALOG_ORG = 0;
 export const INDEX_KIND = "indice" as const;
+/** Lock nomeado por catálogo: no máximo UMA publicação de índice por vez (sem espera — a concorrente é recusada). */
+export const catalogIndexLockKey = (t: OfficialCatalogType) => `licigov:catalog-index:${t}`;
+export const CATALOG_INDEX_SYNC_IN_PROGRESS = "CATALOG_INDEX_SYNC_IN_PROGRESS";
 
 interface IndexIntegrity extends SnapshotIntegrity {
-  kind: typeof INDEX_KIND; complete: boolean; pages: number; total: number | null; entries: number;
+  kind: typeof INDEX_KIND; complete: boolean; pages: number; total: number | null; entries: number; publishedAt: string;
 }
 
 export interface CatalogIndexInfo {
-  readonly snapshotId: string; readonly catalogType: OfficialCatalogType; readonly retrievedAt: string;
+  readonly snapshotId: string; readonly catalogType: OfficialCatalogType; readonly retrievedAt: string; readonly publishedAt: string;
   readonly complete: boolean; readonly pages: number; readonly total: number | null; readonly entries: number; readonly checksum: string;
 }
 
 const parseMeta = <T>(v: unknown): T | null => (typeof v === "string" ? JSON.parse(v) : v) as T | null;
 
+/** Resultado de `SELECT GET_LOCK(...) AS ok` via drizzle/mysql2 (`[rows, fields]` ou `rows`). */
+function readLockResult(res: unknown): number | null {
+  const rows = (Array.isArray(res) && Array.isArray(res[0]) ? res[0] : res) as Array<{ ok?: unknown }> | undefined;
+  const v = Array.isArray(rows) ? rows[0]?.ok : undefined;
+  return v === null || v === undefined ? null : Number(v);
+}
+
+/** Entradas do índice são POR SNAPSHOT (nunca reescrevem as do índice publicado). */
+export const catalogIndexEntryId = (snapshotId: string, code: string) => id32(`cei:${snapshotId}:${code}`);
+
+let indexWriteFault: ((written: number) => void) | null = null;
+/** Testes: falha injetada APÓS gravar cada lote de entradas (simula erro/encerramento no meio da persistência). */
+export function __setCatalogIndexWriteFaultForTests(f: ((written: number) => void) | null): void { indexWriteFault = f; }
+
 /**
- * Grava uma sincronização do índice: snapshot IMUTÁVEL (id pelo checksum do catálogo inteiro) + entradas da org 0.
- * Sincronização COMPLETA desativa as entradas que não vieram nela (código retirado da fonte). Parcial não desativa nada.
+ * Publica uma sincronização do índice de forma ATÔMICA e IDEMPOTENTE:
+ *   - uma transação com lock nomeado do catálogo (`GET_LOCK` sem espera; ocupado ⇒ recusa, nada gravado);
+ *   - mesmo checksum já publicado ⇒ replay (nenhuma escrita);
+ *   - snapshot + todas as entradas (ids por snapshot) gravados e marcados `synced` no MESMO commit; qualquer falha ou
+ *     encerramento ⇒ rollback: nenhum snapshot novo visível, índice anterior intacto, nada desativado.
  */
 export async function recordCatalogIndexSnapshot(p: {
   catalogType: OfficialCatalogType; entries: readonly OfficialCatalogEntry[]; checksum: string; retrievedAt: string;
   sourceUrl: string; pages: number; total: number | null; complete: boolean; pageSize: number; correlationId: string;
-}): Promise<{ snapshotId: string; deactivated: number } | null> {
+}): Promise<{ snapshotId: string; replayed: boolean } | null> {
   const db = await getDb();
   if (!db) return null;
   const snapshotId = catalogSnapshotId(GLOBAL_CATALOG_ORG, p.catalogType, `${INDEX_KIND}:${p.checksum}`);
-  const integrity: IndexIntegrity = {
-    checksumAlg: "sha256", verifiedAt: p.retrievedAt, isValid: true, source: OFFICIAL_CATALOG_SOURCE, sourceUrl: p.sourceUrl,
-    query: { page: 1, pageSize: p.pageSize }, kind: INDEX_KIND, complete: p.complete, pages: p.pages, total: p.total, entries: p.entries.length,
-  };
-  await db.insert(catalogSnapshotsTable).values({
-    id: snapshotId, organizationId: GLOBAL_CATALOG_ORG, catalogType: p.catalogType,
-    version: `${INDEX_KIND}@${p.retrievedAt}`.slice(0, 50), checksum: p.checksum,
-    totalEntries: p.entries.length, indexedEntries: p.entries.length, syncStatus: "synced",
-    snapshotLineage: null, importLineage: [], integrityMetadata: integrity,
-    cacheMetadata: { cachedAt: p.retrievedAt, expiresAt: p.retrievedAt, stale: false },
-    correlationId: p.correlationId.slice(0, 64),
-  }).onDuplicateKeyUpdate({ set: { syncStatus: "synced" } });
-  const CHUNK = 200;
-  for (let i = 0; i < p.entries.length; i += CHUNK) {
-    const rows = p.entries.slice(i, i + CHUNK).map((e) => {
-      const normalized = normalizeCatalogDescription(e.description);
-      return {
-        id: catalogEntryId(GLOBAL_CATALOG_ORG, p.catalogType, e.code), organizationId: GLOBAL_CATALOG_ORG, code: e.code,
-        catalogType: p.catalogType, description: e.description, normalizedDescription: normalized,
-        catalogGroup: e.group?.slice(0, 255) ?? null, aliases: [], tokens: normalized.split(" ").filter((w) => w.length > 2),
-        active: e.active === true, snapshotId,
+  const lockKey = catalogIndexLockKey(p.catalogType);
+  return db.transaction(async (tx) => {
+    const acquired = readLockResult(await tx.execute(sql`SELECT GET_LOCK(${lockKey}, 0) AS ok`));
+    if (acquired !== 1) throw new Error(`${CATALOG_INDEX_SYNC_IN_PROGRESS}: outra publicação do índice ${p.catalogType} está em andamento.`);
+    try {
+      const existing = await tx.select({ id: catalogSnapshotsTable.id, syncStatus: catalogSnapshotsTable.syncStatus })
+        .from(catalogSnapshotsTable).where(eq(catalogSnapshotsTable.id, snapshotId)).limit(1);
+      if (existing[0]?.syncStatus === "synced") return { snapshotId, replayed: true };
+      const publishedAt = new Date().toISOString();
+      const integrity: IndexIntegrity = {
+        checksumAlg: "sha256", verifiedAt: p.retrievedAt, isValid: true, source: OFFICIAL_CATALOG_SOURCE, sourceUrl: p.sourceUrl,
+        query: { page: 1, pageSize: p.pageSize }, kind: INDEX_KIND, complete: p.complete, pages: p.pages, total: p.total,
+        entries: p.entries.length, publishedAt,
       };
-    });
-    await db.insert(catalogEntriesTable).values(rows).onDuplicateKeyUpdate({
-      set: {
-        description: sql`VALUES(description)`, normalizedDescription: sql`VALUES(normalized_description)`,
-        catalogGroup: sql`VALUES(catalog_group)`, active: sql`VALUES(active)`, snapshotId: sql`VALUES(snapshot_id)`,
-      },
-    });
-  }
-  let deactivated = 0;
-  if (p.complete) {
-    const res = await db.update(catalogEntriesTable).set({ active: false }).where(and(
-      eq(catalogEntriesTable.organizationId, GLOBAL_CATALOG_ORG), eq(catalogEntriesTable.catalogType, p.catalogType),
-      ne(catalogEntriesTable.snapshotId, snapshotId), eq(catalogEntriesTable.active, true),
-    ));
-    deactivated = Number(((Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
-  }
-  return { snapshotId, deactivated };
+      const snapshotRow = {
+        id: snapshotId, organizationId: GLOBAL_CATALOG_ORG, catalogType: p.catalogType,
+        version: `${INDEX_KIND}@${p.retrievedAt}`.slice(0, 50), checksum: p.checksum,
+        totalEntries: p.entries.length, indexedEntries: p.entries.length, syncStatus: "syncing" as const,
+        snapshotLineage: null, importLineage: [], integrityMetadata: integrity,
+        cacheMetadata: { cachedAt: p.retrievedAt, expiresAt: p.retrievedAt, stale: false },
+        correlationId: p.correlationId.slice(0, 64),
+      };
+      await tx.insert(catalogSnapshotsTable).values(snapshotRow)
+        .onDuplicateKeyUpdate({ set: { syncStatus: "syncing", integrityMetadata: integrity } });
+      const CHUNK = 200;
+      for (let i = 0; i < p.entries.length; i += CHUNK) {
+        const rows = p.entries.slice(i, i + CHUNK).map((e) => {
+          const normalized = normalizeCatalogDescription(e.description);
+          return {
+            id: catalogIndexEntryId(snapshotId, e.code), organizationId: GLOBAL_CATALOG_ORG, code: e.code,
+            catalogType: p.catalogType, description: e.description, normalizedDescription: normalized,
+            catalogGroup: e.group?.slice(0, 255) ?? null, aliases: [], tokens: normalized.split(" ").filter((w) => w.length > 2),
+            active: e.active === true, snapshotId,
+          };
+        });
+        await tx.insert(catalogEntriesTable).values(rows).onDuplicateKeyUpdate({
+          set: {
+            description: sql`VALUES(description)`, normalizedDescription: sql`VALUES(normalized_description)`,
+            catalogGroup: sql`VALUES(catalog_group)`, active: sql`VALUES(active)`,
+          },
+        });
+        indexWriteFault?.(Math.min(i + CHUNK, p.entries.length));
+      }
+      // Publicação: o snapshot só fica visível como válido junto com TODAS as suas entradas (mesmo commit).
+      await tx.update(catalogSnapshotsTable).set({ syncStatus: "synced" }).where(eq(catalogSnapshotsTable.id, snapshotId));
+      return { snapshotId, replayed: false };
+    } finally {
+      await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);
+    }
+  });
 }
 
-/** Sincronização mais recente do índice (ou null quando nunca sincronizado). */
+/** Último índice PUBLICADO (`synced`) do catálogo, ou null quando nunca publicado. */
 export async function getLatestCatalogIndex(catalogType: OfficialCatalogType): Promise<CatalogIndexInfo | null> {
   const db = await getDb();
   if (!db) return null;
   const snaps = await db.select().from(catalogSnapshotsTable)
-    .where(and(eq(catalogSnapshotsTable.organizationId, GLOBAL_CATALOG_ORG), eq(catalogSnapshotsTable.catalogType, catalogType)))
-    .orderBy(desc(catalogSnapshotsTable.createdAt)).limit(20);
+    .where(and(
+      eq(catalogSnapshotsTable.organizationId, GLOBAL_CATALOG_ORG), eq(catalogSnapshotsTable.catalogType, catalogType),
+      eq(catalogSnapshotsTable.syncStatus, "synced"),
+    ))
+    .orderBy(desc(catalogSnapshotsTable.updatedAt)).limit(20);
+  let best: CatalogIndexInfo | null = null;
   for (const s of snaps) {
     const meta = parseMeta<Partial<IndexIntegrity>>(s.integrityMetadata);
-    if (meta?.kind !== INDEX_KIND || meta.source !== OFFICIAL_CATALOG_SOURCE || typeof meta.verifiedAt !== "string") continue;
-    return {
-      snapshotId: s.id, catalogType, retrievedAt: meta.verifiedAt, complete: meta.complete === true, pages: meta.pages ?? 0,
-      total: meta.total ?? null, entries: meta.entries ?? s.totalEntries, checksum: s.checksum,
+    if (meta?.kind !== INDEX_KIND || meta.source !== OFFICIAL_CATALOG_SOURCE || typeof meta.verifiedAt !== "string" || typeof meta.publishedAt !== "string") continue;
+    const info: CatalogIndexInfo = {
+      snapshotId: s.id, catalogType, retrievedAt: meta.verifiedAt, publishedAt: meta.publishedAt, complete: meta.complete === true,
+      pages: meta.pages ?? 0, total: meta.total ?? null, entries: meta.entries ?? s.totalEntries, checksum: s.checksum,
     };
+    if (!best || info.publishedAt > best.publishedAt) best = info;
   }
-  return null;
+  return best;
 }
 
-/** Entradas ATIVAS do índice (só para encontrar candidatos; a verificação é por código, na fonte). */
-export async function loadCatalogIndexEntries(catalogType: OfficialCatalogType): Promise<OfficialCatalogEntry[]> {
+/** Entradas ATIVAS de UM snapshot publicado (só para encontrar candidatos; a verificação é por código, na fonte). */
+export async function loadCatalogIndexEntries(catalogType: OfficialCatalogType, snapshotId: string): Promise<OfficialCatalogEntry[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select({ code: catalogEntriesTable.code, description: catalogEntriesTable.description, group: catalogEntriesTable.catalogGroup })
     .from(catalogEntriesTable)
-    .where(and(eq(catalogEntriesTable.organizationId, GLOBAL_CATALOG_ORG), eq(catalogEntriesTable.catalogType, catalogType), eq(catalogEntriesTable.active, true)));
+    .where(and(
+      eq(catalogEntriesTable.organizationId, GLOBAL_CATALOG_ORG), eq(catalogEntriesTable.catalogType, catalogType),
+      eq(catalogEntriesTable.snapshotId, snapshotId), eq(catalogEntriesTable.active, true),
+    ));
   return rows.map((r) => ({ catalogType, code: r.code, description: r.description, active: true, group: r.group ?? null }));
 }

@@ -112,19 +112,19 @@ insumos da próxima simplificação. Não é preciso abrir uma rodada de correç
   - CATMAT: o valor aparece como "similaridade textual", não como confiança.
   - Detalhes no Roadmap Mestre, seção "Rodada M8 — homologação visual".
 
-**Catálogo oficial CATMAT/CATSER — conferência real (depois do deploy do PR em staging), no Console do Railway (`/app`):**
-1. `pnpm catalog:smoke`: somente leitura, sem banco e sem credencial.
+**Catálogo oficial CATMAT/CATSER — conferência real ANTES do merge:**
+1. Smoke real sobre o código do PR: adicione a label `catalog-smoke` ao PR (workflow `catalog-official-smoke.yml`).
+   - Somente leitura, sem banco e sem segredos.
    - Saída 0 = consulta por código OK nos dois catálogos.
    - O relatório também classifica:
-     - o filtro `descricaoItem` do CATMAT (exato, parcial, maiúsculas, ignorado);
+     - o filtro `descricaoItem` do CATMAT;
      - o parâmetro textual não documentado do CATSER (esperado: ignorado);
      - o limite de `tamanhoPagina`;
      - o tamanho do CATSER.
-   - Envie a saída completa.
-2. Se o código CATSER estiver OK: `pnpm catalog:sync -- catser`.
-   - Use o tamanho de página que o smoke indicar, por exemplo `--page-size 100`.
-   - Grava no banco do staging um índice versionado sob a organização global 0. Nenhum órgão é alterado.
-   - Falha não grava nada.
+   - Relatório no log e no artefato do job.
+2. `pnpm catalog:sync -- catser`: **só com autorização expressa do Owner**, depois do merge e do dimensionamento.
+   - Publicação atômica num índice versionado sob a organização global 0. Nenhum órgão é alterado.
+   - Falha ou concorrência não publica nada.
 
 **Retomada (depois do deploy do PR em staging), num processo NOVO da org 2:**
 - O `2026/9001` fica preservado como evidência desta rodada.
