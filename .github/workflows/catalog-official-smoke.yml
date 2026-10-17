@@ -14,6 +14,11 @@ on:
         description: "Termo da sonda textual do CATMAT"
         required: false
         default: "notebook"
+      ranking_probe:
+        description: "Também comparar o ranking CATSER anterior × atual sobre as descrições oficiais (somente leitura)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -61,11 +66,19 @@ jobs:
           set -o pipefail
           pnpm catalog:smoke -- "$CATALOG_TERM" 2>&1 | tee catalog-smoke.txt
 
+      - name: Sonda do ranking CATSER (anterior × atual, somente leitura)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ranking_probe == 'true'
+        run: |
+          set -o pipefail
+          pnpm catalog:ranking-probe 2>&1 | tee catalog-ranking-probe.txt
+
       - name: Publicar relatório
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: catalog-smoke-${{ github.event.pull_request.head.sha || github.sha }}
-          path: catalog-smoke.txt
+          path: |
+            catalog-smoke.txt
+            catalog-ranking-probe.txt
           if-no-files-found: warn
           retention-days: 30
