@@ -9,10 +9,11 @@
  *      ("… de ambientes administrativos") — depende só da consulta, nunca do corpus;
  *   3. cobertura ponderada dos termos do objeto casados pelo motor, com corte absoluto e relativo ao melhor candidato:
  *      melhor menos candidatos do que candidatos incompatíveis. Sem termo do objeto casado ⇒ não é candidato.
+ *      Termo com o mesmo radical na descrição (plural/singular) vale inteiro; casado só por aproximação vale parcial.
  * O score continua sendo SIMILARIDADE TEXTUAL (nunca adequação técnica/jurídica); a decisão é sempre humana.
  */
 import type { OfficialCatalogEntry } from "../domain/officialCatalog";
-import { tokenize } from "../domain/semanticIndex";
+import { tokenize, stemPt } from "../domain/semanticIndex";
 import { normalizeCatalogEntry, type CatalogEntry } from "./catalogIntegrationService";
 import {
   searchExact, searchAlias, searchNormalized, searchToken, searchSemantic, searchFuzzy, rankResults, type MatchSource,
@@ -41,6 +42,8 @@ const POSITION_DECAY = 0.5;      // peso do i-ésimo termo do objeto: 1 / (1 + 0
 const MIN_COVERAGE = 0.25;       // cobertura ponderada mínima para ser candidato
 const RELATIVE_TO_BEST = 0.5;    // e ao menos metade da cobertura do melhor candidato
 const COVERAGE_SHARE = 0.6;      // score = 0,6·cobertura + 0,4·score do motor
+const APPROXIMATE_FACTOR = 0.4;  // termo casado só por aproximação (sem radical igual) vale 40% — tolera erro de digitação,
+                                 // mas palavra diferente não sustenta candidato ("tradução" × "produção"/"tração")
 
 /** Termos do objeto, na ordem em que aparecem (mesma normalização/stopwords do motor), sem o enquadramento. */
 export function objectTerms(term: string): string[] {
@@ -66,11 +69,13 @@ export function rankRelevant(term: string, entries: readonly OfficialCatalogEntr
     for (const t of r.matchedTokens) set.add(t);
     matchedByCode.set(r.entry.code, set);
   }
+  const stemsByCode = new Map(normalized.map((e) => [e.code, new Set(e.tokens.map(stemPt))]));
   const scored = rankResults(all)
     .filter((r) => byCode.has(r.entry.code))
     .map((r) => {
       const matched = terms.filter((t) => matchedByCode.get(r.entry.code)!.has(t));
-      const coverage = matched.reduce((s, t) => s + weight.get(t)!, 0) / totalWeight;
+      const stems = stemsByCode.get(r.entry.code)!;
+      const coverage = matched.reduce((s, t) => s + weight.get(t)! * (stems.has(stemPt(t)) ? 1 : APPROXIMATE_FACTOR), 0) / totalWeight;
       const score = Math.round((COVERAGE_SHARE * coverage + (1 - COVERAGE_SHARE) * r.score) * 1e4) / 1e4;
       return { entry: byCode.get(r.entry.code)!, score, coverage, matchSource: r.matchSource, matchedTokens: matched };
     })

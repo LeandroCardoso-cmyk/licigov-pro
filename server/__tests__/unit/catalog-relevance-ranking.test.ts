@@ -30,6 +30,9 @@ const CORPUS: OfficialCatalogEntry[] = [
   svc("900402", "Apoio administrativo e recepção"),
   svc("900501", "Manutenção de ar condicionado"),
   svc("900502", "Serviços de engenharia consultiva"),
+  svc("900601", "Tradução e versão de textos"),
+  svc("900602", "Produção jornalística"),
+  svc("900603", "Tração ortopédica transesquelética"),
 ];
 const codes = (term: string, corpus = CORPUS) => rankRelevant(term, corpus, 5).map((r) => r.entry.code);
 
@@ -71,8 +74,21 @@ describe("ranking CATSER — relevância discriminativa (corpus sintético)", ()
     expect(codes("Execução de serviços de limpeza").sort()).toEqual(LIMPEZA);
   });
 
+  it("aproximação não sustenta candidato com palavra diferente (real: 'tradução' × PRODUCAO/TRACAO); radical igual e erro de digitação sim", () => {
+    // Reproduz o resíduo observado na sonda com o CATSER oficial: só a tradução é candidata.
+    expect(codes("Serviços de tradução juramentada")).toEqual(["900601"]);
+    // Plural × singular (mesmo radical — real: "passageiros" × "PASSAGEIRO") vale inteiro; erro de digitação ainda
+    // encontra, com similaridade menor.
+    const one = [svc("900204", "Transporte de passageiro em aeroportos")];
+    expect(rankRelevant("transporte de passageiros", one, 1)[0]?.matchedTokens).toEqual(["transporte", "passageiros"]);
+    expect(rankRelevant("passageiros", one, 1)[0]?.score).toBeGreaterThan(0.8); // cobertura integral (não aproximada)
+    const typo = rankRelevant("limpesa", CORPUS, 5);
+    expect(typo.map((r) => r.entry.code).sort()).toEqual(LIMPEZA);
+    expect(typo[0].score).toBeLessThan(rankRelevant("limpeza", CORPUS, 1)[0].score);
+  });
+
   it("E) sem correspondência: nenhuma lista artificial (termos genéricos sozinhos não sugerem nada)", () => {
-    expect(rankRelevant("Serviços de tradução juramentada", CORPUS, 5)).toEqual([]);
+    expect(rankRelevant("Serviços de saneamento hospitalar", CORPUS.filter((e) => !LIMPEZA.includes(e.code)), 5)).toEqual([]);
     expect(rankRelevant("Prestação de serviços especializados", CORPUS, 5)).toEqual([]);
     expect(rankRelevant("Contratação de empresa especializada", CORPUS, 5)).toEqual([]);
   });
