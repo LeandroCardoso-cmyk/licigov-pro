@@ -86,6 +86,8 @@ export default function ProcurementItemPanel({
   const [justification, setJustification] = React.useState<string>("");
   const [searchTerm, setSearchTerm] = React.useState<string>("");
   const [searchMsg, setSearchMsg] = React.useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  // Termos do OBJETO que justificaram cada alternativa na última consulta (explicação; não persiste nem decide).
+  const [matchedTerms, setMatchedTerms] = React.useState<Record<string, string[]>>({});
   const keyStateRef = React.useRef<CatmatKeyState | null>(null);
   const lastRetryableRef = React.useRef<boolean>(false);
 
@@ -133,6 +135,7 @@ export default function ProcurementItemPanel({
         setSearchMsg({ tone: "warn", text: res.message });
         return;
       }
+      setMatchedTerms(Object.fromEntries(res.candidates.map((c) => [c.id, c.matchedTokens])));
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
       setSearchMsg(res.candidates.length > 0
@@ -153,6 +156,7 @@ export default function ProcurementItemPanel({
     onSuccess: (res) => {
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       if (res.status === "verified") {
+        setMatchedTerms((m) => ({ ...m, [res.candidate.id]: res.candidate.matchedTokens }));
         setSearchMsg({ tone: "ok", text: `Código ${res.candidate.catmatCode} verificado no ${label}: "${res.candidate.catmatDescription}". Confirme abaixo se corresponde ao item.` });
         setVerifyCode("");
         invalidate();
@@ -391,6 +395,11 @@ export default function ProcurementItemPanel({
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
+                    {(matchedTerms[c.id]?.length ?? 0) > 0 && (
+                      <p data-testid="catmat-candidate-matched-terms" className="text-[11px] text-muted-foreground">
+                        Termos do objeto em comum: {matchedTerms[c.id].join(", ")}
+                      </p>
+                    )}
                     <p data-testid="catmat-candidate-provenance" className={`mt-0.5 ${c.verified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
                       {c.verified
                         ? `Verificado no catálogo oficial ${c.catalogType === "catser" ? "CATSER" : "CATMAT"}${c.retrievedAt ? ` · consultado em ${new Date(c.retrievedAt).toLocaleDateString("pt-BR")}` : ""} — ainda não é decisão`
