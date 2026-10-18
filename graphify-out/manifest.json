@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792175796.2008502,
-    "ast_hash": "352eefe79e5739e9d3f0533c28935b6e",
+    "mtime": 1792258772.3908403,
+    "ast_hash": "6338a01ca973fdd05d7c2ddd1bf23ef2",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792184623.3213742,
-    "ast_hash": "7329eed6f6d3f44e5e4db309d55af137",
+    "mtime": 1792258855.5254967,
+    "ast_hash": "85c3acfd5f9a4228349607bebd26a071",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792184512.2268565,
-    "ast_hash": "e5f24d62b1e9734303dcbc9f922af169",
+    "mtime": 1792258778.5949783,
+    "ast_hash": "471c6b79508bd62959c2daabce8e109a",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {
@@ -15120,13 +15120,13 @@
     "semantic_hash": ""
   },
   "server/services/catalogRelevance.ts": {
-    "mtime": 1792175112.7243242,
-    "ast_hash": "697f8e003a5b3602d5ce48cb0d58c6b5",
+    "mtime": 1792259287.3292203,
+    "ast_hash": "ff6120136fdcc32a12b50623e79d19ff",
     "semantic_hash": ""
   },
   ".github/workflows/catalog-official-smoke.yml": {
-    "mtime": 1792175640.85611,
-    "ast_hash": "0f4d8f27a92a2107ed6f632ab50eb8f5",
+    "mtime": 1792258855.5714843,
+    "ast_hash": "3bf3f71ca1ed75fd682acf3e6dc5aede",
     "semantic_hash": ""
   },
   "scripts/catalog-index-preflight.ts": {
@@ -15137,6 +15137,16 @@
   "server/__tests__/unit/catalog-index-preflight.test.ts": {
     "mtime": 1792184623.3287127,
     "ast_hash": "e846158746be351e591b7aa24914b6cf",
+    "semantic_hash": ""
+  },
+  "scripts/catalog-ranking-probe.ts": {
+    "mtime": 1792258846.2655165,
+    "ast_hash": "f11cd79e0599a77a3255390668dcdab1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/catalog-relevance-ranking.test.ts": {
+    "mtime": 1792259273.1232452,
+    "ast_hash": "bb9e22b899610b71fc582584a436d3ed",
     "semantic_hash": ""
   }
 }

@@ -210,7 +210,8 @@ export async function searchItemClassification(p: ItemCtx & { catalogType: Offic
     });
     snapshotId = ev?.snapshotId ?? snapshotId;
     retrievedAt = look.result.retrievedAt;
-    verified.push({ ...rel, matchSource: r.matchSource, matchedTokens: r.matchedTokens });
+    // Termos casados sobre a descrição OFICIAL atual (a que o servidor vê), origem da correspondência do índice.
+    verified.push({ ...rel, matchSource: r.matchSource });
   }
   if (idx.results.length > 0 && verified.length === 0 && lastUnavailable) {
     await event(`Verificação ${label} por código indisponível (${lastUnavailable}) — nada gravado; classificação pendente.`);
