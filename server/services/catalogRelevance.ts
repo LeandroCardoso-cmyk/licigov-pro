@@ -76,9 +76,11 @@ export function objectTerms(term: string): string[] {
  * e para a descrição oficial: "LOCACAO EQUIPAMENTO - TRADUCAO" ⇒ [locacao]; "TRADUCAO / INTERPRETACAO SIMULTANEA" ⇒
  * [traducao, interpretacao]; "Serviços de tradução de documentos" ⇒ [traducao].
  */
+const SEGMENT_DASH = /\s+-+\s*|\s*-+\s+/;
+
 export function coreTerms(text: string): string[] {
   const tokens = fold(text)
-    .replace(/\s+-+\s*|\s*-+\s+/g, " | ")
+    .replace(new RegExp(SEGMENT_DASH.source, "g"), " | ")
     .replace(/[/,;+]/g, " , ")
     .replace(/[^a-z0-9,|\s]/g, " ")
     .split(/\s+/).filter(Boolean);
@@ -111,12 +113,24 @@ const sameTerm = (a: string, b: string) =>
 const stemsOf = (description: string) => new Set(tokenize(description).map(stemPt));
 const usesActivity = (entries: readonly OfficialCatalogEntry[]) => entries.length > 0 && entries.every((e) => e.catalogType === "catser");
 
+/**
+ * Mesma atividade? Direto: núcleo da consulta × núcleo da descrição. Forma "OBJETO - ATIVIDADE" ("DOCUMENTO - GUARDA /
+ * TRANSPORTE", "ELEVADOR - MANUTENCAO"): a cabeça da descrição é um termo do OBJETO pesquisado e o núcleo da consulta está
+ * no primeiro segmento após o " - ". "LOCACAO EQUIPAMENTO - TRADUCAO" segue fora de "tradução": locação não é o objeto.
+ */
+function sameActivity(terms: string[], queryCore: string[], description: string): boolean {
+  const entryCore = coreTerms(description);
+  if (queryCore.some((q) => entryCore.some((c) => sameTerm(q, c)))) return true;
+  const next = description.split(SEGMENT_DASH)[1];
+  return !!next && entryCore.some((c) => terms.some((t) => sameTerm(t, c)))
+    && coreTerms(next).some((c) => queryCore.some((q) => sameTerm(q, c)));
+}
+
 function explainWith(terms: string[], queryCore: string[], entry: OfficialCatalogEntry, stems: Set<string>, activity: boolean): RelevanceExplanation {
   const matchedTokens = terms.filter((t) => stems.has(stemPt(t)));
   const missingTokens = terms.filter((t) => !stems.has(stemPt(t)));
   if (!activity || queryCore.length === 0) return { matchedTokens, missingTokens, activityMatch: null };
-  const entryCore = coreTerms(entry.description);
-  return { matchedTokens, missingTokens, activityMatch: queryCore.some((q) => entryCore.some((c) => sameTerm(q, c))) };
+  return { matchedTokens, missingTokens, activityMatch: sameActivity(terms, queryCore, entry.description) };
 }
 
 /**

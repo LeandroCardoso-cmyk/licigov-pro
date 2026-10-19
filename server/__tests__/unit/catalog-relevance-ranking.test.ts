@@ -278,3 +278,28 @@ describe("ranking — achados da revisão independente", () => {
     expect(explainRelevance("Aquisição de cadeira de escritório", mat("206504", "CADEIRA ESCRITÓRIO, MATERIAL ESTRUTURA: TUBO AÇO")).activityMatch).toBeNull();
   });
 });
+
+/** Revisão dirigida (defeito novo): descrições oficiais na forma "OBJETO - ATIVIDADE" (ex.: 15407 real). */
+describe("ranking — forma 'OBJETO - ATIVIDADE' da descrição oficial", () => {
+  it("'Transporte de documentos' e 'Guarda de documentos' alinham com DOCUMENTO - GUARDA / TRANSPORTE", () => {
+    const t = rank("Transporte de documentos");
+    expect(t[0]).toMatchObject({ entry: { code: "15407" }, activityMatch: true, missingTokens: [] });
+    expect(rank("Guarda de documentos")[0]).toMatchObject({ entry: { code: "15407" }, activityMatch: true });
+  });
+
+  it("manutenção de elevadores / de ar condicionado: 'OBJETO - MANUTENCAO …' é a mesma atividade (sintéticos 9008xx)", () => {
+    const corpus = [
+      svc("900801", "ELEVADOR - MANUTENCAO PREVENTIVA / CORRETIVA"),
+      svc("900802", "MANUTENCAO DE VEICULOS"),
+      svc("900803", "MANUTENCAO PREDIAL"),
+      svc("900804", "AR CONDICIONADO - INSTALACAO / MANUTENCAO"),
+    ];
+    expect(rankRelevant("Manutenção de elevadores", corpus, 5)[0]?.entry.code).toBe("900801");
+    expect(rankRelevant("Manutenção preventiva e corretiva de ar condicionado", corpus, 5)[0]?.entry.code).toBe("900804");
+  });
+
+  it("a forma invertida não reabre o defeito: locação de equipamento continua fora de 'tradução'", () => {
+    expect(ids("Serviços de tradução juramentada")).not.toContain("21490");
+    expect(ids("Serviços de tradução de documentos")).not.toContain("15407");
+  });
+});

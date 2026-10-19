@@ -15120,8 +15120,8 @@
     "semantic_hash": ""
   },
   "server/services/catalogRelevance.ts": {
-    "mtime": 1792438959.5007484,
-    "ast_hash": "122b293fd9f23ed33149e7a9b4aadade",
+    "mtime": 1792439367.5886865,
+    "ast_hash": "0abb98d177cbc8b040038cee166b7722",
     "semantic_hash": ""
   },
   ".github/workflows/catalog-official-smoke.yml": {
@@ -15145,8 +15145,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/catalog-relevance-ranking.test.ts": {
-    "mtime": 1792438780.4386942,
-    "ast_hash": "45764418496242552f18485376cbd162",
+    "mtime": 1792439354.708525,
+    "ast_hash": "27e60f61ee127a330c16e7e10d82d819",
     "semantic_hash": ""
   }
 }
