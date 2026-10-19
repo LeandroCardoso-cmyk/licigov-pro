@@ -45,6 +45,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0  # a sonda de ranking compara com o código de origin/staging
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,6 +71,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.ranking_probe == 'true'
         run: |
           set -o pipefail
+          # Referência = ranking em origin/staging (copiado só no runner; nunca versionado).
+          git show origin/staging:server/services/catalogRelevance.ts > server/services/catalogRelevance.baseline.ts
+          export CATALOG_PROBE_BASELINE_REF="origin/staging $(git rev-parse --short origin/staging)"
           pnpm catalog:ranking-probe 2>&1 | tee catalog-ranking-probe.txt
 
       - name: Publicar relatório

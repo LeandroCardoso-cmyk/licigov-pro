@@ -24,7 +24,7 @@ import {
   type CatalogUnavailableReason,
 } from "./officialCatalogService";
 import type { MatchSource } from "./catalogSearchEngine";
-import { rankRelevant, type RelevantEntry } from "./catalogRelevance";
+import { rankRelevant, explainRelevance, type RelevantEntry } from "./catalogRelevance";
 import { sanitizeFailureMessage } from "../domain/cognitiveProvenance";
 import {
   getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
@@ -100,6 +100,10 @@ export async function searchCatalogIndex(catalogType: OfficialCatalogType, term:
 export interface ClassificationCandidate extends VerifiedSuggestion {
   readonly matchSource: MatchSource | "codigo";
   readonly matchedTokens: string[];
+  /** Termos do objeto que a descrição oficial não contém (não comprovados — o servidor decide). */
+  readonly missingTokens: string[];
+  /** false ⇒ a atividade principal da descrição oficial é outra (só menciona o objeto); null ⇒ não avaliada (CATMAT). */
+  readonly activityMatch: boolean | null;
 }
 
 export type ItemClassificationSearch =
@@ -142,7 +146,10 @@ async function persistCandidates(p: ItemCtx, catalogType: OfficialCatalogType, r
   const verifiedById = new Map((await listVerifiedSuggestions(p.itemId, p.organizationId)).map((s) => [s.id, s]));
   return matches.flatMap((m, i): ClassificationCandidate[] => {
     const s = verifiedById.get(m.id);
-    return s ? [{ ...s, matchSource: ranked[i].matchSource, matchedTokens: ranked[i].matchedTokens }] : [];
+    return s ? [{
+      ...s, matchSource: ranked[i].matchSource, matchedTokens: ranked[i].matchedTokens,
+      missingTokens: ranked[i].missingTokens, activityMatch: ranked[i].activityMatch,
+    }] : [];
   });
 }
 
@@ -263,7 +270,8 @@ export async function verifyItemCode(p: ItemCtx & { catalogType: OfficialCatalog
     };
   }
   const [rel] = rankRelevant(item.description, [look.entry], 1);
-  const ranked = { entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, matchedTokens: rel?.matchedTokens ?? [] };
+  // Código informado pelo servidor: a explicação não filtra nada (o que consta, o que não consta, atividade principal).
+  const ranked = { entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, ...explainRelevance(item.description, look.entry) };
   const [candidate] = await persistCandidates(p, p.catalogType, [ranked], look.result.retrievedAt);
   await event(`Código ${code} verificado no ${label} ("${look.entry.description.slice(0, 80)}") — alternativa registrada, sem decisão.`);
   if (!candidate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao registrar a alternativa verificada." });
