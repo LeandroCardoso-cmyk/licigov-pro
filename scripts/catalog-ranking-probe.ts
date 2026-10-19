@@ -31,10 +31,17 @@ const QUERIES = [
 type Ranked = Pick<RelevantEntry, "entry" | "score" | "matchSource" | "matchedTokens"> & Partial<Pick<RelevantEntry, "missingTokens" | "activityMatch">>;
 type RankFn = (term: string, entries: readonly OfficialCatalogEntry[], topK: number) => Ranked[];
 
-/** Ranking de referência (staging) — ausente fora do workflow ⇒ a sonda mostra só o atual. */
+/**
+ * Ranking de referência (staging). Fora do workflow (sem CATALOG_PROBE_BASELINE_REF) ⇒ a sonda mostra só o atual; no
+ * workflow, falha ao carregar a referência é ERRO (nunca relatório silencioso sem comparação). A referência roda sobre o
+ * motor/semanticIndex desta branch (iguais aos de staging enquanto o PR não os alterar).
+ */
 async function baselineRanking(): Promise<RankFn | null> {
   const path = "../server/services/catalogRelevance.baseline";
-  try { return ((await import(path)) as { rankRelevant: RankFn }).rankRelevant; } catch { return null; }
+  try { return ((await import(path)) as { rankRelevant: RankFn }).rankRelevant; } catch (err) {
+    if (process.env.CATALOG_PROBE_BASELINE_REF) throw new Error(`referência ${process.env.CATALOG_PROBE_BASELINE_REF} não carregou: ${String((err as Error)?.message ?? err).slice(0, 200)}`);
+    return null;
+  }
 }
 
 const line = (r: Ranked, extra = "") =>

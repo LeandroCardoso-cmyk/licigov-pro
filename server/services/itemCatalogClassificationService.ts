@@ -24,7 +24,7 @@ import {
   type CatalogUnavailableReason,
 } from "./officialCatalogService";
 import type { MatchSource } from "./catalogSearchEngine";
-import { rankRelevant, objectTerms, type RelevantEntry } from "./catalogRelevance";
+import { rankRelevant, explainRelevance, type RelevantEntry } from "./catalogRelevance";
 import { sanitizeFailureMessage } from "../domain/cognitiveProvenance";
 import {
   getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
@@ -102,8 +102,8 @@ export interface ClassificationCandidate extends VerifiedSuggestion {
   readonly matchedTokens: string[];
   /** Termos do objeto que a descrição oficial não contém (não comprovados — o servidor decide). */
   readonly missingTokens: string[];
-  /** false ⇒ a atividade principal da descrição oficial é outra (o candidato só menciona o objeto). */
-  readonly activityMatch: boolean;
+  /** false ⇒ a atividade principal da descrição oficial é outra (só menciona o objeto); null ⇒ não avaliada (CATMAT). */
+  readonly activityMatch: boolean | null;
 }
 
 export type ItemClassificationSearch =
@@ -270,11 +270,8 @@ export async function verifyItemCode(p: ItemCtx & { catalogType: OfficialCatalog
     };
   }
   const [rel] = rankRelevant(item.description, [look.entry], 1);
-  // Código informado pelo servidor: a relevância só explica (não filtra) — sem termo do objeto, nada é "comprovado".
-  const ranked = {
-    entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, matchedTokens: rel?.matchedTokens ?? [],
-    missingTokens: rel?.missingTokens ?? objectTerms(item.description), activityMatch: rel?.activityMatch ?? false,
-  };
+  // Código informado pelo servidor: a explicação não filtra nada (o que consta, o que não consta, atividade principal).
+  const ranked = { entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, ...explainRelevance(item.description, look.entry) };
   const [candidate] = await persistCandidates(p, p.catalogType, [ranked], look.result.retrievedAt);
   await event(`Código ${code} verificado no ${label} ("${look.entry.description.slice(0, 80)}") — alternativa registrada, sem decisão.`);
   if (!candidate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao registrar a alternativa verificada." });

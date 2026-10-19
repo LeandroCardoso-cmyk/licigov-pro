@@ -88,9 +88,9 @@ export default function ProcurementItemPanel({
   const [searchMsg, setSearchMsg] = React.useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   // Explicação de cada alternativa na última consulta (não persiste nem decide): termos do objeto em comum, termos que
   // a descrição oficial não contém e se a atividade principal da descrição é a do objeto.
-  type CandidateWhy = { matched: string[]; missing: string[]; activityMatch: boolean };
+  type CandidateWhy = { matched: string[]; missing: string[]; activityMatch: boolean | null };
   const [why, setWhy] = React.useState<Record<string, CandidateWhy>>({});
-  const whyOf = (c: { matchedTokens: string[]; missingTokens: string[]; activityMatch: boolean }): CandidateWhy =>
+  const whyOf = (c: { matchedTokens: string[]; missingTokens: string[]; activityMatch: boolean | null }): CandidateWhy =>
     ({ matched: c.matchedTokens, missing: c.missingTokens, activityMatch: c.activityMatch });
   const keyStateRef = React.useRef<CatmatKeyState | null>(null);
   const lastRetryableRef = React.useRef<boolean>(false);
@@ -140,9 +140,13 @@ export default function ProcurementItemPanel({
         return;
       }
       setWhy(Object.fromEntries(res.candidates.map((c) => [c.id, whyOf(c)])));
-      const partial = res.candidates.length > 0 && res.candidates.every((c) => c.missingTokens.length > 0 || !c.activityMatch)
+      // Ressalvas globais só no CATSER (índice de serviços); no CATMAT as descrições oficiais são listas de atributos.
+      const serviceIndex = res.catalogType === "catser" && res.candidates.length > 0;
+      const partial = (serviceIndex && res.candidates.every((c) => c.activityMatch === false)
+        ? " Nenhuma alternativa tem o objeto como atividade principal: as descrições oficiais apenas o mencionam."
+        : "") + (serviceIndex && res.candidates.every((c) => c.missingTokens.length > 0)
         ? " Nenhuma alternativa contém todos os termos do objeto: são correspondências relacionadas, não equivalências comprovadas."
-        : "";
+        : "");
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
       setSearchMsg(res.candidates.length > 0
@@ -412,7 +416,7 @@ export default function ProcurementItemPanel({
                         Não consta da descrição oficial: {why[c.id].missing.join(", ")} — avalie se o código atende ao objeto.
                       </p>
                     )}
-                    {why[c.id] && !why[c.id].activityMatch && (
+                    {why[c.id]?.activityMatch === false && (
                       <p data-testid="catmat-candidate-activity-mismatch" className="text-[11px] text-amber-700 dark:text-amber-300">
                         A atividade principal desta descrição oficial é outra; o código apenas menciona o objeto.
                       </p>

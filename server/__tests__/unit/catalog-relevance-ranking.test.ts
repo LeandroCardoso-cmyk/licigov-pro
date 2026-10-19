@@ -9,7 +9,7 @@
  * qualificadores ("administrativos") bastavam para um candidato incompatível empatar com os relevantes.
  */
 import { describe, it, expect } from "vitest";
-import { rankRelevant } from "../../services/catalogRelevance";
+import { rankRelevant, explainRelevance } from "../../services/catalogRelevance";
 import type { OfficialCatalogEntry } from "../../domain/officialCatalog";
 
 const svc = (code: string, description: string): OfficialCatalogEntry => ({ catalogType: "catser", code, description, active: true, group: null });
@@ -220,5 +220,61 @@ describe("ranking CATSER — atividade principal e termos não comprovados", () 
     for (const term of ["Serviços de tradução juramentada", "Locação de equipamentos para tradução simultânea e sonorização", "limpeza"]) {
       expect(rank(term, [...MIXED].reverse())).toEqual(rank(term));
     }
+  });
+});
+
+/** Achados da revisão independente do PR (casos reproduzidos pelo revisor; códigos 9990xx e CATMAT 99xxxx são SINTÉTICOS). */
+describe("ranking — achados da revisão independente", () => {
+  const mat = (code: string, description: string): OfficialCatalogEntry => ({ catalogType: "catmat", code, description, active: true, group: null });
+
+  it("1) CATMAT sem regressão: consulta que começa pela categoria continua encontrando o item (sem filtro de atividade)", () => {
+    const cases: Array<[string, OfficialCatalogEntry]> = [
+      ["Material de limpeza - detergente neutro", mat("990001", "DETERGENTE, COMPOSIÇÃO: TENSOATIVOS ANIÔNICOS, ASPECTO FÍSICO: LÍQUIDO, APLICAÇÃO: LIMPEZA GERAL")],
+      ["Gênero alimentício: arroz tipo 1", mat("990002", "ARROZ, TIPO: 1, CLASSE: LONGO FINO, SUBGRUPO: POLIDO")],
+      ["Peças para manutenção de veículos - pastilha de freio", mat("990003", "PASTILHA FREIO, APLICAÇÃO: VEÍCULO LEVE")],
+    ];
+    for (const [term, e] of cases) {
+      const [r] = rankRelevant(term, [e], 5);
+      expect(r?.entry.code, term).toBe(e.code);
+      expect(r.activityMatch, term).toBeNull(); // não avaliada no CATMAT
+    }
+  });
+
+  it("2) núcleo = termo principal + coordenados: complemento ('de documentos', 'de equipamentos') não alinha atividade", () => {
+    const docs = rank("Serviços de tradução de documentos");
+    expect(docs.map((r) => r.entry.code)).not.toContain("15407"); // DOCUMENTO - GUARDA / TRANSPORTE
+    expect(docs.every((r) => ["12637", "3891"].includes(r.entry.code))).toBe(true);
+    const eq = rank("Transporte de equipamentos");
+    expect(eq.map((r) => r.entry.code)).not.toContain("900703"); // MANUTENCAO DE EQUIPAMENTOS DE TRANSPORTE
+    const alone = rankRelevant("Transporte de equipamentos", [svc("900703", "MANUTENCAO DE EQUIPAMENTOS DE TRANSPORTE")], 5);
+    expect(alone[0]).toMatchObject({ activityMatch: false }); // sem candidato da mesma atividade: só sinalizado
+  });
+
+  it("3) alinhamento não usa aproximação larga: PRODUCAO ≠ TRADUCAO (sai quando há traduções; sozinho, vem sinalizado)", () => {
+    const video = svc("999001", "PRODUCAO DE VIDEO - TRADUCAO / LEGENDAGEM");
+    expect(rank("Serviços de tradução juramentada", [...MIXED, video]).map((r) => r.entry.code)).not.toContain("999001");
+    expect(rankRelevant("Serviços de tradução juramentada", [video], 5)[0]).toMatchObject({ activityMatch: false });
+    // Erro de digitação (distância 1, termo longo) continua alinhando.
+    expect(rank("limpesa").every((r) => r.activityMatch === true)).toBe(true);
+  });
+
+  it("4) termo casado só por aproximação NÃO consta: 'tradução jornalística' × PRODUCAO JORNALISTICA não é equivalência", () => {
+    const [r] = rankRelevant("Serviços de tradução jornalística", [svc("10200", "PRODUCAO JORNALISTICA")], 5);
+    expect(r?.matchedTokens ?? []).not.toContain("traducao");
+    if (r) {
+      expect(r.missingTokens).toContain("traducao");
+      expect(r.activityMatch).toBe(false);
+    }
+  });
+
+  it("5) explicação do 'Verificar código' sem filtros: não afirma ausência do que consta nem atividade diferente indevida", () => {
+    const guard = explainRelevance("Serviços de tradução de documentos", svc("15407", "GUARDA / TRANSPORTE - DOCUMENTOS"));
+    expect(guard).toEqual({ matchedTokens: ["documentos"], missingTokens: ["traducao"], activityMatch: false });
+    const long = "Contratação de empresa especializada para prestação de serviços de tradução juramentada de documentos oficiais, conforme termo de referência";
+    const ok = explainRelevance(long, svc("12637", "TRADUCAO / INTERPRETACAO SIMULTANEA / CONSECUTIVA"));
+    expect(ok.activityMatch).toBe(true);
+    expect(ok.matchedTokens).toContain("traducao");
+    expect(ok.missingTokens).toContain("juramentada");
+    expect(explainRelevance("Aquisição de cadeira de escritório", mat("206504", "CADEIRA ESCRITÓRIO, MATERIAL ESTRUTURA: TUBO AÇO")).activityMatch).toBeNull();
   });
 });
