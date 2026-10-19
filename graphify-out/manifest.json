@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792258772.3908403,
-    "ast_hash": "6338a01ca973fdd05d7c2ddd1bf23ef2",
+    "mtime": 1792437783.7050598,
+    "ast_hash": "682232db3c1b7d92d4a0f2d95c6e697b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792258778.5949783,
-    "ast_hash": "471c6b79508bd62959c2daabce8e109a",
+    "mtime": 1792437623.2435799,
+    "ast_hash": "fdbed5a4f7ac401f39d9f0e9203c5810",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {
@@ -15120,13 +15120,13 @@
     "semantic_hash": ""
   },
   "server/services/catalogRelevance.ts": {
-    "mtime": 1792259287.3292203,
-    "ast_hash": "ff6120136fdcc32a12b50623e79d19ff",
+    "mtime": 1792437603.016231,
+    "ast_hash": "f71b8be28a8906cf7d6b8759b8130e9a",
     "semantic_hash": ""
   },
   ".github/workflows/catalog-official-smoke.yml": {
-    "mtime": 1792258855.5714843,
-    "ast_hash": "3bf3f71ca1ed75fd682acf3e6dc5aede",
+    "mtime": 1792437753.4562786,
+    "ast_hash": "c432328adbf36f6dac954b700b68d505",
     "semantic_hash": ""
   },
   "scripts/catalog-index-preflight.ts": {
@@ -15140,13 +15140,13 @@
     "semantic_hash": ""
   },
   "scripts/catalog-ranking-probe.ts": {
-    "mtime": 1792258846.2655165,
-    "ast_hash": "f11cd79e0599a77a3255390668dcdab1",
+    "mtime": 1792437753.4552133,
+    "ast_hash": "a6f86a4000ebf516ce72a5fcf3bdd222",
     "semantic_hash": ""
   },
   "server/__tests__/unit/catalog-relevance-ranking.test.ts": {
-    "mtime": 1792259273.1232452,
-    "ast_hash": "bb9e22b899610b71fc582584a436d3ed",
+    "mtime": 1792437511.7445424,
+    "ast_hash": "2b98766f15e2cb7d58121ea7d7f2ecfb",
     "semantic_hash": ""
   }
 }

@@ -121,3 +121,104 @@ describe("ranking CATSER — relevância discriminativa (corpus sintético)", ()
     expect(own?.matchedTokens).toEqual(expect.arrayContaining(["cadeira", "escritorio"]));
   });
 });
+
+/**
+ * Atividade principal × menção (homologação visual M8, staging 19/10/2026: "Serviços de tradução juramentada" trazia a
+ * LOCAÇÃO de equipamento de tradução como alternativa). Corpus = descrições OFICIAIS públicas observadas na sonda
+ * somente leitura do CATSER (códigos reais, 17/10/2026) + entradas SINTÉTICAS 9007xx (não oficiais, identificadas).
+ */
+const OFFICIAL_OBSERVED: OfficialCatalogEntry[] = [
+  svc("12637", "TRADUCAO / INTERPRETACAO SIMULTANEA / CONSECUTIVA"),
+  svc("3891", "TRADUCAO, ADAPTACAO E VERSAO DE TEXTOS"),
+  svc("21490", "LOCACAO EQUIPAMENTO - TRADUCAO SIMULTANEA / SONORIZACAO"),
+  svc("10200", "PRODUCAO JORNALISTICA"),
+  svc("12009", "ORTOPEDIA E TRAUMATOLOGIA - TRACAO - TRANSESQUELETICA, CUTA-NEA, FEMORAL E INSTALACAO DE H"),
+  svc("24023", "PRESTACAO DE SERVICO DE LIMPEZA E CONSERVACAO - OUTRAS NECESSIDADES"),
+  svc("24104", "PRESTACAO DE SERVICO DE LIMPEZA E CONSERVACAO - AREAS EXTERNAS - OUTRAS NECESSIDADES."),
+  svc("24090", "PRESTACAO DE SERVICO DE LIMPEZA E CONSERVACAO - AREAS INTERNAS - OUTRAS NECESSIDADES - OUT"),
+  svc("13439", "PRESTACAO DE SERVICOS DE ASCENSORISTA"),
+  svc("13447", "PRESTACAO DE SERVICOS DE TELEFONISTA"),
+  svc("14672", "LIMPEZA URBANA"),
+  svc("14044", "ROÇADA / LIMPEZA DE AREA - MECANIZADA / MANUAL"),
+  svc("8656", "TRANSPORTE SUPERFICIE EM AEROPORTOS - PASSAGEIRO / CARGA /AERONAVE / EQUIPAMENTO"),
+  svc("24694", "TRANSPORTE DUTOVIARIO"),
+  svc("15407", "DOCUMENTO - GUARDA / TRANSPORTE"),
+  svc("30136", "PRESTACAO DE SERVICO DE VIGILANCIA PATRIMONIAL"),
+  svc("24015", "SERVICO DE VIGILANCIA ARMADA"),
+];
+const SYNTHETIC_ACTIVITY: OfficialCatalogEntry[] = [
+  svc("900701", "INTERPRETACAO SIMULTANEA EM EVENTOS"),
+  svc("900702", "LOCACAO DE VEICULOS"),
+  svc("900703", "MANUTENCAO DE EQUIPAMENTOS DE TRANSPORTE"),
+  svc("900704", "LOCACAO DE EQUIPAMENTOS DE LIMPEZA"),
+];
+const MIXED = [...OFFICIAL_OBSERVED, ...SYNTHETIC_ACTIVITY];
+const rank = (term: string, corpus = MIXED) => rankRelevant(term, corpus, 5);
+const ids = (term: string, corpus = MIXED) => rank(term, corpus).map((r) => r.entry.code);
+
+describe("ranking CATSER — atividade principal e termos não comprovados", () => {
+  it("A) tradução juramentada: locação de equipamento NÃO é alternativa; 'juramentada' é declarada não comprovada", () => {
+    const res = rank("Serviços de tradução juramentada");
+    expect(res.map((r) => r.entry.code)).not.toContain("21490");
+    expect(res.map((r) => r.entry.code).every((c) => ["12637", "3891"].includes(c))).toBe(true);
+    for (const r of res) {
+      expect(r.activityMatch).toBe(true);
+      expect(r.missingTokens).toEqual(["juramentada"]); // relacionada, nunca equivalência comprovada
+    }
+  });
+
+  it("B) tradução e interpretação simultânea: interpretação continua localizável; locação de equipamento não", () => {
+    const c = ids("Serviços de tradução e interpretação simultânea");
+    expect(c).toEqual(expect.arrayContaining(["12637", "900701"]));
+    expect(c).not.toContain("21490");
+  });
+
+  it("C) locação de equipamentos para tradução: 21490 continua elegível (sem viés contra locação); prestação de tradução não", () => {
+    const res = rank("Locação de equipamentos para tradução simultânea e sonorização");
+    expect(res[0]).toMatchObject({ entry: { code: "21490" }, activityMatch: true, missingTokens: [] });
+    expect(res.map((r) => r.entry.code)).not.toContain("12637");
+    expect(res.map((r) => r.entry.code)).not.toContain("900702"); // locação de outra coisa
+  });
+
+  it("D) tradução de textos: 3891 primeiro, sem exigir 'juramentada' e sem termo ausente", () => {
+    const res = rank("Serviços de tradução, adaptação e versão de textos");
+    expect(res[0]).toMatchObject({ entry: { code: "3891" }, missingTokens: [] });
+    expect(res.map((r) => r.entry.code)).not.toContain("21490");
+  });
+
+  it("E) limpeza administrativa (regressão do #309): só limpeza e conservação; nem ascensorista/telefonista nem locação de equipamento de limpeza", () => {
+    const c = ids("Prestação de serviços de limpeza e conservação de ambientes administrativos");
+    expect(c.slice(0, 3).sort()).toEqual(["24023", "24090", "24104"]);
+    for (const bad of ["13439", "13447", "900704"]) expect(c).not.toContain(bad);
+  });
+
+  it("F) transporte e vigilância: atividade principal preservada; guarda de documento e manutenção de equipamento não", () => {
+    const t = ids("Prestação de serviços de transporte de passageiros");
+    expect(t[0]).toBe("8656");
+    expect(t).not.toContain("15407");
+    expect(t).not.toContain("900703");
+    const v = ids("Serviços de vigilância patrimonial");
+    expect(v[0]).toBe("30136");
+    expect(v).toContain("24015");
+  });
+
+  it("G) consultas curtas continuam válidas", () => {
+    expect(ids("tradução").sort()).toEqual(["12637", "3891"]);
+    expect(ids("limpeza")).toEqual(expect.arrayContaining(["14672", "24023"]));
+    expect(ids("transporte")).toEqual(expect.arrayContaining(["8656", "24694"]));
+    expect(ids("transporte")).not.toContain("15407");
+  });
+
+  it("H) sem candidato da mesma atividade: menção vem SINALIZADA (atividade diferente + termos ausentes); sem relação ⇒ vazio", () => {
+    const res = rank("Sonorização de eventos");
+    expect(res).toHaveLength(1);
+    expect(res[0]).toMatchObject({ entry: { code: "21490" }, activityMatch: false, missingTokens: ["eventos"] });
+    expect(rank("Serviços de cartografia digital")).toEqual([]);
+  });
+
+  it("I) determinístico e independente da ordem do corpus", () => {
+    for (const term of ["Serviços de tradução juramentada", "Locação de equipamentos para tradução simultânea e sonorização", "limpeza"]) {
+      expect(rank(term, [...MIXED].reverse())).toEqual(rank(term));
+    }
+  });
+});

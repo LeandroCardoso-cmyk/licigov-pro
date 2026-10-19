@@ -86,8 +86,12 @@ export default function ProcurementItemPanel({
   const [justification, setJustification] = React.useState<string>("");
   const [searchTerm, setSearchTerm] = React.useState<string>("");
   const [searchMsg, setSearchMsg] = React.useState<{ tone: "ok" | "warn"; text: string } | null>(null);
-  // Termos do OBJETO que justificaram cada alternativa na última consulta (explicação; não persiste nem decide).
-  const [matchedTerms, setMatchedTerms] = React.useState<Record<string, string[]>>({});
+  // Explicação de cada alternativa na última consulta (não persiste nem decide): termos do objeto em comum, termos que
+  // a descrição oficial não contém e se a atividade principal da descrição é a do objeto.
+  type CandidateWhy = { matched: string[]; missing: string[]; activityMatch: boolean };
+  const [why, setWhy] = React.useState<Record<string, CandidateWhy>>({});
+  const whyOf = (c: { matchedTokens: string[]; missingTokens: string[]; activityMatch: boolean }): CandidateWhy =>
+    ({ matched: c.matchedTokens, missing: c.missingTokens, activityMatch: c.activityMatch });
   const keyStateRef = React.useRef<CatmatKeyState | null>(null);
   const lastRetryableRef = React.useRef<boolean>(false);
 
@@ -135,11 +139,14 @@ export default function ProcurementItemPanel({
         setSearchMsg({ tone: "warn", text: res.message });
         return;
       }
-      setMatchedTerms(Object.fromEntries(res.candidates.map((c) => [c.id, c.matchedTokens])));
+      setWhy(Object.fromEntries(res.candidates.map((c) => [c.id, whyOf(c)])));
+      const partial = res.candidates.length > 0 && res.candidates.every((c) => c.missingTokens.length > 0 || !c.activityMatch)
+        ? " Nenhuma alternativa contém todos os termos do objeto: são correspondências relacionadas, não equivalências comprovadas."
+        : "";
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
       setSearchMsg(res.candidates.length > 0
-        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.` }
+        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.${partial}` }
         : res.filterIgnoredSuspected
           ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
           : res.catalogType === "catmat"
@@ -156,7 +163,7 @@ export default function ProcurementItemPanel({
     onSuccess: (res) => {
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       if (res.status === "verified") {
-        setMatchedTerms((m) => ({ ...m, [res.candidate.id]: res.candidate.matchedTokens }));
+        setWhy((m) => ({ ...m, [res.candidate.id]: whyOf(res.candidate) }));
         setSearchMsg({ tone: "ok", text: `Código ${res.candidate.catmatCode} verificado no ${label}: "${res.candidate.catmatDescription}". Confirme abaixo se corresponde ao item.` });
         setVerifyCode("");
         invalidate();
@@ -395,9 +402,19 @@ export default function ProcurementItemPanel({
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
-                    {(matchedTerms[c.id]?.length ?? 0) > 0 && (
+                    {(why[c.id]?.matched.length ?? 0) > 0 && (
                       <p data-testid="catmat-candidate-matched-terms" className="text-[11px] text-muted-foreground">
-                        Termos do objeto em comum: {matchedTerms[c.id].join(", ")}
+                        Termos do objeto em comum: {why[c.id].matched.join(", ")}
+                      </p>
+                    )}
+                    {(why[c.id]?.missing.length ?? 0) > 0 && (
+                      <p data-testid="catmat-candidate-missing-terms" className="text-[11px] text-amber-700 dark:text-amber-300">
+                        Não consta da descrição oficial: {why[c.id].missing.join(", ")} — avalie se o código atende ao objeto.
+                      </p>
+                    )}
+                    {why[c.id] && !why[c.id].activityMatch && (
+                      <p data-testid="catmat-candidate-activity-mismatch" className="text-[11px] text-amber-700 dark:text-amber-300">
+                        A atividade principal desta descrição oficial é outra; o código apenas menciona o objeto.
                       </p>
                     )}
                     <p data-testid="catmat-candidate-provenance" className={`mt-0.5 ${c.verified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>

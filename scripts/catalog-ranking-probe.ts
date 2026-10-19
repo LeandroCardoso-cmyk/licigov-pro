@@ -1,40 +1,46 @@
 /* eslint-disable no-console -- CLI de diagnóstico: o relatório é a saída no terminal */
 /**
  * Sonda SOMENTE LEITURA do ranking de candidatos CATSER sobre as descrições OFICIAIS reais (API pública).
- * Compara o ranking anterior (referência, reproduzida abaixo) com o atual (`rankRelevant`) para consultas fixas, e
- * confere por código, na fonte, os candidatos do ranking atual. Sem banco, sem segredos, nada gravado.
+ * Compara o ranking de REFERÊNCIA (o `catalogRelevance.ts` de `origin/staging`, copiado pelo workflow para
+ * `server/services/catalogRelevance.baseline.ts` — nunca versionado) com o atual (`rankRelevant`) para consultas fixas,
+ * e confere por código, na fonte, os candidatos do ranking atual. Sem banco, sem segredos, nada gravado.
  *
  * Uso (ambiente com saída HTTPS para dadosabertos.compras.gov.br — ex.: workflow `catalog-official-smoke.yml`):
  *   pnpm catalog:ranking-probe
  */
 import { listOfficialCatalogPage, lookupOfficialCode } from "../server/services/officialCatalogService";
 import { rankRelevant, objectTerms, type RelevantEntry } from "../server/services/catalogRelevance";
-import { normalizeCatalogEntry } from "../server/services/catalogIntegrationService";
-import { searchAll } from "../server/services/catalogSearchEngine";
 import type { OfficialCatalogEntry } from "../server/domain/officialCatalog";
 
 const PAGE_SIZE = 500;
 const MAX_PAGES = 20;
 const TOP_K = 5;
 const QUERIES = [
+  "Serviços de tradução juramentada",
+  "Serviços de tradução e interpretação simultânea",
+  "Locação de equipamentos para tradução simultânea e sonorização",
+  "Serviços de tradução, adaptação e versão de textos",
   "Prestação de serviços de limpeza e conservação de ambientes administrativos.",
   "Prestação de serviços de transporte de passageiros",
   "Serviços de vigilância patrimonial",
   "limpeza",
-  "Serviços de tradução juramentada",
+  "tradução",
+  "transporte",
 ];
 
-/** Ranking ANTERIOR (referência de comparação): qualquer termo em comum bastava. */
-function previousRanking(term: string, entries: readonly OfficialCatalogEntry[], topK: number): RelevantEntry[] {
-  const byCode = new Map(entries.map((e) => [e.code, e]));
-  const normalized = entries.map((e) => normalizeCatalogEntry({ code: e.code, catalogType: e.catalogType, description: e.description, active: e.active === true }, 0));
-  return searchAll(term, normalized, topK)
-    .filter((r) => r.matchedTokens.length > 0 && byCode.has(r.entry.code))
-    .map((r) => ({ entry: byCode.get(r.entry.code)!, score: r.score, matchSource: r.matchSource, matchedTokens: r.matchedTokens }));
+type Ranked = Pick<RelevantEntry, "entry" | "score" | "matchSource" | "matchedTokens"> & Partial<Pick<RelevantEntry, "missingTokens" | "activityMatch">>;
+type RankFn = (term: string, entries: readonly OfficialCatalogEntry[], topK: number) => Ranked[];
+
+/** Ranking de referência (staging) — ausente fora do workflow ⇒ a sonda mostra só o atual. */
+async function baselineRanking(): Promise<RankFn | null> {
+  const path = "../server/services/catalogRelevance.baseline";
+  try { return ((await import(path)) as { rankRelevant: RankFn }).rankRelevant; } catch { return null; }
 }
 
-const line = (r: RelevantEntry, extra = "") =>
-  `    ${r.entry.code.padStart(6)} · ${r.score.toFixed(3)} · ${r.matchSource.padEnd(10)} · [${r.matchedTokens.join(", ")}]${extra} · ${r.entry.description.slice(0, 90)}`;
+const line = (r: Ranked, extra = "") =>
+  `    ${r.entry.code.padStart(6)} · ${r.score.toFixed(3)} · ${r.matchSource.padEnd(10)} · [${r.matchedTokens.join(", ")}]` +
+  `${r.activityMatch === false ? " · ATIVIDADE PRINCIPAL DIFERENTE" : ""}${r.missingTokens?.length ? ` · não consta: [${r.missingTokens.join(", ")}]` : ""}` +
+  `${extra} · ${r.entry.description.slice(0, 90)}`;
 
 async function main(): Promise<number> {
   const all = new Map<string, OfficialCatalogEntry>();
@@ -47,13 +53,15 @@ async function main(): Promise<number> {
     if (res.entries.length < PAGE_SIZE || res.remainingPages === 0) break;
   }
   const entries = [...all.values()].filter((e) => e.active === true);
+  const previousRanking = await baselineRanking();
+  const ref = process.env.CATALOG_PROBE_BASELINE_REF ?? "referência";
   console.log(`[RANKING-PROBE] CATSER oficial: ${entries.length} serviço(s) ativo(s) lido(s) · totalRegistros ${total}${total !== null && all.size !== total ? " · ATENÇÃO: leitura incompleta" : ""}`);
 
   for (const term of QUERIES) {
-    const before = previousRanking(term, entries, TOP_K);
+    const before = previousRanking ? previousRanking(term, entries, TOP_K) : [];
     const after = rankRelevant(term, entries, TOP_K);
     console.log(`\n=== "${term}"  ·  termos do objeto: [${objectTerms(term).join(", ")}]`);
-    console.log(`  ANTES (${before.length}):`);
+    console.log(previousRanking ? `  ANTES — ${ref} (${before.length}):` : "  ANTES: sem ranking de referência (fora do workflow)");
     for (const r of before) console.log(line(r));
     console.log(`  DEPOIS (${after.length}):`);
     for (const r of after) {

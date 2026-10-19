@@ -9,11 +9,17 @@
  *      ("… de ambientes administrativos") — depende só da consulta, nunca do corpus;
  *   3. cobertura ponderada dos termos do objeto casados pelo motor, com corte absoluto e relativo ao melhor candidato:
  *      melhor menos candidatos do que candidatos incompatíveis. Sem termo do objeto casado ⇒ não é candidato.
- *      Termo com o mesmo radical na descrição (plural/singular) vale inteiro; casado só por aproximação vale parcial.
+ *      Termo com o mesmo radical na descrição (plural/singular) vale inteiro; casado só por aproximação vale parcial;
+ *   4. ATIVIDADE PRINCIPAL: o núcleo da consulta (2 primeiros termos do objeto) precisa estar no núcleo da descrição
+ *      oficial (2 primeiros termos dela) — "LOCACAO EQUIPAMENTO - TRADUCAO" é locação, não tradução. Havendo candidatos
+ *      da mesma atividade, os que só MENCIONAM o objeto saem; não havendo, ficam SINALIZADOS (`activityMatch: false`)
+ *      só os que mencionam o termo principal do objeto (um complemento sozinho, ex.: "eventos", não sustenta candidato);
+ *   5. termos do objeto que a descrição oficial NÃO contém (`missingTokens`, ex.: "juramentada") são devolvidos para a
+ *      tela dizer que não estão comprovados — candidato relacionado nunca é apresentado como equivalência.
  * O score continua sendo SIMILARIDADE TEXTUAL (nunca adequação técnica/jurídica); a decisão é sempre humana.
  */
 import type { OfficialCatalogEntry } from "../domain/officialCatalog";
-import { tokenize, stemPt } from "../domain/semanticIndex";
+import { tokenize, stemPt, isFuzzyMatch } from "../domain/semanticIndex";
 import { normalizeCatalogEntry, type CatalogEntry } from "./catalogIntegrationService";
 import {
   searchExact, searchAlias, searchNormalized, searchToken, searchSemantic, searchFuzzy, rankResults, type MatchSource,
@@ -26,6 +32,10 @@ export interface RelevantEntry {
   readonly matchSource: MatchSource;
   /** Termos do OBJETO pesquisado presentes na descrição oficial (justificativa do candidato). */
   readonly matchedTokens: string[];
+  /** Termos do objeto pesquisado que a descrição oficial NÃO contém (características não comprovadas). */
+  readonly missingTokens: string[];
+  /** A atividade principal da descrição oficial é a do objeto (false ⇒ só menciona o objeto; exibido com ressalva). */
+  readonly activityMatch: boolean;
 }
 
 /** Enquadramento da contratação: nunca identifica o objeto (comparação já normalizada, sem acento). */
@@ -42,8 +52,11 @@ const POSITION_DECAY = 0.5;      // peso do i-ésimo termo do objeto: 1 / (1 + 0
 const MIN_COVERAGE = 0.25;       // cobertura ponderada mínima para ser candidato
 const RELATIVE_TO_BEST = 0.5;    // e ao menos metade da cobertura do melhor candidato
 const COVERAGE_SHARE = 0.6;      // score = 0,6·cobertura + 0,4·score do motor
+const CORE_TERMS = 2;            // núcleo = 2 primeiros termos do objeto (consulta e descrição oficial)
 const APPROXIMATE_FACTOR = 0.4;  // termo casado só por aproximação (sem radical igual) vale 40% — tolera erro de digitação,
                                  // mas palavra diferente não sustenta candidato ("tradução" × "produção"/"tração")
+
+const sameTerm = (a: string, b: string) => stemPt(a) === stemPt(b) || isFuzzyMatch(a, b, 2);
 
 /** Termos do objeto, na ordem em que aparecem (mesma normalização/stopwords do motor), sem o enquadramento. */
 export function objectTerms(term: string): string[] {
@@ -70,6 +83,11 @@ export function rankRelevant(term: string, entries: readonly OfficialCatalogEntr
     matchedByCode.set(r.entry.code, set);
   }
   const stemsByCode = new Map(normalized.map((e) => [e.code, new Set(e.tokens.map(stemPt))]));
+  const queryCore = terms.slice(0, CORE_TERMS);
+  const activityOf = (e: OfficialCatalogEntry) => {
+    const core = objectTerms(e.description).slice(0, CORE_TERMS);
+    return queryCore.some((q) => core.some((c) => sameTerm(q, c)));
+  };
   const scored = rankResults(all)
     .filter((r) => byCode.has(r.entry.code))
     .map((r) => {
@@ -77,14 +95,21 @@ export function rankRelevant(term: string, entries: readonly OfficialCatalogEntr
       const stems = stemsByCode.get(r.entry.code)!;
       const coverage = matched.reduce((s, t) => s + weight.get(t)! * (stems.has(stemPt(t)) ? 1 : APPROXIMATE_FACTOR), 0) / totalWeight;
       const score = Math.round((COVERAGE_SHARE * coverage + (1 - COVERAGE_SHARE) * r.score) * 1e4) / 1e4;
-      return { entry: byCode.get(r.entry.code)!, score, coverage, matchSource: r.matchSource, matchedTokens: matched };
+      const entry = byCode.get(r.entry.code)!;
+      const missingTokens = terms.filter((t) => !matched.includes(t));
+      return { entry, score, coverage, matchSource: r.matchSource, matchedTokens: matched, missingTokens, activityMatch: activityOf(entry) };
     })
     .filter((r) => r.matchedTokens.length > 0 && r.coverage >= MIN_COVERAGE);
-  const best = Math.max(0, ...scored.map((r) => r.coverage));
+  // Atividade principal: com candidatos da MESMA atividade, os que apenas mencionam o objeto não são alternativas.
+  // Sem nenhum, ficam só os que mencionam o TERMO PRINCIPAL do objeto (complemento sozinho não basta), sinalizados.
+  const pool = scored.some((r) => r.activityMatch)
+    ? scored.filter((r) => r.activityMatch)
+    : scored.filter((r) => r.matchedTokens.includes(terms[0]));
+  const best = Math.max(0, ...pool.map((r) => r.coverage));
 
-  return scored
+  return pool
     .filter((r) => r.coverage >= best * RELATIVE_TO_BEST)
     .sort((a, b) => b.score - a.score || (a.entry.code < b.entry.code ? -1 : a.entry.code > b.entry.code ? 1 : 0))
     .slice(0, topK)
-    .map(({ entry, score, matchSource, matchedTokens }) => ({ entry, score, matchSource, matchedTokens }));
+    .map(({ entry, score, matchSource, matchedTokens, missingTokens, activityMatch }) => ({ entry, score, matchSource, matchedTokens, missingTokens, activityMatch }));
 }
