@@ -24,7 +24,7 @@ import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
-  type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
+  fictitiousQuotesReviewText, type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
 import { formatBRL, reaisToCents } from "../../domain/money";
 import { draftContentHash } from "../../domain/generatedDocument";
@@ -190,6 +190,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       return {
         id: r.id, description: r.description.trim(), quantity: r.quantity, unit: r.unit.trim(),
         averagePriceCents: r.averagePriceCents, quoteCount: r.quoteCount,
+        // M8 hardening: só quando há cotação fictícia (renderizada) — sem ela, snapshot byte-idêntico.
+        ...(r.fictitiousQuoteCount ? { fq: r.fictitiousQuoteCount } : {}),
         confirmedCatalogCode: r.confirmedCatalogCode ?? null, suggested: !!r.suggestedCatalogCode,
         sourceState: src.sourceState,
         // Só campos RENDERIZADOS no prompt (o quoteId não aparece no prompt ⇒ não entra no digest).
@@ -246,7 +248,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       const src = byId.get(r.id)!;
       const catalog = r.confirmedCatalogCode ? ` · catálogo confirmado: ${r.confirmedCatalogCode}` : " · catálogo: a revisar";
       const flag = src.sourceState !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
-      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}`);
+      const fict = r.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(r.fictitiousQuoteCount)}` : "";
+      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}${fict}`);
       for (const q of sortQuotes(src.quotes)) {
         const bm = [q.brand.trim(), q.model.trim()].filter(Boolean).join(" / ");
         lines.push(`  - ${q.supplier.trim() || "Fornecedor não identificado"}${bm ? ` (${bm})` : ""}: ${q.valueCents !== null && q.valueCents > 0 ? formatBRL(q.valueCents) : "sem preço"}`);
@@ -359,6 +362,7 @@ export function canonicalDocumentItems(
       averagePriceCents: it.priceContext.unitReferencePriceCents ?? 0,
       priceBlockedReason: it.priceContext.priceBlockedReason,
       quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
+      fictitiousQuoteCount: evid.reduce((n, e) => n + (e.fictitiousQuoteCount ?? 0), 0),
       confirmedCatalogCode: catalogs.length === 1 ? catalogs[0] : null,
       suggestedCatalogCode: evid.find((e) => e.suggestedCatalogCode)?.suggestedCatalogCode ?? null,
       sourceState: evid.find((e) => e.sourceState !== "current")?.sourceState ?? "current",
@@ -420,7 +424,7 @@ export async function loadApprovedContextItems(params: {
   const decisions = await getLatestCatmatDecisionsForItems(approved.map((i) => i.id), params.organizationId);
   const approvedItems: ContextItem[] = approved.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-    averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount,
+    averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount, fictitiousQuoteCount: i.fictitiousQuoteCount,
     confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
     suggestedCatalogCode: i.suggestedCATMAT,
     sourceState: i.sourceState ?? "current",

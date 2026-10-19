@@ -6,7 +6,7 @@
  * Padrão getDb(): degrada graciosamente sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, notInArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
@@ -29,7 +29,7 @@ import { withHumanEditMarker } from "../domain/humanEditMarker";
 import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
-import type { PriceResearchWorkspace, PriceResearchItem } from "../domain/priceResearch";
+import { FICTITIOUS_QUOTE_MARKER, isFictitiousQuote, type PriceResearchWorkspace, type PriceResearchItem } from "../domain/priceResearch";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
 import type { CATMATMatch } from "../domain/catmatMatching";
 import type { ItemRecommendation, ItemRisk } from "../domain/itemRecommendation";
@@ -275,19 +275,41 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
  * P0 piloto — campos ADITIVOS: `averagePriceCents` (contrato monetário: reaisToCents, sem /100), fornecedores
  * (cotações que compõem a média), `quoteCount` e `enrichmentStatus`.
  */
+/**
+ * M8 hardening — ids (tenant-scoped) das cotações cujo registro canônico carrega o marcador de fonte FICTÍCIA do parser.
+ * Somente leitura; nada é alterado nos registros.
+ */
+export async function listFictitiousQuoteIds(orgId: number, quoteIds: readonly string[]): Promise<Set<string>> {
+  const ids = [...new Set(quoteIds.filter(Boolean))];
+  const db = await getDb();
+  if (!db || ids.length === 0) return new Set();
+  const rows = await db.select({ id: priceResearchItemsTable.id }).from(priceResearchItemsTable)
+    .where(and(eq(priceResearchItemsTable.organizationId, orgId), inArray(priceResearchItemsTable.id, ids),
+      like(priceResearchItemsTable.observations, `%${FICTITIOUS_QUOTE_MARKER}%`)));
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Cotações COM PREÇO (as que compõem a média) que são fictícias/demonstrativas. */
+export function countFictitiousPricedQuotes(suppliers: readonly IntelligentItemSupplier[], fictitiousIds: ReadonlySet<string>): number {
+  return suppliers.filter((x) => Number(x.value) > 0 && ((x.quoteId && fictitiousIds.has(x.quoteId)) || isFictitiousQuote({ name: x.name }))).length;
+}
+
 export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
   id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
-  averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; enrichmentStatus: string; sourceResearchId: string;
+  averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; fictitiousQuoteCount: number;
+  enrichmentStatus: string; sourceResearchId: string;
   sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null; approvedBy: number | null;
 }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(intelligentItemsTable)
     .where(and(eq(intelligentItemsTable.processId, processId), eq(intelligentItemsTable.organizationId, orgId)));
+  const fictitiousIds = await listFictitiousQuoteIds(orgId, rows.flatMap((r) => parseArr<IntelligentItemSupplier>(r.suppliers).map((x) => x.quoteId ?? "")));
   return rows.map(r => {
     const suppliers = parseArr<IntelligentItemSupplier>(r.suppliers);
     const pending = r.pendingSuppliers ? parseArr<IntelligentItemSupplier>(r.pendingSuppliers) : null;
     return {
+      fictitiousQuoteCount: countFictitiousPricedQuotes(suppliers, fictitiousIds),
       id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice),
       suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status,
       averagePriceCents: reaisToCents(r.averagePrice), suppliers,
@@ -376,6 +398,44 @@ export async function insertCatmatMatch(m: CATMATMatch): Promise<CATMATMatch | n
     decision: m.decision, correlationId: m.correlationId, createdAt: toDb(m.createdAt),
   }).onDuplicateKeyUpdate({ set: { decision: m.decision } });
   return m;
+}
+
+/**
+ * M8 hardening — grava o resultado de uma busca oficial CONCLUÍDA como o conjunto `busca_atual` do item, numa transação
+ * com o item travado (buscas concorrentes não se misturam):
+ *   1. candidatos anteriores (`busca_atual`/legado `sugerido`) fora desta busca ⇒ `historico` (linha preservada);
+ *      `keepCodes` = códigos que a busca não conseguiu reavaliar (fonte indisponível) ⇒ estado mantido, nunca inventado;
+ *   2. candidatos desta busca ⇒ `busca_atual` (posição/score desta busca), exceto `codigo_verificado` (verificação manual
+ *      não é rebaixada nem requalificada por busca).
+ * Nada é apagado; o ledger de decisões não é tocado. Retorna quantos candidatos passaram a histórico.
+ */
+export async function recordCatalogSearchMatches(p: {
+  organizationId: number; itemId: string; matches: readonly CATMATMatch[]; keepCodes?: readonly string[];
+}): Promise<{ demoted: number }> {
+  const db = await getDb();
+  if (!db) return { demoted: 0 };
+  return db.transaction(async (tx) => {
+    await tx.select({ id: intelligentItemsTable.id }).from(intelligentItemsTable)
+      .where(and(eq(intelligentItemsTable.id, p.itemId), eq(intelligentItemsTable.organizationId, p.organizationId))).for("update");
+    const keepCodes = [...new Set([...p.matches.map((m) => m.catmatCode), ...(p.keepCodes ?? [])])];
+    const scope = and(
+      eq(itemCatmatMatchesTable.itemId, p.itemId), eq(itemCatmatMatchesTable.organizationId, p.organizationId),
+      inArray(itemCatmatMatchesTable.decision, ["busca_atual", "sugerido"]),
+    );
+    const [res] = await tx.update(itemCatmatMatchesTable).set({ decision: "historico" })
+      .where(keepCodes.length > 0 ? and(scope, notInArray(itemCatmatMatchesTable.catmatCode, keepCodes)) : scope);
+    for (const m of p.matches) {
+      await tx.insert(itemCatmatMatchesTable).values({
+        id: m.id, organizationId: m.organizationId, itemId: m.itemId, catmatCode: m.catmatCode,
+        catmatDescription: m.catmatDescription, score: String(m.score), matchRank: m.rank,
+        decision: "busca_atual", correlationId: m.correlationId, createdAt: toDb(m.createdAt),
+      }).onDuplicateKeyUpdate({ set: {
+        decision: sql`IF(${itemCatmatMatchesTable.decision} = 'codigo_verificado', 'codigo_verificado', 'busca_atual')`,
+        matchRank: m.rank, score: String(m.score),
+      } });
+    }
+    return { demoted: Number((res as { affectedRows?: number }).affectedRows ?? 0) };
+  });
 }
 
 export async function listCatmatMatches(itemId: string, orgId: number): Promise<Array<{ id: string; catmatCode: string; catmatDescription: string; score: number; rank: number; decision: string }>> {

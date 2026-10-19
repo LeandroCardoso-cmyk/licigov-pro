@@ -23,7 +23,7 @@ import {
 import { decideCatmat, assertConfirmableSuggestion, type AvailableSuggestion } from "../../services/catmatGovernanceService";
 
 const SUGGESTIONS: AvailableSuggestion[] = [
-  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "api-comprasgov:catmat", verified: true },
+  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "api-comprasgov:catmat", verified: true, state: "busca_atual" },
   { id: "s2", catmatCode: "222222", catmatDescription: "lápis preto nº 2", score: 0.40, source: "sugestao-ia" },
 ];
 const codes = SUGGESTIONS.map(s => s.catmatCode);
@@ -131,6 +131,18 @@ describe("PR C.2 / V1 — decideCatmat (serviço, sem DB): valida e FAIL-CLOSED 
     // Decisões que não fixam código oficial não dependem de verificação.
     expect(() => assertConfirmableSuggestion("rejeitado", SUGGESTIONS[1])).not.toThrow();
     expect(() => assertConfirmableSuggestion("substituido", null)).not.toThrow();
+  });
+
+  it("M8 hardening — verificada mas fora da busca mais recente (histórica/origem não identificada/sem estado) ⇒ CATMAT_SUGGESTION_NOT_CURRENT", () => {
+    for (const state of ["historico", "origem_nao_identificada", undefined] as const) {
+      expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state }), String(state)).toThrow(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    }
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state: "busca_atual" })).not.toThrow();
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state: "codigo_verificado" })).not.toThrow();
+    // Sem verificação oficial continua prevalecendo a recusa original; decisões que não fixam código não dependem do estado.
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: false, state: "busca_atual" })).toThrow(/CATMAT_SUGGESTION_UNVERIFIED/);
+    expect(() => assertConfirmableSuggestion("rejeitado", { verified: true, state: "historico" })).not.toThrow();
+    expect(() => assertConfirmableSuggestion("substituido", { verified: true, state: "historico" })).not.toThrow();
   });
 
   it("confirmar válido sem limiar (no-DB) → PRECONDITION_FAILED (fail-closed)", async () => {

@@ -4,7 +4,7 @@ import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import CatmatThresholdConfig from "./CatmatThresholdConfig";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { ITEM_STATUS_LABELS, approveAction, outlierSummary } from "./itemSourceUpdateView";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary, quoteCountText } from "./itemSourceUpdateView";
 
 /**
  * ItemIntelligenceWorkspace — REAL (wired to tRPC). *** NÚCLEO DO DOMÍNIO ***
@@ -149,7 +149,11 @@ export default function ItemIntelligenceWorkspace({
                       <td className="px-4 py-3 text-foreground">
                         {/* R9 / SEM-054 — média em CENTAVOS (servidor) = preço que vira a referência canônica ao aprovar. */}
                         <span className="font-mono">{formatCentsBRL(it.averagePriceCents)}</span>
-                        {!approve.block && it.status !== "aprovado" && (
+                        {(it.fictitiousQuoteCount ?? 0) > 0 ? (
+                          <div data-testid="fictitious-price" className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                            Valor demonstrativo (fonte fictícia) — não é referência oficial
+                          </div>
+                        ) : !approve.block && it.status !== "aprovado" && (
                           <div className="mt-1 text-xs text-muted-foreground">Referência canônica ao aprovar</div>
                         )}
                         {outliers.length > 0 && (
@@ -185,7 +189,7 @@ export default function ItemIntelligenceWorkspace({
                             Identidade a revisar
                           </span>
                         )}
-                        <div className="mt-1 text-xs text-muted-foreground">{it.quoteCount} cotação(ões) válida(s)</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{quoteCountText(it.quoteCount, it.fictitiousQuoteCount)}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">

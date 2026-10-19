@@ -19,6 +19,7 @@ import { __setOfficialCatalogFetchForTests, __clearOfficialCatalogCacheForTests 
 import { syncCatalogIndex, searchCatalogIndex, __clearCatalogIndexCacheForTests } from "../../services/itemCatalogClassificationService";
 import { __setCatalogIndexWriteFaultForTests, catalogIndexLockKey, getLatestCatalogIndex, recordCatalogIndexSnapshot } from "../../db/catalogEvidence";
 import type { OfficialCatalogEntry } from "../../domain/officialCatalog";
+import { resetRateLimit } from "../../services/rateLimiter";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 996601;
@@ -134,7 +135,7 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     for (const org of [ORG, ORG_B]) await setCatmatThresholdConfig({ organizationId: org, minScore: 0.1, reason: "smoke sintético", actorUserId: 1, correlationId: `cat-thr-${org}` });
   }, 300_000);
 
-  afterEach(() => { __setOfficialCatalogFetchForTests(null); __setCatalogIndexWriteFaultForTests(null); catserListing = CATSER_ALL; lastUrls = []; catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r])); });
+  afterEach(() => { resetRateLimit(`user:${U.operator}`, "catmat"); __setOfficialCatalogFetchForTests(null); __setCatalogIndexWriteFaultForTests(null); catserListing = CATSER_ALL; lastUrls = []; catserByCode = new Map(CATSER_ALL.map((r) => [String(r.codigoServico), r])); });
 
   afterAll(async () => {
     if (!conn) return;
@@ -522,5 +523,162 @@ describe.skipIf(!DB)("CATMAT/CATSER oficial — fluxo único dos Itens Inteligen
     await insertCatmatMatch({ id: `iso${RUN}`.slice(0, 20), itemId: `ib${RUN}`.slice(0, 20), organizationId: ORG_B, catmatCode: "482201", catmatDescription: DESKTOP, score: 1, rank: 0, decision: "sugerido", correlationId: "iso", createdAt: new Date().toISOString() });
     const { listVerifiedSuggestions } = await import("../../services/itemCatalogClassificationService");
     expect((await listVerifiedSuggestions(`ib${RUN}`.slice(0, 20), ORG_B))[0]).toMatchObject({ verified: false });
+  }, 120_000);
+
+  it("M8 hardening — cotações FICTÍCIAS: servidor conta as demonstrativas (marcador do parser e nome declarado); registros intactos; cotação real não é marcada", async () => {
+    const { pid, itemId } = await newProcessWithItem("fict");
+    const api = await caller(U.operator);
+    const before = await rows<{ id: string; o: string | null }>("SELECT id, observations o FROM price_research_items WHERE organization_id = ? AND process_id = ? ORDER BY id", [ORG, pid]);
+    const listed = (await api.procurementProcess.listItems({ processId: pid })).items.find((x) => x.id === itemId)!;
+    expect(listed).toMatchObject({ quoteCount: 3, fictitiousQuoteCount: 3 });
+    const panel = await api.itemIntelligence.getItem({ itemId });
+    expect(panel.governance).toMatchObject({ validQuoteCount: 3, fictitiousQuoteCount: 3, referencePriceCents: 400000 });
+    // Somente leitura: cotações e média não mudam.
+    const after = await rows<{ id: string; o: string | null }>("SELECT id, observations o FROM price_research_items WHERE organization_id = ? AND process_id = ? ORDER BY id", [ORG, pid]);
+    expect(after.map((r) => [r.id, r.o])).toEqual(before.map((r) => [r.id, r.o]));
+    expect(Number((await rows<{ p: string }>("SELECT average_price p FROM intelligent_items WHERE id = ?", [itemId]))[0].p)).toBe(4000);
+    // Consumo documental: aprovado (sem bloqueio — política não alterada), o contexto do TR marca [REVISAR] fonte fictícia.
+    await api.procurementProcess.approveItem({ itemId });
+    const { resolveDocumentAuthoringContext } = await import("../../services/authoring/authoringContext");
+    const trCtx = JSON.stringify(await resolveDocumentAuthoringContext({ organizationId: ORG, processId: pid, kind: "tr", object: "Aquisição de 10 computadores desktop completos" }));
+    expect(trCtx).toContain("3 cotação(ões) de fonte fictícia/sintética — valor demonstrativo, não constitui pesquisa de preços válida");
+    // Pesquisa com fornecedores reais (sem marca) ⇒ nada fictício.
+    const { process } = await api.procurementProcess.createProcess({ processNumber: `CAT-real-${RUN}`, object: "Aquisição de cadeiras", startOption: "iniciar_pesquisa" });
+    await api.procurementProcess.importPriceResearch({ processId: process.id, source: "colar", text: [
+      "Item 1 — Cadeira giratória", "Quantidade: 5", "Unidade: UN", "",
+      "Cotação 1 — Alfa Comércio de Móveis — R$ 500,00 — 05/10/2026",
+      "Cotação 2 — Beta Móveis Ltda — R$ 520,00 — 06/10/2026",
+    ].join("\n") });
+    const real = (await api.procurementProcess.listItems({ processId: process.id })).items;
+    expect(real.length).toBeGreaterThan(0);
+    expect(real.every((x) => x.fictitiousQuoteCount === 0)).toBe(true);
+    for (const x of real) await api.procurementProcess.approveItem({ itemId: x.id });
+    const realCtx = JSON.stringify(await resolveDocumentAuthoringContext({ organizationId: ORG, processId: process.id, kind: "tr", object: "Aquisição de cadeiras" }));
+    expect(realCtx).not.toContain("fonte fictícia");
+  }, 120_000);
+
+  // ─── M8 HARDENING — verificação oficial ≠ recomendação atual ≠ decisão institucional ───────────────────────────────
+
+  it("ADVERSARIAL P1 (CATMAT): sugestão verificada que a busca MAIS RECENTE excluiu ⇒ histórica, não confirmável (decidir/aceitar); linha e evidência preservadas", async () => {
+    const { itemId } = await newProcessWithItem("hist");
+    const api = await caller(U.operator);
+    serveFixtures();
+    const first = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    expect(first.status === "ok" && first.candidates.map((c) => c.catmatCode).sort()).toEqual(["482201", "482202"]);
+    // Fonte que ignora o filtro (linhas sem relação) ⇒ resposta não confiável: nada rebaixado.
+    serveFixtures({ resultado: [{ codigoItem: 222333, descricaoItem: "CANETA ESFEROGRÁFICA AZUL", statusItem: true }], totalRegistros: 1 });
+    const ignored = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    expect(ignored).toMatchObject({ status: "ok", filterIgnoredSuspected: true, candidates: [] });
+    expect((await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions.map((x) => x.state)).toEqual(["busca_atual", "busca_atual"]);
+    // Nova busca: a fonte devolve só o 482201 ⇒ o 482202 deixa de ser candidato da busca atual.
+    serveFixtures({ resultado: [{ codigoItem: 482201, descricaoItem: DESKTOP, statusItem: true }], totalRegistros: 1 });
+    const second = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    expect(second.status === "ok" && second.candidates.map((c) => [c.catmatCode, c.state])).toEqual([["482201", "busca_atual"]]);
+    // Após recarregar: a evidência oficial continua válida (verified), mas a sugestão é HISTÓRICA — nunca "atual".
+    const after = (await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions;
+    const old = after.find((x) => x.catmatCode === "482202")!;
+    expect(old).toMatchObject({ verified: true, state: "historico" });
+    expect(after.find((x) => x.catmatCode === "482201")).toMatchObject({ verified: true, state: "busca_atual" });
+    // Backend recusa (não depende de botão desabilitado): decidirCATMAT e o wrapper legado acceptCATMAT.
+    const e1 = await err(api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: old.id, idempotencyKey: `hist-${RUN}` }));
+    expect(e1?.code).toBe("PRECONDITION_FAILED");
+    expect(e1?.message).toMatch(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    expect((await err(api.itemIntelligence.acceptCATMAT({ itemId, matchId: old.id, catmatCode: "482202" })))?.message).toMatch(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    expect(await n("SELECT COUNT(*) n FROM catmat_decisions WHERE organizationId = ? AND itemId = ?", [ORG, itemId])).toBe(0);
+    expect((await rows<{ s: string | null }>("SELECT suggested_catmat s FROM intelligent_items WHERE id = ?", [itemId]))[0].s).toBeNull();
+    // Nada apagado: candidato histórico e evidência oficial permanecem.
+    expect(await n("SELECT COUNT(*) n FROM item_catmat_matches WHERE organization_id = ? AND item_id = ? AND catmat_code = '482202'", [ORG, itemId])).toBe(1);
+    expect(await n("SELECT COUNT(*) n FROM catalog_entries WHERE organization_id = ? AND code = '482202'", [ORG])).toBe(1);
+    // Substituição manual (declaração com justificativa) continua possível — não é confirmação de sugestão.
+    // Fluxo LEGÍTIMO preservado: o servidor informa o código e pede a verificação oficial ⇒ confirmável (fora do top-K).
+    const v = await api.itemIntelligence.verificarCodigoOficial({ itemId, catalogType: "catmat", code: "482202" });
+    expect(v.status === "verified" && v.candidate.state).toBe("codigo_verificado");
+    const ok = await api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: old.id, idempotencyKey: `hist-code-${RUN}` });
+    expect(ok.decision).toMatchObject({ decision: "confirmado", catmatCode: "482202", source: "api-comprasgov:catmat" });
+    // Código verificado manualmente não é rebaixado por busca posterior que não o traga.
+    await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    expect((await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions.find((x) => x.catmatCode === "482202")).toMatchObject({ state: "codigo_verificado" });
+  }, 120_000);
+
+  it("ADVERSARIAL P1: replay de decisão legítima continua devolvendo o registro original depois que a sugestão vira histórica; decisão nova sobre ela é recusada", async () => {
+    const { itemId } = await newProcessWithItem("histreplay");
+    const api = await caller(U.operator);
+    serveFixtures();
+    const first = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    const s2 = first.status === "ok" ? first.candidates.find((c) => c.catmatCode === "482202")! : null;
+    const key = `histreplay-${RUN}`;
+    const out = await api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: s2!.id, idempotencyKey: key });
+    expect(out.replayed).toBe(false);
+    serveFixtures({ resultado: [{ codigoItem: 482201, descricaoItem: DESKTOP, statusItem: true }], totalRegistros: 1 });
+    await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    // Decisão passada NÃO é revogada; replay idempotente devolve o mesmo registro.
+    const again = await api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: s2!.id, idempotencyKey: key });
+    expect(again).toMatchObject({ replayed: true, decision: { id: out.decision.id, catmatCode: "482202" } });
+    expect((await api.itemIntelligence.getCATMATDecisions({ itemId })).current).toMatchObject({ decision: "confirmado", catmatCode: "482202" });
+    const e = await err(api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: s2!.id, idempotencyKey: `${key}-new` }));
+    expect(e?.message).toMatch(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    expect(await n("SELECT COUNT(*) n FROM catmat_decisions WHERE organizationId = ? AND itemId = ?", [ORG, itemId])).toBe(1);
+  }, 120_000);
+
+  it("ADVERSARIAL P1 (CATSER): candidato de busca anterior (outro termo) fica histórico; busca parcialmente indisponível não rebaixa o que não pôde verificar", async () => {
+    serveFixtures();
+    expect((await syncCatalogIndex({ catalogType: "catser", pageSize: 10, maxPages: 50, correlationId: `cat-smoke-h-${RUN}` })).status).toBe("synced");
+    const { itemId } = await newProcessWithItem("serhist");
+    const api = await caller(U.operator);
+    const a = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "limpeza" });
+    expect(a.status === "ok" && a.candidates.map((c) => c.catmatCode)).toEqual(["24961"]);
+    const b = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "manutenção de computadores desktop" });
+    expect(b.status === "ok" && b.candidates.map((c) => c.catmatCode)).toEqual(["27502"]);
+    const list = (await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions;
+    const limpeza = list.find((x) => x.catmatCode === "24961")!;
+    expect(limpeza).toMatchObject({ verified: true, state: "historico" });
+    expect((await err(api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: limpeza.id, idempotencyKey: `serhist-${RUN}` })))?.message).toMatch(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    // Busca PARCIALMENTE indisponível: o candidato que a fonte não deixou reavaliar mantém o estado anterior (nunca inventado).
+    const c = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "exame hospitalar de rotina" });
+    const codesC = c.status === "ok" ? c.candidates.map((x) => x.catmatCode) : [];
+    expect(codesC.length).toBeGreaterThan(1);
+    const [down, ...rest] = codesC;
+    const { __setOfficialCatalogFetchForTests: setFetch } = await import("../../services/officialCatalogService");
+    __clearOfficialCatalogCacheForTests();
+    setFetch(async (url) => {
+      const code = new URL(url).searchParams.get("codigoServico");
+      if (code === down) throw new Error("ECONNRESET");
+      const body = code ? { resultado: catserByCode.has(code) ? [catserByCode.get(code)] : [], totalRegistros: catserByCode.has(code) ? 1 : 0 } : { resultado: [], totalRegistros: 0 };
+      return { ok: true, status: 200, json: async () => body };
+    });
+    const partial = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "exame hospitalar de rotina" });
+    expect(partial.status === "ok" && partial.candidates.map((x) => x.catmatCode).sort()).toEqual([...rest].sort());
+    const after = (await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions;
+    expect(after.find((x) => x.catmatCode === down)).toMatchObject({ state: "busca_atual" });
+    expect(after.filter((x) => rest.includes(x.catmatCode)).every((x) => x.state === "busca_atual")).toBe(true);
+    expect(after.find((x) => x.catmatCode === "27502")).toMatchObject({ state: "historico" });
+    expect(after.find((x) => x.catmatCode === "24961")).toMatchObject({ state: "historico" });
+    // Busca TOTALMENTE indisponível ⇒ nada muda (nenhum rebaixamento sem nova busca concluída).
+    __clearOfficialCatalogCacheForTests();
+    setFetch(async () => { throw new Error("ECONNRESET"); });
+    const down2 = await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catser", term: "limpeza" });
+    expect(down2.status).toBe("unavailable");
+    expect((await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions.map((x) => [x.catmatCode, x.state])).toEqual(after.map((x) => [x.catmatCode, x.state]));
+  }, 120_000);
+
+  it("ADVERSARIAL P1: sugestão anterior a esta versão (sem origem identificável), mesmo verificada, NÃO é apresentada como atual nem confirmável; nova busca a requalifica", async () => {
+    const { itemId } = await newProcessWithItem("legacycur");
+    const api = await caller(U.operator);
+    serveFixtures();
+    await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    // Estado gravado pela versão anterior (staging atual): decision = 'sugerido' para todas as linhas.
+    await conn.execute("UPDATE item_catmat_matches SET decision = 'sugerido' WHERE organization_id = ? AND item_id = ?", [ORG, itemId]);
+    const legacy = (await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions;
+    expect(legacy.map((x) => [x.catmatCode, x.verified, x.state]).sort()).toEqual([["482201", true, "origem_nao_identificada"], ["482202", true, "origem_nao_identificada"]]);
+    expect((await err(api.itemIntelligence.decidirCATMAT({ itemId, decision: "confirmado", suggestionId: legacy[0].id, idempotencyKey: `legacycur-${RUN}` })))?.message).toMatch(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    serveFixtures({ resultado: [{ codigoItem: 482201, descricaoItem: DESKTOP, statusItem: true }], totalRegistros: 1 });
+    await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    const now = (await api.itemIntelligence.getCATMATSuggestions({ itemId })).suggestions;
+    expect(now.find((x) => x.catmatCode === "482201")).toMatchObject({ state: "busca_atual" });
+    expect(now.find((x) => x.catmatCode === "482202")).toMatchObject({ state: "historico" });
+    // Isolamento: rebaixamento não toca linhas de outro órgão.
+    await insertCatmatMatch({ id: `lb${RUN}`.slice(0, 20), itemId, organizationId: ORG_B, catmatCode: "482202", catmatDescription: "X", score: 1, rank: 0, decision: "sugerido", correlationId: "iso", createdAt: new Date().toISOString() });
+    await api.itemIntelligence.buscarClassificacaoOficial({ itemId, catalogType: "catmat" });
+    expect((await rows<{ d: string }>("SELECT decision d FROM item_catmat_matches WHERE id = ?", [`lb${RUN}`.slice(0, 20)]))[0].d).toBe("sugerido");
   }, 120_000);
 });

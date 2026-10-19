@@ -33,6 +33,7 @@ import {
 async function resolveAvailableSuggestions(itemId: string, orgId: number): Promise<AvailableSuggestion[]> {
   return (await listVerifiedSuggestions(itemId, orgId)).map((s) => ({
     id: s.id, catmatCode: s.catmatCode, catmatDescription: s.catmatDescription, score: s.score, source: s.source, verified: s.verified,
+    state: s.state,
   }));
 }
 

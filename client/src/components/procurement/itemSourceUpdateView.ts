@@ -98,3 +98,15 @@ export function approveAction(sourceState: string | null | undefined, status: st
 export function outlierSummary(outliers: readonly PriceOutlier[] | null | undefined): string[] {
   return (outliers ?? []).map((o) => `${o.name || "Fornecedor não identificado"} — ${formatCentsBRL(o.valueCents)} (${o.deviationPercent > 0 ? "+" : ""}${o.deviationPercent}% da média)`);
 }
+
+/**
+ * M8 hardening — cotações importadas (declaradas pela pesquisa, não verificadas) × fictícias (demonstrativas). Nunca
+ * chama de "válida" uma cotação: "com preço" = entra na média; fictícia = valor demonstrativo, não é pesquisa oficial.
+ */
+export function quoteCountText(priced: number, fictitious: number | null | undefined): string {
+  const f = fictitious ?? 0;
+  if (f <= 0) return `${priced} cotação(ões) importada(s) com preço`;
+  const real = priced - f;
+  return `${f} cotação(ões) fictícia(s) — valor demonstrativo, não utilizável como pesquisa de preços oficial`
+    + (real > 0 ? ` · ${real} importada(s) com preço` : "");
+}

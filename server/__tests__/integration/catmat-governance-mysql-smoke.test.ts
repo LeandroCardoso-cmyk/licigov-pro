@@ -28,7 +28,7 @@ const USER = 7;
 
 const SUGGESTIONS: AvailableSuggestion[] = [
   // s1 = sugestão VERIFICADA no catálogo oficial (a única confirmável); s2 = sem verificação oficial.
-  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "api-comprasgov:catmat", verified: true },
+  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "api-comprasgov:catmat", verified: true, state: "busca_atual" },
   { id: "s2", catmatCode: "222222", catmatDescription: "lápis preto nº 2", score: 0.40, source: "sugestao-ia" },
 ];
 

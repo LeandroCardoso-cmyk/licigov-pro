@@ -21,6 +21,7 @@ import {
   decisionSource,
   type CATMATGovernanceDecision,
 } from "../domain/catmatGovernance";
+import { isConfirmableSuggestionState, type SuggestionState } from "../domain/catmatMatching";
 import {
   getActiveCatmatThreshold,
   insertCatmatDecision,
@@ -39,6 +40,11 @@ export interface AvailableSuggestion {
    * situação ativa. Ausente/false ⇒ não pode ser CONFIRMADO como classificação oficial (fail-closed).
    */
   readonly verified?: boolean;
+  /**
+   * M8 hardening — estado da sugestão. Só `busca_atual` (busca oficial mais recente) e `codigo_verificado` ("Verificar
+   * código") podem ser CONFIRMADOS; histórico/origem não identificada/ausente ⇒ recusa (fail-closed).
+   */
+  readonly state?: SuggestionState;
 }
 
 export interface DecideCatmatParams {
@@ -85,14 +91,25 @@ function payloadHashOf(p: DecideCatmatParams): string {
  * registrada devolve o registro original (a classificação não muda por mudança posterior da evidência).
  */
 export function assertConfirmableSuggestion(
-  decision: CATMATGovernanceDecision, decided: Pick<AvailableSuggestion, "verified"> | null,
+  decision: CATMATGovernanceDecision, decided: Pick<AvailableSuggestion, "verified" | "state"> | null,
 ): void {
-  if (decision === "confirmado" && decided?.verified !== true) {
+  if (decision !== "confirmado") return;
+  if (decided?.verified !== true) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "CATMAT_SUGGESTION_UNVERIFIED: esta sugestão não tem verificação no catálogo oficial CATMAT/CATSER e não pode ser "
         + "confirmada como classificação oficial. Use \"Buscar classificação\" para consultar o catálogo oficial, ou registre a "
         + "substituição manual (com justificativa) ou \"sem correspondência segura\". Nada foi gravado.",
+    });
+  }
+  // Verificação oficial ≠ recomendação atual: sugestão que a busca mais recente não trouxe (ou de origem não
+  // identificável) não é confirmada — o servidor busca de novo ou verifica o código. Decisões já registradas ficam intactas.
+  if (!isConfirmableSuggestionState(decided.state)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "CATMAT_SUGGESTION_NOT_CURRENT: esta sugestão não pertence à busca oficial mais recente do item (é histórica ou "
+        + "anterior ao registro da origem). A verificação oficial não a torna recomendação atual. Use \"Buscar classificação\" "
+        + "novamente ou informe o código em \"Verificar código\". Nada foi gravado.",
     });
   }
 }

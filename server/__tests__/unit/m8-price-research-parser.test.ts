@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { parsePriceResearchText } from "../../domain/priceResearchParser";
-import { extractItemsFromText } from "../../domain/priceResearch";
+import { extractItemsFromText, isFictitiousQuote, FICTITIOUS_QUOTE_MARKER } from "../../domain/priceResearch";
 import { consolidateQuotes } from "../../domain/priceQuoteConsolidation";
 import { isCatalogItemCandidate } from "../../domain/priceResearchParser";
 
@@ -172,5 +172,16 @@ describe("M8-PRICE-IMPORT-001 — guarda do CATMAT", () => {
     expect(isCatalogItemCandidate({ description: "Quantidade: 10", pricedQuotes: 0 })).toBe(false);
     expect(isCatalogItemCandidate({ description: "Computador desktop completo", pricedQuotes: 0 })).toBe(false);
     expect(isCatalogItemCandidate({ description: "R$ 3.900,00", pricedQuotes: 1 })).toBe(false);
+  });
+});
+
+describe("M8 hardening — cotação fictícia (demonstrativa)", () => {
+  it("marcador persistido do parser ou fornecedor declarado fictício ⇒ fictícia; fornecedor real ⇒ não", () => {
+    expect(isFictitiousQuote({ name: "Fornecedor Fictício A" })).toBe(true);
+    expect(isFictitiousQuote({ name: "Couros Sintéticos Ltda" })).toBe(false); // razão social real: só o marcador do parser conta
+    expect(isFictitiousQuote({ name: "Alfa Comércio", observations: `Data: 05/10/2026 | ${FICTITIOUS_QUOTE_MARKER}` })).toBe(true);
+    expect(isFictitiousQuote({ name: "Alfa Comércio", observations: "Data: 05/10/2026" })).toBe(false);
+    expect(isFictitiousQuote({ name: "Papelaria Teste & Cia" })).toBe(false); // heurística estreita: "teste"/"exemplo" no nome não marcam
+    expect(isFictitiousQuote({})).toBe(false);
   });
 });
