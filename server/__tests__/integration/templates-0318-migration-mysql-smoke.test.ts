@@ -28,9 +28,11 @@ const urlFor = (dbName: string): string => { const u = new URL(DB!); u.pathname 
 type Row = mysql.RowDataPacket;
 const rows = async (c: mysql.Connection, sql: string, a: unknown[] = []) => (await c.query<Row[]>(sql, a))[0];
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+/** Coluna acrescentada por migration POSTERIOR (0319 — proveniência das cotações; aditiva, anulável, sem índice/FK): fora do que esta migration promete preservar. */
+const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')";
 const signature = async (c: mysql.Connection): Promise<string> => JSON.stringify([
   await rows(c, `SELECT TABLE_NAME t, COLUMN_NAME c, COLUMN_TYPE ty, IS_NULLABLE n, COLUMN_DEFAULT d, EXTRA e FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> 'template_governance_transitions' ORDER BY TABLE_NAME, ORDINAL_POSITION`),
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> 'template_governance_transitions'${LATER_COLUMN_FILTER} ORDER BY TABLE_NAME, ORDINAL_POSITION`),
   await rows(c, `SELECT TABLE_NAME t, INDEX_NAME i, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) c FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> 'template_governance_transitions' GROUP BY TABLE_NAME, INDEX_NAME ORDER BY TABLE_NAME, INDEX_NAME`),
 ]);
