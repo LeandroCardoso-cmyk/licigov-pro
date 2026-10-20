@@ -30,7 +30,9 @@ import {
   getLatestCatalogIndex, getOfficialCatalogEvidence, loadCatalogIndexEntries, recordCatalogIndexSnapshot,
   recordOfficialCatalogEvidence, type CatalogIndexInfo,
 } from "../db/catalogEvidence";
-import { getIntelligentItem, insertCatmatMatch, listCatmatMatches, recordCatalogSearchMatches, recordProcessEvent } from "../db/procurement";
+import {
+  getIntelligentItem, listCatmatMatches, recordCatalogSearchMatches, recordProcessEvent, recordVerifiedCodeMatch, type ProcurementExecutor,
+} from "../db/procurement";
 
 /** Máximo de alternativas oficiais apresentadas por consulta. */
 const MAX_CANDIDATES = 10;
@@ -62,10 +64,14 @@ const STATE_ORDER: Record<SuggestionState, number> = { busca_atual: 0, codigo_ve
  * Sugestões persistidas do item, cada uma com o estado de verificação contra a evidência oficial do órgão e o ESTADO da
  * sugestão (busca atual primeiro; históricas por último).
  */
-export async function listVerifiedSuggestions(itemId: string, organizationId: number): Promise<VerifiedSuggestion[]> {
-  const persisted = await listCatmatMatches(itemId, organizationId);
+export async function listVerifiedSuggestions(
+  itemId: string, organizationId: number,
+  /** Transação da decisão governada (lock do item já obtido): leitura vigente no commit. */
+  executor?: ProcurementExecutor,
+): Promise<VerifiedSuggestion[]> {
+  const persisted = await listCatmatMatches(itemId, organizationId, executor);
   if (persisted.length === 0) return [];
-  const evidence: CatalogEvidence[] = await getOfficialCatalogEvidence(organizationId, persisted.map((m) => m.catmatCode));
+  const evidence: CatalogEvidence[] = await getOfficialCatalogEvidence(organizationId, persisted.map((m) => m.catmatCode), executor);
   return persisted.map((m) => {
     const v = verifySuggestionAgainstEvidence(m, evidence);
     return {
@@ -123,6 +129,8 @@ export type ItemClassificationSearch =
       readonly filterIgnoredSuspected: boolean;
       readonly index: { retrievedAt: string; complete: boolean; entries: number } | null;
       readonly discarded: { inactive: number; irrelevant: number; invalidRows: number; unverified: number };
+      /** Códigos já registrados neste item com OUTRA descrição oficial (outro catálogo ou redação anterior) — não apresentados. */
+      readonly identityConflicts: string[];
     }
   | { readonly status: "unavailable"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly reason: CatalogUnavailableReason; readonly message: string }
   | { readonly status: "index_unavailable"; readonly catalogType: OfficialCatalogType; readonly term: string; readonly message: string };
@@ -153,29 +161,33 @@ type PersistMode = { kind: "search"; keepCodes: readonly string[] } | { kind: "c
 
 async function persistCandidates(
   p: ItemCtx, catalogType: OfficialCatalogType, ranked: readonly RankedForPersist[], at: string, mode: PersistMode,
-): Promise<{ candidates: ClassificationCandidate[]; demoted: number }> {
+): Promise<{ candidates: ClassificationCandidate[]; demoted: number; identityConflicts: string[] }> {
   const matches = matchesFromRanked({
     itemId: p.itemId, organizationId: p.organizationId, correlationId: p.correlationId, createdAt: at,
     ranked: ranked.map((r) => ({ code: r.entry.code, description: r.entry.description, score: r.score, source: officialSourceLabel(catalogType) })),
   });
   let demoted = 0;
+  let identityConflicts: string[] = [];
   if (mode.kind === "search") {
-    ({ demoted } = await recordCatalogSearchMatches({ organizationId: p.organizationId, itemId: p.itemId, matches, keepCodes: mode.keepCodes }));
+    ({ demoted, identityConflicts } = await recordCatalogSearchMatches({ organizationId: p.organizationId, itemId: p.itemId, matches, keepCodes: mode.keepCodes }));
   } else {
-    for (const m of matches) await insertCatmatMatch({ ...m, decision: "codigo_verificado" });
+    for (const m of matches) if ((await recordVerifiedCodeMatch(m)).identityConflict) identityConflicts.push(m.catmatCode);
   }
+  const conflicted = new Set(identityConflicts);
   const verifiedById = new Map((await listVerifiedSuggestions(p.itemId, p.organizationId)).map((s) => [s.id, s]));
   const candidates = matches.flatMap((m, i): ClassificationCandidate[] => {
-    const s = verifiedById.get(m.id);
+    const s = conflicted.has(m.catmatCode) ? undefined : verifiedById.get(m.id);
     return s ? [{
       ...s, matchSource: ranked[i].matchSource, matchedTokens: ranked[i].matchedTokens,
       missingTokens: ranked[i].missingTokens, activityMatch: ranked[i].activityMatch,
     }] : [];
   });
-  return { candidates, demoted };
+  return { candidates, demoted, identityConflicts };
 }
 
 const demotedNote = (n: number) => (n > 0 ? ` · ${n} sugestão(ões) anterior(es) passaram a histórico` : "");
+const conflictNote = (codes: readonly string[]) =>
+  (codes.length > 0 ? ` · ${codes.length} código(s) não apresentado(s): já registrado(s) neste item com outra descrição oficial (${codes.join(", ")})` : "");
 
 /**
  * "Buscar classificação": consulta conforme o contrato do catálogo indicado pelo servidor e persiste só alternativas
@@ -202,18 +214,19 @@ export async function searchItemClassification(p: ItemCtx & { catalogType: Offic
     }) : null;
     // Busca concluída (inclusive vazia) ⇒ define o conjunto atual do item; anteriores fora dele viram histórico. Filtro
     // possivelmente ignorado pela fonte ⇒ resposta não confiável: nada gravado nem rebaixado (como na indisponibilidade).
-    const { candidates, demoted } = filterIgnoredSuspected
-      ? { candidates: [] as ClassificationCandidate[], demoted: 0 }
+    const { candidates, demoted, identityConflicts } = filterIgnoredSuspected
+      ? { candidates: [] as ClassificationCandidate[], demoted: 0, identityConflicts: [] as string[] }
       : await persistCandidates(p, "catmat", relevant, res.retrievedAt, { kind: "search", keepCodes: [] });
     await event(
       `Consulta ${label} ("${term.slice(0, 80)}"): ${res.entries.length} retornado(s), ${candidates.length} alternativa(s) relevante(s)` +
       `${filterIgnoredSuspected ? " — linhas sem relação com o termo (filtro possivelmente ignorado), nada sugerido" : ""}` +
-      `${evidence ? ` · evidência ${evidence.snapshotId}` : ""}${demotedNote(demoted)}.`,
+      `${evidence ? ` · evidência ${evidence.snapshotId}` : ""}${demotedNote(demoted)}${conflictNote(identityConflicts)}.`,
     );
     return {
       status: "ok", catalogType: "catmat", term, method: "busca-textual-oficial", retrievedAt: res.retrievedAt,
       snapshotId: evidence?.snapshotId ?? null, candidates, returned: res.entries.length, filterIgnoredSuspected, index: null,
       discarded: { inactive: res.entries.length - active.length, irrelevant: active.length - relevant.length, invalidRows: res.discardedRows, unverified: 0 },
+      identityConflicts,
     };
   }
 
@@ -254,16 +267,17 @@ export async function searchItemClassification(p: ItemCtx & { catalogType: Offic
     await event(`Verificação ${label} por código indisponível (${lastUnavailable}) — nada gravado; classificação pendente.`);
     return { status: "unavailable", catalogType: "catser", term, reason: lastUnavailable, message: unavailableMessage(lastUnavailable) };
   }
-  const { candidates, demoted } = await persistCandidates(p, "catser", verified, retrievedAt, { kind: "search", keepCodes: notReevaluated });
+  const { candidates, demoted, identityConflicts } = await persistCandidates(p, "catser", verified, retrievedAt, { kind: "search", keepCodes: notReevaluated });
   await event(
     `Busca ${label} ("${term.slice(0, 80)}") no índice de ${idx.index.retrievedAt.slice(0, 10)}: ${idx.results.length} candidato(s), ` +
-    `${candidates.length} verificado(s) por código na fonte${unverified ? `, ${unverified} não verificado(s)` : ""}${demotedNote(demoted)}.`,
+    `${candidates.length} verificado(s) por código na fonte${unverified ? `, ${unverified} não verificado(s)` : ""}${demotedNote(demoted)}${conflictNote(identityConflicts)}.`,
   );
   return {
     status: "ok", catalogType: "catser", term, method: "indice-sincronizado", retrievedAt, snapshotId, candidates,
     returned: idx.results.length, filterIgnoredSuspected: false,
     index: { retrievedAt: idx.index.retrievedAt, complete: idx.index.complete, entries: idx.index.entries },
     discarded: { inactive: 0, irrelevant: 0, invalidRows: 0, unverified },
+    identityConflicts,
   };
 }
 
@@ -271,7 +285,7 @@ export async function searchItemClassification(p: ItemCtx & { catalogType: Offic
 
 export type CodeVerification =
   | { readonly status: "verified"; readonly catalogType: OfficialCatalogType; readonly candidate: ClassificationCandidate }
-  | { readonly status: "not_found" | "inactive"; readonly catalogType: OfficialCatalogType; readonly code: string; readonly message: string; readonly officialDescription?: string }
+  | { readonly status: "not_found" | "inactive" | "identity_conflict"; readonly catalogType: OfficialCatalogType; readonly code: string; readonly message: string; readonly officialDescription?: string }
   | { readonly status: "unavailable"; readonly catalogType: OfficialCatalogType; readonly code: string; readonly reason: CatalogUnavailableReason; readonly message: string };
 
 /** Consulta oficial POR CÓDIGO (parâmetro do catálogo) e, se ativo, registra como alternativa verificada do item. */
@@ -302,7 +316,16 @@ export async function verifyItemCode(p: ItemCtx & { catalogType: OfficialCatalog
   const [rel] = rankRelevant(item.description, [look.entry], 1);
   // Código informado pelo servidor: a explicação não filtra nada (o que consta, o que não consta, atividade principal).
   const ranked = { entry: look.entry, score: rel?.score ?? 0, matchSource: "codigo" as const, ...explainRelevance(item.description, look.entry) };
-  const { candidates: [candidate] } = await persistCandidates(p, p.catalogType, [ranked], look.result.retrievedAt, { kind: "code" });
+  const { candidates: [candidate], identityConflicts } = await persistCandidates(p, p.catalogType, [ranked], look.result.retrievedAt, { kind: "code" });
+  if (identityConflicts.length > 0) {
+    await event(`Código ${code} verificado no ${label}, mas já registrado neste item com outra descrição oficial — não apresentado como alternativa.`);
+    return {
+      status: "identity_conflict", catalogType: p.catalogType, code, officialDescription: look.entry.description,
+      message: `O código ${code} existe no ${label} ("${look.entry.description.slice(0, 120)}"), mas este item já registra o mesmo código com outra `
+        + "descrição oficial (o item homônimo do outro catálogo ou uma redação anterior). Para não confundir CATMAT e CATSER, ele não foi "
+        + "apresentado como alternativa. Se for o código correto, registre a substituição manual com justificativa.",
+    };
+  }
   await event(`Código ${code} verificado no ${label} ("${look.entry.description.slice(0, 80)}") — alternativa registrada, sem decisão.`);
   if (!candidate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao registrar a alternativa verificada." });
   return { status: "verified", catalogType: p.catalogType, candidate };

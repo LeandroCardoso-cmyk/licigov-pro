@@ -41,6 +41,9 @@ interface SnapshotIntegrity {
 }
 
 /** Registra a evidência de uma consulta oficial válida. Idempotente: mesma evidência ⇒ mesmo snapshot. */
+type EvidenceDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type EvidenceExecutor = EvidenceDb | Parameters<Parameters<EvidenceDb["transaction"]>[0]>[0];
+
 export async function recordOfficialCatalogEvidence(p: {
   organizationId: number; catalogType: OfficialCatalogType; entries: readonly OfficialCatalogEntry[];
   checksum: string; retrievedAt: string; sourceUrl: string;
@@ -78,16 +81,26 @@ export async function recordOfficialCatalogEvidence(p: {
  * Evidência oficial vigente do órgão para os códigos informados. `active` só é `true` quando a fonte declarou o código
  * ativo NESTA evidência (a situação "não informada" é gravada como inativa — nunca confirmável).
  */
-export async function getOfficialCatalogEvidence(organizationId: number, codes: readonly string[]): Promise<CatalogEvidence[]> {
-  const db = await getDb();
+export async function getOfficialCatalogEvidence(
+  organizationId: number, codes: readonly string[],
+  /** Transação da decisão governada: leitura com lock COMPARTILHADO (a evidência não muda até o commit da decisão). */
+  executor?: EvidenceExecutor,
+): Promise<CatalogEvidence[]> {
+  const db = executor ?? await getDb();
   const unique = Array.from(new Set(codes.map((c) => c.trim()).filter((c) => /^\d{1,9}$/.test(c))));
   if (!db || unique.length === 0) return [];
-  const entries = await db.select().from(catalogEntriesTable)
-    .where(and(eq(catalogEntriesTable.organizationId, organizationId), inArray(catalogEntriesTable.code, unique)));
+  const where = and(eq(catalogEntriesTable.organizationId, organizationId), inArray(catalogEntriesTable.code, unique));
+  const entries = executor
+    ? await db.select().from(catalogEntriesTable).where(where).for("share")
+    : await db.select().from(catalogEntriesTable).where(where);
   const snapIds = Array.from(new Set(entries.map((e) => e.snapshotId).filter((s): s is string => !!s)));
   if (snapIds.length === 0) return [];
-  const snaps = await db.select().from(catalogSnapshotsTable)
-    .where(and(eq(catalogSnapshotsTable.organizationId, organizationId), inArray(catalogSnapshotsTable.id, snapIds)));
+  // Leitura CORRENTE também dos snapshots na transação da decisão: o snapshot apontado pela entrada (lida com lock) é
+  // sempre visível, mesmo se gravado depois da visão de leitura da transação.
+  const snapWhere = and(eq(catalogSnapshotsTable.organizationId, organizationId), inArray(catalogSnapshotsTable.id, snapIds));
+  const snaps = executor
+    ? await db.select().from(catalogSnapshotsTable).where(snapWhere).for("share")
+    : await db.select().from(catalogSnapshotsTable).where(snapWhere);
   const official = new Map<string, { checksum: string; verifiedAt: string }>();
   for (const s of snaps) {
     const meta = (typeof s.integrityMetadata === "string" ? JSON.parse(s.integrityMetadata) : s.integrityMetadata) as Partial<SnapshotIntegrity> | null;

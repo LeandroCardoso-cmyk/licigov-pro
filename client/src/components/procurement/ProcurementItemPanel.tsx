@@ -152,13 +152,17 @@ export default function ProcurementItemPanel({
         : "");
       const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
       const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
-      setSearchMsg(res.candidates.length > 0
+      const conflicts = res.identityConflicts.length > 0
+        ? ` Código(s) ${res.identityConflicts.join(", ")} não apresentado(s): já registrado(s) neste item com outra descrição oficial (outro catálogo ou redação anterior) — para não confundir CATMAT e CATSER; se for o correto, use a substituição manual com justificativa.`
+        : "";
+      const msg: { tone: "ok" | "warn"; text: string } = res.candidates.length > 0
         ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.${partial}` }
         : res.filterIgnoredSuspected
           ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
           : res.catalogType === "catmat"
             ? { tone: "warn", text: `Nenhuma correspondência no CATMAT para "${res.term}". A busca oficial do CATMAT só encontra a descrição oficial completa e exata do item — informe o código em "Verificar código", busque no outro catálogo ou declare "sem correspondência segura".` }
-            : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` });
+            : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` };
+      setSearchMsg(conflicts ? { tone: "warn", text: msg.text + conflicts } : msg);
       invalidate();
     },
     onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao consultar o catálogo oficial." }),

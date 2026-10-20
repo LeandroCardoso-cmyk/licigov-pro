@@ -22,7 +22,7 @@ import {
 } from "../db/catmatGovernance";
 import {
   getIntelligentItem, listItemHistory, updateMatchDecision,
-  updateItemCatmat, listRecommendations, recordProcessEvent,
+  updateItemCatmat, listRecommendations, recordProcessEvent, type ProcurementExecutor,
 } from "../db/procurement";
 
 /**
@@ -30,8 +30,8 @@ import {
  * (catálogo CATMAT/CATSER). Sem sugestão persistida ⇒ lista vazia: nenhum candidato é gerado localmente.
  * Base das decisões supervisionadas — confirmar exige sugestão VERIFICADA (o serviço recusa as demais).
  */
-async function resolveAvailableSuggestions(itemId: string, orgId: number): Promise<AvailableSuggestion[]> {
-  return (await listVerifiedSuggestions(itemId, orgId)).map((s) => ({
+async function resolveAvailableSuggestions(itemId: string, orgId: number, executor?: ProcurementExecutor): Promise<AvailableSuggestion[]> {
+  return (await listVerifiedSuggestions(itemId, orgId, executor)).map((s) => ({
     id: s.id, catmatCode: s.catmatCode, catmatDescription: s.catmatDescription, score: s.score, source: s.source, verified: s.verified,
     state: s.state,
   }));
@@ -71,17 +71,20 @@ async function governedCatmatDecision(ctx: CatmatCtx, p: {
     itemId: p.itemId, processId: item.processId, decision: p.decision, suggestions,
     suggestionId: p.suggestionId ?? null, catmatCode: p.catmatCode ?? null,
     catmatDescription: p.catmatDescription ?? null, justification: p.justification ?? null,
+    // Leitura DECISIVA dentro da transação da decisão (após o lock do item) — nunca o estado lido acima.
+    loadSuggestions: (tx) => resolveAvailableSuggestions(p.itemId, orgId, tx),
+    // Lineage atômica com o ledger (decisão nova): código no item + evento (singleton por chave).
+    lineage: async (tx, rec) => {
+      if (rec.catmatCode && (p.decision === "confirmado" || p.decision === "substituido")) {
+        await updateItemCatmat(p.itemId, orgId, rec.catmatCode, item.updatedAt, tx);
+      }
+      await recordProcessEvent({
+        organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user!.id),
+        summary: `CATMAT/CATSER — decisão do servidor: ${p.decision}${rec.catmatCode ? ` (${rec.catmatCode})` : ""}${rec.source ? ` · fonte ${rec.source}` : ""}.`,
+        refId: p.itemId, correlationId: ctx.correlationId, idempotencyKey: `catmat-decision:${p.idempotencyKey}`,
+      }, tx);
+    },
   });
-  if (!replayed) {
-    if (record.catmatCode && (p.decision === "confirmado" || p.decision === "substituido")) {
-      await updateItemCatmat(p.itemId, orgId, record.catmatCode, item.updatedAt);
-    }
-    await recordProcessEvent({
-      organizationId: orgId, processId: item.processId, eventType: "decision", actor: String(ctx.user!.id),
-      summary: `CATMAT/CATSER — decisão do servidor: ${p.decision}${record.catmatCode ? ` (${record.catmatCode})` : ""}${record.source ? ` · fonte ${record.source}` : ""}.`,
-      refId: p.itemId, correlationId: ctx.correlationId,
-    });
-  }
   return { record, replayed };
 }
 

@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792444989.6263688,
-    "ast_hash": "3a402eaaecc140b500bfc893ab17dcc7",
+    "mtime": 1792461506.2844918,
+    "ast_hash": "31542a8f81715e9e4094fbc3c22d77a2",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -5455,8 +5455,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/catmat-governance-mysql-smoke.test.ts": {
-    "mtime": 1792444989.6263688,
-    "ast_hash": "98b69798c4c01f74475f379e954d2125",
+    "mtime": 1792461785.0663939,
+    "ast_hash": "c218d76b7a68ec6e7bf1a3f342ba5bd3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/cognitive-provenance-a1-mysql-smoke.test.ts": {
@@ -6910,8 +6910,8 @@
     "semantic_hash": ""
   },
   "server/db/catmatGovernance.ts": {
-    "mtime": 1791289220.1041226,
-    "ast_hash": "03e95b050f990c1390ded3d7c4f69916",
+    "mtime": 1792462612.4005492,
+    "ast_hash": "3c5a2e4e5d130571990c4b8698322d49",
     "semantic_hash": ""
   },
   "server/db/cognitiveObservability.ts": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1792444989.6263688,
-    "ast_hash": "f08b54f41e6d13eb89e31d80dd8b18fe",
+    "mtime": 1792462612.399805,
+    "ast_hash": "21b04505d0d1dce16c5481082802a73d",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -8845,8 +8845,8 @@
     "semantic_hash": ""
   },
   "server/routers/itemIntelligenceRouter.ts": {
-    "mtime": 1792444989.6263688,
-    "ast_hash": "70f3eb05c90f7734954bce19e4803359",
+    "mtime": 1792461310.8742273,
+    "ast_hash": "0dd6f64017d64030f17325ea2b7fda25",
     "semantic_hash": ""
   },
   "server/routers/itemTrRouter.ts": {
@@ -9300,8 +9300,8 @@
     "semantic_hash": ""
   },
   "server/services/catmatGovernanceService.ts": {
-    "mtime": 1792444989.6263688,
-    "ast_hash": "bb89eddb1a72759ebd6d3efd5ccb0751",
+    "mtime": 1792462660.4545686,
+    "ast_hash": "17e5608960daf7edf07a23e913c6fcee",
     "semantic_hash": ""
   },
   "server/services/catmatMatcher.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792159633.1907747,
-    "ast_hash": "50ae835283d8981b67ec7acdc0dd6a5e",
+    "mtime": 1792462033.8864818,
+    "ast_hash": "6998a67d0e0936a0d7e550ac3879b5da",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13090,8 +13090,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr08-rbac-state-machine.test.ts": {
-    "mtime": 1792160040.2840939,
-    "ast_hash": "d51f4333373f5c4bd420e6cca618d719",
+    "mtime": 1792462033.8872054,
+    "ast_hash": "f77071de64098f839c13a76748f9e898",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr14-money-formatter-mysql-smoke.test.ts": {
@@ -13215,8 +13215,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/sp2d-legacy-structural-guards.test.ts": {
-    "mtime": 1791289219.9161227,
-    "ast_hash": "9f92777006f09e40bb2e5b4bb6e57be6",
+    "mtime": 1792462033.887761,
+    "ast_hash": "cd7ebdc0bc69844f41290dfacad2f88b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/sp2d-sem073-077-experimental-tenant.test.ts": {
@@ -15095,8 +15095,8 @@
     "semantic_hash": ""
   },
   "server/db/catalogEvidence.ts": {
-    "mtime": 1792178331.556783,
-    "ast_hash": "e92625a5f6da7a0294ef09652bcd12ff",
+    "mtime": 1792462612.398917,
+    "ast_hash": "2e3c9052dfaacaf31101be661f9a5431",
     "semantic_hash": ""
   },
   "server/domain/officialCatalog.ts": {
@@ -15105,8 +15105,8 @@
     "semantic_hash": ""
   },
   "server/services/itemCatalogClassificationService.ts": {
-    "mtime": 1792445435.2793515,
-    "ast_hash": "733970a7251c9ae879dab52b1ed58e9a",
+    "mtime": 1792461467.1266155,
+    "ast_hash": "97c04d01e0e991b0e74af154b1f96a11",
     "semantic_hash": ""
   },
   "server/services/officialCatalogService.ts": {
@@ -15152,6 +15152,11 @@
   "server/__tests__/unit/m8-hardening-fictitious-quotes-documents.test.ts": {
     "mtime": 1792445353.5903652,
     "ast_hash": "688d554a6a4a99c4c0aeb1fd77f1aa83",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-catmat-decision-race-mysql-smoke.test.ts": {
+    "mtime": 1792462660.4789803,
+    "ast_hash": "8caa3104cc245ad97b0f4351093b3158",
     "semantic_hash": ""
   }
 }

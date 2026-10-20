@@ -28,6 +28,7 @@ import { draftContentHash } from "../domain/generatedDocument";
 import { withHumanEditMarker } from "../domain/humanEditMarker";
 import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
+import { normalizeCatalogDescription } from "../domain/officialCatalog";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
 import { FICTITIOUS_QUOTE_MARKER, isFictitiousQuote, type PriceResearchWorkspace, type PriceResearchItem } from "../domain/priceResearch";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
@@ -379,8 +380,8 @@ export async function transitionItemStatusCAS(params: {
   return { applied: affected > 0 };
 }
 
-export async function updateItemCatmat(id: string, orgId: number, catmat: string, updatedAt: string): Promise<boolean> {
-  const db = await getDb();
+export async function updateItemCatmat(id: string, orgId: number, catmat: string, updatedAt: string, executor?: ProcurementExecutor): Promise<boolean> {
+  const db = executor ?? await getDb();
   if (!db) return false;
   await db.update(intelligentItemsTable).set({ suggestedCatmat: catmat, updatedAt: toDb(updatedAt) })
     .where(and(eq(intelligentItemsTable.id, id), eq(intelligentItemsTable.organizationId, orgId)));
@@ -389,8 +390,8 @@ export async function updateItemCatmat(id: string, orgId: number, catmat: string
 
 // ─── CATMAT matches ────────────────────────────────────────────────────────
 
-export async function insertCatmatMatch(m: CATMATMatch): Promise<CATMATMatch | null> {
-  const db = await getDb();
+export async function insertCatmatMatch(m: CATMATMatch, executor?: ProcurementExecutor): Promise<CATMATMatch | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(itemCatmatMatchesTable).values({
     id: m.id, organizationId: m.organizationId, itemId: m.itemId, catmatCode: m.catmatCode,
@@ -411,20 +412,23 @@ export async function insertCatmatMatch(m: CATMATMatch): Promise<CATMATMatch | n
  */
 export async function recordCatalogSearchMatches(p: {
   organizationId: number; itemId: string; matches: readonly CATMATMatch[]; keepCodes?: readonly string[];
-}): Promise<{ demoted: number }> {
+}): Promise<{ demoted: number; identityConflicts: string[] }> {
   const db = await getDb();
-  if (!db) return { demoted: 0 };
+  if (!db) return { demoted: 0, identityConflicts: [] };
   return db.transaction(async (tx) => {
-    await tx.select({ id: intelligentItemsTable.id }).from(intelligentItemsTable)
-      .where(and(eq(intelligentItemsTable.id, p.itemId), eq(intelligentItemsTable.organizationId, p.organizationId))).for("update");
-    const keepCodes = [...new Set([...p.matches.map((m) => m.catmatCode), ...(p.keepCodes ?? [])])];
+    await lockIntelligentItemForClassification(p.itemId, p.organizationId, tx);
+    // Identidade: a linha da sugestão é (órgão, item, código) — sem o catálogo. Mesmo código já registrado com OUTRA
+    // descrição oficial (o homônimo do outro catálogo, ou redação anterior) nunca é promovido nem reaproveitado.
+    const conflicts = await catmatIdentityConflicts(tx, p.organizationId, p.matches);
+    const accepted = p.matches.filter((m) => !conflicts.has(m.id));
+    const keepCodes = [...new Set([...accepted.map((m) => m.catmatCode), ...(p.keepCodes ?? [])])];
     const scope = and(
       eq(itemCatmatMatchesTable.itemId, p.itemId), eq(itemCatmatMatchesTable.organizationId, p.organizationId),
       inArray(itemCatmatMatchesTable.decision, ["busca_atual", "sugerido"]),
     );
     const [res] = await tx.update(itemCatmatMatchesTable).set({ decision: "historico" })
       .where(keepCodes.length > 0 ? and(scope, notInArray(itemCatmatMatchesTable.catmatCode, keepCodes)) : scope);
-    for (const m of p.matches) {
+    for (const m of accepted) {
       await tx.insert(itemCatmatMatchesTable).values({
         id: m.id, organizationId: m.organizationId, itemId: m.itemId, catmatCode: m.catmatCode,
         catmatDescription: m.catmatDescription, score: String(m.score), matchRank: m.rank,
@@ -434,12 +438,52 @@ export async function recordCatalogSearchMatches(p: {
         matchRank: m.rank, score: String(m.score),
       } });
     }
-    return { demoted: Number((res as { affectedRows?: number }).affectedRows ?? 0) };
+    return {
+      demoted: Number((res as { affectedRows?: number }).affectedRows ?? 0),
+      identityConflicts: p.matches.filter((m) => conflicts.has(m.id)).map((m) => m.catmatCode),
+    };
   });
 }
 
-export async function listCatmatMatches(itemId: string, orgId: number): Promise<Array<{ id: string; catmatCode: string; catmatDescription: string; score: number; rank: number; decision: string }>> {
+/** Ids cujas linhas já existem com OUTRA descrição oficial (normalizada) — nunca reutilizadas para este resultado. */
+async function catmatIdentityConflicts(tx: ProcurementExecutor, orgId: number, matches: readonly CATMATMatch[]): Promise<Set<string>> {
+  if (matches.length === 0) return new Set();
+  const existing = await tx.select({ id: itemCatmatMatchesTable.id, d: itemCatmatMatchesTable.catmatDescription })
+    .from(itemCatmatMatchesTable)
+    .where(and(eq(itemCatmatMatchesTable.organizationId, orgId), inArray(itemCatmatMatchesTable.id, matches.map((m) => m.id))));
+  const byId = new Map(existing.map((r) => [r.id, normalizeCatalogDescription(r.d ?? "")]));
+  return new Set(matches.filter((m) => byId.has(m.id) && byId.get(m.id) !== normalizeCatalogDescription(m.catmatDescription)).map((m) => m.id));
+}
+
+/**
+ * "Verificar código": registra o código verificado na fonte como `codigo_verificado`, sob o lock do item. Mesmo código já
+ * registrado com outra descrição oficial ⇒ `identityConflict` e nada muda (nunca apresenta o item de outro catálogo).
+ */
+export async function recordVerifiedCodeMatch(m: CATMATMatch): Promise<{ identityConflict: boolean }> {
   const db = await getDb();
+  if (!db) return { identityConflict: false };
+  return db.transaction(async (tx) => {
+    await lockIntelligentItemForClassification(m.itemId, m.organizationId, tx);
+    if ((await catmatIdentityConflicts(tx, m.organizationId, [m])).size > 0) return { identityConflict: true };
+    await insertCatmatMatch({ ...m, decision: "codigo_verificado" }, tx);
+    return { identityConflict: false };
+  });
+}
+
+/**
+ * Trava a linha do Item Inteligente (tenant-scoped) até o fim da transação — lock ÚNICO de serialização das escritas de
+ * classificação do item (busca oficial, "Verificar código" e decisão governada). Ordem de aquisição em todas elas:
+ * 1º intelligent_items (este lock) → 2º item_catmat_matches → 3º catalog_entries (leitura compartilhada) → 4º catmat_decisions.
+ * `false` ⇒ item inexistente neste órgão.
+ */
+export async function lockIntelligentItemForClassification(itemId: string, orgId: number, executor: ProcurementExecutor): Promise<boolean> {
+  const rows = await executor.select({ id: intelligentItemsTable.id }).from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.id, itemId), eq(intelligentItemsTable.organizationId, orgId))).for("update");
+  return rows.length > 0;
+}
+
+export async function listCatmatMatches(itemId: string, orgId: number, executor?: ProcurementExecutor): Promise<Array<{ id: string; catmatCode: string; catmatDescription: string; score: number; rank: number; decision: string }>> {
+  const db = executor ?? await getDb();
   if (!db) return [];
   const rows = await db.select().from(itemCatmatMatchesTable)
     .where(and(eq(itemCatmatMatchesTable.itemId, itemId), eq(itemCatmatMatchesTable.organizationId, orgId)))
@@ -450,9 +494,16 @@ export async function listCatmatMatches(itemId: string, orgId: number): Promise<
 export async function updateMatchDecision(id: string, orgId: number, decision: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  await db.update(itemCatmatMatchesTable).set({ decision })
-    .where(and(eq(itemCatmatMatchesTable.id, id), eq(itemCatmatMatchesTable.organizationId, orgId)));
-  return true;
+  // Mesmo lock de serialização das escritas de classificação do item (busca, "Verificar código", decisão governada).
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select({ itemId: itemCatmatMatchesTable.itemId }).from(itemCatmatMatchesTable)
+      .where(and(eq(itemCatmatMatchesTable.id, id), eq(itemCatmatMatchesTable.organizationId, orgId))).limit(1);
+    if (!row) return false;
+    await lockIntelligentItemForClassification(row.itemId, orgId, tx);
+    await tx.update(itemCatmatMatchesTable).set({ decision })
+      .where(and(eq(itemCatmatMatchesTable.id, id), eq(itemCatmatMatchesTable.organizationId, orgId)));
+    return true;
+  });
 }
 
 // ─── Recommendations & risks ─────────────────────────────────────────────────

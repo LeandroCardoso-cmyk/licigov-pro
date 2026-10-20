@@ -32,18 +32,28 @@ const SUGGESTIONS: AvailableSuggestion[] = [
   { id: "s2", catmatCode: "222222", catmatDescription: "lápis preto nº 2", score: 0.40, source: "sugestao-ia" },
 ];
 
+/**
+ * Itens sintéticos referidos pelas decisões (a decisão governada trava o item DO ÓRGÃO — item inexistente ⇒ NOT_FOUND).
+ * O id do item é a PK global ⇒ um id por órgão.
+ */
+const ITEMS = ["item-smoke", "item-4dec", "item-desc", "item-history", "item-tenant"];
+const itemOf = (org: number, base: string) => `${base}-${org % 100}`;
+
 const decParams = (org: number, over: Record<string, unknown>) => ({
   organizationId: org,
   actorUserId: USER,
   correlationId: `corr-c2-${org}`,
-  itemId: "item-smoke",
+  itemId: itemOf(org, "item-smoke"),
   processId: "proc-smoke",
   suggestions: SUGGESTIONS,
   ...over,
 }) as Parameters<typeof decideCatmat>[0];
 
+
 async function cleanup(conn: mysql.Connection) {
   for (const org of [ORG_A, ORG_B, ORG_NOTHRESH]) {
+    await conn.query("DELETE FROM `intelligent_items` WHERE organization_id = ? AND id IN (?)", [org, ITEMS.map((i) => itemOf(org, i))]).catch(() => {});
+    await conn.query("DELETE FROM `process_timeline` WHERE organization_id = ?", [org]).catch(() => {});
     await conn.query("DELETE FROM `catmat_decisions` WHERE organizationId = ?", [org]).catch(() => {});
     await conn.query("DELETE FROM `catmat_threshold_config` WHERE organizationId = ?", [org]).catch(() => {});
     await conn.query("DELETE FROM `idempotency_keys` WHERE organizationId = ?", [org]).catch(() => {});
@@ -60,6 +70,11 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
     await cleanup(conn);
     // ORG_A recebe um limiar ativo (papel autorizado em runtime) — pré-condição das decisões governadas.
     await setCatmatThresholdConfig({ organizationId: ORG_A, minScore: 0.5, reason: "smoke-setup", actorUserId: USER, correlationId: "corr-setup-a" });
+    for (const org of [ORG_A, ORG_B, ORG_NOTHRESH]) {
+      for (const id of ITEMS) {
+        await conn.query("INSERT INTO intelligent_items (id, organization_id, process_id, description) VALUES (?, ?, 'proc-smoke', 'item sintético')", [itemOf(org, id), org]);
+      }
+    }
   }, 300_000);
 
   afterAll(async () => {
@@ -73,8 +88,8 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
       decideCatmat(decParams(ORG_NOTHRESH, { idempotencyKey: "c2-noThreshold-1", decision: "confirmado", suggestionId: "s1" })),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     // Nenhuma entrada no ledger e nenhuma decisão para o item.
-    expect((await listCatmatDecisions("item-smoke", ORG_NOTHRESH)).length).toBe(0);
-    expect(await getLatestCatmatDecision("item-smoke", ORG_NOTHRESH)).toBeNull();
+    expect((await listCatmatDecisions(itemOf(ORG_NOTHRESH, "item-smoke"), ORG_NOTHRESH)).length).toBe(0);
+    expect(await getLatestCatmatDecision(itemOf(ORG_NOTHRESH, "item-smoke"), ORG_NOTHRESH)).toBeNull();
   }, 60_000);
 
   it("após o gestor configurar o limiar, a decisão prossegue e capta o limiar vigente", async () => {
@@ -91,14 +106,14 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
 
   it("as QUATRO decisões governadas funcionam sob limiar ativo", async () => {
     const item = "item-4dec";
-    const c = await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "d-conf", decision: "confirmado", suggestionId: "s1" }));
+    const c = await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "d-conf", decision: "confirmado", suggestionId: "s1" }));
     expect(c.decision.decision).toBe("confirmado");
-    const r = await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "d-rej", decision: "rejeitado", suggestionId: "s2", justification: "fora do escopo" }));
+    const r = await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "d-rej", decision: "rejeitado", suggestionId: "s2", justification: "fora do escopo" }));
     expect(r.decision.decision).toBe("rejeitado");
-    const s = await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "d-sub", decision: "substituido", catmatCode: "888888", catmatDescription: "código oficial", justification: "correção" }));
+    const s = await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "d-sub", decision: "substituido", catmatCode: "888888", catmatDescription: "código oficial", justification: "correção" }));
     expect(s.decision.decision).toBe("substituido");
     expect(s.decision.catmatCode).toBe("888888");
-    const n = await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "d-none", decision: "sem_correspondencia_segura", justification: "nenhum adequado" }));
+    const n = await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "d-none", decision: "sem_correspondencia_segura", justification: "nenhum adequado" }));
     expect(n.decision.decision).toBe("sem_correspondencia_segura");
     expect(n.decision.catmatCode).toBeNull();
   }, 60_000);
@@ -107,11 +122,11 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
     const p = decParams(ORG_A, { idempotencyKey: "c2-replay", decision: "rejeitado", suggestionId: "s2", justification: "fora do escopo" });
     const first = await decideCatmat(p);
     expect(first.replayed).toBe(false);
-    const before = (await listCatmatDecisions("item-smoke", ORG_A)).length;
+    const before = (await listCatmatDecisions(itemOf(ORG_A, "item-smoke"), ORG_A)).length;
 
     const second = await decideCatmat(p);
     expect(second.replayed).toBe(true);
-    const after = (await listCatmatDecisions("item-smoke", ORG_A)).length;
+    const after = (await listCatmatDecisions(itemOf(ORG_A, "item-smoke"), ORG_A)).length;
     expect(after).toBe(before); // nenhuma linha nova no replay
   }, 60_000);
 
@@ -124,9 +139,9 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
 
   it("IDEMPOTÊNCIA: mesma chave + catmatDescription diferente → CONFLICT (descrição participa do payload)", async () => {
     const item = "item-desc";
-    await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "c2-desc", decision: "substituido", catmatCode: "888888", catmatDescription: "descrição A", justification: "manual" }));
+    await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "c2-desc", decision: "substituido", catmatCode: "888888", catmatDescription: "descrição A", justification: "manual" }));
     await expect(
-      decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "c2-desc", decision: "substituido", catmatCode: "888888", catmatDescription: "descrição B", justification: "manual" })),
+      decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "c2-desc", decision: "substituido", catmatCode: "888888", catmatDescription: "descrição B", justification: "manual" })),
     ).rejects.toMatchObject({ code: "CONFLICT" });
   }, 60_000);
 
@@ -150,14 +165,14 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
 
   it("LEDGER IMUTÁVEL: histórico acumula decisões (mais recente primeiro) e a vigente é a última", async () => {
     const item = "item-history";
-    await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "h-1", decision: "confirmado", suggestionId: "s1" }));
-    await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "h-2", decision: "rejeitado", suggestionId: "s2", justification: "revisão" }));
-    await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: "h-3", decision: "substituido", catmatCode: "888888", justification: "código oficial" }));
+    await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "h-1", decision: "confirmado", suggestionId: "s1" }));
+    await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "h-2", decision: "rejeitado", suggestionId: "s2", justification: "revisão" }));
+    await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: "h-3", decision: "substituido", catmatCode: "888888", justification: "código oficial" }));
 
-    const history = await listCatmatDecisions(item, ORG_A);
+    const history = await listCatmatDecisions(itemOf(ORG_A, item), ORG_A);
     expect(history.length).toBe(3);
     expect(history[0].decision).toBe("substituido"); // desc por id
-    const current = await getLatestCatmatDecision(item, ORG_A);
+    const current = await getLatestCatmatDecision(itemOf(ORG_A, item), ORG_A);
     expect(current?.decision).toBe("substituido");
     expect(current?.catmatCode).toBe("888888");
   }, 60_000);
@@ -165,16 +180,25 @@ describe.skipIf(!DB)("PR C.2 — Governança CATMAT/CATSER (MySQL real)", () => 
   it("ISOLAMENTO MULTI-TENANT: MESMA idempotencyKey em orgs distintas → linhas independentes", async () => {
     const item = "item-tenant";
     const KEY = "shared-key-cross-tenant";
-    const a = await decideCatmat(decParams(ORG_A, { itemId: item, idempotencyKey: KEY, decision: "confirmado", suggestionId: "s1" }));
-    const b = await decideCatmat(decParams(ORG_B, { itemId: item, idempotencyKey: KEY, decision: "confirmado", suggestionId: "s1" }));
+    const a = await decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_A, item), idempotencyKey: KEY, decision: "confirmado", suggestionId: "s1" }));
+    const b = await decideCatmat(decParams(ORG_B, { itemId: itemOf(ORG_B, item), idempotencyKey: KEY, decision: "confirmado", suggestionId: "s1" }));
     expect(a.replayed).toBe(false);
     expect(b.replayed).toBe(false); // org B não é replay da org A: chave é tenant-aware
 
-    const histA = await listCatmatDecisions(item, ORG_A);
-    const histB = await listCatmatDecisions(item, ORG_B);
+    const histA = await listCatmatDecisions(itemOf(ORG_A, item), ORG_A);
+    const histB = await listCatmatDecisions(itemOf(ORG_B, item), ORG_B);
     expect(histA.length).toBe(1);
     expect(histB.length).toBe(1);
-    expect(histA.every(d => d.itemId === item)).toBe(true);
+    expect(histA.every(d => d.itemId === itemOf(ORG_A, item))).toBe(true);
+  }, 60_000);
+
+  it("M8 hardening — item inexistente no órgão (ou de outro órgão) ⇒ NOT_FOUND na transação da decisão, nada gravado", async () => {
+    await expect(decideCatmat(decParams(ORG_A, { itemId: "item-ghost", idempotencyKey: "c2-ghost", decision: "confirmado", suggestionId: "s1" })))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(decideCatmat(decParams(ORG_A, { itemId: itemOf(ORG_B, "item-smoke"), idempotencyKey: "c2-cross", decision: "confirmado", suggestionId: "s1" })))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await listCatmatDecisions("item-ghost", ORG_A)).length).toBe(0);
+    expect((await listCatmatDecisions(itemOf(ORG_B, "item-smoke"), ORG_A)).length).toBe(0);
   }, 60_000);
 
   it("ISOLAMENTO MULTI-TENANT: limiar de uma org não é visível na outra", async () => {
