@@ -35,7 +35,7 @@ vi.mock("../../services/importStagingService", () => ({
   getStagingSummary: vi.fn().mockResolvedValue({ total: 0, pending: 0, approved: 0, rejected: 0, skipped: 0 }),
   correctStagingItem: vi.fn(),
 }));
-vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn() }));
+vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn(), isSessionInFlight: vi.fn(() => false) }));
 vi.mock("../../services/importPromotionService", () => ({
   promoteApprovedSessionToDomain: vi.fn(),
   previewSessionPromotion: vi.fn(),

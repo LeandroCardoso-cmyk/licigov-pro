@@ -197,11 +197,11 @@ function buildParseOptions(session: NonNullable<Awaited<ReturnType<typeof getImp
 function provenanceScanFor(
   result: { declarationScan?: { version: number }; warnings: unknown },
   session: { checksum: string | null },
-  buffer: Buffer, parserType: string, parserVersion: string, origin: ProvenanceScanOrigin,
+  analyzedBytes: Buffer, parserType: string, parserVersion: string, origin: ProvenanceScanOrigin,
 ) {
   return buildProvenanceScanEvidence({
     performed: result.declarationScan, sessionChecksum: session.checksum,
-    analyzedChecksum: createHash("sha256").update(buffer).digest("hex"),
+    analyzedChecksum: createHash("sha256").update(analyzedBytes).digest("hex"),
     parserType, parserVersion, warnings: result.warnings, origin,
   });
 }

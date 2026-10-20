@@ -52,6 +52,7 @@ vi.mock("../../services/importStagingService", () => ({
 
 vi.mock("../../services/importQueueService", () => ({
   enqueueImport: vi.fn().mockReturnValue("job_1_123"),
+  isSessionInFlight: vi.fn(() => false),
 }));
 
 // ── Imports (após os mocks) ──
