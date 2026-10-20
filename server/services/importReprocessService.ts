@@ -26,7 +26,7 @@ import {
   type ProvenanceRevalidationBlocker, type ReextractionRecord, type ReprocessEligibility,
 } from "../domain/importReprocess";
 import {
-  assessProvenanceScan, mergeRevalidatedDeclarationWarnings,
+  assessProvenanceScan, documentFictitiousDeclaration, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration,
   type ProvenanceRevalidationRecord, type ProvenanceScanEvidence,
 } from "../domain/quoteProvenance";
 import type { ExtractionSummary, ImportWarning } from "../domain/importTypes";
@@ -195,7 +195,12 @@ export async function commitReextraction(p: CommitParams): Promise<CommitResult>
       parserVersion:     p.parserVersion,
       stage:             p.outcomeStage,
       warnings:          p.warnings,
-      extractionSummary: { ...p.summary, reextractions: [...history, record] } as unknown as object,
+      // P1-C — o histórico de revalidações de proveniência sobrevive à reextração (a evidência, não: é da nova extração).
+      extractionSummary: {
+        ...p.summary, reextractions: [...history, record],
+        ...((session.extractionSummary as ExtractionSummary | null)?.provenanceRevalidations
+          ? { provenanceRevalidations: (session.extractionSummary as ExtractionSummary).provenanceRevalidations } : {}),
+      } as unknown as object,
       errors:            [],
       finishedAt:        now,
     }).where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId)));
@@ -287,22 +292,35 @@ export async function commitProvenanceRevalidation(p: {
       throw new ReextractionAbortedError("SESSION_STATE_CHANGED", "O arquivo da sessão mudou durante a revalidação; nada foi alterado.");
     }
     const summary = (session.extractionSummary ?? {}) as ExtractionSummary;
+    // União: a revalidação nunca REMOVE uma declaração já registrada; o veredito é o mais restritivo.
+    const warnings = mergeRevalidatedDeclarationWarnings<ImportWarning>(session.warnings, p.warnings);
+    const seenAtReview = documentFictitiousDeclaration(session.warnings);
+    const declaration = mostRestrictiveDeclaration(p.scan.declaration, documentFictitiousDeclaration(warnings));
+    // Declaração NOVA (o revisor não a viu ao aprovar) ⇒ a aprovação da sessão deixa de corresponder: volta à revisão
+    // (compare-and-set sob o lock, como na correção supervisionada). Itens, correções e decisões por item permanecem.
+    const reopen = session.status === "approved" && declaration !== null && declaration !== seenAtReview;
     const record: ProvenanceRevalidationRecord = {
       at: now.toISOString(), actorUserId: p.actorUserId, correlationId: p.correlationId, sourceChecksum: p.scan.sourceChecksum,
       previousScanVersion: typeof summary.provenanceScan?.version === "number" ? summary.provenanceScan.version : null,
-      declaration: p.scan.declaration,
+      declaration, approvalReopened: reopen,
     };
-    await tx.update(importSessions).set({
-      warnings: mergeRevalidatedDeclarationWarnings<ImportWarning>(session.warnings, p.warnings),
-      extractionSummary: { ...summary, provenanceScan: p.scan, provenanceRevalidations: [...(summary.provenanceRevalidations ?? []), record] } as unknown as object,
-    }).where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId)));
+    const res = await tx.update(importSessions).set({
+      warnings,
+      extractionSummary: { ...summary, provenanceScan: { ...p.scan, declaration }, provenanceRevalidations: [...(summary.provenanceRevalidations ?? []), record] } as unknown as object,
+      ...(reopen ? { status: "awaiting_review" as const, stage: "awaiting_review", progress: 90 } : {}),
+    }).where(and(
+      eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId),
+      eq(importSessions.status, session.status), eq(importSessions.promotionStatus, "none"),
+    ));
+    const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+    if ((header?.affectedRows ?? 0) !== 1) throw new ReextractionAbortedError("SESSION_STATE_CHANGED", "A sessão mudou durante a revalidação; nada foi alterado.");
     await tx.insert(activityLogs).values({
       organizationId: p.organizationId, userId: p.actorUserId, action: "import_provenance_revalidated", sourceContext: "job",
       entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? null,
       details: JSON.stringify({
         procurementProcessId: session.procurementProcessId ?? null, sessionId: p.sessionId, sourceChecksum: p.scan.sourceChecksum,
         scanVersion: p.scan.version, previousScanVersion: record.previousScanVersion, parserType: p.scan.parserType,
-        parserVersion: p.scan.parserVersion, declaration: p.scan.declaration, correlationId: p.correlationId, timestamp: record.at,
+        parserVersion: p.scan.parserVersion, declaration, approvalReopened: reopen, correlationId: p.correlationId, timestamp: record.at,
       }),
     });
     return record;

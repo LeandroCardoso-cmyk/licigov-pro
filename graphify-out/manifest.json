@@ -1170,8 +1170,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/DocumentIngestionLauncher.tsx": {
-    "mtime": 1792527342.5947237,
-    "ast_hash": "1e13e74d61e9cce5593a0e989517afae",
+    "mtime": 1792528529.2480237,
+    "ast_hash": "d7e41800659db785c188540457b7e786",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/ExtractionDetailsPanels.tsx": {
@@ -5735,8 +5735,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-promotion.test.ts": {
-    "mtime": 1792528302.7362034,
-    "ast_hash": "b8fcd9395ee4e51730a3e0a6f55d8ece",
+    "mtime": 1792528529.2594626,
+    "ast_hash": "eeca860d23445413fa9d85679af38874",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-queue-recovery.test.ts": {
@@ -5750,13 +5750,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-reprocess-router.test.ts": {
-    "mtime": 1792528302.7348237,
-    "ast_hash": "e6eed7a34e94a9d9b0b784517c6ab154",
+    "mtime": 1792528529.25329,
+    "ast_hash": "ec05c8ff3c0047ae4548f7d10b082491",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
-    "mtime": 1792528308.6908476,
-    "ast_hash": "8e8e787d7d134093fbe9863b0090ec6a",
+    "mtime": 1792528529.261819,
+    "ast_hash": "30cc241e177be29968c75ad21cd6749c",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-streaming.test.ts": {
@@ -5935,8 +5935,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-rbac-router.test.ts": {
-    "mtime": 1792528302.7358184,
-    "ast_hash": "725ecb2c50028e055df5d4f4d360834c",
+    "mtime": 1792528529.2561274,
+    "ast_hash": "7048a451c5914102171a8fbbc659cf09",
     "semantic_hash": ""
   },
   "server/__tests__/integration/parecer-loadcontext-decoupling.test.ts": {
@@ -8815,8 +8815,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1792527315.5328217,
-    "ast_hash": "943a4c175d94241cd56c4b89717ce7de",
+    "mtime": 1792528529.2464635,
+    "ast_hash": "a98475f613ffc9ffc728631432b541c1",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9820,13 +9820,13 @@
     "semantic_hash": ""
   },
   "server/services/importQueueService.ts": {
-    "mtime": 1792528302.7376184,
-    "ast_hash": "2b1f0dd84458f7cb1ca82ebb6a3a43da",
+    "mtime": 1792528529.2456837,
+    "ast_hash": "03352297301d23d41ba6ceef47efe406",
     "semantic_hash": ""
   },
   "server/services/importReprocessService.ts": {
-    "mtime": 1792527240.2800746,
-    "ast_hash": "434d2c96a9b1dff6680b5a79f8a8be75",
+    "mtime": 1792528529.2447379,
+    "ast_hash": "aea8c010bb034c2c12bb3d4f6db476e0",
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/domain/quoteProvenance.ts": {
-    "mtime": 1792527067.0324285,
-    "ast_hash": "95b68ff2c0d9880d51f10947a2c0632b",
+    "mtime": 1792528529.2451656,
+    "ast_hash": "fe6be89dfd88e2479e26e2b79bdce4e8",
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
@@ -15200,8 +15200,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
-    "mtime": 1792527963.6681862,
-    "ast_hash": "f54a9fb56ffca43b420054980263d150",
+    "mtime": 1792528666.5480666,
+    "ast_hash": "beffd2c71881d2b5be2a9a0e7a6600e3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts": {
@@ -15230,13 +15230,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-legacy-session-provenance-scan-mysql-smoke.test.ts": {
-    "mtime": 1792527567.1633987,
-    "ast_hash": "5e1f8696e9c0837fd35a59adb0c1159a",
+    "mtime": 1792528820.7366538,
+    "ast_hash": "66ecc784620e3b101cb5637b5a312daf",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-provenance-scan-evidence.test.ts": {
-    "mtime": 1792527869.4095676,
-    "ast_hash": "a9d4086184e4569270f96b40f126c64a",
+    "mtime": 1792528640.9857779,
+    "ast_hash": "93e42462b8d396bd556a37a804d952de",
     "semantic_hash": ""
   }
 }

@@ -106,7 +106,9 @@ Sem migration (coluna JSON existente).
 
 - **Quem grava:** o worker, na extração, na reextração governada e na revalidação. Só grava se o parser declarar que a
   análise rodou naquele caminho (`ParseResult.declarationScan`: CSV, XLSX, DOCX e PDF nativo/OCR no modo de linhas) e se o
-  sha256 do arquivo lido for igual ao `checksum` da sessão. Nenhum parâmetro do cliente participa. A reextração substitui
+  sha256 do arquivo lido for igual ao `checksum` da sessão. Também exige que todas as páginas tenham sido lidas: com
+  `OCR_REQUIRED`, `OCR_REQUIRED_PARTIAL`, `OCR_FAILED` ou `OCR_PAGE_LIMIT`, o texto de páginas digitalizadas não foi
+  examinado e, por isso, não há evidência. Nenhum parâmetro do cliente participa. A reextração substitui
   o sumário inteiro, então a evidência anterior nunca sobrevive a uma nova extração.
 - **Quem exige:** `promoteApprovedSessionToDomain`, dentro da transação, com a sessão travada (FOR UPDATE) e antes de
   qualquer escrita, e também `previewSessionPromotion`. Se a evidência faltar, estiver em versão antiga ou for de outro
@@ -119,8 +121,14 @@ Sem migration (coluna JSON existente).
     ARQUIVO ORIGINAL (mesmo checksum) fora de transação. `commitProvenanceRevalidation` grava, sob lock da sessão, só a
     evidência, os avisos de declaração do documento e o histórico append-only `provenanceRevalidations`, além da auditoria
     `import_provenance_revalidated` na MESMA transação.
-  - **O que não muda:** staging, correções e decisões humanas, pois o conteúdo revisado é o mesmo. A declaração
-    encontrada só pode tornar as cotações `ficticia` (mais restritivo).
+  - **O que não muda:** staging, correções e decisões por item, pois o conteúdo revisado é o mesmo.
+  - **Avisos:** a revalidação faz a UNIÃO com os avisos já registrados e NUNCA remove uma declaração. O veredito é o mais
+    restritivo entre os avisos registrados e a nova análise.
+  - **Aprovação:** se a declaração for NOVA para a revisão, a aprovação da SESSÃO volta para `awaiting_review`
+    (compare-and-set sob o lock, como na correção supervisionada) e o revisor confirma de novo (um clique). Sem
+    declaração nova, a aprovação é preservada.
+  - **Falha:** se a reanálise não reconhecer cotações, não ler todas as páginas ou o arquivo divergir, nada é aplicado. O
+    motivo aparece no painel e fica auditado (`import_provenance_revalidation_not_applied`).
   - **Recusa da revalidação:** se o estado mudou entre a pré-checagem e o commit (promovida, reextração reservada, outro
     arquivo, evidência já vigente), nada é aplicado.
 - **Sessão já promovida:** nada é reprocessado nem reclassificado; o replay da promoção continua idempotente e a
@@ -141,6 +149,9 @@ Sem migration (coluna JSON existente).
   (cotações `declarada`); não há fluxo para retirar uma declaração global do arquivo (exigiria decisão do Owner).
 - ~~Sessões de ingestão EXTRAÍDAS antes da emenda P1-B seguiam a regra por cotação.~~ Resolvido pela P1-C: sem a
   evidência vigente, a promoção é recusada e a sessão é revalidada (ou reextraída, quando ainda não tem revisão).
+- Num ambiente com OCR desligado, PDF com página digitalizada nunca recebe evidência e não é promovível até o OCR estar
+  disponível (fail-closed, por desenho).
+- O histórico de revalidações sobrevive à reextração (`provenanceRevalidations`); a evidência é sempre a da extração vigente.
 - Revalidação roda na fila em memória do worker. Se o processo reiniciar no meio, nada é aplicado e basta pedir de novo.
   Também falha de forma explícita, com auditoria, se o arquivo original não puder mais ser lido ou reanalisado. Nesse
   caso a promoção continua bloqueada (fail-closed). Reenviar o MESMO arquivo reaproveita a sessão (checksum), e não há

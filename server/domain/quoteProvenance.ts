@@ -285,8 +285,20 @@ export interface ProvenanceScanEvidence {
 }
 
 /**
- * Evidência a partir do resultado do parser — ou null quando a análise não rodou nesse caminho, a versão é outra ou o
- * checksum do arquivo lido não corresponde ao da sessão (nunca se fabrica evidência).
+ * Lacunas de COBERTURA da análise: página digitalizada não lida (OCR indisponível/falho/limite de páginas). O texto dessas
+ * páginas não foi examinado — uma declaração ali não seria vista — então não há evidência de análise concluída.
+ */
+export const DECLARATION_SCAN_COVERAGE_GAPS: ReadonlySet<string> = new Set(["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT"]);
+
+/** Veredito mais restritivo (global > suspected > nada). */
+export function mostRestrictiveDeclaration(...vs: Array<"global" | "suspected" | null | undefined>): "global" | "suspected" | null {
+  if (vs.includes("global")) return "global";
+  return vs.includes("suspected") ? "suspected" : null;
+}
+
+/**
+ * Evidência a partir do resultado do parser — ou null quando a análise não rodou nesse caminho, não cobriu todas as
+ * páginas, a versão é outra ou o checksum do arquivo lido não corresponde ao da sessão (nunca se fabrica evidência).
  */
 export function buildProvenanceScanEvidence(p: {
   performed: DeclarationScanPerformed | null | undefined;
@@ -299,6 +311,8 @@ export function buildProvenanceScanEvidence(p: {
   now?: Date;
 }): ProvenanceScanEvidence | null {
   if (p.performed?.version !== PROVENANCE_SCAN_VERSION) return null;
+  const codes = (Array.isArray(p.warnings) ? p.warnings : []).map((w) => (w as { code?: unknown } | null)?.code);
+  if (codes.some((c) => typeof c === "string" && DECLARATION_SCAN_COVERAGE_GAPS.has(c))) return null;
   const session = (p.sessionChecksum ?? "").toLowerCase();
   if (!session || session !== p.analyzedChecksum.toLowerCase()) return null;
   return {
@@ -315,6 +329,8 @@ export interface ProvenanceRevalidationRecord {
   sourceChecksum:      string;
   previousScanVersion: number | null;
   declaration:         "global" | "suspected" | null;
+  /** A declaração era nova para a revisão ⇒ a aprovação da sessão foi devolvida à revisão humana. */
+  approvalReopened:    boolean;
 }
 
 export type ProvenanceScanAssessment =
@@ -336,13 +352,12 @@ export function assessProvenanceScan(extractionSummary: unknown, sessionChecksum
 }
 
 /**
- * Avisos da sessão após uma REVALIDAÇÃO: preserva os avisos da extração vigente (as linhas revisadas não mudam) e
- * substitui os de declaração do documento pelos produzidos pela nova análise (o veredito completo — inclusive o
- * rebaixamento por OCR de baixa confiança — fica na evidência).
+ * Avisos da sessão após uma REVALIDAÇÃO: UNIÃO — preserva TODOS os avisos da extração vigente (inclusive declarações já
+ * registradas: a revalidação nunca remove uma declaração) e acrescenta as declarações do documento da nova análise.
  */
-export function mergeRevalidatedDeclarationWarnings<T extends { code: string }>(current: unknown, revalidated: readonly T[]): T[] {
+export function mergeRevalidatedDeclarationWarnings<T extends { code: string; field?: string }>(current: unknown, revalidated: readonly T[]): T[] {
   const SCAN_CODES = new Set([DOCUMENT_DECLARES_FICTITIOUS, DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION]);
   const keep = (Array.isArray(current) ? current : []).filter((w): w is T =>
-    !!w && typeof w === "object" && typeof (w as { code?: unknown }).code === "string" && !SCAN_CODES.has((w as { code: string }).code));
-  return [...keep, ...revalidated.filter((w) => SCAN_CODES.has(w.code))];
+    !!w && typeof w === "object" && typeof (w as { code?: unknown }).code === "string");
+  return dedupeDocumentDeclarations([...keep, ...revalidated.filter((w) => SCAN_CODES.has(w.code))]);
 }

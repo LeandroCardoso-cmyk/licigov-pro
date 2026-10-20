@@ -20,8 +20,8 @@ import { PdfParser } from "../../parsers/pdfParser";
 import { parserRegistry } from "../../parsers/parserRegistry";
 import type { ParseOptions } from "../../parsers/baseParser";
 import {
-  assessProvenanceScan, buildProvenanceScanEvidence, DOCUMENT_DECLARES_FICTITIOUS, DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION,
-  DECLARATION_SCAN_PERFORMED, mergeRevalidatedDeclarationWarnings, PROVENANCE_SCAN_VERSION,
+  assessProvenanceScan, buildProvenanceScanEvidence, DOCUMENT_DECLARES_FICTITIOUS,
+  DECLARATION_SCAN_PERFORMED, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration, PROVENANCE_SCAN_VERSION,
 } from "../../domain/quoteProvenance";
 import { assessProvenanceRevalidation } from "../../domain/importReprocess";
 
@@ -96,6 +96,27 @@ describe("P1-C — evidência só com análise vigente sobre o MESMO arquivo", (
     expect(buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [] })!.declaration).toBeNull();
   });
 
+  it("não gera quando há página digitalizada NÃO lida (OCR indisponível, falho, parcial ou limitado)", () => {
+    for (const code of ["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT"]) {
+      expect(buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [{ code }] })).toBeNull();
+    }
+    expect(buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [{ code: "OCR_LOW_CONFIDENCE" }] })).not.toBeNull();
+  });
+
+  it("PDF digitalizado sem OCR: o parser roda a análise, mas a cobertura é incompleta ⇒ sem evidência", async () => {
+    const buf = await new Promise<Buffer>((resolve) => {
+      const doc = new PDFDocument({ margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.rect(60, 60, 300, 200).fill("#cccccc");
+      doc.end();
+    });
+    const r = await new PdfParser().safeParse(buf, opts("application/pdf"));
+    expect(r.warnings.some((w) => w.code === "OCR_REQUIRED")).toBe(true);
+    expect(buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings })).toBeNull();
+  });
+
   it("não gera: análise não executada, versão diferente, arquivo divergente, sessão sem checksum", () => {
     expect(buildProvenanceScanEvidence({ ...base, performed: undefined, warnings: [] })).toBeNull();
     expect(buildProvenanceScanEvidence({ ...base, performed: { version: PROVENANCE_SCAN_VERSION + 1 }, warnings: [] })).toBeNull();
@@ -118,12 +139,16 @@ describe("P1-C — evidência só com análise vigente sobre o MESMO arquivo", (
 });
 
 describe("P1-C — revalidação", () => {
-  it("substitui SÓ os avisos de declaração do documento", () => {
-    const current = [{ code: "OCR_LOW_CONFIDENCE" }, { code: "HEADER_INFERENCE" }, { code: DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION }];
-    const next = [{ code: DOCUMENT_DECLARES_FICTITIOUS }, { code: "MULTIPLE_SHEETS" }];
-    expect(mergeRevalidatedDeclarationWarnings(current, next).map((w) => w.code))
-      .toEqual(["OCR_LOW_CONFIDENCE", "HEADER_INFERENCE", DOCUMENT_DECLARES_FICTITIOUS]);
+  it("UNIÃO: nunca remove uma declaração já registrada; acrescenta só as declarações da nova análise (sem duplicar)", () => {
+    const current = [{ code: "OCR_LOW_CONFIDENCE" }, { code: "HEADER_INFERENCE" }, { code: DOCUMENT_DECLARES_FICTITIOUS, field: "ocr" }];
+    expect(mergeRevalidatedDeclarationWarnings(current, []).map((w) => w.code)).toEqual(["OCR_LOW_CONFIDENCE", "HEADER_INFERENCE", DOCUMENT_DECLARES_FICTITIOUS]);
+    const next = [{ code: DOCUMENT_DECLARES_FICTITIOUS }, { code: DOCUMENT_DECLARES_FICTITIOUS, field: "ocr" }, { code: "MULTIPLE_SHEETS" }];
+    expect(mergeRevalidatedDeclarationWarnings(current, next).map((w) => `${w.code}|${w.field ?? ""}`))
+      .toEqual(["OCR_LOW_CONFIDENCE|", "HEADER_INFERENCE|", `${DOCUMENT_DECLARES_FICTITIOUS}|ocr`, `${DOCUMENT_DECLARES_FICTITIOUS}|`]);
     expect(mergeRevalidatedDeclarationWarnings(null, []).length).toBe(0);
+    expect(mostRestrictiveDeclaration(null, "suspected")).toBe("suspected");
+    expect(mostRestrictiveDeclaration("suspected", "global", null)).toBe("global");
+    expect(mostRestrictiveDeclaration(null, undefined)).toBeNull();
   });
 
   const facts = {

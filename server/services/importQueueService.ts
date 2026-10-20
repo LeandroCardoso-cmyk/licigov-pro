@@ -136,6 +136,7 @@ export function enqueueImport(
     ...(opts.reextract ? { reextract: opts.reextract } : {}),
     ...(opts.revalidateProvenance ? { revalidateProvenance: opts.revalidateProvenance } : {}),
   };
+  if (opts.revalidateProvenance) revalidationFailures.delete(sessionId);
 
   inFlight.add(sessionId);
   queue.push(job);
@@ -539,6 +540,7 @@ async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
     inFlight.delete(job.sessionId);
   };
   const notApplied = async (code: string, message: string) => {
+    revalidationFailures.set(job.sessionId, { code, message });
     await recordProvenanceRevalidationNotApplied({ sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, correlationId, code, message }).catch(() => {});
     finish("failed", code);
   };
@@ -553,12 +555,14 @@ async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
     if (documentMode) { await notApplied("DOCUMENT_IMPORT", "Importação de documento não usa a análise de cotações."); return; }
     const result = await parser.safeParse(buffer, opts); // FORA de transação (parser/OCR pesado)
     if (result.errors.some((e) => e.fatal)) { await notApplied("PARSER_FAILED", "Não foi possível reanalisar o arquivo original."); return; }
+    if (result.items.length === 0) { await notApplied("SCAN_INCOMPLETE", "A reanálise do arquivo original não reconheceu as cotações; a análise não foi concluída."); return; }
     const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "revalidation");
-    if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "O arquivo lido não corresponde ao da sessão ou a análise não pôde ser executada."); return; }
+    if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "A análise não pôde ser concluída: o arquivo lido não corresponde ao da sessão ou há páginas digitalizadas não lidas (OCR indisponível ou incompleto)."); return; }
     await commitProvenanceRevalidation({
       sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, correlationId,
       scan, warnings: result.warnings,
     });
+    revalidationFailures.delete(job.sessionId);
     finish("done");
     log.info("import_provenance_revalidated", {
       jobId: job.jobId, correlationId, organizationId: job.organizationId, processId: session.procurementProcessId ?? null,
@@ -573,6 +577,12 @@ async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
 
 /** Revalidação em andamento neste processo (UI: estado "em andamento"; o servidor revalida tudo no commit). */
 export function isSessionInFlight(sessionId: number): boolean { return inFlight.has(sessionId); }
+
+/** Último motivo de revalidação NÃO aplicada neste processo (UI explica o bloqueio; a auditoria fica em activity_logs). */
+const revalidationFailures = new Map<number, { code: string; message: string }>();
+export function getProvenanceRevalidationFailure(sessionId: number): { code: string; message: string } | null {
+  return revalidationFailures.get(sessionId) ?? null;
+}
 
 // ─── Recovery (replay-safe) ─────────────────────────────────────────────────────
 

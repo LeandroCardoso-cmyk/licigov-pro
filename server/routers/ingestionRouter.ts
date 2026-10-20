@@ -42,7 +42,7 @@ import {
   getDocumentReviewHistory,
 } from "../services/documentIntakeService";
 import { isDocumentImportType } from "../domain/documentProjection";
-import { enqueueImport, isSessionInFlight } from "../services/importQueueService";
+import { enqueueImport, getProvenanceRevalidationFailure, isSessionInFlight } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
   assertCanonicalIngestionEnabled,
@@ -65,7 +65,7 @@ import {
   assertProvenanceRevalidationAllowed, getReprocessEligibility, releaseReextraction, reserveReextraction,
 } from "../services/importReprocessService";
 import { assessProvenanceScan, PROVENANCE_SCAN_REQUIRED_MESSAGE } from "../domain/quoteProvenance";
-import { REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
+import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
 import { getPriceResearchReview, reviewPriceResearchGroups } from "../services/priceResearchReviewService";
 import type { PriceResearchReviewProjection } from "../domain/priceResearchReviewGroups";
 
@@ -217,9 +217,10 @@ function provenanceScanView(s: NonNullable<Awaited<ReturnType<typeof getImportSe
     return { status: "not_applicable", message: null };
   }
   if (assessProvenanceScan(s.extractionSummary, s.checksum).ok) return { status: "current", message: null };
-  return isSessionInFlight(s.id)
-    ? { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…" }
-    : { status: "required", message: PROVENANCE_SCAN_REQUIRED_MESSAGE };
+  if (isSessionInFlight(s.id)) return { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…" };
+  if (!s.checksum) return { status: "required", message: `${PROVENANCE_SCAN_REQUIRED_MESSAGE} ${PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.NO_CHECKSUM}` };
+  const failure = getProvenanceRevalidationFailure(s.id);
+  return { status: "required", message: failure ? `${PROVENANCE_SCAN_REQUIRED_MESSAGE} Última tentativa não concluída: ${failure.message}` : PROVENANCE_SCAN_REQUIRED_MESSAGE };
 }
 
 /** Serializa a sessão para o cliente, ocultando nada sensível (não há segredos aqui). */

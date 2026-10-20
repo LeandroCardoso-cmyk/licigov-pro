@@ -154,9 +154,13 @@ async function holdSessionLock(sid: number) {
   return {
     holder,
     async waitForWaiter() {
+      // Espera de lock NA TABELA import_sessions deste banco (não qualquer espera do servidor).
       let waits = 0;
       for (const deadline = Date.now() + 20_000; waits === 0 && Date.now() < deadline;) {
-        waits = Number((await rows("SELECT COUNT(*) n FROM performance_schema.data_lock_waits"))[0].n);
+        waits = Number((await rows(
+          `SELECT COUNT(*) n FROM performance_schema.data_lock_waits w
+             JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+            WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'import_sessions'`))[0].n);
         if (waits === 0) await new Promise((r) => setTimeout(r, 25));
       }
       expect(waits).toBeGreaterThan(0);
@@ -220,6 +224,14 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     expect(err).toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(err!.message).toContain(PROVENANCE_SCAN_REQUIRED);
     expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
+    // Revalidada sem declaração ⇒ aprovação preservada (nada novo para o revisor) e promoção legítima `declarada`.
+    await (await asUser(U.operator)).ingestion.revalidateProvenance({ sessionId: sid, procurementProcessId: pid });
+    await waitIdle(sid);
+    const s = await summaryOf(sid);
+    expect(s.status).toBe("approved");
+    expect(s.summary.provenanceRevalidations[0]).toMatchObject({ declaration: null, approvalReopened: false });
+    expect((await promote(sid, pid, `p1c-promo-${sid}`)).idempotent).toBe(false);
+    expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((x) => x.k)).toEqual(["declarada"]);
   });
 
   it("[3] atual legítima ⇒ evidência gravada sem declaração; promoção permitida; `declarada` (sem falso positivo)", async () => {
@@ -275,10 +287,11 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     await waitIdle(sid);
 
     const after = await summaryOf(sid);
-    expect(after.status).toBe("approved");                         // aprovação humana preservada (conteúdo não mudou)
+    // Declaração NOVA para o revisor ⇒ a aprovação da SESSÃO volta à revisão (itens/correções/decisões por item intactos).
+    expect(after.status).toBe("awaiting_review");
     expect(after.summary.provenanceScan).toMatchObject({ version: PROVENANCE_SCAN_VERSION, sourceChecksum: checksum, declaration: "global", origin: "revalidation" });
     expect(after.summary.provenanceRevalidations).toHaveLength(1);
-    expect(after.summary.provenanceRevalidations[0]).toMatchObject({ actorUserId: U.operator, previousScanVersion: null, declaration: "global" });
+    expect(after.summary.provenanceRevalidations[0]).toMatchObject({ actorUserId: U.operator, previousScanVersion: null, declaration: "global", approvalReopened: true });
     expect(after.summary.extraction?.fingerprint ?? null).toBe(beforeSummary.extraction?.fingerprint ?? null); // linhagem da extração vigente intacta
     expect(after.warnings).toContain(DOCUMENT_DECLARES_FICTITIOUS);
     expect(await stagingSnapshot(sid)).toEqual(before);           // itens, decisões e correções intocados
@@ -287,7 +300,9 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     // Já vigente ⇒ nova revalidação recusada (nada a refazer).
     const again = await op.ingestion.revalidateProvenance({ sessionId: sid, procurementProcessId: pid }).then(() => null, codeOf);
     expect(again).toMatchObject({ code: "PRECONDITION_FAILED" });
-
+    // Sem nova aprovação humana não há promoção; o revisor confirma (um clique) e então promove.
+    expect((await promote(sid, pid, `p1c-promo-${sid}`).then(() => null, codeOf))?.code).toBe("PRECONDITION_FAILED");
+    await op.ingestion.approveSession({ sessionId: sid, procurementProcessId: pid });
     await promote(sid, pid, `p1c-promo-${sid}`);
     const q = await rows("SELECT supplier, provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ? ORDER BY supplier", [ORG, pid]);
     expect(q.map((x) => [x.supplier, x.k])).toEqual([["Empresa Beta", "ficticia"], ["Empresa Gama Ltda", "ficticia"]]);
@@ -308,11 +323,52 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((x) => x.k)).toEqual(["ficticia"]);
   });
 
+  it("[5c] revalidação NUNCA remove uma declaração já registrada (veredito mais restritivo)", async () => {
+    const pid = await newProcess(ORG);
+    const { sid } = await csvSession(ORG, pid, FICT_CSV, U.operator);
+    const scan = (await summaryOf(sid)).summary.provenanceScan as ProvenanceScanEvidence;
+    // Sessão com o aviso P1-B já gravado, mas sem evidência (extraída entre P1-B e P1-C).
+    await conn.execute("UPDATE import_sessions SET extractionSummary = JSON_REMOVE(extractionSummary, '$.provenanceScan') WHERE id = ?", [sid]);
+    expect((await summaryOf(sid)).warnings).toContain(DOCUMENT_DECLARES_FICTITIOUS);
+    // Nova análise que NÃO vê a declaração (ex.: OCR com leitura diferente).
+    await commitProvenanceRevalidation({ sessionId: sid, organizationId: ORG, actorUserId: U.operator, correlationId: "p1c-5c", scan: { ...scan, declaration: null, origin: "revalidation" }, warnings: [] });
+    const s = await summaryOf(sid);
+    expect(s.warnings).toContain(DOCUMENT_DECLARES_FICTITIOUS);
+    expect(s.summary.provenanceScan.declaration).toBe("global");
+    expect(s.status).toBe("awaiting_review"); // ainda não aprovada: nada a reabrir
+    await approveAll(sid, pid);
+    await promote(sid, pid, `p1c-promo-${sid}`);
+    expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((x) => x.k)).toEqual(["ficticia"]);
+  });
+
+  it("[6c] revalidação que não conclui a análise (arquivo lido ≠ sessão) ⇒ nada aplicado; motivo visível e auditado", async () => {
+    const pid = await newProcess(ORG);
+    const { sid } = await csvSession(ORG, pid, FICT_CSV, U.operator);
+    await makeLegacy(sid);
+    await approveAll(sid, pid);
+    const [{ k }] = await rows("SELECT sourceFileId k FROM import_sessions WHERE id = ?", [sid]);
+    mem.set(String(k), Buffer.from(REAL_CSV, "utf8")); // objeto do storage diverge do checksum da sessão
+    const op = await asUser(U.operator);
+    await op.ingestion.revalidateProvenance({ sessionId: sid, procurementProcessId: pid });
+    await waitIdle(sid);
+    const s = await summaryOf(sid);
+    expect(s.summary.provenanceScan).toBeUndefined();
+    expect(s.status).toBe("approved");
+    const st = await op.ingestion.getSessionStatus({ sessionId: sid, procurementProcessId: pid });
+    expect(st.session.provenanceScan.status).toBe("required");
+    expect(st.session.provenanceScan.message).toMatch(/Última tentativa não concluída/);
+    expect(Number((await rows("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_provenance_revalidation_not_applied'", [ORG, sid]))[0].n)).toBe(1);
+    expect((await promote(sid, pid, `p1c-promo-${sid}`).then(() => null, codeOf))?.message).toContain(PROVENANCE_SCAN_REQUIRED);
+    expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
+  });
+
   it("[6] retry após a recusa com a MESMA chave; replay idempotente; payload divergente; promoção espera o lock e enxerga o commit", async () => {
     // Retry: a sessão [1] foi recusada com `p1c-promo-${sidL}` — revalidada, a MESMA chave promove (nada foi gravado antes).
     const op = await asUser(U.operator);
     await op.ingestion.revalidateProvenance({ sessionId: sidL, procurementProcessId: pidL });
     await waitIdle(sidL);
+    expect((await summaryOf(sidL)).status).toBe("awaiting_review"); // declaração nova ⇒ nova confirmação humana
+    await op.ingestion.approveSession({ sessionId: sidL, procurementProcessId: pidL });
     const ok = await promote(sidL, pidL, `p1c-promo-${sidL}`);
     expect(ok.idempotent).toBe(false);
     expect((await promote(sidL, pidL, `p1c-promo-${sidL}`)).idempotent).toBe(true);   // replay
@@ -336,6 +392,9 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     await lock.commit();
     expect((await pending).idempotent).toBe(false);
     expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((x) => x.k)).toEqual(["ficticia"]);
+    // Ordem inversa: a promoção venceu ⇒ uma revalidação que chega depois aborta sob o lock (PROMOTED), nada muda.
+    const late = await commitProvenanceRevalidation({ sessionId: sid, organizationId: ORG, actorUserId: U.operator, correlationId: "p1c-late", scan: { ...scan, sourceChecksum: checksum, origin: "revalidation" }, warnings: [] }).then(() => null, (e) => e.code);
+    expect(late).toBe("PROMOTED");
   });
 
   it("[6b] estado muda entre a pré-checagem e o commit da revalidação ⇒ nada aplicado; arquivo divergente ⇒ nada aplicado", async () => {
