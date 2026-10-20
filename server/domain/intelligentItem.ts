@@ -31,6 +31,8 @@ export interface IntelligentItemSupplier {
   readonly researchId?: string;
   /** Hardening P0 — hash de CONTEÚDO da cotação (mesmo quoteId + conteúdo novo ⇒ cotação alterada). */
   readonly contentHash?: string;
+  /** M8 — proveniência da cotação no momento da materialização (retrato; não participa do contentHash). */
+  readonly provenanceKind?: string;
 }
 
 /**

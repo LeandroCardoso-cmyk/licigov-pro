@@ -24,7 +24,7 @@ describe("R9 / SEM-052 — modelo da confirmação (atual × proposto)", () => {
     const m = sourceUpdateConfirmModel(PREVIEW);
     expect(m.title).toBe("Comparativo de cotações — Papel A4");
     expect(m.rows).toEqual([
-      { label: "Cotações válidas", before: "2", after: "3" },
+      { label: "Cotações com preço", before: "2", after: "3" },
       { label: "Preço médio (referência)", before: "R$ 110,00", after: "R$ 1.500,00" },
       { label: "Situação do item", before: "Aprovado", after: "Em análise" },
     ]);

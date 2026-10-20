@@ -48,7 +48,7 @@ export function sourceUpdateConfirmModel(p: SourceUpdatePreview): SourceUpdateCo
   return {
     title: `Comparativo de cotações — ${p.description}`,
     rows: [
-      { label: "Cotações válidas", before: String(p.current.quoteCount), after: String(p.proposed.quoteCount) },
+      { label: "Cotações com preço", before: String(p.current.quoteCount), after: String(p.proposed.quoteCount) },
       { label: "Preço médio (referência)", before: formatCentsBRL(p.current.averageCents), after: formatCentsBRL(p.proposed.averageCents) },
       { label: "Situação do item", before: statusLabel(p.status), after: statusLabel(p.statusAfter) },
     ],

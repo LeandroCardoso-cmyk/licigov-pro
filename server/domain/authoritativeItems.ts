@@ -34,10 +34,15 @@ export interface AuthoritativeItemInput {
   readonly confirmedCatalogCode: string | null;
   /** Sugestão existente (não confirmada) — só sinaliza "a revisar". */
   readonly suggestedCatalogCode: string | null;
-  /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (`SOURCE_NOT_CURRENT` | `UNIT_MISMATCH`); null/ausente = sem bloqueio. */
+  /**
+   * R9 / SEM-028, SEM-031 — preço vinculado suspenso (`SOURCE_NOT_CURRENT` | `UNIT_MISMATCH`); M8 — `FICTITIOUS_SOURCE`
+   * (cotação fictícia não constitui pesquisa de preços oficial). null/ausente = sem bloqueio.
+   */
   readonly priceBlockedReason?: string | null;
   /** M8 hardening — das `quoteCount`, quantas são de fonte FICTÍCIA (demonstrativas); ausente/0 ⇒ nenhuma. */
   readonly fictitiousQuoteCount?: number;
+  /** M8 — cotações LEGADAS possivelmente demonstrativas (marcador antigo, sem declaração): só [REVISAR]; ausente/0 ⇒ nenhuma. */
+  readonly suspectedQuoteCount?: number;
 }
 
 export interface AuthoritativeItemRow extends AuthoritativeItemInput {
@@ -71,6 +76,8 @@ export interface AuthoritativeItemsEstimate {
   readonly quoteCount: number;
   /** M8 hardening — cotações de fonte fictícia entre as `quoteCount` (0 ⇒ bloco byte-idêntico ao anterior). */
   readonly fictitiousQuoteCount: number;
+  /** M8 — cotações legadas possivelmente demonstrativas (0 ⇒ bloco byte-idêntico ao anterior). */
+  readonly suspectedQuoteCount: number;
   readonly confirmedClassificationCount: number;
   readonly pendingClassificationCount: number;
 }
@@ -93,6 +100,14 @@ export function fictitiousQuotesReviewText(n: number): string {
   return `[REVISAR: ${n} cotação(ões) de fonte fictícia/sintética — valor demonstrativo, não constitui pesquisa de preços válida.]`;
 }
 
+/** M8 — célula de preço suspenso por fonte fictícia (documento de órgão real nunca exibe o valor demonstrativo). */
+export const FICTITIOUS_PRICE_CELL_TEXT = "[REVISAR: preço suspenso — cotação fictícia não constitui pesquisa de preços oficial]";
+
+/** M8 — cotação LEGADA marcada pelo leitor antigo como fictícia/sintética, sem declaração explícita: revisão humana. */
+export function suspectedQuotesReviewText(n: number): string {
+  return `[REVISAR: ${n} cotação(ões) possivelmente demonstrativa(s) (marcação de importação anterior) — confira a fonte antes de usar o valor.]`;
+}
+
 export function computeItemEstimates(items: readonly AuthoritativeItemInput[], opts: { preserveOrder?: boolean } = {}): AuthoritativeItemsEstimate {
   const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
@@ -109,6 +124,7 @@ export function computeItemEstimates(items: readonly AuthoritativeItemInput[], o
     unknownQuantityItemCount: rows.filter((r) => !isQuantityInformed(r.quantity)).length,
     quoteCount: rows.reduce((a, r) => a + r.quoteCount, 0),
     fictitiousQuoteCount: rows.reduce((a, r) => a + (r.fictitiousQuoteCount ?? 0), 0),
+    suspectedQuoteCount: rows.reduce((a, r) => a + (r.suspectedQuoteCount ?? 0), 0),
     confirmedClassificationCount: rows.filter((r) => r.confirmedCatalogCode).length,
     pendingClassificationCount: rows.filter((r) => !r.confirmedCatalogCode).length,
   };
@@ -167,6 +183,7 @@ export function renderAuthoritativeItemsBlock(
       ? cell(r.confirmedCatalogCode)
       : r.suggestedCatalogCode ? "a revisar (sugestão não confirmada)" : "a revisar";
     const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "")
+      : r.priceBlockedReason === "FICTITIOUS_SOURCE" ? FICTITIOUS_PRICE_CELL_TEXT
       : r.priceBlockedReason === "SOURCE_NOT_CURRENT" ? "[REVISAR: preço suspenso — fonte da pesquisa alterada]"
         : r.priceBlockedReason === "UNIT_MISMATCH" ? "[REVISAR: unidade da cotação incompatível com o item]"
           : "[REVISAR: sem preço]";
@@ -185,6 +202,9 @@ export function renderAuthoritativeItemsBlock(
   lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
   if (estimate.fictitiousQuoteCount > 0) {
     lines.push(`- ${fictitiousQuotesReviewText(estimate.fictitiousQuoteCount)}`);
+  }
+  if (estimate.suspectedQuoteCount > 0) {
+    lines.push(`- ${suspectedQuotesReviewText(estimate.suspectedQuoteCount)}`);
   }
   if (estimate.unpricedItemCount > 0) {
     lines.push(`- [REVISAR: ${estimate.unpricedItemCount} item(ns) sem preço de referência — excluído(s) do total.]`);

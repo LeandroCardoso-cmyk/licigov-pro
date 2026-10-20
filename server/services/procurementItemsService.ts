@@ -34,7 +34,7 @@ import {
   type ItemSourceLink, type ItemProvenance, type GovernanceState, type NeedChange,
   type IntelligentItemSource, type PriceResearchEligibilitySummary,
 } from "../domain/procurementItems";
-import { factValueHash, itemPath, normalizeText, type CanonicalField, type ProcurementCanonicalContext } from "../domain/canonicalProcurementContext";
+import { factValueHash, itemPath, normalizeText, type CanonicalField, type PriceBlockedReason, type ProcurementCanonicalContext } from "../domain/canonicalProcurementContext";
 import { buildDFDPrefill, parseDFD, linkDFDRows, readMarkers } from "../domain/dfdPrefill";
 import { sumCents } from "../domain/money";
 
@@ -225,7 +225,7 @@ export interface ItemsWorkspaceItem {
   }>;
   unitReferencePriceCents: number | null; priceAmbiguous: boolean; estimatedTotalCents: number | null;
   /** R9 / SEM-028, SEM-031 — por que o preço vinculado não é autoritativo (null = sem bloqueio). */
-  priceBlockedReason: "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
+  priceBlockedReason: PriceBlockedReason | null;
 }
 
 export interface ItemsWorkspace {

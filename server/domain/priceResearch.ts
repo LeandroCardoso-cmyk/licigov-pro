@@ -9,6 +9,7 @@
 import { createHash } from "crypto";
 import { parseBRL, averageCents, centsToReais } from "./money";
 import { parsePriceResearchText, type PriceResearchParse } from "./priceResearchParser";
+import type { QuoteProvenanceKind } from "./quoteProvenance";
 
 export type PriceResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
 
@@ -36,6 +37,8 @@ export interface PriceResearchItem {
   readonly value: number;
   readonly observations: string;
   readonly source: string;
+  /** M8 — proveniência estruturada (`server/domain/quoteProvenance.ts`). Novas cotações: `ficticia` | `declarada`. */
+  readonly provenanceKind: QuoteProvenanceKind;
   readonly createdAt: string;
 }
 
@@ -74,6 +77,8 @@ export function createPriceResearchItem(params: {
   value?: number;
   observations?: string;
   source?: string;
+  /** Default `declarada` (informada/importada, sem verificação). Nunca `verificada` por inferência. */
+  provenanceKind?: QuoteProvenanceKind;
   index: number;
   createdAt?: string;
 }): PriceResearchItem {
@@ -94,22 +99,17 @@ export function createPriceResearchItem(params: {
     value: params.value ?? 0,
     observations: params.observations ?? "",
     source: params.source ?? "",
+    provenanceKind: params.provenanceKind ?? "declarada",
     createdAt: params.createdAt ?? new Date().toISOString(),
   };
 }
 
 
-/** Marcador persistido (observations da cotação) quando o parser detecta fonte fictícia/sintética. */
-export const FICTITIOUS_QUOTE_MARKER = "Fonte fictícia/sintética — não constitui cotação válida para fins oficiais";
-
 /**
- * M8 hardening — cotação FICTÍCIA (demonstrativa): marcador do parser persistido na cotação OU fornecedor declarado
- * "fictício" no próprio nome (heurística estreita: "sintético" no nome é comum em razões sociais reais — ex.: couro
- * sintético — e só conta pelo marcador do parser). Não é pesquisa de preços oficial; nunca apresentada como "válida".
+ * Nota legível gravada nas observações da cotação FICTÍCIA. A fonte da verdade é a coluna `provenance_kind`; o texto
+ * só serve de leitura humana e de fallback LEGADO (linhas anteriores à 0319 ⇒ estado "suspeita", nunca bloqueio).
  */
-export function isFictitiousQuote(q: { name?: string | null; observations?: string | null }): boolean {
-  return (q.observations ?? "").includes(FICTITIOUS_QUOTE_MARKER) || /\bfict[ií]ci[oa]s?\b/i.test(q.name ?? "");
-}
+export const FICTITIOUS_QUOTE_MARKER = "Fonte fictícia/sintética — não constitui cotação válida para fins oficiais";
 
 /**
  * Extração determinística das COTAÇÕES (uma `PriceResearchItem` por cotação, agrupáveis pelo item) a partir de
@@ -147,6 +147,7 @@ export function extractItemsFromText(
         supplier: q.supplier,
         observations: observations.slice(0, 1000),
         source: "colar",
+        provenanceKind: q.fictitious ? "ficticia" : "declarada",
         index: q.index,
       }));
     }

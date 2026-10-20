@@ -10,7 +10,8 @@ export type EmissionBlockerCode =
   | "EMISSION_REVIEW_MARKERS"
   | "EMISSION_SOURCES_CHANGED"
   | "EMISSION_TR_NOT_EMITTED"
-  | "EMISSION_NO_CHANGES";
+  | "EMISSION_NO_CHANGES"
+  | "EMISSION_FICTITIOUS_PRICES";
 
 export interface EmissionBlocker {
   readonly code: EmissionBlockerCode;
@@ -29,6 +30,12 @@ export interface EmissionPreconditionInput {
   /** Hash da última versão emitida deste tipo (null = nunca emitido). */
   readonly lastEmittedContentHash: string | null;
   readonly lastEmittedVersion: number | null;
+  /**
+   * M8 (política de 20/10/2026) — itens cuja referência de preço deriva de cotação FICTÍCIA, calculado das FONTES
+   * (nunca do texto): remover o marcador `[REVISAR]` do rascunho não libera a emissão. 0/ausente ⇒ sem bloqueio
+   * (inclui a homologação sintética autorizada no backend).
+   */
+  readonly fictitiousPriceItemCount?: number;
 }
 
 const REVIEW_MARKER = /\[REVISAR\b/g;
@@ -49,6 +56,12 @@ export function emissionBlockers(input: EmissionPreconditionInput): EmissionBloc
   }
   if (input.kind === "edital" && !input.trEmitted) {
     out.push({ code: "EMISSION_TR_NOT_EMITTED", message: "O Edital só pode ser emitido depois do Termo de Referência emitido (ordem DFD → ETP → TR → Edital)." });
+  }
+  if ((input.fictitiousPriceItemCount ?? 0) > 0) {
+    out.push({
+      code: "EMISSION_FICTITIOUS_PRICES",
+      message: `A Pesquisa de Preços de ${input.fictitiousPriceItemCount} item(ns) contém cotação identificada como fictícia, que não constitui pesquisa de preços oficial — o preço desses itens fica suspenso e o documento não pode ser emitido até que a referência seja fundamentada em cotações reais.`,
+    });
   }
   if (input.lastEmittedContentHash !== null && input.lastEmittedContentHash === input.contentHash) {
     out.push({ code: "EMISSION_NO_CHANGES", message: `O conteúdo é idêntico à versão oficial já emitida (v${input.lastEmittedVersion ?? "?"}) — nada a emitir.` });

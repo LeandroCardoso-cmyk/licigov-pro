@@ -27,11 +27,12 @@ export interface ItemView {
   sources: ItemSourceView[];
   unitReferencePriceCents: number | null; priceAmbiguous: boolean; estimatedTotalCents: number | null;
   /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (opcional para payloads antigos). */
-  priceBlockedReason?: "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
+  priceBlockedReason?: "FICTITIOUS_SOURCE" | "SOURCE_NOT_CURRENT" | "UNIT_MISMATCH" | null;
 }
 
 /** R9 / SEM-028, SEM-031 — explicação do preço suspenso (null = sem bloqueio). */
 export function priceBlockedText(reason: ItemView["priceBlockedReason"]): string | null {
+  if (reason === "FICTITIOUS_SOURCE") return "Preço de referência suspenso: a Pesquisa de Preços vinculada contém cotação identificada como fictícia, que não constitui pesquisa de preços oficial. O preço fica suspenso até que a referência seja fundamentada em cotações reais.";
   if (reason === "SOURCE_NOT_CURRENT") return "Preço de referência suspenso: a fonte da Pesquisa de Preços mudou ou exige revisão. Revise o Item Inteligente antes de usar o preço.";
   if (reason === "UNIT_MISMATCH") return "Preço de referência suspenso: a unidade da cotação é diferente da unidade deste item (nenhuma conversão é feita). Ajuste a unidade ou o vínculo.";
   return null;

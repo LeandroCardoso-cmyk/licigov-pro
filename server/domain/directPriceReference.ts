@@ -34,12 +34,21 @@ export const PRICE_RESEARCH_INCONSISTENT = "PRICE_RESEARCH_INCONSISTENT";
 export const PRICE_METHOD_REQUIRED = "PRICE_METHOD_REQUIRED";
 export const PRICE_REFERENCE_DIVERGES = "PRICE_REFERENCE_DIVERGES";
 export const PRICE_LINEAGE_NOT_ALLOWED = "PRICE_LINEAGE_NOT_ALLOWED";
+/** M8 (política de 20/10/2026) — item da pesquisa só com cotação(ões) fictícia(s): não há valor de referência oficial. */
+export const PRICE_RESEARCH_FICTITIOUS = "PRICE_RESEARCH_FICTITIOUS";
 
 export interface PriceQuoteRow {
   readonly description: string;
   readonly unit: string;
   readonly quantity: number | string;
   readonly value: number | string;
+  /**
+   * M8 — cotação de proveniência efetiva `ficticia` (fora da homologação sintética autorizada): EXCLUÍDA do cálculo;
+   * nunca fundamenta o valor de referência. Não participa do contentHash da importação (identidade inalterada).
+   */
+  readonly fictitious?: boolean;
+  /** M8 — cotação fictícia aceita SÓ pela exceção de homologação sintética (entra no cálculo como DEMONSTRATIVA). */
+  readonly demonstrative?: boolean;
 }
 
 export interface PriceItemSummary {
@@ -61,6 +70,10 @@ export interface PriceResearchSummary {
   readonly items: readonly PriceItemSummary[];
   /** Valor de referência por método, em R$ com 2 casas. */
   readonly values: Readonly<Record<PriceReferenceMethod, number>>;
+  /** M8 — cotações fictícias excluídas do cálculo (não contam em `quoteCount`). */
+  readonly excludedFictitiousQuoteCount: number;
+  /** M8 — cotações demonstrativas (homologação sintética autorizada) incluídas no cálculo (0 = nenhuma). */
+  readonly demonstrativeQuoteCount: number;
 }
 
 const norm = (s: string): string => String(s ?? "").normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -75,14 +88,25 @@ function median(sorted: readonly number[]): number {
 
 export type SummarizeResult =
   | { readonly ok: true; readonly summary: PriceResearchSummary }
-  | { readonly ok: false; readonly code: typeof PRICE_RESEARCH_INCONSISTENT; readonly detail: string };
+  | { readonly ok: false; readonly code: typeof PRICE_RESEARCH_INCONSISTENT | typeof PRICE_RESEARCH_FICTITIOUS; readonly detail: string };
 
 /**
  * Resume as cotações de UMA importação. `ok:false` quando o conteúdo não permite um valor sem decisão arbitrária
  * (quantidades diferentes para o mesmo item, valor/quantidade não numéricos ou não positivos).
  */
-export function summarizePriceResearch(quotes: readonly PriceQuoteRow[]): SummarizeResult {
-  if (quotes.length === 0) return { ok: false, code: PRICE_RESEARCH_INCONSISTENT, detail: "pesquisa sem cotações" };
+export function summarizePriceResearch(allQuotes: readonly PriceQuoteRow[]): SummarizeResult {
+  if (allQuotes.length === 0) return { ok: false, code: PRICE_RESEARCH_INCONSISTENT, detail: "pesquisa sem cotações" };
+  const keyOf = (q: PriceQuoteRow) => `${norm(q.description)}|${norm(q.unit || "un")}`;
+  // M8: cotação fictícia é EXCLUÍDA; item que fica sem cotação real ⇒ recusa (nunca some do total em silêncio).
+  const quotes = allQuotes.filter((q) => q.fictitious !== true);
+  const excludedFictitiousQuoteCount = allQuotes.length - quotes.length;
+  if (excludedFictitiousQuoteCount > 0) {
+    const realKeys = new Set(quotes.map(keyOf));
+    const onlyFictitious = allQuotes.find((q) => !realKeys.has(keyOf(q)));
+    if (onlyFictitious) {
+      return { ok: false, code: PRICE_RESEARCH_FICTITIOUS, detail: `o item "${String(onlyFictitious.description).trim()}" só tem cotação(ões) identificada(s) como fictícia(s), que não constitui(em) pesquisa de preços oficial` };
+    }
+  }
   const groups = new Map<string, { description: string; unit: string; quantities: Set<string>; values: number[] }>();
   for (const q of quotes) {
     const qty = Number(q.quantity);
@@ -91,7 +115,7 @@ export function summarizePriceResearch(quotes: readonly PriceQuoteRow[]): Summar
       return { ok: false, code: PRICE_RESEARCH_INCONSISTENT, detail: `cotação com quantidade/valor inválido em "${q.description}"` };
     }
     const unit = norm(q.unit || "un");
-    const key = `${norm(q.description)}|${unit}`;
+    const key = keyOf(q);
     const g = groups.get(key) ?? { description: String(q.description).trim(), unit, quantities: new Set<string>(), values: [] };
     g.quantities.add(qty.toFixed(3));
     g.values.push(val);
@@ -117,6 +141,8 @@ export function summarizePriceResearch(quotes: readonly PriceQuoteRow[]): Summar
     summary: {
       quoteCount: quotes.length, itemCount: items.length, minQuotesPerItem: Math.min(...items.map((i) => i.quoteCount)), items,
       values: { media: total((i) => i.unitMean), mediana: total((i) => i.unitMedian), menor_preco: total((i) => i.unitMin) },
+      excludedFictitiousQuoteCount,
+      demonstrativeQuoteCount: quotes.filter((q) => q.demonstrative === true).length,
     },
   };
 }
@@ -145,6 +171,10 @@ export interface ResearchLineage {
   readonly computedValue: number;
   /** Proposta do cliente (null = não enviada). Só é aceita quando coincide com o valor do servidor. */
   readonly proposedValue: number | null;
+  /** M8 — cotações fictícias excluídas do cálculo (presente só quando > 0: linhagem anterior byte-idêntica). */
+  readonly excludedFictitiousQuoteCount?: number;
+  /** M8 — cotações DEMONSTRATIVAS incluídas (homologação sintética autorizada; presente só quando > 0). */
+  readonly demonstrativeQuoteCount?: number;
 }
 
 export interface DeclaredLineage {
@@ -164,6 +194,8 @@ export function buildResearchLineage(p: {
     kind: "pesquisa", researchId: p.researchId, contentHash: p.contentHash, hashVersion: DIRECT_PRICE_IMPORT_HASH_VERSION,
     importedAt: p.importedAt, importSource: p.importSource, quoteCount: p.summary.quoteCount, itemCount: p.summary.itemCount,
     method: p.method, computedValue: p.summary.values[p.method], proposedValue: p.proposedValue,
+    ...(p.summary.excludedFictitiousQuoteCount > 0 ? { excludedFictitiousQuoteCount: p.summary.excludedFictitiousQuoteCount } : {}),
+    ...(p.summary.demonstrativeQuoteCount > 0 ? { demonstrativeQuoteCount: p.summary.demonstrativeQuoteCount } : {}),
   };
 }
 
@@ -192,7 +224,7 @@ export function splitLineage(refs: readonly string[]): { lineage: PriceLineage |
 /** Frase FACTUAL da linhagem (sem "confiança", sem afirmação além do que foi registrado). */
 export function describeLineage(l: PriceLineage): string {
   if (l.kind === "pesquisa") {
-    return `Pesquisa de preços ${l.researchId} (conteúdo sha256 ${l.contentHash.slice(0, 12)}…, ${l.hashVersion}, importada em ${l.importedAt}), ${l.quoteCount} cotação(ões) em ${l.itemCount} item(ns); método: ${PRICE_METHOD_LABELS[l.method]}; valor calculado pelo sistema: R$ ${l.computedValue.toFixed(2)}.`;
+    return `Pesquisa de preços ${l.researchId} (conteúdo sha256 ${l.contentHash.slice(0, 12)}…, ${l.hashVersion}, importada em ${l.importedAt}), ${l.quoteCount} cotação(ões) em ${l.itemCount} item(ns); método: ${PRICE_METHOD_LABELS[l.method]}; valor calculado pelo sistema: R$ ${l.computedValue.toFixed(2)}${l.excludedFictitiousQuoteCount ? `; ${l.excludedFictitiousQuoteCount} cotação(ões) fictícia(s) excluída(s) do cálculo (não constituem pesquisa de preços oficial)` : ""}${l.demonstrativeQuoteCount ? `; ${l.demonstrativeQuoteCount} cotação(ões) DEMONSTRATIVA(S) incluída(s) — homologação sintética, não constitui pesquisa de preços oficial` : ""}.`;
   }
   return `Valor declarado pelo servidor (R$ ${l.declaredValue.toFixed(2)}), sem pesquisa de preços vinculada — não verificado pelo sistema.`;
 }

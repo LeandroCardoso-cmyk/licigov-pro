@@ -235,6 +235,8 @@ export default function ProcurementItemPanel({
   const approve = approveAction(governance?.sourceState, item?.status, approveItem.isPending);
   const outliers = outlierSummary(governance?.priceOutliers);
   const fictitious = governance?.fictitiousQuoteCount ?? 0;
+  // M8 (política de 20/10/2026) — o servidor decide se a fonte fictícia suspende a referência (fora da homologação autorizada).
+  const referenceBlocked = governance?.referenceBlockedReason === "FICTITIOUS_SOURCE";
 
   return (
     <aside className="flex h-full w-full max-w-md flex-col border-l border-border bg-card">
@@ -681,9 +683,11 @@ export default function ProcurementItemPanel({
             {governance && (
               <div className="rounded-md border border-border p-3 text-xs" data-testid="approval-impact">
                 <p className="text-muted-foreground">
-                  {fictitious > 0
-                    ? (item.status === "aprovado" ? "Valor demonstrativo em uso como referência do item" : "Valor demonstrativo (fonte fictícia) — ao aprovar, vira a referência do item")
-                    : (item.status === "aprovado" ? "Preço de referência canônico vigente" : "Ao aprovar, o preço de referência canônico será")}
+                  {referenceBlocked
+                    ? (item.status === "aprovado" ? "Média operacional (fonte fictícia) — suspensa como preço de referência" : "Média operacional (fonte fictícia) — ao aprovar, NÃO vira preço de referência oficial")
+                    : fictitious > 0
+                      ? (item.status === "aprovado" ? "Valor demonstrativo em uso como referência (homologação sintética autorizada)" : "Valor demonstrativo (homologação sintética autorizada) — ao aprovar, vira a referência do item")
+                      : (item.status === "aprovado" ? "Preço de referência canônico vigente" : "Ao aprovar, o preço de referência canônico será")}
                 </p>
                 <p className="font-mono text-sm font-semibold text-foreground">
                   {formatCentsBRL(governance.referencePriceCents)}
@@ -693,8 +697,9 @@ export default function ProcurementItemPanel({
                 </p>
                 {fictitious > 0 && (
                   <p role="status" data-testid="fictitious-quotes-warning" className="mt-2 rounded border border-amber-400 p-2 text-amber-800 dark:border-amber-700 dark:text-amber-300">
-                    Esta média inclui {fictitious} cotação(ões) de fonte fictícia/sintética: não constitui pesquisa de preços válida.
-                    Use somente em homologação ou substitua por cotações reais antes de aprovar para uso oficial.
+                    {referenceBlocked
+                      ? `Esta média inclui ${fictitious} cotação(ões) identificada(s) como fictícia(s), que não constitui(em) pesquisa de preços oficial. A aprovação operacional continua disponível, mas o preço fica suspenso na referência da contratação e nos documentos oficiais até que cotações reais substituam as fictícias.`
+                      : `Esta média inclui ${fictitious} cotação(ões) de fonte fictícia: valores demonstrativos permitidos só nesta organização de homologação sintética — não constituem pesquisa de preços oficial.`}
                   </p>
                 )}
                 {outliers.length > 0 ? (

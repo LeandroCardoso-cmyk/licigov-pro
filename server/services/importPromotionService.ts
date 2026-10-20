@@ -26,13 +26,14 @@ import {
 import { toDbDatetime } from "../db/institutionalConsultations";
 import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
+import { classifyIncomingQuote } from "../domain/quoteProvenance";
 import { centsToReais, centsToDecimalString } from "../domain/money";
 import { normalizeQuantity, storedQuantity, type PriceQuote } from "../domain/priceQuoteConsolidation";
 import {
   materializeIntelligentItemsTx, enrichMaterializedItems, recoverStaleEnrichment, recordMaterializationSignals,
   type MaterializationResult,
 } from "./itemMaterializationService";
-import { recordProcessEvent } from "../db/procurement";
+import { provenanceOnReimportSql, recordProcessEvent } from "../db/procurement";
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
 import { assertSessionPromotable, ImportInvariantViolation } from "../domain/importOutcome";
@@ -189,8 +190,9 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
         description: dom.description, quantity: String(dom.quantity), unit: dom.unit,
         supplier: dom.supplier, brand: dom.brand, model: dom.model,
         value: unitCents !== null ? centsToDecimalString(unitCents) : "0.00",
-        observations: dom.observations, source: dom.source, createdAt: toDb(dom.createdAt),
+        observations: dom.observations, source: dom.source, provenanceKind: dom.provenanceKind, createdAt: toDb(dom.createdAt),
       }).onDuplicateKeyUpdate({ set: {
+        provenanceKind: provenanceOnReimportSql(),
         value: unitCents !== null ? centsToDecimalString(unitCents) : "0.00", quantity: String(dom.quantity), description: dom.description,
         unit: dom.unit, supplier: dom.supplier, brand: dom.brand, model: dom.model, observations: dom.observations, source: dom.source,
       } });
@@ -312,12 +314,15 @@ function buildPromotionQuotes(p: {
       // Lineage no próprio item de domínio (sem conteúdo sensível): sessão/item/revisão de correção.
       observations: `${notes ? `${notes} — ` : ""}origem: ingestão sessão ${p.sessionId}, item ${it.id}, correção rev ${it.correctionRevision}`,
       source: text(eff.source, 200) || `import:${p.importType}`, index: i, createdAt: p.nowIso,
+      // M8 — só declaração EXPLÍCITA no fornecedor/observação torna a cotação fictícia; nunca "verificada" por inferência.
+      provenanceKind: classifyIncomingQuote({ supplier, notes }),
     });
     out.push({
       dom, unitCents,
       quote: {
         quoteId: dom.id, researchId: p.researchId, description: dom.description, quantity, unit: dom.unit,
         supplier: dom.supplier, brand: dom.brand, model: dom.model, source: dom.source, valueCents: unitCents,
+        provenanceKind: dom.provenanceKind,
       },
     });
   }

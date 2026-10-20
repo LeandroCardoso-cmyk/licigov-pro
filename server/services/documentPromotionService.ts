@@ -20,7 +20,10 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
-import { getGeneratedDocumentByKind, getProcess } from "../db/procurement";
+import { getGeneratedDocumentByKind, getProcess, listIntelligentItems } from "../db/procurement";
+import { listProcurementItems } from "../db/procurementItems";
+import { resolveProcurementContext } from "./canonicalContextService";
+import { fictitiousPriceBlocker } from "./priceGovernanceService";
 import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
@@ -52,6 +55,22 @@ function payloadHashOf(p: { organizationId: number; processId: string; kind: str
 }
 
 /**
+ * M8 (política de 20/10/2026) — itens do documento cuja referência de preço deriva de cotação fictícia, lidos das
+ * FONTES (mesma decisão do contexto canônico/legado da autoria). Sem cotação fictícia aprovada ⇒ 0 sem leituras extras;
+ * homologação sintética autorizada no backend ⇒ 0.
+ */
+async function fictitiousPriceItemCount(organizationId: number, processId: string): Promise<number> {
+  const approved = (await listIntelligentItems(processId, organizationId)).filter((i) => i.status === "aprovado");
+  const blocked = approved.filter(await fictitiousPriceBlocker(organizationId, approved));
+  if (blocked.length === 0) return 0;
+  // Mesmo gate dos documentos: Itens da contratação ativos ⇒ só conta o que está VINCULADO a eles (canônico).
+  const canonical = (await listProcurementItems(organizationId, processId)).some((i) => i.status === "active");
+  if (!canonical) return blocked.length;
+  const ctx = await resolveProcurementContext({ organizationId, processId });
+  return ctx.items.filter((i) => i.priceContext.priceBlockedReason === "FICTITIOUS_SOURCE").length;
+}
+
+/**
  * R9 / SEM-057 — reúne as entradas das pré-condições semânticas da emissão (leituras tenant-scoped, sem efeito).
  */
 async function resolveEmissionPreconditions(params: {
@@ -59,13 +78,14 @@ async function resolveEmissionPreconditions(params: {
 }): Promise<{ blockers: EmissionBlocker[]; lastEmittedContent: string | null }> {
   const process = await getProcess(params.processId, params.organizationId);
   const object = process?.object ?? "";
-  const [source, lastPromotion, lastEmitted, trEmitted] = await Promise.all([
+  const [source, lastPromotion, lastEmitted, trEmitted, fictitiousItems] = await Promise.all([
     params.kind === "edital"
       ? getEditalSourceState({ organizationId: params.organizationId, processId: params.processId, object })
       : getAuthoringSourceState({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, object }),
     getLatestOfficialPromotion(params.organizationId, params.processId, params.kind),
     getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, params.kind),
     params.kind === "edital" ? getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, "tr") : Promise.resolve(null),
+    fictitiousPriceItemCount(params.organizationId, params.processId),
   ]);
   // Sem objeto AUTORITATIVO no processo (legado/ausente), a autoria usou o objeto informado na geração, que não é
   // reconstituível aqui: a fonte "processo" não é comparável (e o digest global legado também não) — não bloqueia.
@@ -78,6 +98,7 @@ async function resolveEmissionPreconditions(params: {
       sourceState, changedSourceLabels: changed.map((c) => c.label),
       trEmitted: trEmitted !== null,
       lastEmittedContentHash: lastPromotion?.contentHash ?? null, lastEmittedVersion: lastPromotion?.version ?? null,
+      fictitiousPriceItemCount: fictitiousItems,
     }),
     lastEmittedContent: lastEmitted?.content ?? null,
   };

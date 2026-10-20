@@ -79,13 +79,14 @@ export async function listDirectPriceImports(
 /** Cotações de uma importação (ordem estável por id de inserção/criação), escopadas ao tenant. */
 export async function listDirectPriceImportItems(
   executor: ProcurementExecutor, importId: string, organizationId: number,
-): Promise<Array<{ id: string; description: string; quantity: string; unit: string; value: string; supplier: string; brand: string; model: string; observations: string; source: string }>> {
+): Promise<Array<{ id: string; description: string; quantity: string; unit: string; value: string; supplier: string; brand: string; model: string; observations: string; source: string; provenanceKind: string | null }>> {
   const rows = await executor.select().from(priceResearchItemsTable)
     .where(and(eq(priceResearchItemsTable.researchId, importId), eq(priceResearchItemsTable.organizationId, organizationId)))
     .orderBy(asc(priceResearchItemsTable.id));
   return rows.map((r) => ({
     id: r.id, description: r.description ?? "", quantity: String(r.quantity), unit: r.unit, value: String(r.value),
     supplier: r.supplier, brand: r.brand, model: r.model, observations: r.observations ?? "", source: r.source,
+    provenanceKind: r.provenanceKind ?? null,
   }));
 }
 
@@ -105,6 +106,6 @@ export async function insertDirectPriceImportTx(
     id: it.id, organizationId: it.organizationId, researchId: it.researchId, processId: it.processId,
     description: it.description, quantity: String(it.quantity), unit: it.unit, supplier: it.supplier,
     brand: it.brand, model: it.model, value: String(it.value), observations: it.observations,
-    source: it.source, createdAt: toDb(it.createdAt),
+    source: it.source, provenanceKind: it.provenanceKind, createdAt: toDb(it.createdAt),
   })));
 }

@@ -48,6 +48,7 @@ import {
 } from "../db/procurement";
 import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchSource, type PriceResearchWorkspace } from "../domain/priceResearch";
 import { parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { LOW_QUOTE_COUNT_RISK_TEXT } from "../domain/quoteProvenance";
 import { suggestSpecifications } from "./itemIntelligenceService";
 import { serviceLogger } from "./observabilityService";
 import { assertKernelAccess } from "./kernelAccessService";
@@ -129,6 +130,7 @@ function quoteToSupplier(q: PriceQuote): IntelligentItemSupplier {
     quoteId: q.quoteId,
     researchId: q.researchId,
     contentHash: h.contentHash,
+    ...(q.provenanceKind ? { provenanceKind: q.provenanceKind } : {}),
   };
 }
 
@@ -140,6 +142,7 @@ function supplierToQuote(s: IntelligentItemSupplier, idx: number, base: { descri
     description: base.description, quantity: base.quantity, unit: base.unit,
     supplier: s.name ?? "", brand: s.brand ?? "", model: s.model ?? "", source: s.source ?? "",
     valueCents: s.value > 0 ? reaisToCents(s.value) : null,
+    ...(s.provenanceKind ? { provenanceKind: s.provenanceKind } : {}),
   };
   return s.contentHash ? { ...q, contentHash: s.contentHash } : q;
 }
@@ -464,6 +467,7 @@ async function quotesForKeyHash(tx: ProcurementExecutor, org: number, processId:
     quoteId: q.id, researchId: q.researchId, description: q.description ?? "", quantity: normalizeQuantity(q.quantity), unit: q.unit,
     supplier: q.supplier ?? "", brand: q.brand ?? "", model: q.model ?? "", source: q.source ?? "",
     valueCents: reaisToCents(q.value) > 0 ? reaisToCents(q.value) : null,
+    ...(q.provenanceKind ? { provenanceKind: q.provenanceKind } : {}),
   })).filter((q) => logicalKeyHash(intelligentItemLogicalKey(q)) === keyHash);
 }
 
@@ -563,7 +567,7 @@ export async function enrichMaterializedItems(params: {
       if (values.length < 3) {
         risks.push(createItemRisk({
           itemId: it.id, organizationId: params.organizationId, type: "baixa_competitividade", severity: "medio",
-          description: "Menos de 3 cotações válidas na pesquisa.",
+          description: LOW_QUOTE_COUNT_RISK_TEXT,
           explanation: "Amostra pequena pode comprometer a estimativa. Recomenda-se ampliar as fontes.", correlationId: params.correlationId,
         }));
       }
@@ -672,7 +676,7 @@ export async function importManualPriceResearch(p: {
     quotes: rawItems.map((it) => ({
       quoteId: it.id, researchId: research.id, description: it.description, quantity: it.quantity, unit: it.unit,
       supplier: it.supplier, brand: it.brand, model: it.model, source: it.source,
-      valueCents: it.value > 0 ? reaisToCents(it.value) : null,
+      valueCents: it.value > 0 ? reaisToCents(it.value) : null, provenanceKind: it.provenanceKind,
     })),
     writeResearch: async (tx) => {
       await insertResearch({ ...research, itemCount: rawItems.length }, tx);
