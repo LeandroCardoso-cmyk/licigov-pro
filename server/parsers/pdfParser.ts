@@ -19,7 +19,8 @@
  * - Limites de segurança: tamanho, páginas, itens e tempo de processamento (inclusive orçamento de OCR).
  */
 import { BaseParser } from "./baseParser";
-import { matrixToRawItems, linesToRawItems, type TabularContext } from "./tabularExtraction";
+import { matrixToRawItems, linesToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
+import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import { buildDocumentProjection, pageTextToBlocks, type DocumentBlock } from "../domain/documentProjection";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
@@ -302,6 +303,9 @@ export class PdfParser extends BaseParser {
         const r = await this.runOcr(parser, ocrTargets, opts, ctx, maxItems - items.length, positioned);
         ocrInfo = r.info; ocrArtifact = r.artifact;
         warnings.push(...r.warnings);
+        // M8 — declaração do documento no TEXTO lido por OCR (título/notas fora da tabela); marcada como origem OCR.
+        warnings.push(...documentDeclarationWarnings((r.artifact?.pages ?? []).flatMap((p) => (p.text ?? "").split(/\r?\n/)
+          .map((t, li) => ({ text: t, location: `page:${p.pageNumber}, line:${li + 1}` }))), { fromOcr: true }));
         rowsRead += r.rowsRead; skipped += r.skipped;
         if (r.info.failure === null || r.info.failure === undefined) {
           // Página reconhecida por OCR substitui a leitura nativa (que não rendeu item).
@@ -358,6 +362,10 @@ export class PdfParser extends BaseParser {
         }),
       };
 
+      // M8 — declaração do documento no TEXTO das páginas (título/notas fora das tabelas); um aviso por tipo.
+      warnings.push(...documentDeclarationWarnings(pages.flatMap((p, pi) => (p.text ?? "").split(/\r?\n/).map((t, li) => ({ text: t, location: `page:${pi + 1}, line:${li + 1}` })))));
+      const declaredWarnings = dedupeDocumentDeclarations(warnings);
+      warnings.splice(0, warnings.length, ...declaredWarnings);
       const processingMs = Date.now() - startMs;
       const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs, { pagesProcessed: pages.length });
       return {

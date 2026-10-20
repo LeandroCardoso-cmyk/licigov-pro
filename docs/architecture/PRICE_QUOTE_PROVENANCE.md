@@ -72,16 +72,43 @@ Antes de publicar, a linhagem da Justificativa de Preço é recalculada com a pr
 (`assertPriceLineageStillEligible`): valor que não se sustenta (só fictícias, ou valor legado que incluía fictícia) ⇒
 `PRICE_RESEARCH_FICTITIOUS`; a justificativa deve ser registrada de novo. Justificativa declarada não é afetada.
 
+## Emenda de integridade — emissão concorrente (P1-A)
+
+`promoteOfficialDocument` recalcula `EMISSION_FICTITIOUS_PRICES` **dentro** da transação de emissão com
+`lockedFictitiousPriceItemCount`: trava as fontes do processo (FOR SHARE, locks de registro por chave primária — sem gap
+lock, sem contenção com outros processos/órgãos) e conta a partir das MESMAS leituras com trava (último estado
+confirmado; sem conexões extras do pool). Ordem estável, a mesma dos escritores: `price_research_items` →
+`intelligent_items` → `procurement_items` → `procurement_item_source_links`. Importação manual e promoção da ingestão
+repetem a transação inteira em deadlock (SEM-084). Escritor que já tinha a linha ⇒ a emissão espera e enxerga o
+commit; escritor que chega depois ⇒ espera a emissão (ou expira com erro explícito). Deadlock ⇒ retry governado
+(SEM-084). Nenhum fail-open: sem a trava/recontagem, não há emissão.
+
+## Emenda de integridade — declaração do arquivo (P1-B)
+
+A extração compartilhada (`tableToRawItems`, `linesToRawItems`, texto nativo e texto OCR de PDF, parágrafos de DOCX,
+demais abas de XLSX) procura, em linhas
+que **não** são cotação (título acima do cabeçalho, notas, parágrafos — linha com número/valor fica de fora), uma
+declaração explícita do conjunto (`classifyDocumentDeclaration`: o sujeito coletivo GOVERNA o predicado — "dados/valores/
+preços/cotações/itens/empresas/exemplo fictícios", "todos … fictícios", "planilha com valores demonstrativos" — sem
+negação; rótulo isolado ou cotação singular ⇒ só revisão) e grava o aviso estruturado `DOCUMENT_DECLARES_FICTITIOUS` em `import_sessions.warnings`
+(recalculado a cada reextração). Na promoção, `documentFictitiousDeclaration` ⇒ `global` marca TODAS as cotações da sessão
+como `ficticia` (correção de linha não remove); declaração parcial (`DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION`) ou lida
+SÓ por OCR com `OCR_LOW_CONFIDENCE` ⇒ só revisão (texto nativo nunca é rebaixado). Rótulo isolado ("Fornecedor Fictício
+A") segue a regra por cotação. Na colagem (linhas já classificadas estruturalmente como não-cotação), qualquer declaração
+explícita sem escopo parcial vale para o conjunto.
+
 ## Limitações conhecidas
 
 - Não há ação governada para **excluir/reclassificar** uma cotação fictícia de um Item Inteligente (o merge é por
   união de `quoteId`). O bloqueio é seguro (fail-closed), mas o órgão real que importou uma cotação fictícia precisa de
   nova pesquisa/novo item. Recomendação: ação governada de reclassificação (autor, motivo, timeline, revogação da
   aprovação) — exige decisão do Owner.
-- Importação por arquivo (sessão de ingestão) classifica por cotação (fornecedor/observação); declaração só no
-  cabeçalho do arquivo não é propagada (a extração estruturada não preserva o cabeçalho).
-- O bloqueio de emissão é calculado imediatamente antes da transação de emissão (mesmo padrão dos demais bloqueios);
-  uma reimportação concorrente nesse intervalo não é vista.
+- A trava da emissão é por REGISTRO (linhas existentes): cotação/item NOVO inserido durante a emissão não é travado —
+  por desenho, pois não fundamenta o conteúdo revisado que está sendo emitido; a próxima emissão o enxerga.
+- Declaração do documento lida por OCR de baixa confiança, ou restrita a parte das cotações, fica só como revisão
+  (cotações `declarada`); não há fluxo para retirar uma declaração global do arquivo (exigiria decisão do Owner).
+- Sessões de ingestão EXTRAÍDAS antes desta emenda não têm o aviso estruturado: promovidas sem reextração, seguem a regra
+  por cotação. Recomendação operacional: reextrair (fluxo existente) sessões pendentes de promoção após o deploy.
 - Contratação Direta exclui a fictícia e calcula com as reais (o servidor escolhe o método explicitamente); Itens
   Inteligentes com mistura ficam suspensos — regras diferentes por desenho (cálculo pontual × referência persistida).
 

@@ -19,7 +19,7 @@
 
 import { parseBRL } from "./money";
 import { normalizeDecimal } from "./importCorrectionFields";
-import { declaresFictitious, suggestsDemonstrative } from "./quoteProvenance";
+import { declaresFictitious, suggestsDemonstrative, isPartialDeclarationScope } from "./quoteProvenance";
 
 export const PRICE_RESEARCH_PARSER_VERSION = "price-research-parser/2";
 
@@ -393,12 +393,15 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
   // fictícios, exclusivamente para homologação." ⇒ TODAS as cotações do documento são fictícias. Linha NÃO reconhecida
   // não declara nada (só suspeita), e negação ("não foram aceitas cotações fictícias") não é declaração.
   const NON_QUOTE: ReadonlySet<PriceLineKind> = new Set(["header", "metadata", "note", "summary"]);
-  const documentDeclaresFictitious = lines.some((l) => NON_QUOTE.has(l.kind) && declaresFictitious(l.text));
+  // Colagem: a linha já foi classificada estruturalmente como NÃO-cotação ⇒ declaração explícita vale para o conjunto, salvo
+  // escopo restrito ("itens 3 e 4…", "algumas…") ⇒ só suspeita (revisão).
+  const documentDeclaresFictitious = lines.some((l) => NON_QUOTE.has(l.kind) && declaresFictitious(l.text) && !isPartialDeclarationScope(l.text));
+  const documentPartial = lines.some((l) => NON_QUOTE.has(l.kind) && declaresFictitious(l.text) && isPartialDeclarationScope(l.text));
   if (documentDeclaresFictitious) {
     for (const d of drafts) d.quotes = d.quotes.map((q) => ({ ...q, fictitious: true, suspected: false }));
   }
   const synthetic = documentDeclaresFictitious || drafts.some((d) => d.quotes.some((q) => q.fictitious));
-  const suspected = !synthetic && (drafts.some((d) => d.quotes.some((q) => q.suspected)) || lines.some((l) => suggestsDemonstrative(l.text)));
+  const suspected = !synthetic && (documentPartial || drafts.some((d) => d.quotes.some((q) => q.suspected)) || lines.some((l) => suggestsDemonstrative(l.text)));
   const items: ParsedPriceItem[] = [];
   for (const d of drafts) {
     if (!d.description) {

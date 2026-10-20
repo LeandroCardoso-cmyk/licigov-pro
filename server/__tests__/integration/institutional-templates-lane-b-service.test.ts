@@ -55,6 +55,8 @@ vi.mock("../../db/procurement", () => ({
   getProcess: vi.fn(async () => ({ processNumber: "2026/0001", object: "Objeto do processo" })),
   // M8 — bloqueio estrutural de preços fictícios na emissão: sem itens aprovados ⇒ nada a bloquear.
   listIntelligentItems: vi.fn(async () => []),
+  // M8 (emenda) — trava das fontes de preço dentro da transação de emissão (no mock: sem efeito).
+  lockedFictitiousPriceItemCount: vi.fn(async () => 0),
 }));
 vi.mock("../../services/institutionalIdentityService", () => ({
   snapshotInstitutionalIdentity: vi.fn(async () => ({ snapshot: { organizationName: "Órgão Sintético" }, fingerprint: "fp-identity-1" })),

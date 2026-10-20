@@ -4,7 +4,8 @@
  * esparsas, campos de cotação (fornecedor/marca/modelo/obs./fonte) e mapa comparativo.
  */
 import { BaseParser } from "./baseParser";
-import { tableToRawItems, type TabularContext } from "./tabularExtraction";
+import { tableToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
+import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning } from "../domain/importTypes";
 import { numberToDecimalString } from "../domain/money";
@@ -116,7 +117,11 @@ export class XlsxParser extends BaseParser {
       extras: {},
     }), typed);
 
-    const allWarnings = [...warnings, ...out.warnings];
+    // M8 — declaração do documento nas DEMAIS abas (capa, "Leia-me"): só texto não-cotação; um aviso por tipo.
+    const otherSheets = sheetNames.filter((n) => n !== targetSheet).flatMap((n) =>
+      (XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[n], { header: 1, defval: "" }) as unknown[][])
+        .map((r, i) => ({ text: r.map(cellToString).filter((c) => c !== "").join(" "), location: `sheet:${n}, row:${i + 1}` })));
+    const allWarnings = dedupeDocumentDeclarations([...warnings, ...out.warnings, ...documentDeclarationWarnings(otherSheets)]);
     const processingMs = Date.now() - startMs;
     const summary = this.buildSummary(out.rowsRead, out.items, out.skipped, allWarnings, [], processingMs, { sheetsProcessed: 1 });
     return { items: out.items, warnings: allWarnings, errors: [], summary, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION } };

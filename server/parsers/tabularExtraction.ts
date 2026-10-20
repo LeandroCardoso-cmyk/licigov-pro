@@ -15,6 +15,7 @@
  *
  * Determinístico e puro (sem I/O). Não inventa dados: campos ausentes ficam null.
  */
+import { classifyDocumentDeclaration, DECLARATION_FROM_OCR, DOCUMENT_DECLARES_FICTITIOUS, DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION } from "../domain/quoteProvenance";
 import { createRawItem } from "../domain/importExtraction";
 import { buildProvenance } from "../domain/importProvenance";
 import { buildFieldConfidence, aggregateConfidence } from "../domain/importConfidence";
@@ -80,6 +81,33 @@ const NUMERIC_RE = /^-?\d+([.,]\d+)?$/;
 const UNIT_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9./²³ºª]{0,9}$/;
 
 export function isMoneyLike(t: string): boolean { return MONEY_RE.test(t.trim()); }
+
+/**
+ * M8 (emenda de integridade) — declaração do DOCUMENTO em linhas que NÃO são cotação (título acima do cabeçalho, notas,
+ * parágrafos): linha com valor monetário é dado de cotação (tratado por cotação) e fica de fora. Devolve no máximo um
+ * aviso estruturado por tipo (global / parcial), com a evidência (≤ 200 caracteres) e a localização.
+ */
+export function documentDeclarationWarnings(lines: ReadonlyArray<string | { text: string; location?: string }>, opts: { fromOcr?: boolean } = {}): ImportWarning[] {
+  const out: ImportWarning[] = [];
+  const seen = new Set<string>();
+  for (const l of lines) {
+    const text = (typeof l === "string" ? l : l.text).replace(/\s+/g, " ").trim();
+    if (!text || text.split(" ").some((tok) => isMoneyLike(tok))) continue;
+    const kind = classifyDocumentDeclaration(text);
+    if (!kind) continue;
+    const code = kind === "global" ? DOCUMENT_DECLARES_FICTITIOUS : DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push({
+      code, severity: "warning", raw: text.slice(0, 200), ...(typeof l !== "string" && l.location ? { location: l.location } : {}),
+      ...(opts.fromOcr ? { field: DECLARATION_FROM_OCR } : {}),
+      message: kind === "global"
+        ? "O documento declara que os valores são fictícios/demonstrativos: as cotações serão registradas como fictícias (não fundamentam preço de referência oficial)."
+        : "O documento declara valores fictícios em PARTE das cotações: confira cada fonte (nenhuma cotação é reclassificada automaticamente).",
+    });
+  }
+  return out;
+}
 export function isNumericLike(t: string): boolean { return NUMERIC_RE.test(t.trim()); }
 export function isUnitLike(t: string): boolean {
   const s = t.trim();
@@ -328,6 +356,11 @@ export function tableToRawItems(
   else map = { description: 0, quantity: -1, unit: -1, unitPrice: -1, totalPrice: -1, supplier: -1, brand: -1, model: -1, notes: -1, source: -1 };
 
   const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  // M8 — declaração do documento: título/linhas ACIMA do cabeçalho e linhas SEM número (notas); linhas de dado ficam de fora.
+  warnings.push(...documentDeclarationWarnings(matrix
+    .map((row, i) => ({ row, i }))
+    .filter(({ row, i }) => (headerRowIdx >= 0 && i < headerRowIdx) || (i >= startRow && !row.some((c) => isNumericLike(c) || isMoneyLike(c))))
+    .map(({ row, i }) => ({ text: row.filter((c) => c !== "").join(" "), location: `${opts.sheetName ? `sheet:${opts.sheetName}, ` : ""}row:${i + 1}` }))));
   const dataRows = matrix.slice(startRow);
   const wide = headersNorm.length ? detectWideFormat(headersRaw, dataRows, map) : { kind: "long" as const };
   if (wide.kind === "wide") {
@@ -441,6 +474,7 @@ export function linesToRawItems(
   const warnings: ImportWarning[] = [];
   let skipped = 0, rowsRead = 0;
   let headerSeen = false;
+  const nonQuoteLines: Array<{ text: string; location: string }> = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -448,7 +482,7 @@ export function linesToRawItems(
     rowsRead++;
     const cells = line.split(/\s{2,}/).map(c => c.trim()).filter(c => c !== "");
     if ((cells.length >= 2 && looksLikeHeaderCells(cells)) || looksLikeHeaderCells(line.split(/\s+/))) {
-      headerSeen = true; skipped++; continue;
+      headerSeen = true; skipped++; nonQuoteLines.push({ text: line, location: `line:${i + 1}` }); continue;
     }
     let raw: ReturnType<typeof parsePriceRowTokens> = null;
     if (cells.length >= 3) {
@@ -462,7 +496,7 @@ export function linesToRawItems(
       if (!raw.rawDescription) raw = null;
     }
     if (!raw) raw = parsePriceRowTokens(line.split(/\s+/));
-    if (!raw) { skipped++; continue; }
+    if (!raw) { skipped++; nonQuoteLines.push({ text: line, location: `line:${i + 1}` }); continue; }
 
     const { location, extras } = locate(i);
     if (!pushItem(items, ctx, raw, location, { ...extras, rawRowData: [line] }, { line })) {
@@ -473,5 +507,6 @@ export function linesToRawItems(
   if (!headerSeen && items.length > 0) {
     warnings.push({ code: "HEADER_INFERENCE", message: "Nenhum cabeçalho de tabela identificado no texto; colunas inferidas por heurística.", severity: "warning" });
   }
+  warnings.push(...documentDeclarationWarnings(nonQuoteLines));
   return { items, warnings, rowsRead, skipped };
 }

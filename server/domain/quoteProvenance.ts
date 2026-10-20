@@ -168,3 +168,82 @@ export function deriveItemRisks(itemId: string, stored: readonly ItemRiskView[],
   }
   return out;
 }
+
+// ─── Declaração do DOCUMENTO (cabeçalho/título/notas de arquivo importado) ───────────────────────────────────────────
+
+/** Escopo PARCIAL ("os itens 3 e 4…", "algumas cotações…", "exceto…"): a declaração não vale para o conjunto inteiro. */
+const PARTIAL_SCOPE = /\b(?:ite(?:m|ns)|linhas?|lotes?|cota[çc](?:[ãa]o|[õo]es))\s+(?:n[ºo°.]?\s*)?\d|\b(?:alguns|algumas|parte d[oa]s?|parcialmente|exceto|salvo)\b/i;
+
+/**
+ * Classifica uma linha NÃO-cotação do documento (título, cabeçalho, nota): `global` = declaração explícita, sem negação, de
+ * que o CONJUNTO de valores é fictício/demonstrativo; `partial` = declaração explícita restrita a parte do documento
+ * (só revisão — nunca marca o conjunto); `null` = nada declarado (termos genéricos não bastam).
+ */
+/**
+ * Declaração do CONJUNTO: o sujeito coletivo GOVERNA o predicado (não basta co-ocorrer na linha):
+ *   "dados/valores/preços/cotações/fontes/fornecedores/itens/empresas/exemplo [são] fictícios|demonstrativos|sintéticos";
+ *   "todos/todas/tudo … fictício"; "planilha/documento/tabela/mapa/conteúdo/material … com|é|são|contém … fictício|demonstrativo".
+ * Singular "cotação/proposta fictícia" (uma fonte desconsiderada) e rótulo "Fornecedor Fictício A" NÃO são do conjunto.
+ */
+const COLLECTIVE_DECLARATIONS: readonly RegExp[] = [
+  /\b(?:dados|valores|pre[çc]os|cota[çc][õo]es|fontes|fornecedores|itens|empresas|exemplos?)\s+(?:s[ãa]o\s+|foram\s+)?(?:todos\s+|todas\s+)?(?:fict[ií]ci|demonstrativ|sint[ée]tic)/gi,
+  /\b(?:todos|todas|tudo)\b[^.;:\n]{0,60}?\b(?:fict[ií]ci|demonstrativ)/gi,
+  /\b(?:planilha|documento|tabela|mapa|conte[uú]do|material)\b[^.;:\n]{0,40}?\b(?:com|[ée]|s[ãa]o|cont[ée]m)\b[^.;:\n]{0,24}?\b(?:fict[ií]ci|demonstrativ)/gi,
+];
+
+/**
+ * Classifica uma linha NÃO-cotação de ARQUIVO (título, cabeçalho, nota): `global` = declaração explícita, sem negação, de
+ * que o CONJUNTO é fictício/demonstrativo; `partial` = declara fictício mas restrito a parte (itens N, algumas…) ou sem
+ * sujeito coletivo (rótulo, cotação singular): só revisão; `null` = nada declarado (termos genéricos não bastam).
+ */
+export function classifyDocumentDeclaration(text: string | null | undefined): "global" | "partial" | null {
+  const t = text ?? "";
+  if (!declaresFictitious(t)) return null;
+  if (PARTIAL_SCOPE.test(t)) return "partial";
+  return COLLECTIVE_DECLARATIONS.some((re) => declaredMatch(re, t)) ? "global" : "partial";
+}
+
+/** Escopo restrito a parte das cotações (itens N, linhas N, algumas, exceto…). */
+export function isPartialDeclarationScope(text: string | null | undefined): boolean {
+  return PARTIAL_SCOPE.test(text ?? "");
+}
+
+/** Aviso estruturado gravado pela extração (import_sessions.warnings): o documento declara o conjunto fictício. */
+export const DOCUMENT_DECLARES_FICTITIOUS = "DOCUMENT_DECLARES_FICTITIOUS";
+/** Declaração restrita a parte do documento: revisão supervisionada, sem classificar o conjunto. */
+export const DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION = "DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION";
+/** Aviso de OCR de baixa confiança (extração existente): a declaração lida por OCR incerto não é confirmada. */
+const OCR_LOW_CONFIDENCE = "OCR_LOW_CONFIDENCE";
+
+/**
+ * Decisão da PROMOÇÃO a partir dos avisos estruturados da sessão de importação (determinística, sem IA):
+ *   `global`    ⇒ todas as cotações da sessão são gravadas `ficticia` (a declaração do arquivo não se perde);
+ *   `suspected` ⇒ declaração parcial ou lida por OCR de baixa confiança: só revisão (cotações seguem `declarada`);
+ *   `null`      ⇒ nada declarado.
+ */
+export function documentFictitiousDeclaration(warnings: unknown): "global" | "suspected" | null {
+  const list = (Array.isArray(warnings) ? warnings : []).filter((w): w is { code: string; field?: unknown } =>
+    !!w && typeof w === "object" && typeof (w as { code?: unknown }).code === "string");
+  const lowOcr = list.some((w) => w.code === OCR_LOW_CONFIDENCE);
+  const globals = list.filter((w) => w.code === DOCUMENT_DECLARES_FICTITIOUS);
+  // Só a declaração lida POR OCR é rebaixada quando o OCR foi de baixa confiança; texto nativo/planilha vale sempre.
+  if (globals.some((w) => w.field !== DECLARATION_FROM_OCR)) return "global";
+  if (globals.length > 0) return lowOcr ? "suspected" : "global";
+  return list.some((w) => w.code === DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION) ? "suspected" : null;
+}
+
+/** Marca (campo `field` do aviso) da declaração lida no texto do OCR. */
+export const DECLARATION_FROM_OCR = "ocr";
+
+/** Mantém no máximo UM aviso de declaração do documento por tipo (várias fontes do mesmo arquivo: tabela + texto). */
+export function dedupeDocumentDeclarations<T extends { code: string; field?: string }>(warnings: readonly T[]): T[] {
+  // Um aviso por (tipo, origem): a declaração do texto nativo e a do OCR são evidências distintas (rebaixamento por OCR).
+  const seen = new Set<string>();
+  return warnings.filter((w) => {
+    if (w.code !== DOCUMENT_DECLARES_FICTITIOUS && w.code !== DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION) return true;
+    const k = `${w.code}|${w.field === DECLARATION_FROM_OCR ? "ocr" : "text"}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}

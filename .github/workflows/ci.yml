@@ -305,6 +305,16 @@ jobs:
       - name: Smoke — proveniência das cotações e preço de referência
         run: pnpm exec vitest run server/__tests__/integration/m8-price-reference-governance-mysql-smoke.test.ts
 
+      # Emenda de integridade (P1-A): fonte que vira fictícia durante a emissão ⇒ recusa sob trava (barreiras
+      # determinísticas: alteração vence / emissão vence / rollback, replay, lock timeout, isolamento entre órgãos).
+      - name: Smoke — corrida proveniência × emissão oficial
+        run: pnpm exec vitest run server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts
+
+      # Emenda de integridade (P1-B): declaração fictícia no título do ARQUIVO (worker real) ⇒ cotações fictícias,
+      # Item Inteligente e referência suspensa; correção supervisionada, replay, legado e isolamento.
+      - name: Smoke — declaração fictícia do arquivo importado
+        run: pnpm exec vitest run server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts
+
       # Executor de homologação — usuário com múltiplas organizações: sem X-Organization-Id ⇒ BAD_REQUEST; tenant sintético
       # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
       - name: Smoke — homologação com usuário de múltiplas organizações

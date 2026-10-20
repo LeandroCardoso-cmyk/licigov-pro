@@ -50,6 +50,7 @@ import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchS
 import { parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { LOW_QUOTE_COUNT_RISK_TEXT } from "../domain/quoteProvenance";
 import { suggestSpecifications } from "./itemIntelligenceService";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { serviceLogger } from "./observabilityService";
 import { assertKernelAccess } from "./kernelAccessService";
 
@@ -647,10 +648,11 @@ export async function persistResearchAndMaterialize(params: {
 }): Promise<MaterializationResult> {
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — pesquisa não persistida (fail-closed).");
-  const result = await db.transaction(async (tx) => {
+  // M8 (emenda) — escritor da fonte de preço concorre com a trava da emissão: deadlock ⇒ repete a transação INTEIRA (SEM-084).
+  const result = await runTransactionWithDeadlockRetry({ label: "price_research.materialize", organizationId: params.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
     await params.writeResearch(tx);
     return materializeIntelligentItemsTx(tx, params);
-  });
+  }));
   await enrichMaterializedItems({
     organizationId: params.organizationId, processId: params.processId,
     itemIds: [...result.created, ...result.updated], correlationId: params.correlationId,

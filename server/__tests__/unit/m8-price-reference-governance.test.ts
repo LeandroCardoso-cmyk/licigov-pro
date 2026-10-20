@@ -415,3 +415,23 @@ describe("M8 — correções da auditoria independente", () => {
     expect(describeLineage(l)).toContain("DEMONSTRATIVA(S)");
   });
 });
+
+describe("M8 emenda — Contratação Direta: a pesquisa da linhagem é IMUTÁVEL (sem janela entre revalidação e publicação)", () => {
+  it("só três escritores de price_research_items; nenhum UPDATE/DELETE; a importação direta é INSERT estrito (sem upsert)", () => {
+    const root = path.join(__dirname, "../..");
+    const walk = (d: string): string[] => readdirSync(d).flatMap((n) => {
+      const f = path.join(d, n);
+      return statSync(f).isDirectory() ? (n === "__tests__" ? [] : walk(f)) : [f];
+    });
+    const writers: string[] = [];
+    for (const f of walk(root).filter((x) => /\.ts$/.test(x))) {
+      const s = readFileSync(f, "utf8");
+      if (/\.(update|delete)\(priceResearchItemsTable\)/.test(s) || /(UPDATE|DELETE FROM)\s+`?price_research_items/i.test(s)) writers.push(`MUTATION:${path.relative(root, f)}`);
+      if (/\.insert\(priceResearchItemsTable\)/.test(s)) writers.push(path.relative(root, f));
+    }
+    expect(writers.sort()).toEqual(["db/directPriceImport.ts", "db/procurement.ts", "services/importPromotionService.ts"]);
+    const direct = readFileSync(path.join(root, "db/directPriceImport.ts"), "utf8");
+    expect(direct).toContain("tx.insert(priceResearchItemsTable)");
+    expect(direct).not.toContain("onDuplicateKeyUpdate"); // linha da importação direta nunca é reescrita
+  });
+});

@@ -9,7 +9,8 @@
  * - Rejeita arquivo inválido/corrompido e .doc legado (binário, não-OOXML). NÃO grava no domínio.
  */
 import { BaseParser } from "./baseParser";
-import { matrixToRawItems, type TabularContext } from "./tabularExtraction";
+import { matrixToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
+import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import { createRawItem } from "../domain/importExtraction";
 import { buildProvenance } from "../domain/importProvenance";
 import { aggregateConfidence, buildFieldConfidence } from "../domain/importConfidence";
@@ -274,9 +275,12 @@ export class DocxParser extends BaseParser {
       warnings.push({ code: "NO_ITEMS_EXTRACTED", message: "Nenhum item reconhecido no DOCX. Revise o documento.", severity: "warning" });
     }
 
+    // M8 — declaração do documento em títulos/parágrafos/listas FORA das tabelas; um aviso por tipo.
+    warnings.push(...documentDeclarationWarnings(docxHtmlToBlocks(html).filter((b) => b.type !== "table").map((b) => ({ text: b.text, location: `bloco:${b.index + 1}` }))));
+    const declaredWarnings = dedupeDocumentDeclarations(warnings);
     const processingMs = Date.now() - startMs;
-    const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs);
-    return { items, warnings, errors: [], summary, rawMetadata: { tablesDetected: tables.length, parserVersion: PARSER_VERSION } };
+    const summary = this.buildSummary(rowsRead, items, skipped, declaredWarnings, [], processingMs);
+    return { items, warnings: declaredWarnings, errors: [], summary, rawMetadata: { tablesDetected: tables.length, parserVersion: PARSER_VERSION } };
   }
 
   private fail(error: ImportError, startMs: number): ParseResult {

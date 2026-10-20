@@ -23,6 +23,8 @@ import {
   processTimelineTable,
   generatedDocumentsTable,
   generatedDocumentEditsTable,
+  procurementItemSourceLinksTable,
+  procurementItemsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
 import { withHumanEditMarker } from "../domain/humanEditMarker";
@@ -340,6 +342,67 @@ export function quoteProvenanceCounts(
       stored, supplierName: x.name, legacyMarker: sameContent ? row?.legacyMarker : false, legacyNotes: row?.legacyNotes,
     });
   }));
+}
+
+/**
+ * M8 (emenda de integridade) — FRONTEIRA DECISIVA da elegibilidade de preço na EMISSÃO, dentro da transação do chamador:
+ * trava as fontes do processo (FOR SHARE, locks de REGISTRO por chave primária das linhas existentes — sem gap/next-key
+ * lock, sem contenção com outros processos/órgãos) e conta, a partir das MESMAS leituras com trava (que veem o último
+ * estado CONFIRMADO, independentemente do snapshot da transação), os itens cujo preço deriva de cotação fictícia — sem
+ * conexões extras do pool. Ordem ESTÁVEL de aquisição, a mesma dos escritores:
+ *   1. price_research_items (upsert de cotação: importação/promoção) →
+ *   2. intelligent_items (materialização FOR UPDATE, aprovação CAS, atualização de fonte) →
+ *   3. procurement_items (Itens da contratação: status ativo) →
+ *   4. procurement_item_source_links (vínculos existentes).
+ * Linha NOVA (cotação/item/vínculo ainda inexistente) não fundamenta o conteúdo revisado que está sendo emitido. Espera,
+ * timeout ou deadlock ⇒ retry governado/erro explícito — nunca fail-open. Regra idêntica a `fictitiousPriceItemCount`
+ * (modo legado: itens aprovados com fictícia; canônico: itens ativos vinculados a evidência aprovada com preço e fictícia).
+ */
+export async function lockedFictitiousPriceItemCount(
+  tx: ProcurementExecutor, orgId: number, processId: string, demonstrativeAllowed: boolean,
+): Promise<number> {
+  const scopeIds = async <T extends { id: unknown }>(rows: Promise<T[]>) => (await rows).map((r) => r.id);
+  const quoteIds = await scopeIds(tx.select({ id: priceResearchItemsTable.id }).from(priceResearchItemsTable)
+    .where(and(eq(priceResearchItemsTable.organizationId, orgId), eq(priceResearchItemsTable.processId, processId))));
+  const quotes = quoteIds.length ? await tx.select({
+    id: priceResearchItemsTable.id, kind: priceResearchItemsTable.provenanceKind, obs: priceResearchItemsTable.observations,
+    supplier: priceResearchItemsTable.supplier, value: priceResearchItemsTable.value,
+  }).from(priceResearchItemsTable).where(inArray(priceResearchItemsTable.id, quoteIds as string[])).for("share") : [];
+  const itemIds = await scopeIds(tx.select({ id: intelligentItemsTable.id }).from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.organizationId, orgId), eq(intelligentItemsTable.processId, processId))));
+  const items = itemIds.length ? await tx.select({
+    id: intelligentItemsTable.id, status: intelligentItemsTable.status, suppliers: intelligentItemsTable.suppliers, averagePrice: intelligentItemsTable.averagePrice,
+  }).from(intelligentItemsTable).where(inArray(intelligentItemsTable.id, itemIds as string[])).for("share") : [];
+  const pItemIds = await scopeIds(tx.select({ id: procurementItemsTable.id }).from(procurementItemsTable)
+    .where(and(eq(procurementItemsTable.organizationId, orgId), eq(procurementItemsTable.processId, processId))));
+  const pItems = pItemIds.length ? await tx.select({ id: procurementItemsTable.id, status: procurementItemsTable.status })
+    .from(procurementItemsTable).where(inArray(procurementItemsTable.id, pItemIds as string[])).for("share") : [];
+  const linkIds = await scopeIds(tx.select({ id: procurementItemSourceLinksTable.id }).from(procurementItemSourceLinksTable)
+    .where(and(eq(procurementItemSourceLinksTable.organizationId, orgId), eq(procurementItemSourceLinksTable.processId, processId))));
+  const links = linkIds.length ? await tx.select({ itemId: procurementItemSourceLinksTable.itemId, sourceType: procurementItemSourceLinksTable.sourceType, sourceId: procurementItemSourceLinksTable.sourceId })
+    .from(procurementItemSourceLinksTable).where(inArray(procurementItemSourceLinksTable.id, linkIds as number[])).for("share") : [];
+  if (demonstrativeAllowed) return 0;
+
+  const provenance = new Map<string, StoredQuoteProvenance>(quotes.map((r) => {
+    const obs = r.obs ?? "";
+    const legacyMarker = obs.includes(FICTITIOUS_QUOTE_MARKER);
+    return [r.id, {
+      stored: r.kind ?? null, legacyMarker, supplier: r.supplier ?? "", valueCents: reaisToCents(r.value),
+      ...(legacyMarker ? { legacyNotes: obs.split(FICTITIOUS_QUOTE_MARKER).join(" ") } : {}),
+    }];
+  }));
+  const approved = items.filter((i) => i.status === "aprovado").map((i) => {
+    const suppliers = parseArr<IntelligentItemSupplier>(i.suppliers);
+    return {
+      id: i.id, fictitious: quoteProvenanceCounts(suppliers, provenance).ficticia,
+      priced: reaisToCents(i.averagePrice) > 0 && suppliers.some((x) => Number(x.value) > 0),
+    };
+  });
+  const active = new Set(pItems.filter((p) => p.status === "active").map((p) => p.id));
+  if (active.size === 0) return approved.filter((a) => a.fictitious > 0).length;
+  const blockedEvidence = new Set(approved.filter((a) => a.fictitious > 0 && a.priced).map((a) => a.id));
+  const blockedItems = new Set(links.filter((l) => l.sourceType === "price_research" && active.has(l.itemId) && blockedEvidence.has(l.sourceId)).map((l) => l.itemId));
+  return blockedItems.size;
 }
 
 export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{

@@ -5400,8 +5400,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-official-promotion.test.ts": {
-    "mtime": 1792506388.1774936,
-    "ast_hash": "5470f453752430b6df69a1e6dd6f141b",
+    "mtime": 1792521957.1856678,
+    "ast_hash": "8e1afff455db4315b79abbffd7b4df1e",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft-mysql-smoke.test.ts": {
@@ -5425,8 +5425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-sod-provenance.test.ts": {
-    "mtime": 1792506388.1781125,
-    "ast_hash": "47b097d332172d4e46e0bacad56bcc23",
+    "mtime": 1792521957.1859057,
+    "ast_hash": "b19d45e1bb23193abb52f6d01d2c9e8f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3b-governed-human-editing-mysql-smoke.test.ts": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1792507869.6188502,
-    "ast_hash": "639092571a58492148c017d1e852cf15",
+    "mtime": 1792521957.1846027,
+    "ast_hash": "3f5d689a504866f2944093de8e60c634",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -8525,8 +8525,8 @@
     "semantic_hash": ""
   },
   "server/parsers/docxParser.ts": {
-    "mtime": 1790881396.3088768,
-    "ast_hash": "cd174bd8e40224a05c47a3cb372d4725",
+    "mtime": 1792520652.0601935,
+    "ast_hash": "f8bb6a11dc313a1d18130eacc8a5cf5e",
     "semantic_hash": ""
   },
   "server/parsers/layout/layoutExtraction.ts": {
@@ -8565,18 +8565,18 @@
     "semantic_hash": ""
   },
   "server/parsers/pdfParser.ts": {
-    "mtime": 1790881396.3125682,
-    "ast_hash": "74d967fee3515f356ba7c2ac8dae09ec",
+    "mtime": 1792521872.82951,
+    "ast_hash": "615b669e0974f69f1a3f579fb93f25bb",
     "semantic_hash": ""
   },
   "server/parsers/tabularExtraction.ts": {
-    "mtime": 1790881396.3125682,
-    "ast_hash": "ca1e6b1742eace5a3b68669d8be701a2",
+    "mtime": 1792521861.0655677,
+    "ast_hash": "617313bb83219c49973ebecd72a3b7f8",
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
-    "mtime": 1790881396.3125682,
-    "ast_hash": "ca0c26937d1275d1f230d963d9d9562e",
+    "mtime": 1792521872.8303218,
+    "ast_hash": "1d8bac8ee3e7cddc946504dc1c38b852",
     "semantic_hash": ""
   },
   "server/providers/claude/claudeAdapter.ts": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1792508054.3926468,
-    "ast_hash": "5454e3295ce0af95f1ca3e0dd5b8c157",
+    "mtime": 1792521957.185209,
+    "ast_hash": "77af8ae800ca4191d1c2d1c34e920daa",
     "semantic_hash": ""
   },
   "server/services/documentRenderService.ts": {
@@ -9815,8 +9815,8 @@
     "semantic_hash": ""
   },
   "server/services/importPromotionService.ts": {
-    "mtime": 1792507799.8931382,
-    "ast_hash": "f1602d3a25d7f31a5c52271be6d14cbb",
+    "mtime": 1792522014.5285392,
+    "ast_hash": "255d6fb3ebedfa1fff81df2de17cbbdb",
     "semantic_hash": ""
   },
   "server/services/importQueueService.ts": {
@@ -9905,8 +9905,8 @@
     "semantic_hash": ""
   },
   "server/services/itemMaterializationService.ts": {
-    "mtime": 1792507799.892833,
-    "ast_hash": "7483e78bf48bbc62e5e77adec5a3dd58",
+    "mtime": 1792522008.2715716,
+    "ast_hash": "15e92c71b7de5cb9be6b5fbb2990481f",
     "semantic_hash": ""
   },
   "server/services/jurisprudenceCorrelationService.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792507423.3321128,
-    "ast_hash": "3bfe5b0b0b9875a9036dd15aec0058bb",
+    "mtime": 1792521189.2075095,
+    "ast_hash": "2c37eeea936c09563ab9f6418fabfe2f",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13705,8 +13705,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-templates-lane-b-service.test.ts": {
-    "mtime": 1792506388.1786263,
-    "ast_hash": "a59443467cd851b6f39e583b531eda96",
+    "mtime": 1792521957.1865928,
+    "ast_hash": "4550ba0de40617ad817cd5efae487e52",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
@@ -15010,8 +15010,8 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearchParser.ts": {
-    "mtime": 1792507943.4491837,
-    "ast_hash": "031f168310ba146f2b2f3de3073fe5ce",
+    "mtime": 1792521861.065096,
+    "ast_hash": "2e36eec966adab7c0a1b86e2390149a2",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-dfd-justification-contract.test.ts": {
@@ -15180,8 +15180,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-price-reference-governance.test.ts": {
-    "mtime": 1792508122.2436395,
-    "ast_hash": "ce7738fa73a28d2682b529baded91672",
+    "mtime": 1792520899.720391,
+    "ast_hash": "15e4858170d78a37068204b3059d24ce",
     "semantic_hash": ""
   },
   "server/config/homologation.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/domain/quoteProvenance.ts": {
-    "mtime": 1792507948.5988562,
-    "ast_hash": "a4f7d6b24a003d867fd0f477f8060108",
+    "mtime": 1792521861.0645185,
+    "ast_hash": "b9aaa9a8bfa6c61980b95ad469f01585",
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
@@ -15200,8 +15200,28 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
-    "mtime": 1792508193.4123728,
-    "ast_hash": "408f36b9f4ec7246c8365c7be8f53f1b",
+    "mtime": 1792522095.6295724,
+    "ast_hash": "f241933975b383dbaf62aecba2689351",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts": {
+    "mtime": 1792520410.0303712,
+    "ast_hash": "b883d6e368791a91e07ee4aded720114",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts": {
+    "mtime": 1792520839.3043523,
+    "ast_hash": "28fe49e737dcb05bbe6655980053a0b2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-ocr-declaration.test.ts": {
+    "mtime": 1792522074.0955622,
+    "ast_hash": "57fda11e4adaea0250d58a9204197c93",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-file-declaration-provenance.test.ts": {
+    "mtime": 1792522046.4408078,
+    "ast_hash": "6fa9019e5621c1d075371db4bf3b426b",
     "semantic_hash": ""
   }
 }

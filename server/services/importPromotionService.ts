@@ -26,7 +26,8 @@ import {
 import { toDbDatetime } from "../db/institutionalConsultations";
 import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
-import { classifyIncomingQuote } from "../domain/quoteProvenance";
+import { classifyIncomingQuote, documentFictitiousDeclaration } from "../domain/quoteProvenance";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { centsToReais, centsToDecimalString } from "../domain/money";
 import { normalizeQuantity, storedQuantity, type PriceQuote } from "../domain/priceQuoteConsolidation";
 import {
@@ -102,7 +103,8 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
   let toEnrich: string[] = [];
   let result: PromotionResult;
   try {
-  result = await db.transaction(async (tx): Promise<PromotionResult> => {
+  // M8 (emenda) — escritor da fonte de preço concorre com a trava da emissão: deadlock ⇒ repete a transação INTEIRA (SEM-084).
+  result = await runTransactionWithDeadlockRetry({ label: "import_session.promote", organizationId: org, correlationId }, () => db.transaction(async (tx): Promise<PromotionResult> => {
     // 1) Lock da sessão (serializa promoções concorrentes da mesma sessão).
     const sessRows = await tx.select().from(importSessions)
       .where(and(eq(importSessions.id, sessionId), eq(importSessions.organizationId, org)))
@@ -183,7 +185,7 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
     // 7) Itens de domínio a partir do conteúdo EFETIVO (raw + overlay de correção). Cotação de 1ª classe:
     //    fornecedor/marca/modelo/observação/fonte preservados; valores pelo CONTRATO MONETÁRIO (money.ts).
     //    R9 / SEM-053 — a construção das cotações é compartilhada com a PRÉVIA (mesma fonte, mesmo resultado).
-    const built = buildPromotionQuotes({ approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso });
+    const built = buildPromotionQuotes({ approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso, sessionWarnings: session.warnings });
     for (const { dom, unitCents } of built) {
       await tx.insert(priceResearchItemsTable).values({
         id: dom.id, organizationId: org, researchId, processId,
@@ -236,7 +238,7 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
     }, tx);
 
     return { sessionId, idempotent: false, targetKind: "price_research", targetRef: researchId, itemsPromoted: quotes.length, intelligentItems };
-  });
+  }));
   } catch (err) {
     if (!isDuplicateKeyError(err)) throw err;
     // Corrida perdida. Mesma sessão → replay do resultado vencedor; outra sessão com o mesmo arquivo → CONFLICT.
@@ -286,8 +288,14 @@ interface BuiltQuote { dom: ReturnType<typeof createPriceResearchItem>; unitCent
 function buildPromotionQuotes(p: {
   approved: readonly StagingRow[]; organizationId: number; processId: string; researchId: string;
   sessionId: number; importType: string; nowIso: string;
+  /** Avisos estruturados da extração (import_sessions.warnings): fonte da declaração do DOCUMENTO (M8). */
+  sessionWarnings?: unknown;
 }): BuiltQuote[] {
   const out: BuiltQuote[] = [];
+  // M8 (emenda) — declaração explícita do ARQUIVO (título/cabeçalho/notas) vale para TODAS as cotações da sessão; parcial ou
+  // lida por OCR de baixa confiança fica só como revisão. Recalculada a cada reextração; correção de linha não a remove.
+  const raw = typeof p.sessionWarnings === "string" ? (() => { try { return JSON.parse(p.sessionWarnings as string); } catch { return null; } })() : p.sessionWarnings;
+  const documentDeclaresFictitious = documentFictitiousDeclaration(raw) === "global";
   for (let i = 0; i < p.approved.length; i++) {
     const it = p.approved[i];
     const eff = computeEffectiveContent(it as unknown as Record<string, unknown> & { correctedPayload?: unknown }, "price_research");
@@ -315,7 +323,7 @@ function buildPromotionQuotes(p: {
       observations: `${notes ? `${notes} — ` : ""}origem: ingestão sessão ${p.sessionId}, item ${it.id}, correção rev ${it.correctionRevision}`,
       source: text(eff.source, 200) || `import:${p.importType}`, index: i, createdAt: p.nowIso,
       // M8 — só declaração EXPLÍCITA no fornecedor/observação torna a cotação fictícia; nunca "verificada" por inferência.
-      provenanceKind: classifyIncomingQuote({ supplier, notes }),
+      provenanceKind: classifyIncomingQuote({ supplier, notes, documentDeclaresFictitious }),
     });
     out.push({
       dom, unitCents,
@@ -412,6 +420,7 @@ export async function previewSessionPromotion(params: {
   const researchId = createResearchId(org, sessionId);
   const built = buildPromotionQuotes({
     approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso: new Date().toISOString(),
+    sessionWarnings: session.warnings,
   });
   try {
     assertSessionPromotable(built.length);
