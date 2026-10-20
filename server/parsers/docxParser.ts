@@ -10,7 +10,7 @@
  */
 import { BaseParser } from "./baseParser";
 import { matrixToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
-import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
+import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import { createRawItem } from "../domain/importExtraction";
 import { buildProvenance } from "../domain/importProvenance";
 import { aggregateConfidence, buildFieldConfidence } from "../domain/importConfidence";
@@ -280,7 +280,7 @@ export class DocxParser extends BaseParser {
     const declaredWarnings = dedupeDocumentDeclarations(warnings);
     const processingMs = Date.now() - startMs;
     const summary = this.buildSummary(rowsRead, items, skipped, declaredWarnings, [], processingMs);
-    return { items, warnings: declaredWarnings, errors: [], summary, rawMetadata: { tablesDetected: tables.length, parserVersion: PARSER_VERSION } };
+    return { items, warnings: declaredWarnings, errors: [], summary, declarationScan: DECLARATION_SCAN_PERFORMED, rawMetadata: { tablesDetected: tables.length, parserVersion: PARSER_VERSION } };
   }
 
   private fail(error: ImportError, startMs: number): ParseResult {

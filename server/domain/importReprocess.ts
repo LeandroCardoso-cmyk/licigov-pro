@@ -89,3 +89,46 @@ export interface ReextractionRecord {
   previous: { parserVersion: string | null; layoutVersion: string | null; fingerprint: string | null; stagedCount: number };
   next:     { parserVersion: string; layoutVersion: string | null; fingerprint: string | null; stagedCount: number };
 }
+
+// ─── M8 (P1-C) — revalidação da ANÁLISE de proveniência (sessão legada) ─────────────────────────────────────────────
+
+/**
+ * Diferente da reextração: NÃO substitui o staging — só reanalisa o arquivo original (mesmo checksum) para gravar a
+ * evidência da análise de declaração do documento. Por isso vale também com revisões/correções/aprovação já feitas.
+ * Nunca para sessão promovida (o histórico concluído é imutável) nem durante uma reextração.
+ */
+export type ProvenanceRevalidationBlocker =
+  | "NOT_PRICE_RESEARCH" | "NOT_REVIEWABLE" | "PROMOTED" | "REPROCESS_IN_PROGRESS" | "NO_CHECKSUM" | "ALREADY_CURRENT";
+
+export const PROVENANCE_REVALIDATION_BLOCKER_MESSAGE: Record<ProvenanceRevalidationBlocker, string> = {
+  NOT_PRICE_RESEARCH:    "A revalidação de proveniência só se aplica à Pesquisa de Preços.",
+  NOT_REVIEWABLE:        "A sessão não está em revisão nem aprovada.",
+  PROMOTED:              "A sessão já foi promovida; o histórico concluído não é reprocessado.",
+  REPROCESS_IN_PROGRESS: "Há uma reextração em andamento; ela já registrará a análise vigente.",
+  NO_CHECKSUM:           "A sessão não tem o checksum do arquivo original; reenvie o arquivo.",
+  ALREADY_CURRENT:       "A análise de proveniência desta sessão já está na versão vigente.",
+};
+
+export interface ProvenanceRevalidationFacts {
+  importType: string;
+  status: string;
+  promotionStatus: string | null;
+  hasPromotionLedger: boolean;
+  stage: string | null;
+  updatedAt: Date | null;
+  now: Date;
+  checksum: string | null;
+  /** A evidência gravada já é a vigente (assessProvenanceScan ok). */
+  scanCurrent: boolean;
+}
+
+export function assessProvenanceRevalidation(f: ProvenanceRevalidationFacts): { eligible: boolean; blockers: ProvenanceRevalidationBlocker[]; message: string } {
+  const blockers: ProvenanceRevalidationBlocker[] = [];
+  if (f.importType !== "price_research") blockers.push("NOT_PRICE_RESEARCH");
+  if (f.status !== "awaiting_review" && f.status !== "approved") blockers.push("NOT_REVIEWABLE");
+  if ((f.promotionStatus ?? "none") !== "none" || f.hasPromotionLedger) blockers.push("PROMOTED");
+  if (isReextractionReservationActive(f.stage, f.updatedAt, f.now)) blockers.push("REPROCESS_IN_PROGRESS");
+  if (!f.checksum) blockers.push("NO_CHECKSUM");
+  if (f.scanCurrent) blockers.push("ALREADY_CURRENT");
+  return { eligible: blockers.length === 0, blockers, message: blockers.length === 0 ? "" : PROVENANCE_REVALIDATION_BLOCKER_MESSAGE[blockers[0]] };
+}

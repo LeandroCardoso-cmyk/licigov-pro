@@ -66,6 +66,8 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
         const s = q.state.data?.session?.status as IngestionSessionStatus | undefined;
         // Layout v2 — reextração em andamento (sessão continua em revisão, estágio "reprocessing").
         if (q.state.data?.session?.stage === "reprocessing") return 1500;
+        // M8 (P1-C) — revalidação da análise de proveniência em andamento (sessão em revisão ou aprovada).
+        if (q.state.data?.session?.provenanceScan?.status === "in_progress") return 1500;
         return s && POLL_STATUSES.includes(s) ? 1500 : false;
       },
       refetchOnWindowFocus: false,
@@ -228,6 +230,20 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     }
   }, [sessionId, reprocessMut, opts.procurementProcessId, statusQuery]);
 
+  // M8 (P1-C) — revalidar a análise de proveniência do arquivo original (sessão legada; revisões preservadas).
+  const revalidateMut = trpc.ingestion.revalidateProvenance.useMutation();
+  const [provenanceRevalidationError, setProvenanceRevalidationError] = useState<string | null>(null);
+  const revalidateProvenance = useCallback(async () => {
+    if (sessionId == null || revalidateMut.isPending) return;
+    setProvenanceRevalidationError(null);
+    try {
+      await revalidateMut.mutateAsync({ sessionId, procurementProcessId: opts.procurementProcessId });
+    } catch (err) {
+      setProvenanceRevalidationError(err instanceof Error ? err.message.replace(/^PROVENANCE_REVALIDATION_FORBIDDEN:\s*/, "") : "Falha ao solicitar a revalidação.");
+    }
+    void statusQuery.refetch();
+  }, [sessionId, revalidateMut, opts.procurementProcessId, statusQuery]);
+
   // PR B.2.4 — promoção supervisionada ao domínio (só quando elegível; idempotente; anti-duplo-clique).
   const promoteMut = trpc.ingestion.promoteSession.useMutation();
   const promotingRef = useRef(false);
@@ -324,5 +340,10 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     reprocess,
     isReprocessing: reprocessMut.isPending,
     reprocessError,
+    // M8 (P1-C) — análise de proveniência vigente × sessão legada (revalidação)
+    provenanceScan: (session as { provenanceScan?: { status: string; message: string | null } } | null)?.provenanceScan ?? null,
+    revalidateProvenance,
+    isRevalidatingProvenance: revalidateMut.isPending,
+    provenanceRevalidationError,
   };
 }

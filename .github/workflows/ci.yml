@@ -315,6 +315,11 @@ jobs:
       - name: Smoke — declaração fictícia do arquivo importado
         run: pnpm exec vitest run server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts
 
+      # Emenda de integridade (P1-C): sessão extraída ANTES da análise de declaração (sem evidência versionada) ⇒ promoção
+      # recusada sem efeito; revalidação preserva revisões; reextração; replay/concorrência; isolamento; legado promovido.
+      - name: Smoke — sessão legada sem análise de proveniência
+        run: pnpm exec vitest run server/__tests__/integration/m8-legacy-session-provenance-scan-mysql-smoke.test.ts
+
       # Executor de homologação — usuário com múltiplas organizações: sem X-Organization-Id ⇒ BAD_REQUEST; tenant sintético
       # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
       - name: Smoke — homologação com usuário de múltiplas organizações

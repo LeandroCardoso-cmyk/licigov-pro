@@ -74,10 +74,11 @@ async function newProcess(org: number): Promise<string> {
 /** Sessão REAL: CSV pelo worker (parser real) ⇒ staging pendente. */
 async function csvSession(org: number, processId: string, csv: string, uploader: number): Promise<number> {
   const db = (await getDb())!;
-  const buf = Buffer.from(csv, "utf8");
-  const key = `imports/${org}/${stamp}-${++seq}-pesquisa.csv`;
+  // Conteúdo distinto por sessão (linhas em branco são ignoradas pelo CSV) e checksum = sha256 REAL, como no upload.
+  const buf = Buffer.from(`${csv}${"\n".repeat(++seq)}`, "utf8");
+  const key = `imports/${org}/${stamp}-${seq}-pesquisa.csv`;
   mem.set(key, buf);
-  const checksum = createHash("sha256").update(`${seq}-${org}`).update(buf).digest("hex");
+  const checksum = createHash("sha256").update(buf).digest("hex");
   const [s] = await db.insert(importSessions).values({
     organizationId: org, uploadedBy: uploader, sourceFileId: key, sourceFileName: "pesquisa.csv", sourceMimeType: "text/csv",
     sourceSize: buf.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",

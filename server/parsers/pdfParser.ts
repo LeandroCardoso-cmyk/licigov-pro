@@ -20,7 +20,7 @@
  */
 import { BaseParser } from "./baseParser";
 import { matrixToRawItems, linesToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
-import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
+import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import { buildDocumentProjection, pageTextToBlocks, type DocumentBlock } from "../domain/documentProjection";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
@@ -369,7 +369,7 @@ export class PdfParser extends BaseParser {
       const processingMs = Date.now() - startMs;
       const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs, { pagesProcessed: pages.length });
       return {
-        items, warnings, errors: [], summary, extraction: lineage, ocrArtifact,
+        items, warnings, errors: [], summary, extraction: lineage, ocrArtifact, declarationScan: DECLARATION_SCAN_PERFORMED,
         rawMetadata: {
           pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION,
           extractionMode: lineage.extractionMode, layoutVersion: PDF_LAYOUT_VERSION, layoutMode: layoutInfo.mode,

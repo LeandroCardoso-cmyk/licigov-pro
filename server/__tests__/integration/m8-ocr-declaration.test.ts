@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { PdfParser } from "../../parsers/pdfParser";
 import { TesseractOcrAdapter } from "../../providers/ocr/tesseractOcrAdapter";
-import { DECLARATION_FROM_OCR, DOCUMENT_DECLARES_FICTITIOUS, documentFictitiousDeclaration } from "../../domain/quoteProvenance";
+import { DECLARATION_FROM_OCR, DOCUMENT_DECLARES_FICTITIOUS, documentFictitiousDeclaration, PROVENANCE_SCAN_VERSION } from "../../domain/quoteProvenance";
 import { scannedPdf, PRICE_TABLE } from "../fixtures/ocrPdfFixtures";
 
 const tesseract = new TesseractOcrAdapter({ maxConcurrency: 1 });
@@ -23,6 +23,7 @@ describe("M8 emenda — declaração no título de PDF escaneado (OCR real)", ()
       ocr: { port: tesseract, maxPages: 5, timeoutMs: 90_000, renderWidth: 2000, minConfidence: 75 },
     });
     expect(r.items.length).toBeGreaterThan(0);
+    expect(r.declarationScan?.version).toBe(PROVENANCE_SCAN_VERSION); // P1-C — a análise rodou também no caminho OCR
     const decl = r.warnings.find((w) => w.code === DOCUMENT_DECLARES_FICTITIOUS);
     expect(decl?.field).toBe(DECLARATION_FROM_OCR);
     expect(decl?.raw ?? "").toMatch(/FICTICIOS/i);

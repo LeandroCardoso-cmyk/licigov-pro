@@ -26,7 +26,9 @@ import {
 import { toDbDatetime } from "../db/institutionalConsultations";
 import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
-import { classifyIncomingQuote, documentFictitiousDeclaration } from "../domain/quoteProvenance";
+import {
+  assessProvenanceScan, classifyIncomingQuote, documentFictitiousDeclaration, PROVENANCE_SCAN_REQUIRED, PROVENANCE_SCAN_REQUIRED_MESSAGE,
+} from "../domain/quoteProvenance";
 import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { centsToReais, centsToDecimalString } from "../domain/money";
 import { normalizeQuantity, storedQuantity, type PriceQuote } from "../domain/priceQuoteConsolidation";
@@ -133,6 +135,9 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
     if (!isPromotableImportType(session.importType)) {
       throw new TRPCError({ code: "BAD_REQUEST", message: `Promoção ao domínio indisponível para o tipo "${session.importType}".` });
     }
+    // 4a) M8 (P1-C) — evidência VIGENTE da análise de declaração do documento sobre ESTE arquivo (lida sob o lock da sessão).
+    //     Ausência de aviso só é "nada declarado" quando a análise rodou; sessão legada ⇒ recusa explícita, nunca `declarada`.
+    const scan = requireProvenanceScan(session);
 
     // 4b) O MESMO arquivo (checksum) já promovido para este processo em outra sessão ⇒ CONFLICT. Sem isso,
     //     reimportar a mesma planilha duplicaria cotações (quoteIds novos por sessão) nos Itens Inteligentes.
@@ -185,7 +190,7 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
     // 7) Itens de domínio a partir do conteúdo EFETIVO (raw + overlay de correção). Cotação de 1ª classe:
     //    fornecedor/marca/modelo/observação/fonte preservados; valores pelo CONTRATO MONETÁRIO (money.ts).
     //    R9 / SEM-053 — a construção das cotações é compartilhada com a PRÉVIA (mesma fonte, mesmo resultado).
-    const built = buildPromotionQuotes({ approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso, sessionWarnings: session.warnings });
+    const built = buildPromotionQuotes({ approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso, sessionWarnings: session.warnings, scanDeclaration: scan.declaration });
     for (const { dom, unitCents } of built) {
       await tx.insert(priceResearchItemsTable).values({
         id: dom.id, organizationId: org, researchId, processId,
@@ -278,6 +283,13 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** M8 (P1-C) — sem evidência vigente da análise de proveniência ⇒ PRECONDITION_FAILED acionável (revalidar o arquivo). */
+function requireProvenanceScan(session: { extractionSummary: unknown; checksum: string | null }): { declaration: "global" | "suspected" | null } {
+  const scan = assessProvenanceScan(session.extractionSummary, session.checksum);
+  if (!scan.ok) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${PROVENANCE_SCAN_REQUIRED}: ${PROVENANCE_SCAN_REQUIRED_MESSAGE}` });
+  return scan;
+}
+
 type StagingRow = typeof importStagingItems.$inferSelect;
 interface BuiltQuote { dom: ReturnType<typeof createPriceResearchItem>; unitCents: number | null; quote: PriceQuote }
 
@@ -290,12 +302,14 @@ function buildPromotionQuotes(p: {
   sessionId: number; importType: string; nowIso: string;
   /** Avisos estruturados da extração (import_sessions.warnings): fonte da declaração do DOCUMENTO (M8). */
   sessionWarnings?: unknown;
+  /** Veredito da evidência da análise (P1-C): `global` também classifica o conjunto (o mais restritivo prevalece). */
+  scanDeclaration?: "global" | "suspected" | null;
 }): BuiltQuote[] {
   const out: BuiltQuote[] = [];
   // M8 (emenda) — declaração explícita do ARQUIVO (título/cabeçalho/notas) vale para TODAS as cotações da sessão; parcial ou
   // lida por OCR de baixa confiança fica só como revisão. Recalculada a cada reextração; correção de linha não a remove.
   const raw = typeof p.sessionWarnings === "string" ? (() => { try { return JSON.parse(p.sessionWarnings as string); } catch { return null; } })() : p.sessionWarnings;
-  const documentDeclaresFictitious = documentFictitiousDeclaration(raw) === "global";
+  const documentDeclaresFictitious = documentFictitiousDeclaration(raw) === "global" || p.scanDeclaration === "global";
   for (let i = 0; i < p.approved.length; i++) {
     const it = p.approved[i];
     const eff = computeEffectiveContent(it as unknown as Record<string, unknown> & { correctedPayload?: unknown }, "price_research");
@@ -409,6 +423,7 @@ export async function previewSessionPromotion(params: {
   if (!isPromotableImportType(session.importType)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Promoção ao domínio indisponível para o tipo "${session.importType}".` });
   }
+  const scan = requireProvenanceScan(session);
 
   const rows = await db.select().from(importStagingItems)
     .where(and(eq(importStagingItems.importSessionId, sessionId), eq(importStagingItems.organizationId, org)))
@@ -420,7 +435,7 @@ export async function previewSessionPromotion(params: {
   const researchId = createResearchId(org, sessionId);
   const built = buildPromotionQuotes({
     approved, organizationId: org, processId, researchId, sessionId, importType: session.importType, nowIso: new Date().toISOString(),
-    sessionWarnings: session.warnings,
+    sessionWarnings: session.warnings, scanDeclaration: scan.declaration,
   });
   try {
     assertSessionPromotable(built.length);

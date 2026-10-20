@@ -5,7 +5,7 @@
  */
 import { BaseParser } from "./baseParser";
 import { tableToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
-import { dedupeDocumentDeclarations } from "../domain/quoteProvenance";
+import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning } from "../domain/importTypes";
 import { numberToDecimalString } from "../domain/money";
@@ -124,7 +124,7 @@ export class XlsxParser extends BaseParser {
     const allWarnings = dedupeDocumentDeclarations([...warnings, ...out.warnings, ...documentDeclarationWarnings(otherSheets)]);
     const processingMs = Date.now() - startMs;
     const summary = this.buildSummary(out.rowsRead, out.items, out.skipped, allWarnings, [], processingMs, { sheetsProcessed: 1 });
-    return { items: out.items, warnings: allWarnings, errors: [], summary, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION } };
+    return { items: out.items, warnings: allWarnings, errors: [], summary, declarationScan: DECLARATION_SCAN_PERFORMED, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION } };
   }
 }
 

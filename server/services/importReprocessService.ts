@@ -22,9 +22,13 @@ import { logActivity } from "./activityLogService";
 import { replaceUntouchedStagingTx, StagingAlreadyReviewedError } from "./importStagingService";
 import { isDocumentImportType } from "../domain/documentProjection";
 import {
-  assessReprocessEligibility, REEXTRACTION_LEASE_MS, REEXTRACTION_STAGE,
-  type ReextractionRecord, type ReprocessEligibility,
+  assessProvenanceRevalidation, assessReprocessEligibility, REEXTRACTION_LEASE_MS, REEXTRACTION_STAGE,
+  type ProvenanceRevalidationBlocker, type ReextractionRecord, type ReprocessEligibility,
 } from "../domain/importReprocess";
+import {
+  assessProvenanceScan, mergeRevalidatedDeclarationWarnings,
+  type ProvenanceRevalidationRecord, type ProvenanceScanEvidence,
+} from "../domain/quoteProvenance";
 import type { ExtractionSummary, ImportWarning } from "../domain/importTypes";
 import type { RawExtractedItem } from "../domain/importExtraction";
 import type { ExtractionLineage } from "../domain/extractionLineage";
@@ -33,9 +37,9 @@ const log = serviceLogger("ImportReprocessService");
 
 type Session = typeof importSessions.$inferSelect;
 
-/** Reextração abortada no commit porque o estado mudou (outra ação ganhou) — nada foi alterado. */
+/** Reextração/revalidação abortada no commit porque o estado mudou (outra ação ganhou) — nada foi alterado. */
 export class ReextractionAbortedError extends Error {
-  constructor(readonly code: "SESSION_STATE_CHANGED" | "PROMOTED" | "CORRECTION_HISTORY", message: string) {
+  constructor(readonly code: "SESSION_STATE_CHANGED" | "PROMOTED" | "CORRECTION_HISTORY" | ProvenanceRevalidationBlocker, message: string) {
     super(message);
     this.name = "ReextractionAbortedError";
   }
@@ -232,6 +236,89 @@ export async function releaseReextraction(p: {
     details: { code: p.code, message: p.message.slice(0, 300) },
   });
   log.warn("import_reextraction_released", { sessionId: p.sessionId, organizationId: p.organizationId, code: p.code, correlationId: p.correlationId });
+}
+
+// ─── M8 (P1-C) — revalidação da análise de proveniência ──────────────────────────────────────────────────────────────
+
+async function provenanceRevalidationFacts(session: Session, hasLedger: boolean, now: Date) {
+  return assessProvenanceRevalidation({
+    importType: session.importType, status: session.status, promotionStatus: session.promotionStatus ?? "none",
+    hasPromotionLedger: hasLedger, stage: session.stage ?? null, updatedAt: session.updatedAt ?? null, now,
+    checksum: session.checksum ?? null, scanCurrent: assessProvenanceScan(session.extractionSummary, session.checksum).ok,
+  });
+}
+
+/**
+ * Elegibilidade da revalidação (tenant-scoped; sessão de outro órgão ⇒ NOT_FOUND). Lança PRECONDITION_FAILED acionável;
+ * o enfileiramento fica com o chamador e o COMMIT revalida tudo sob lock.
+ */
+export async function assertProvenanceRevalidationAllowed(sessionId: number, organizationId: number): Promise<Session> {
+  const db = await requireDb();
+  const [session] = await db.select().from(importSessions)
+    .where(and(eq(importSessions.id, sessionId), eq(importSessions.organizationId, organizationId))).limit(1);
+  if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+  const ledger = await db.select({ id: importPromotions.id }).from(importPromotions)
+    .where(and(eq(importPromotions.importSessionId, sessionId), eq(importPromotions.organizationId, organizationId))).limit(1);
+  const elig = await provenanceRevalidationFacts(session, ledger.length > 0, new Date());
+  if (!elig.eligible) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `PROVENANCE_REVALIDATION_FORBIDDEN: ${elig.message}` });
+  return session;
+}
+
+/**
+ * Grava a evidência da revalidação + avisos de declaração do documento (UMA transação, lock da sessão FOR UPDATE).
+ * Reconfere sob lock: mesma sessão/órgão, ainda revisável e não promovida, sem reextração em andamento, MESMO arquivo e
+ * evidência ainda não vigente. Staging, correções e decisões humanas não são tocados. Estado mudou ⇒ nada muda.
+ */
+export async function commitProvenanceRevalidation(p: {
+  sessionId: number; organizationId: number; actorUserId: number; correlationId: string | null;
+  scan: ProvenanceScanEvidence; warnings: ImportWarning[];
+}): Promise<ProvenanceRevalidationRecord> {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const [session] = await tx.select().from(importSessions)
+      .where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId))).for("update");
+    if (!session) throw new ReextractionAbortedError("SESSION_STATE_CHANGED", "Sessão não encontrada; nada foi alterado.");
+    const ledger = await tx.select({ id: importPromotions.id }).from(importPromotions)
+      .where(and(eq(importPromotions.importSessionId, p.sessionId), eq(importPromotions.organizationId, p.organizationId))).limit(1);
+    const now = new Date();
+    const elig = await provenanceRevalidationFacts(session, ledger.length > 0, now);
+    if (!elig.eligible) throw new ReextractionAbortedError(elig.blockers[0], `${elig.message} Nada foi alterado.`);
+    if ((session.checksum ?? "").toLowerCase() !== p.scan.sourceChecksum) {
+      throw new ReextractionAbortedError("SESSION_STATE_CHANGED", "O arquivo da sessão mudou durante a revalidação; nada foi alterado.");
+    }
+    const summary = (session.extractionSummary ?? {}) as ExtractionSummary;
+    const record: ProvenanceRevalidationRecord = {
+      at: now.toISOString(), actorUserId: p.actorUserId, correlationId: p.correlationId, sourceChecksum: p.scan.sourceChecksum,
+      previousScanVersion: typeof summary.provenanceScan?.version === "number" ? summary.provenanceScan.version : null,
+      declaration: p.scan.declaration,
+    };
+    await tx.update(importSessions).set({
+      warnings: mergeRevalidatedDeclarationWarnings<ImportWarning>(session.warnings, p.warnings),
+      extractionSummary: { ...summary, provenanceScan: p.scan, provenanceRevalidations: [...(summary.provenanceRevalidations ?? []), record] } as unknown as object,
+    }).where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId)));
+    await tx.insert(activityLogs).values({
+      organizationId: p.organizationId, userId: p.actorUserId, action: "import_provenance_revalidated", sourceContext: "job",
+      entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? null,
+      details: JSON.stringify({
+        procurementProcessId: session.procurementProcessId ?? null, sessionId: p.sessionId, sourceChecksum: p.scan.sourceChecksum,
+        scanVersion: p.scan.version, previousScanVersion: record.previousScanVersion, parserType: p.scan.parserType,
+        parserVersion: p.scan.parserVersion, declaration: p.scan.declaration, correlationId: p.correlationId, timestamp: record.at,
+      }),
+    });
+    return record;
+  });
+}
+
+/** Revalidação não aplicada (falha/estado mudou): só auditoria — a sessão e a promoção bloqueada permanecem como estavam. */
+export async function recordProvenanceRevalidationNotApplied(p: {
+  sessionId: number; organizationId: number; actorUserId: number; correlationId: string | null; code: string; message: string;
+}): Promise<void> {
+  await logActivity({
+    organizationId: p.organizationId, userId: p.actorUserId, action: "import_provenance_revalidation_not_applied", sourceContext: "job",
+    entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? undefined,
+    details: { code: p.code, message: p.message.slice(0, 300) },
+  });
+  log.warn("import_provenance_revalidation_not_applied", { sessionId: p.sessionId, organizationId: p.organizationId, code: p.code, correlationId: p.correlationId });
 }
 
 export { StagingAlreadyReviewedError };

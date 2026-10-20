@@ -247,3 +247,102 @@ export function dedupeDocumentDeclarations<T extends { code: string; field?: str
     return true;
   });
 }
+
+// ─── P1-C — evidência versionada da ANÁLISE de declaração do documento ──────────────────────────────────────────────
+//
+// A AUSÊNCIA de `DOCUMENT_DECLARES_FICTITIOUS` só significa "nada declarado" quando a extração EXECUTOU a análise. Sessões
+// extraídas antes dela não têm o aviso por não terem sido examinadas — não por serem regulares. A evidência abaixo é gravada
+// SÓ pelo backend (worker de extração/reextração/revalidação, junto ao resultado da extração em
+// `import_sessions.extractionSummary`), também quando nada é encontrado, vinculada ao checksum do arquivo analisado. A
+// promoção a exige (fail-closed); nenhum parâmetro do cliente participa.
+
+/** Versão do contrato da análise de declaração do documento. Mudou o que a análise examina ⇒ INCREMENTAR (sessões antigas
+ *  passam a exigir revalidação). 1 = emenda P1-B (título/notas/parágrafos/demais abas/OCR). */
+export const PROVENANCE_SCAN_VERSION = 1;
+
+/** Código acionável da promoção recusada por falta de análise compatível. */
+export const PROVENANCE_SCAN_REQUIRED = "PROVENANCE_SCAN_REQUIRED";
+export const PROVENANCE_SCAN_REQUIRED_MESSAGE =
+  "Esta pesquisa foi extraída por uma versão anterior da análise de proveniência. Revalide o arquivo original antes de promover as cotações — as revisões já feitas são preservadas.";
+
+/** Marca que o PARSER devolve quando a análise da declaração do documento rodou no caminho de extração usado. */
+export interface DeclarationScanPerformed { version: number }
+export const DECLARATION_SCAN_PERFORMED: DeclarationScanPerformed = Object.freeze({ version: PROVENANCE_SCAN_VERSION });
+
+export type ProvenanceScanOrigin = "extraction" | "reextraction" | "revalidation";
+
+/** Evidência persistida em `extractionSummary.provenanceScan` (sem conteúdo do documento). */
+export interface ProvenanceScanEvidence {
+  version:        number;
+  /** sha256 do arquivo efetivamente analisado (= `import_sessions.checksum`). */
+  sourceChecksum: string;
+  parserType:     string;
+  parserVersion:  string;
+  /** Veredito da análise (`documentFictitiousDeclaration` dos avisos produzidos por ela). */
+  declaration:    "global" | "suspected" | null;
+  origin:         ProvenanceScanOrigin;
+  scannedAt:      string;
+}
+
+/**
+ * Evidência a partir do resultado do parser — ou null quando a análise não rodou nesse caminho, a versão é outra ou o
+ * checksum do arquivo lido não corresponde ao da sessão (nunca se fabrica evidência).
+ */
+export function buildProvenanceScanEvidence(p: {
+  performed: DeclarationScanPerformed | null | undefined;
+  sessionChecksum: string | null | undefined;
+  analyzedChecksum: string;
+  parserType: string;
+  parserVersion: string;
+  warnings: unknown;
+  origin: ProvenanceScanOrigin;
+  now?: Date;
+}): ProvenanceScanEvidence | null {
+  if (p.performed?.version !== PROVENANCE_SCAN_VERSION) return null;
+  const session = (p.sessionChecksum ?? "").toLowerCase();
+  if (!session || session !== p.analyzedChecksum.toLowerCase()) return null;
+  return {
+    version: PROVENANCE_SCAN_VERSION, sourceChecksum: session, parserType: p.parserType, parserVersion: p.parserVersion,
+    declaration: documentFictitiousDeclaration(p.warnings), origin: p.origin, scannedAt: (p.now ?? new Date()).toISOString(),
+  };
+}
+
+/** Registro append-only de uma revalidação (em `extractionSummary.provenanceRevalidations`) — sem conteúdo do documento. */
+export interface ProvenanceRevalidationRecord {
+  at:                  string;
+  actorUserId:         number;
+  correlationId:       string | null;
+  sourceChecksum:      string;
+  previousScanVersion: number | null;
+  declaration:         "global" | "suspected" | null;
+}
+
+export type ProvenanceScanAssessment =
+  | { ok: true; declaration: "global" | "suspected" | null }
+  | { ok: false; reason: "MISSING" | "OUTDATED" | "CHECKSUM_MISMATCH" };
+
+/** Confere a evidência gravada na sessão (versão vigente + mesmo arquivo). Qualquer dúvida ⇒ não ok (fail-closed). */
+export function assessProvenanceScan(extractionSummary: unknown, sessionChecksum: string | null | undefined): ProvenanceScanAssessment {
+  const summary = typeof extractionSummary === "string"
+    ? (() => { try { return JSON.parse(extractionSummary) as unknown; } catch { return null; } })()
+    : extractionSummary;
+  const ev = (summary as { provenanceScan?: Partial<ProvenanceScanEvidence> } | null)?.provenanceScan;
+  if (!ev || typeof ev !== "object") return { ok: false, reason: "MISSING" };
+  if (ev.version !== PROVENANCE_SCAN_VERSION) return { ok: false, reason: "OUTDATED" };
+  const checksum = (sessionChecksum ?? "").toLowerCase();
+  if (!checksum || typeof ev.sourceChecksum !== "string" || ev.sourceChecksum.toLowerCase() !== checksum) return { ok: false, reason: "CHECKSUM_MISMATCH" };
+  const d = ev.declaration;
+  return { ok: true, declaration: d === "global" || d === "suspected" ? d : null };
+}
+
+/**
+ * Avisos da sessão após uma REVALIDAÇÃO: preserva os avisos da extração vigente (as linhas revisadas não mudam) e
+ * substitui os de declaração do documento pelos produzidos pela nova análise (o veredito completo — inclusive o
+ * rebaixamento por OCR de baixa confiança — fica na evidência).
+ */
+export function mergeRevalidatedDeclarationWarnings<T extends { code: string }>(current: unknown, revalidated: readonly T[]): T[] {
+  const SCAN_CODES = new Set([DOCUMENT_DECLARES_FICTITIOUS, DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION]);
+  const keep = (Array.isArray(current) ? current : []).filter((w): w is T =>
+    !!w && typeof w === "object" && typeof (w as { code?: unknown }).code === "string" && !SCAN_CODES.has((w as { code: string }).code));
+  return [...keep, ...revalidated.filter((w) => SCAN_CODES.has(w.code))];
+}

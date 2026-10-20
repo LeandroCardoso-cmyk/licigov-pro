@@ -14,6 +14,7 @@ import { getDb } from "../../db/connection";
 import { importSessions, importStagingItems, importPromotions, priceResearchTable, priceResearchItemsTable } from "../../../drizzle/schema";
 import { runMigrations } from "../../bootstrap";
 import { promoteApprovedSessionToDomain } from "../../services/importPromotionService";
+import { currentProvenanceScanSummary } from "../helpers/provenanceScanFixture";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 990401;
@@ -25,6 +26,7 @@ type ItemSeed = {
   reviewStatus?: "pending" | "approved" | "rejected" | "skipped"; correctedPayload?: Record<string, unknown> | null; correctionRevision?: number;
 };
 
+let fixtureSeq = 0;
 async function seedSession(over: Partial<Record<string, unknown>>, items: ItemSeed[]): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB indisponível");
@@ -32,8 +34,11 @@ async function seedSession(over: Partial<Record<string, unknown>>, items: ItemSe
     organizationId: ORG, uploadedBy: 1, sourceFileId: "imports/x/1-cot.xlsx", sourceFileName: "cot.xlsx",
     sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     procurementProcessId: PROC, importType: "price_research", parserType: "xlsx", parserVersion: "1.0.0",
-    status: "approved", ...over,
+    status: "approved", checksum: `${++fixtureSeq}`.padStart(64, "e"), ...over,
   }).$returningId();
+  // P1-C — sessão do contrato atual (a extração registrou a análise de proveniência sobre este arquivo).
+  const [row] = await db.select({ checksum: importSessions.checksum }).from(importSessions).where(eq(importSessions.id, s.id));
+  if (row.checksum) await db.update(importSessions).set({ extractionSummary: currentProvenanceScanSummary(row.checksum) }).where(eq(importSessions.id, s.id));
   for (const it of items) {
     await db.insert(importStagingItems).values({
       importSessionId: s.id, organizationId: ORG,

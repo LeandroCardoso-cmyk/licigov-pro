@@ -97,6 +97,38 @@ SÓ por OCR com `OCR_LOW_CONFIDENCE` ⇒ só revisão (texto nativo nunca é reb
 A") segue a regra por cotação. Na colagem (linhas já classificadas estruturalmente como não-cotação), qualquer declaração
 explícita sem escopo parcial vale para o conjunto.
 
+## Emenda de integridade — sessões legadas de importação (P1-C)
+
+A AUSÊNCIA de `DOCUMENT_DECLARES_FICTITIOUS` só significa "nada declarado" quando a análise RODOU. Por isso a extração
+grava, só pelo backend, a evidência versionada `import_sessions.extractionSummary.provenanceScan`
+(`PROVENANCE_SCAN_VERSION`, checksum do arquivo, parser/versão, veredito, origem, instante) — também quando nada é encontrado.
+Sem migration (coluna JSON existente).
+
+- **Quem grava:** o worker, na extração, na reextração governada e na revalidação. Só grava se o parser declarar que a
+  análise rodou naquele caminho (`ParseResult.declarationScan`: CSV, XLSX, DOCX e PDF nativo/OCR no modo de linhas) e se o
+  sha256 do arquivo lido for igual ao `checksum` da sessão. Nenhum parâmetro do cliente participa. A reextração substitui
+  o sumário inteiro, então a evidência anterior nunca sobrevive a uma nova extração.
+- **Quem exige:** `promoteApprovedSessionToDomain`, dentro da transação, com a sessão travada (FOR UPDATE) e antes de
+  qualquer escrita, e também `previewSessionPromotion`. Se a evidência faltar, estiver em versão antiga ou for de outro
+  arquivo, a promoção é recusada com `PRECONDITION_FAILED` / `PROVENANCE_SCAN_REQUIRED` e orientação acionável. Nunca há
+  fallback para `declarada`. Como a transação inteira é revertida, nada fica gravado: nem ledger, nem pesquisa, cotação,
+  Item Inteligente ou evento. O veredito `global` da evidência também classifica o conjunto, valendo o mais restritivo.
+- **Sessão legada (antes desta emenda):**
+  - **Sem revisão:** usa o reprocessamento governado já existente.
+  - **Com revisões, correções ou aprovação:** usa `ingestion.revalidateProvenance` (operador+). O worker reanalisa o
+    ARQUIVO ORIGINAL (mesmo checksum) fora de transação. `commitProvenanceRevalidation` grava, sob lock da sessão, só a
+    evidência, os avisos de declaração do documento e o histórico append-only `provenanceRevalidations`, além da auditoria
+    `import_provenance_revalidated` na MESMA transação.
+  - **O que não muda:** staging, correções e decisões humanas, pois o conteúdo revisado é o mesmo. A declaração
+    encontrada só pode tornar as cotações `ficticia` (mais restritivo).
+  - **Recusa da revalidação:** se o estado mudou entre a pré-checagem e o commit (promovida, reextração reservada, outro
+    arquivo, evidência já vigente), nada é aplicado.
+- **Sessão já promovida:** nada é reprocessado nem reclassificado; o replay da promoção continua idempotente e a
+  revalidação é recusada (histórico concluído é imutável).
+- **UI:** o painel de promoção mostra a orientação e o botão "Revalidar arquivo original" (um clique, sem formulário).
+- **Mudou o que a análise examina?** Incrementar `PROVENANCE_SCAN_VERSION`: as sessões ainda não promovidas passam a
+  exigir revalidação.
+
 ## Limitações conhecidas
 
 - Não há ação governada para **excluir/reclassificar** uma cotação fictícia de um Item Inteligente (o merge é por
@@ -107,8 +139,12 @@ explícita sem escopo parcial vale para o conjunto.
   por desenho, pois não fundamenta o conteúdo revisado que está sendo emitido; a próxima emissão o enxerga.
 - Declaração do documento lida por OCR de baixa confiança, ou restrita a parte das cotações, fica só como revisão
   (cotações `declarada`); não há fluxo para retirar uma declaração global do arquivo (exigiria decisão do Owner).
-- Sessões de ingestão EXTRAÍDAS antes desta emenda não têm o aviso estruturado: promovidas sem reextração, seguem a regra
-  por cotação. Recomendação operacional: reextrair (fluxo existente) sessões pendentes de promoção após o deploy.
+- ~~Sessões de ingestão EXTRAÍDAS antes da emenda P1-B seguiam a regra por cotação.~~ Resolvido pela P1-C: sem a
+  evidência vigente, a promoção é recusada e a sessão é revalidada (ou reextraída, quando ainda não tem revisão).
+- Revalidação roda na fila em memória do worker. Se o processo reiniciar no meio, nada é aplicado e basta pedir de novo.
+  Também falha de forma explícita, com auditoria, se o arquivo original não puder mais ser lido ou reanalisado. Nesse
+  caso a promoção continua bloqueada (fail-closed). Reenviar o MESMO arquivo reaproveita a sessão (checksum), e não há
+  fluxo para descartar uma sessão APROVADA e não promovida, então criar esse fluxo exige decisão do Owner.
 - Contratação Direta exclui a fictícia e calcula com as reais (o servidor escolhe o método explicitamente); Itens
   Inteligentes com mistura ficam suspensos — regras diferentes por desenho (cálculo pontual × referência persistida).
 

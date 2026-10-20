@@ -318,6 +318,10 @@ export function DocumentIngestionLauncher({
                   isPreviewLoading={ingestion.isPromotionPreviewLoading}
                   previewError={ingestion.promotionPreviewError}
                   onRequestPreview={ingestion.requestPromotionPreview}
+                  provenanceScan={ingestion.provenanceScan}
+                  onRevalidateProvenance={ingestion.revalidateProvenance}
+                  isRevalidatingProvenance={ingestion.isRevalidatingProvenance}
+                  provenanceRevalidationError={ingestion.provenanceRevalidationError}
                 />
               </div>
             ) : (

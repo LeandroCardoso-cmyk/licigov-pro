@@ -24,6 +24,7 @@ import { resolveProcurementContext } from "../../services/canonicalContextServic
 import { draftContentHash } from "../../domain/generatedDocument";
 import { readHumanEditMarker } from "../../domain/humanEditMarker";
 import { QUANTITY_NOT_INFORMED_TEXT } from "../../domain/authoritativeItems";
+import { currentProvenanceScanSummary } from "../helpers/provenanceScanFixture";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 960510;
@@ -52,6 +53,7 @@ async function seedSession(rows: Array<{ description: string; quantity: string |
     organizationId: ORG, uploadedBy: A, sourceFileId: `imports/${ORG}/${++seq}-cot.xlsx`, sourceFileName: "cot.xlsx",
     sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", checksum: `${seq}`.padStart(64, "d"),
     procurementProcessId: PROC, importType: "price_research", parserType: "xlsx", parserVersion: "1.0.0", status: "approved", stage: "approved",
+    extractionSummary: currentProvenanceScanSummary(`${seq}`.padStart(64, "d")),
   }).$returningId();
   for (const r of rows) {
     await db.insert(importStagingItems).values({

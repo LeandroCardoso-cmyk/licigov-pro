@@ -85,6 +85,8 @@ export interface ParseResult {
   extraction?:     ExtractionLineage;
   /** U2A-OCR — texto BRUTO do OCR por página (artefato derivado para auditoria; o original é imutável). */
   ocrArtifact?:    { pages: Array<{ pageNumber: number; confidence: number; text: string }> };
+  /** M8 (P1-C) — presente SÓ quando a análise da declaração do documento rodou neste caminho de extração. */
+  declarationScan?: import("../domain/quoteProvenance").DeclarationScanPerformed;
 }
 
 // ─── Observability hook ───────────────────────────────────────────────────────
