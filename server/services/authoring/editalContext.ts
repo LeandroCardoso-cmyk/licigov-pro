@@ -25,6 +25,7 @@ import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import { formatBRL, reaisToCents } from "../../domain/money";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
+  fictitiousQuotesReviewText,
 } from "../../domain/authoritativeItems";
 import {
   confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
@@ -71,6 +72,8 @@ export interface EditalApprovedItem {
   readonly confirmedCatalogCode?: string | null;
   /** Nº de cotações VÁLIDAS que compõem o preço médio. */
   readonly quoteCount?: number;
+  /** M8 hardening — das cotações, quantas são de fonte fictícia (demonstrativas); ausente/0 ⇒ nenhuma. */
+  readonly fictitiousQuoteCount?: number;
   /** current | source_changed | review_required (renderizado ⇒ entra no digest). */
   readonly sourceState?: string;
 }
@@ -144,6 +147,7 @@ function itemsSignature(items: readonly EditalApprovedItem[]): Array<Record<stri
     .map((i) => ({
       id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: reaisToCents(i.averagePrice),
       cm: i.suggestedCATMAT ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount ?? 0, ss: i.sourceState ?? "current",
+      ...(i.fictitiousQuoteCount ? { fq: i.fictitiousQuoteCount } : {}),
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -214,7 +218,7 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     ? computeItemEstimates(canonical.items, { preserveOrder: true })
     : computeItemEstimates(input.approvedItems.map((i) => ({
       id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-      averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+      averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0, fictitiousQuoteCount: i.fictitiousQuoteCount,
       confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
     })));
   const itemCount = canonical ? canonical.items.length : input.approvedItems.length;
@@ -233,7 +237,8 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const changed = stateOf(it.id);
       const flag = changed && changed !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
       const lot = lotOf(it.id);
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
+      const fict = it.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(it.fictitiousQuoteCount)}` : "";
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}${fict}`);
     }
     lines.push(`- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
@@ -320,6 +325,7 @@ function canonicalItemsSignature(items: readonly ContextItem[]): Array<Record<st
   return items.map((i) => ({
     id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: i.averagePriceCents, l: i.lotCode ?? null,
     cm: i.suggestedCatalogCode ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount, ss: i.sourceState,
+    ...(i.fictitiousQuoteCount ? { fq: i.fictitiousQuoteCount } : {}),
   }));
 }
 
@@ -364,12 +370,12 @@ export async function resolveEditalSources(params: {
   const approvedItems: EditalApprovedItem[] = approved.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice,
     suggestedCATMAT: i.suggestedCATMAT, confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
-    quoteCount: i.quoteCount, sourceState: i.sourceState,
+    quoteCount: i.quoteCount, fictitiousQuoteCount: i.fictitiousQuoteCount, sourceState: i.sourceState,
   }));
   // Gate determinístico COMPARTILHADO com ETP/TR: Itens da contratação ativos ⇒ modo canônico obrigatório.
   const canonical = await resolveCanonicalDocumentItems(params, approvedItems.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0, fictitiousQuoteCount: i.fictitiousQuoteCount,
     confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
     sourceState: i.sourceState ?? "current", quotes: [],
   })));

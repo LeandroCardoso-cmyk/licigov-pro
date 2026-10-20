@@ -36,6 +36,8 @@ export interface AuthoritativeItemInput {
   readonly suggestedCatalogCode: string | null;
   /** R9 / SEM-028, SEM-031 — preço vinculado suspenso (`SOURCE_NOT_CURRENT` | `UNIT_MISMATCH`); null/ausente = sem bloqueio. */
   readonly priceBlockedReason?: string | null;
+  /** M8 hardening — das `quoteCount`, quantas são de fonte FICTÍCIA (demonstrativas); ausente/0 ⇒ nenhuma. */
+  readonly fictitiousQuoteCount?: number;
 }
 
 export interface AuthoritativeItemRow extends AuthoritativeItemInput {
@@ -67,6 +69,8 @@ export interface AuthoritativeItemsEstimate {
   /** R10 / SEM-090 — itens sem quantidade informada (excluídos do total estimado; sinalizados [REVISAR]). */
   readonly unknownQuantityItemCount: number;
   readonly quoteCount: number;
+  /** M8 hardening — cotações de fonte fictícia entre as `quoteCount` (0 ⇒ bloco byte-idêntico ao anterior). */
+  readonly fictitiousQuoteCount: number;
   readonly confirmedClassificationCount: number;
   readonly pendingClassificationCount: number;
 }
@@ -84,6 +88,11 @@ function sortItems(items: readonly AuthoritativeItemInput[]): AuthoritativeItemI
  * Calcula as estimativas autoritativas (centavos, half-up). `preserveOrder` mantém a ORDEM OFICIAL recebida
  * (Itens da contratação: lote → ordinal); sem ele, ordem histórica por descrição (legado).
  */
+/** M8 hardening — marcação documental de cotações de fonte fictícia (nunca apresentadas como pesquisa de preços válida). */
+export function fictitiousQuotesReviewText(n: number): string {
+  return `[REVISAR: ${n} cotação(ões) de fonte fictícia/sintética — valor demonstrativo, não constitui pesquisa de preços válida.]`;
+}
+
 export function computeItemEstimates(items: readonly AuthoritativeItemInput[], opts: { preserveOrder?: boolean } = {}): AuthoritativeItemsEstimate {
   const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
@@ -99,6 +108,7 @@ export function computeItemEstimates(items: readonly AuthoritativeItemInput[], o
     unpricedItemCount: rows.length - priced.length,
     unknownQuantityItemCount: rows.filter((r) => !isQuantityInformed(r.quantity)).length,
     quoteCount: rows.reduce((a, r) => a + r.quoteCount, 0),
+    fictitiousQuoteCount: rows.reduce((a, r) => a + (r.fictitiousQuoteCount ?? 0), 0),
     confirmedClassificationCount: rows.filter((r) => r.confirmedCatalogCode).length,
     pendingClassificationCount: rows.filter((r) => !r.confirmedCatalogCode).length,
   };
@@ -173,6 +183,9 @@ export function renderAuthoritativeItemsBlock(
   lines.push("");
   // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
   lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
+  if (estimate.fictitiousQuoteCount > 0) {
+    lines.push(`- ${fictitiousQuotesReviewText(estimate.fictitiousQuoteCount)}`);
+  }
   if (estimate.unpricedItemCount > 0) {
     lines.push(`- [REVISAR: ${estimate.unpricedItemCount} item(ns) sem preço de referência — excluído(s) do total.]`);
   }

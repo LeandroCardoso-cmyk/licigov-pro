@@ -31,6 +31,8 @@ import {
 import {
   insertIntelligentItem,
   insertCatmatMatch,
+  listFictitiousQuoteIds,
+  countFictitiousPricedQuotes,
   insertItemRecommendation,
   insertItemRisk,
   getIntelligentItem,
@@ -247,6 +249,8 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   governance: {
     sourceState: string; sourceStateReason: string | null; approvalBlock: ItemApprovalBlock | null;
     referencePriceCents: number; validQuoteCount: number; priceOutliers: PriceOutlier[];
+    /** M8 hardening — cotações com preço de fonte FICTÍCIA (demonstrativas), que hoje compõem a média. */
+    fictitiousQuoteCount: number;
   } | null;
 }> {
   const item = await getIntelligentItem(itemId, organizationId);
@@ -260,12 +264,14 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   const source = item ? await getIntelligentItemSourceState(item.id, organizationId) : null;
   // Fornecedores persistidos em REAIS → CENTAVOS explicitamente (contrato monetário do cliente).
   const quotesCents = item ? item.suppliers.map(s => ({ name: s.name, valueCents: reaisToCents(s.value) })) : [];
+  const fictitiousIds = item ? await listFictitiousQuoteIds(organizationId, item.suppliers.map(s => s.quoteId ?? "")) : new Set<string>();
   const governance = item ? {
     sourceState: source?.sourceState ?? "current", sourceStateReason: source?.sourceStateReason ?? null,
     approvalBlock: itemApprovalBlock(source?.sourceState ?? "current"),
     referencePriceCents: reaisToCents(item.averagePrice),
     validQuoteCount: quotesCents.filter(q => q.valueCents > 0).length,
     priceOutliers: findPriceOutliers(quotesCents),
+    fictitiousQuoteCount: countFictitiousPricedQuotes(item.suppliers, fictitiousIds),
   } : null;
   return { item, catmat, recommendations, risks, history, graphNodeIds: graphNodes.map(n => n.id), governance };
 }

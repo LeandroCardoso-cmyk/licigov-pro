@@ -169,7 +169,7 @@ describe("ItemIntelligenceWorkspace — falha de refetch não esconde itens vál
     expect(html).toContain("Fonte alterada");
     expect(html).toContain("Identidade a revisar");
     expect(html).toContain("461234");
-    expect(html).toContain("3 cotação(ões) válida(s)");
+    expect(html).toContain("3 cotação(ões) importada(s) com preço");
     expect(html).toContain("Aplicar cotações atualizadas (2)");
     expect(html).toContain("Aprovar");
     expect(html).toContain("Rejeitar");

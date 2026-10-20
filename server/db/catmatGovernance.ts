@@ -15,6 +15,10 @@ import { getDb } from "./connection";
 import { catmatDecisionsTable, catmatThresholdConfigTable } from "../../drizzle/schema";
 import type { CATMATGovernanceDecision } from "../domain/catmatGovernance";
 
+/** Conexão ou transação Drizzle (mesmo padrão de `ProcurementExecutor`). Ausente ⇒ getDb(). */
+type GovDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export type CatmatGovernanceExecutor = GovDb | Parameters<Parameters<GovDb["transaction"]>[0]>[0];
+
 // ─── Threshold config (versionado, fail-closed) ──────────────────────────────
 
 export interface ActiveThreshold {
@@ -121,8 +125,8 @@ export async function insertCatmatDecision(params: {
   actorUserId: number;
   correlationId: string;
   idempotencyKey: string;
-}): Promise<CatmatDecisionRecord | null> {
-  const db = await getDb();
+}, executor?: CatmatGovernanceExecutor): Promise<CatmatDecisionRecord | null> {
+  const db = executor ?? await getDb();
   if (!db) return null;
   await db.insert(catmatDecisionsTable).values({
     organizationId: params.organizationId,
@@ -148,7 +152,23 @@ export async function insertCatmatDecision(params: {
     set: { idempotencyKey: params.idempotencyKey },
   });
 
-  return getLatestCatmatDecision(params.itemId, params.organizationId);
+  // A linha DESTA chave (nunca "a última do item": sob concorrência, outra decisão pode ter entrado depois). Leitura
+  // CORRENTE: se o upsert virou no-op porque outra transação gravou a mesma chave, a linha dela é visível (o chamador
+  // recusa quando não é a decisão pedida).
+  return getCatmatDecisionByIdempotencyKey(params.organizationId, params.idempotencyKey, db, { current: true });
+}
+
+/** Decisão do ledger registrada com a chave (org, idempotencyKey) — UNIQUE `uq_catmat_decision_idem`. */
+export async function getCatmatDecisionByIdempotencyKey(
+  orgId: number, idempotencyKey: string, executor?: CatmatGovernanceExecutor, opts: { current?: boolean } = {},
+): Promise<CatmatDecisionRecord | null> {
+  const db = executor ?? await getDb();
+  if (!db) return null;
+  const where = and(eq(catmatDecisionsTable.organizationId, orgId), eq(catmatDecisionsTable.idempotencyKey, idempotencyKey));
+  const rows = opts.current
+    ? await db.select().from(catmatDecisionsTable).where(where).limit(1).for("share")
+    : await db.select().from(catmatDecisionsTable).where(where).limit(1);
+  return rows.length > 0 ? mapRow(rows[0]) : null;
 }
 
 function mapRow(r: typeof catmatDecisionsTable.$inferSelect): CatmatDecisionRecord {

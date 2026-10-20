@@ -9,7 +9,28 @@
 
 import { createHash } from "crypto";
 
-export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual";
+export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual" | SuggestionStateValue;
+
+/**
+ * M8 hardening — estado da SUGESTÃO (coluna `decision` de `item_catmat_matches`; a decisão institucional vive só no
+ * ledger `catmat_decisions`). Verificação oficial ≠ recomendação atual ≠ decisão:
+ *   - `busca_atual`       — candidato da busca oficial MAIS RECENTE concluída para o item;
+ *   - `historico`         — candidato de busca anterior que a busca mais recente não trouxe (preservado, nunca apagado);
+ *   - `codigo_verificado` — código informado pelo servidor e verificado na fonte oficial ("Verificar código").
+ * Linhas gravadas antes desta regra (`sugerido`, `rejeitado`…) não têm origem identificável ⇒ `origem_nao_identificada`
+ * (nunca apresentadas como atuais). Só `busca_atual` e `codigo_verificado` podem ser CONFIRMADAS.
+ */
+export type SuggestionStateValue = "busca_atual" | "historico" | "codigo_verificado";
+export type SuggestionState = SuggestionStateValue | "origem_nao_identificada";
+
+export function suggestionStateOf(decision: string): SuggestionState {
+  return decision === "busca_atual" || decision === "historico" || decision === "codigo_verificado" ? decision : "origem_nao_identificada";
+}
+
+/** Estados que podem ser confirmados como classificação oficial (além da verificação na fonte). */
+export function isConfirmableSuggestionState(state: SuggestionState | null | undefined): boolean {
+  return state === "busca_atual" || state === "codigo_verificado";
+}
 
 /**
  * Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. O catálogo oficial é

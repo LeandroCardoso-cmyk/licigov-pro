@@ -98,6 +98,19 @@ export function createPriceResearchItem(params: {
   };
 }
 
+
+/** Marcador persistido (observations da cotação) quando o parser detecta fonte fictícia/sintética. */
+export const FICTITIOUS_QUOTE_MARKER = "Fonte fictícia/sintética — não constitui cotação válida para fins oficiais";
+
+/**
+ * M8 hardening — cotação FICTÍCIA (demonstrativa): marcador do parser persistido na cotação OU fornecedor declarado
+ * "fictício" no próprio nome (heurística estreita: "sintético" no nome é comum em razões sociais reais — ex.: couro
+ * sintético — e só conta pelo marcador do parser). Não é pesquisa de preços oficial; nunca apresentada como "válida".
+ */
+export function isFictitiousQuote(q: { name?: string | null; observations?: string | null }): boolean {
+  return (q.observations ?? "").includes(FICTITIOUS_QUOTE_MARKER) || /\bfict[ií]ci[oa]s?\b/i.test(q.name ?? "");
+}
+
 /**
  * Extração determinística das COTAÇÕES (uma `PriceResearchItem` por cotação, agrupáveis pelo item) a partir de
  * texto colado/CSV/extraído. M8-PRICE-IMPORT-001: a leitura é ESTRUTURADA (`parsePriceResearchText`) — cabeçalho,
@@ -116,11 +129,12 @@ export function extractItemsFromText(
   const items: PriceResearchItem[] = [];
   for (const it of parsed.items) {
     for (const q of it.quotes) {
+      // O marcador de fonte fictícia vem PRIMEIRO: o corte de 1.000 caracteres nunca o remove (M8 hardening).
       const observations = [
+        q.fictitious && FICTITIOUS_QUOTE_MARKER,
         it.specification && `Especificação: ${it.specification}`,
         q.date && `Data: ${q.date}`,
         q.notes,
-        q.fictitious && "Fonte fictícia/sintética — não constitui cotação válida para fins oficiais",
       ].filter(Boolean).join(" | ");
       items.push(createPriceResearchItem({
         researchId: ctx.researchId,

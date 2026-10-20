@@ -57,6 +57,7 @@ vi.mock("@/components/procurement/CatmatThresholdConfig", () => ({ default: () =
 import ItemIntelligenceWorkspace from "@/components/procurement/ItemIntelligenceWorkspace";
 import ItemSourceUpdateConfirm from "@/components/procurement/ItemSourceUpdateConfirm";
 import ProcurementItemPanel from "@/components/procurement/ProcurementItemPanel";
+import { ItemDrawer } from "@/pages/ProcessoLicitatorio";
 
 const render = (el: Parameters<typeof createElement>[0], props: Record<string, unknown> = {}) =>
   renderToStaticMarkup(createElement(el as never, props));
@@ -199,7 +200,8 @@ describe("R9 / SEM-054 — ProcurementItemPanel: impacto da aprovação e bloque
     expect(button(html, "Aprovar item")).not.toContain('disabled=""');
     expect(html).toContain("Ao aprovar, o preço de referência canônico será");
     expect(html).toContain("R$ 1.234,56");
-    expect(html).toContain("Média de 3 cotação(ões) válida(s).");
+    expect(html).toContain("Média de 3 cotação(ões) importada(s) com preço.");
+    expect(html).not.toContain("válida(s)");
     expect(html).toContain("Móveis C — R$ 400,00 (+100% da média)");
   });
 
@@ -223,7 +225,7 @@ describe("CATMAT/CATSER oficial — ProcurementItemPanel: buscar classificação
     governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 400000, validQuoteCount: 3, priceOutliers: [] },
   };
   const cand = (over: Record<string, unknown>) => ({
-    id: "m1", catmatCode: "451868", catmatDescription: "COMPUTADOR PORTÁTIL (NOTEBOOK)", score: 0.5, rank: 0, decision: "sugerido",
+    id: "m1", catmatCode: "451868", catmatDescription: "COMPUTADOR PORTÁTIL (NOTEBOOK)", score: 0.5, rank: 0, decision: "busca_atual", state: "busca_atual",
     source: "api-comprasgov:catmat", verified: true, catalogType: "catmat", retrievedAt: "2026-10-16T12:00:00.000Z", evidenceSnapshotId: "s1", verificationNote: null, ...over,
   });
 
@@ -249,5 +251,83 @@ describe("CATMAT/CATSER oficial — ProcurementItemPanel: buscar classificação
     const legacy = render(ProcurementItemPanel, { itemId: "i1" });
     expect(legacy).toContain("Sem proveniência verificável");
     expect(button(legacy, "Confirmar")).toContain('disabled=""');
+  });
+});
+
+describe("M8 hardening — sugestões: busca atual × histórico × código verificado × decisão (ledger)", () => {
+  const base = {
+    item: {
+      id: "i1", organizationId: 1, processId: "p1", sourceResearchId: "r1", description: "Tradução juramentada", quantity: 1, unit: "sv",
+      averagePrice: 100, suppliers: [], suggestedCATMAT: null, alternativeCATMAT: [], specifications: [], risks: [], recommendations: [],
+      status: "pendente", approvedBy: null, correlationId: "c", createdAt: "", updatedAt: "",
+    },
+    recommendations: [], risks: [], history: [], graphNodeIds: [],
+    governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 10000, validQuoteCount: 1, priceOutliers: [], fictitiousQuoteCount: 0 },
+  };
+  const s = (code: string, state: string, rank = 0) => ({
+    id: `m${code}`, catmatCode: code, catmatDescription: `SERVIÇO ${code}`, score: 0.8, rank, decision: state, state,
+    source: "api-comprasgov:catser", verified: true, catalogType: "catser", retrievedAt: "2026-10-16T12:00:00.000Z", evidenceSnapshotId: "s1", verificationNote: null,
+  });
+
+  it("histórica verificada (ex.: 21490 após nova busca) fica em 'Sugestões anteriores', sem botão Confirmar; atual e código verificado são confirmáveis", () => {
+    st.panel = { data: { ...base, catmat: [s("1000", "busca_atual"), s("2000", "codigo_verificado"), s("21490", "historico"), s("3000", "origem_nao_identificada")] }, isLoading: false };
+    const html = render(ProcurementItemPanel, { itemId: "i1" });
+    const [current, previous] = html.split('data-testid="catmat-previous-suggestions"');
+    expect(current).toContain("Candidato da busca atual");
+    expect(current).toContain("Código informado e verificado");
+    expect(current).toContain("#1 1000");
+    expect((current.match(/>Confirmar<\/button>/g) ?? []).length).toBe(2);
+    expect(previous).toContain("Sugestões anteriores (2) — não pertencem à busca mais recente; não podem ser confirmadas");
+    expect(previous).toContain("21490");
+    expect(previous).toContain("Histórico — não retornou na busca mais recente");
+    expect(previous).toContain("Sugestão anterior — origem da busca não registrada");
+    expect(previous).toContain("verificação não é recomendação atual");
+    expect(previous).not.toContain(">Confirmar</button>");
+    expect(previous).not.toContain("ainda não é decisão");
+  });
+});
+
+describe("M8 hardening — cotações fictícias nunca aparecem como válidas", () => {
+  it("Workspace: item com cotações fictícias ⇒ 'valor demonstrativo', sem 'Referência canônica' nem 'válida(s)'", () => {
+    withItems(item({ quoteCount: 2, fictitiousQuoteCount: 2, averagePriceCents: 15000 }));
+    const html = render(ItemIntelligenceWorkspace, { processId: "p1" });
+    expect(html).toContain("Valor demonstrativo (fonte fictícia) — não é referência oficial");
+    expect(html).toContain("2 cotação(ões) fictícia(s) — valor demonstrativo, não utilizável como pesquisa de preços oficial");
+    expect(html).not.toContain("Referência canônica ao aprovar");
+    expect(html).not.toContain("válida(s)");
+  });
+
+  it("Workspace: sem fictícias ⇒ cotações importadas (não 'válidas')", () => {
+    withItems(item({ quoteCount: 3, fictitiousQuoteCount: 0 }));
+    const html = render(ItemIntelligenceWorkspace, { processId: "p1" });
+    expect(html).toContain("3 cotação(ões) importada(s) com preço");
+    expect(html).toContain("Referência canônica ao aprovar");
+  });
+
+  it("Painel: média com fonte fictícia ⇒ aviso explícito e consequência da aprovação declarada", () => {
+    st.panel = { data: {
+      item: { id: "i1", organizationId: 1, processId: "p1", sourceResearchId: "r1", description: "Caneta", quantity: 10, unit: "un", averagePrice: 150, suppliers: [], suggestedCATMAT: null, alternativeCATMAT: [], specifications: [], risks: [], recommendations: [], status: "pendente", approvedBy: null, correlationId: "c", createdAt: "", updatedAt: "" },
+      catmat: [], recommendations: [], risks: [], history: [], graphNodeIds: [],
+      governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 15000, validQuoteCount: 2, priceOutliers: [], fictitiousQuoteCount: 2 },
+    }, isLoading: false };
+    const html = render(ProcurementItemPanel, { itemId: "i1" });
+    expect(html).toContain("Valor demonstrativo (fonte fictícia) — ao aprovar, vira a referência do item");
+    expect(html).toContain('data-testid="fictitious-quotes-warning"');
+    expect(html).toContain("não constitui pesquisa de preços válida");
+    expect(html).not.toContain("Ao aprovar, o preço de referência canônico será");
+    expect(html).not.toContain("válida(s)");
+  });
+});
+
+describe("M8 hardening — ItemDrawer: um único cabeçalho 'Inteligência do Item' e um único Fechar", () => {
+  it("drawer + painel ⇒ 1 título, 1 botão Fechar (com nome acessível), diálogo nomeado pelo título", () => {
+    st.panel = { data: undefined, isLoading: true };
+    const html = render(ItemDrawer, { itemId: "i1", onClose: () => {} });
+    expect((html.match(/Inteligência do item/gi) ?? []).length).toBe(1);
+    expect((html.match(/aria-label="Fechar"/g) ?? []).length).toBe(1);
+    expect(html).toContain('aria-label="Fechar painel do item"'); // fundo clicável (fora do cabeçalho)
+    expect(html).toMatch(/role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="item-intelligence-panel-title"/);
+    expect(html).toContain('id="item-intelligence-panel-title"');
+    expect(html).not.toContain("<svg"); // sem o X duplicado do lucide
   });
 });

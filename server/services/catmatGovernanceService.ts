@@ -21,11 +21,16 @@ import {
   decisionSource,
   type CATMATGovernanceDecision,
 } from "../domain/catmatGovernance";
+import { isConfirmableSuggestionState, type SuggestionState } from "../domain/catmatMatching";
 import {
   getActiveCatmatThreshold,
+  getCatmatDecisionByIdempotencyKey,
   insertCatmatDecision,
   type CatmatDecisionRecord,
+  type CatmatGovernanceExecutor,
 } from "../db/catmatGovernance";
+import { getDb } from "../db/connection";
+import { lockIntelligentItemForClassification } from "../db/procurement";
 
 /** Sugestão persistida do item, com o estado de verificação contra a evidência oficial do órgão. */
 export interface AvailableSuggestion {
@@ -39,6 +44,11 @@ export interface AvailableSuggestion {
    * situação ativa. Ausente/false ⇒ não pode ser CONFIRMADO como classificação oficial (fail-closed).
    */
   readonly verified?: boolean;
+  /**
+   * M8 hardening — estado da sugestão. Só `busca_atual` (busca oficial mais recente) e `codigo_verificado` ("Verificar
+   * código") podem ser CONFIRMADOS; histórico/origem não identificada/ausente ⇒ recusa (fail-closed).
+   */
+  readonly state?: SuggestionState;
 }
 
 export interface DecideCatmatParams {
@@ -56,6 +66,13 @@ export interface DecideCatmatParams {
   readonly catmatCode?: string | null;
   readonly catmatDescription?: string | null;
   readonly justification?: string | null;
+  /**
+   * Relê as sugestões do item DENTRO da transação da decisão (após o lock do item). Ausente ⇒ usa `suggestions`.
+   * É a leitura decisiva: estado (busca atual/histórico/código verificado) e verificação oficial vigentes no commit.
+   */
+  readonly loadSuggestions?: (executor: CatmatGovernanceExecutor) => Promise<readonly AvailableSuggestion[]>;
+  /** Efeitos de lineage da decisão NOVA (código no item, evento), executados na mesma transação do ledger. */
+  readonly lineage?: (executor: CatmatGovernanceExecutor, record: CatmatDecisionRecord) => Promise<void>;
 }
 
 export interface DecideCatmatResult {
@@ -85,9 +102,10 @@ function payloadHashOf(p: DecideCatmatParams): string {
  * registrada devolve o registro original (a classificação não muda por mudança posterior da evidência).
  */
 export function assertConfirmableSuggestion(
-  decision: CATMATGovernanceDecision, decided: Pick<AvailableSuggestion, "verified"> | null,
+  decision: CATMATGovernanceDecision, decided: Pick<AvailableSuggestion, "verified" | "state"> | null,
 ): void {
-  if (decision === "confirmado" && decided?.verified !== true) {
+  if (decision !== "confirmado") return;
+  if (decided?.verified !== true) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "CATMAT_SUGGESTION_UNVERIFIED: esta sugestão não tem verificação no catálogo oficial CATMAT/CATSER e não pode ser "
@@ -95,36 +113,93 @@ export function assertConfirmableSuggestion(
         + "substituição manual (com justificativa) ou \"sem correspondência segura\". Nada foi gravado.",
     });
   }
+  // Verificação oficial ≠ recomendação atual: sugestão que a busca mais recente não trouxe (ou de origem não
+  // identificável) não é confirmada — o servidor busca de novo ou verifica o código. Decisões já registradas ficam intactas.
+  if (!isConfirmableSuggestionState(decided.state)) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "CATMAT_SUGGESTION_NOT_CURRENT: esta sugestão não pertence à busca oficial mais recente do item (é histórica ou "
+        + "anterior ao registro da origem). A verificação oficial não a torna recomendação atual. Use \"Buscar classificação\" "
+        + "novamente ou informe o código em \"Verificar código\". Nada foi gravado.",
+    });
+  }
 }
 
-/**
- * Executa uma decisão supervisionada e a persiste no ledger imutável (idempotente).
- * Lança `BAD_REQUEST` quando a decisão viola as invariantes (fail-closed).
- */
-export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCatmatResult> {
-  const suggestionCodes = params.suggestions.map(s => s.catmatCode);
+/** Barreira de TESTE (interleavings determinísticos). Nunca configurada em produção. */
+export type CatmatDecisionHookPhase = "before_lock" | "after_lock" | "before_commit";
+let decisionHook: ((phase: CatmatDecisionHookPhase) => Promise<void> | void) | null = null;
+export function __setCatmatDecisionHookForTests(fn: typeof decisionHook): void { decisionHook = fn; }
 
-  // Sugestão decidida (quando aplicável) → proveniência/score/descrição auditáveis.
-  // Resolvida por id (confirmar/rejeitar sobre uma sugestão) ou por código.
+/** Campos efetivos da decisão, derivados das sugestões REAIS do item (o código de confirmar nunca é inventado). */
+function resolveDecision(params: DecideCatmatParams, suggestions: readonly AvailableSuggestion[]) {
+  // Sugestão decidida (quando aplicável) → proveniência/score/descrição auditáveis. Por id ou por código.
   const decided =
     params.suggestionId
-      ? params.suggestions.find(s => s.id === params.suggestionId) ?? null
-      : params.suggestions.find(s => s.catmatCode === (params.catmatCode ?? "").trim()) ?? null;
-
-  // Código a fixar: só existe em confirmar/substituir. Nunca fabricado:
-  //   - confirmar  → código da sugestão decidida (validado a seguir como real);
-  //   - substituir → código informado explicitamente pelo servidor.
-  const resolvedCode =
+      ? suggestions.find(s => s.id === params.suggestionId) ?? null
+      : suggestions.find(s => s.catmatCode === (params.catmatCode ?? "").trim()) ?? null;
+  // Código a fixar: confirmar → código da sugestão decidida; substituir → código informado pelo servidor.
+  const code =
     params.decision === "confirmado"
       ? (decided?.catmatCode ?? ((params.catmatCode ?? "").trim() || null))
       : params.decision === "substituido"
         ? ((params.catmatCode ?? "").trim() || null)
         : null;
+  const description =
+    params.decision === "confirmado"
+      ? decided?.catmatDescription ?? null
+      : params.decision === "substituido"
+        ? params.catmatDescription ?? null
+        : null;
+  const score = params.decision === "confirmado" ? decided?.score ?? null : null;
+  // Substituição manual: declarada pelo servidor; só leva a fonte oficial no rótulo quando o MESMO código tem evidência
+  // oficial verificada neste item (nunca apresenta a declaração do usuário como consulta oficial).
+  const manualEvidence = params.decision === "substituido"
+    ? suggestions.find((s) => s.verified === true && s.catmatCode === code)?.source ?? null
+    : null;
+  const source = decisionSource(params.decision, decided?.source ?? null, manualEvidence);
+  return { decided, code, description, score, source };
+}
+
+/**
+ * A chave já tem decisão no ledger (falha DEPOIS do commit, ou chave de idempotência vencida): devolve o registro original
+ * — nunca reavalia nem duplica. Mesma chave com decisão diferente ⇒ CONFLICT (nada gravado).
+ */
+function assertSamePriorDecision(prior: CatmatDecisionRecord, params: DecideCatmatParams): void {
+  const code = (params.catmatCode ?? "").trim() || null;
+  const fixesCode = params.decision === "confirmado" || params.decision === "substituido";
+  const same = prior.itemId === params.itemId && prior.decision === params.decision && prior.actorUserId === params.actorUserId
+    && (!params.suggestionId || prior.suggestionId === params.suggestionId)
+    && (!fixesCode || !code || prior.catmatCode === code)
+    && (params.decision !== "substituido" || (prior.catmatCode === ((params.catmatCode ?? "").trim() || null)
+      && (prior.catmatDescription ?? null) === (params.catmatDescription ?? null)))
+    && (prior.justification ?? null) === ((params.justification ?? "").trim() || null);
+  if (!same) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Idempotency-Key já registrada no ledger para outra decisão — operação recusada. Nada foi gravado.",
+    });
+  }
+}
+
+/**
+ * Executa uma decisão supervisionada e a persiste no ledger imutável (idempotente).
+ * Lança `BAD_REQUEST` quando a decisão viola as invariantes (fail-closed).
+ *
+ * Integridade sob concorrência (M8 hardening): a verificação DECISIVA (sugestão vigente, proveniência oficial) e a gravação
+ * no ledger (com a fixação do código no item e o evento de linha do tempo) formam UMA transação, aberta com o lock do item
+ * — o mesmo da busca oficial (`recordCatalogSearchMatches`) e de "Verificar código". Ordem de locks: item → sugestões →
+ * evidência (compartilhado) → ledger. Uma busca que rebaixa a sugestão antes do lock faz a decisão ser recusada; uma
+ * decisão que obtém o lock primeiro é registrada e a busca posterior não a altera. Sem retry automático: deadlock/timeout
+ * ⇒ rollback integral e a chave fica reutilizável (o reenvio com a mesma chave reencontra a decisão, se ela foi gravada).
+ */
+export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCatmatResult> {
+  const suggestionCodes = params.suggestions.map(s => s.catmatCode);
+  const pre = resolveDecision(params, params.suggestions);
 
   // Valida com o código EFETIVO (o de confirmar vem sempre de uma sugestão real).
   const validation = validateDecision({
     decision: params.decision,
-    catmatCode: resolvedCode,
+    catmatCode: pre.code,
     justification: params.justification,
     suggestionCodes,
   });
@@ -143,21 +218,7 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
     });
   }
 
-  const resolvedDescription =
-    params.decision === "confirmado"
-      ? decided?.catmatDescription ?? null
-      : params.decision === "substituido"
-        ? params.catmatDescription ?? null
-        : null;
-
-  const resolvedScore = params.decision === "confirmado" ? decided?.score ?? null : null;
-  // Substituição manual: declarada pelo servidor; só leva a fonte oficial no rótulo quando o MESMO código tem evidência
-  // oficial verificada neste item (nunca apresenta a declaração do usuário como consulta oficial).
-  const manualEvidence = params.decision === "substituido"
-    ? params.suggestions.find((s) => s.verified === true && s.catmatCode === resolvedCode)?.source ?? null
-    : null;
-  const source = decisionSource(params.decision, decided?.source ?? null, manualEvidence);
-
+  let recovered = false;
   const { result, replayed } = await runWithIdempotency(
     {
       key: params.idempotencyKey,
@@ -167,25 +228,58 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
       payloadHash: payloadHashOf(params),
     },
     async () => {
-      assertConfirmableSuggestion(params.decision, decided);
-      const record = await insertCatmatDecision({
-        organizationId: params.organizationId,
-        processId: params.processId,
-        itemId: params.itemId,
-        decision: params.decision,
-        suggestionId: params.suggestionId ?? decided?.id ?? null,
-        catmatCode: resolvedCode,
-        catmatDescription: resolvedDescription,
-        source,
-        score: resolvedScore,
-        justification: (params.justification ?? "").trim() || null,
-        thresholdMinScore: threshold?.minScore ?? null,
-        thresholdConfigId: threshold?.id ?? null,
-        actorUserId: params.actorUserId,
-        correlationId: params.correlationId,
-        idempotencyKey: params.idempotencyKey,
+      await decisionHook?.("before_lock");
+      const db = await getDb();
+      if (!db) {
+        // Sem DB (degrade): valida sobre as sugestões recebidas; nada é persistido.
+        assertConfirmableSuggestion(params.decision, pre.decided);
+        return null;
+      }
+      return db.transaction(async (tx) => {
+        if (!await lockIntelligentItemForClassification(params.itemId, params.organizationId, tx)) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado." });
+        }
+        await decisionHook?.("after_lock");
+        const prior = await getCatmatDecisionByIdempotencyKey(params.organizationId, params.idempotencyKey, tx);
+        if (prior) {
+          assertSamePriorDecision(prior, params);
+          recovered = true;
+          return prior;
+        }
+        // Estado VIGENTE sob o lock do item (nunca o que foi lido antes da transação).
+        const current = params.loadSuggestions ? await params.loadSuggestions(tx) : params.suggestions;
+        const eff = resolveDecision(params, current);
+        assertConfirmableSuggestion(params.decision, eff.decided);
+        const record = await insertCatmatDecision({
+          organizationId: params.organizationId,
+          processId: params.processId,
+          itemId: params.itemId,
+          decision: params.decision,
+          suggestionId: params.suggestionId ?? eff.decided?.id ?? null,
+          catmatCode: eff.code,
+          catmatDescription: eff.description,
+          source: eff.source,
+          score: eff.score,
+          justification: (params.justification ?? "").trim() || null,
+          thresholdMinScore: threshold.minScore,
+          thresholdConfigId: threshold.id,
+          actorUserId: params.actorUserId,
+          correlationId: params.correlationId,
+          idempotencyKey: params.idempotencyKey,
+        }, tx);
+        if (!record) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao registrar a decisão no ledger." });
+        // A chave (única por órgão) foi gravada por OUTRA transação concorrente (outro ator/item) ⇒ recusa, nada gravado.
+        if (record.itemId !== params.itemId || record.actorUserId !== params.actorUserId) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Idempotency-Key já registrada no ledger para outra decisão — operação recusada. Nada foi gravado.",
+          });
+        }
+        // Lineage na MESMA transação: código fixado no item e evento de linha do tempo (ou tudo, ou nada).
+        await params.lineage?.(tx, record);
+        await decisionHook?.("before_commit");
+        return record;
       });
-      return record;
     },
   );
 
@@ -198,14 +292,14 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
         decision: params.decision,
         itemId: params.itemId,
         processId: params.processId,
-        suggestionId: params.suggestionId ?? decided?.id ?? null,
-        catmatCode: resolvedCode,
-        catmatDescription: resolvedDescription,
-        source,
-        score: resolvedScore,
+        suggestionId: params.suggestionId ?? pre.decided?.id ?? null,
+        catmatCode: pre.code,
+        catmatDescription: pre.description,
+        source: pre.source,
+        score: pre.score,
         justification: (params.justification ?? "").trim() || null,
-        thresholdMinScore: threshold?.minScore ?? null,
-        thresholdConfigId: threshold?.id ?? null,
+        thresholdMinScore: threshold.minScore,
+        thresholdConfigId: threshold.id,
         actorUserId: params.actorUserId,
         correlationId: params.correlationId,
         createdAt: "",
@@ -213,5 +307,5 @@ export async function decideCatmat(params: DecideCatmatParams): Promise<DecideCa
     };
   }
 
-  return { decision: result, replayed };
+  return { decision: result, replayed: replayed || recovered };
 }
