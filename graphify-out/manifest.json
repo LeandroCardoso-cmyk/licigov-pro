@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/parsers/tabularExtraction.ts": {
-    "mtime": 1792521861.0655677,
-    "ast_hash": "617313bb83219c49973ebecd72a3b7f8",
+    "mtime": 1792595188.3830159,
+    "ast_hash": "3040a5cd89caf14e9198b93ed558e952",
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
@@ -15010,8 +15010,8 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearchParser.ts": {
-    "mtime": 1792521861.065096,
-    "ast_hash": "2e36eec966adab7c0a1b86e2390149a2",
+    "mtime": 1792595106.123276,
+    "ast_hash": "d30161575436738a75f3e97e9e096735",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-dfd-justification-contract.test.ts": {
@@ -15200,8 +15200,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
-    "mtime": 1792550953.013329,
-    "ast_hash": "fc5299937c4809a40218c690c6d1b48a",
+    "mtime": 1792595429.1958795,
+    "ast_hash": "c6647b4d2371c1e12e926a4620109856",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts": {
@@ -15210,8 +15210,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts": {
-    "mtime": 1792527661.5794318,
-    "ast_hash": "481ff4e420e76f1a8dbe88a9467c7870",
+    "mtime": 1792595239.8001754,
+    "ast_hash": "c84db01f6a834549a61ac679bec06fb0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-ocr-declaration.test.ts": {
@@ -15242,6 +15242,11 @@
   "server/__tests__/fixtures/pageLimitPdfFixture.ts": {
     "mtime": 1792550173.26818,
     "ast_hash": "bbbc3b0e9f26b70457d0731178600440",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-numeric-declaration.test.ts": {
+    "mtime": 1792595188.3837047,
+    "ast_hash": "a7a248009e8b40de3b7d70bf327a29ab",
     "semantic_hash": ""
   }
 }

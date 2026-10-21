@@ -81,10 +81,19 @@ const NUMERIC_RE = /^-?\d+([.,]\d+)?$/;
 const UNIT_RE = /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9./²³ºª]{0,9}$/;
 
 export function isMoneyLike(t: string): boolean { return MONEY_RE.test(t.trim()); }
+/**
+ * Token com cara de PREÇO: valor monetário com moeda (R$) ou centavos (",50"/".50"). Inteiro solto — ano, número de item,
+ * código, quantidade — NÃO é preço: não faz de uma linha de texto uma cotação.
+ */
+export function isPriceToken(t: string): boolean {
+  const s = t.trim();
+  return isMoneyLike(s) && (/R\$/.test(s) || /[.,]\d{2}$/.test(s));
+}
 
 /**
  * M8 (emenda de integridade) — declaração do DOCUMENTO em linhas que NÃO são cotação (título acima do cabeçalho, notas,
- * parágrafos): linha com valor monetário é dado de cotação (tratado por cotação) e fica de fora. Devolve no máximo um
+ * parágrafos): linha com PREÇO (moeda/centavos) é dado de cotação (tratado por cotação) e fica de fora; ano ou número de
+ * item não exclui a linha. Global × parcial × negação é decidido por `classifyDocumentDeclaration`. Devolve no máximo um
  * aviso estruturado por tipo (global / parcial), com a evidência (≤ 200 caracteres) e a localização.
  */
 export function documentDeclarationWarnings(lines: ReadonlyArray<string | { text: string; location?: string }>, opts: { fromOcr?: boolean } = {}): ImportWarning[] {
@@ -92,7 +101,7 @@ export function documentDeclarationWarnings(lines: ReadonlyArray<string | { text
   const seen = new Set<string>();
   for (const l of lines) {
     const text = (typeof l === "string" ? l : l.text).replace(/\s+/g, " ").trim();
-    if (!text || text.split(" ").some((tok) => isMoneyLike(tok))) continue;
+    if (!text || text.split(" ").some((tok) => isPriceToken(tok))) continue;
     const kind = classifyDocumentDeclaration(text);
     if (!kind) continue;
     const code = kind === "global" ? DOCUMENT_DECLARES_FICTITIOUS : DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION;
@@ -356,13 +365,21 @@ export function tableToRawItems(
   else map = { description: 0, quantity: -1, unit: -1, unitPrice: -1, totalPrice: -1, supplier: -1, brand: -1, model: -1, notes: -1, source: -1 };
 
   const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
-  // M8 — declaração do documento: título/linhas ACIMA do cabeçalho e linhas SEM número (notas); linhas de dado ficam de fora.
-  warnings.push(...documentDeclarationWarnings(matrix
-    .map((row, i) => ({ row, i }))
-    .filter(({ row, i }) => (headerRowIdx >= 0 && i < headerRowIdx) || (i >= startRow && !row.some((c) => isNumericLike(c) || isMoneyLike(c))))
-    .map(({ row, i }) => ({ text: row.filter((c) => c !== "").join(" "), location: `${opts.sheetName ? `sheet:${opts.sheetName}, ` : ""}row:${i + 1}` }))));
   const dataRows = matrix.slice(startRow);
   const wide = headersNorm.length ? detectWideFormat(headersRaw, dataRows, map) : { kind: "long" as const };
+  // M8 — declaração do documento: título/linhas ACIMA do cabeçalho e NOTAS (linhas sem preço e sem fornecedor). "Linha de
+  // cotação" vem da estrutura já reconhecida: valor nas colunas de preço (ou de fornecedor, no mapa comparativo) ou
+  // fornecedor informado; sem colunas de preço mapeadas, um token com cara de preço. Ano/quantidade/código numa nota não a
+  // tornam cotação — e uma cotação nunca vira declaração do documento.
+  const priceCols = [map.unitPrice, map.totalPrice, ...(wide.kind === "wide" ? wide.supplierColumns : [])].filter((c) => c >= 0);
+  const supplierCol = map.supplier;
+  const quoteRow = (row: string[]) =>
+    (priceCols.length > 0 ? priceCols.some((c) => isPriceCell(row[c] ?? "")) : row.some((c) => isPriceToken(c))) ||
+    (supplierCol >= 0 && (row[supplierCol] ?? "").trim() !== "");
+  warnings.push(...documentDeclarationWarnings(matrix
+    .map((row, i) => ({ row, i }))
+    .filter(({ row, i }) => (headerRowIdx >= 0 && i < headerRowIdx) || (i >= startRow && !quoteRow(row)))
+    .map(({ row, i }) => ({ text: row.filter((c) => c !== "").join(" "), location: `${opts.sheetName ? `sheet:${opts.sheetName}, ` : ""}row:${i + 1}` }))));
   if (wide.kind === "wide") {
     warnings.push({
       code: "WIDE_FORMAT_EXPANDED",
@@ -393,6 +410,9 @@ export function tableToRawItems(
     if (row.every(c => c === "")) { skipped++; continue; }
     const rawDescription = at(row, map.description);
     if (!rawDescription) { skipped++; continue; }
+    // M8 — linha SEM preço e SEM fornecedor que declara o DOCUMENTO (ex.: "DADOS FICTÍCIOS…;2026") é nota, não cotação: a
+    // declaração já foi registrada acima e a linha nunca vira item de revisão (mesma regra estrutural da colagem).
+    if (!quoteRow(row) && classifyDocumentDeclaration(row.filter((c) => c !== "").join(" ")) !== null) { skipped++; continue; }
     const base = {
       rawDescription,
       rawQuantity: at(row, map.quantity),

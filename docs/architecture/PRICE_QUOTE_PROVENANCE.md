@@ -144,6 +144,20 @@ Sem migration (coluna JSON existente).
 - **Mudou o que a análise examina?** Incrementar `PROVENANCE_SCAN_VERSION`: as sessões ainda não promovidas passam a
   exigir revalidação.
 
+## Emenda final — declaração acompanhada de número
+
+Ano, número de item ou código não fazem de uma linha de texto uma cotação.
+- **Tabelas (`tableToRawItems`, CSV/XLSX/DOCX/layout de PDF/OCR):** a linha é cotação quando a estrutura já reconhecida
+  mostra preço nas colunas de preço (ou de fornecedor, no mapa comparativo) ou um fornecedor informado. As demais linhas
+  (título, notas) são examinadas. Uma nota que declara o documento ("DADOS FICTÍCIOS PARA HOMOLOGAÇÃO;2026;;;") não vira
+  item de revisão.
+- **Linhas sem estrutura (texto de PDF/OCR, parágrafos, demais abas):** só um token com cara de PREÇO (`isPriceToken`:
+  moeda ou centavos) exclui a linha.
+- **Colagem:** linha delimitada sem valor e sem fornecedor que declara o documento é nota.
+- **Classificação:** global × parcial × negação × genérico segue com `classifyDocumentDeclaration` (sem regra nova). Uma
+  declaração parcial com números ("Somente os itens 3 e 4 são fictícios") passa a gerar o aviso de revisão; antes era
+  descartada.
+
 ## Limitações conhecidas
 
 - Não há ação governada para **excluir/reclassificar** uma cotação fictícia de um Item Inteligente (o merge é por

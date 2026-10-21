@@ -19,7 +19,7 @@
 
 import { parseBRL } from "./money";
 import { normalizeDecimal } from "./importCorrectionFields";
-import { declaresFictitious, suggestsDemonstrative, isPartialDeclarationScope } from "./quoteProvenance";
+import { classifyDocumentDeclaration, declaresFictitious, suggestsDemonstrative, isPartialDeclarationScope } from "./quoteProvenance";
 
 export const PRICE_RESEARCH_PARSER_VERSION = "price-research-parser/2";
 
@@ -246,6 +246,9 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
       const unit = at("unit") || q.unitHint;
       const cents = at("value") ? parseBRL(at("value")) : null;
       const supplier = at("supplier");
+      // M8 — linha SEM valor e SEM fornecedor que declara o documento ("DADOS FICTÍCIOS…;2026;;;") é NOTA, não cotação:
+      // o ano/código na coluna de quantidade não a torna cotação (global × parcial × negação: classifyDocumentDeclaration).
+      if (cents === null && !supplier && classifyDocumentDeclaration(line) !== null) { mark(index, "note", original); return; }
       const key = `${strip(description).replace(/\s+/g, " ")}|${strip(unit)}|${q.quantity ?? ""}`;
       let d = delimitedDrafts.get(key);
       if (!d) {

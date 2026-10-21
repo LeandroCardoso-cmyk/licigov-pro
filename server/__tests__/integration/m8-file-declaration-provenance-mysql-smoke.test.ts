@@ -36,7 +36,7 @@ import { getDb } from "../../db/connection";
 import { importSessions } from "../../../drizzle/schema";
 import { enqueueImport } from "../../services/importQueueService";
 import { getImportSession } from "../../services/fileIngestionService";
-import { insertProcess, listIntelligentItems } from "../../db/procurement";
+import { insertProcess, listIntelligentItems, lockedFictitiousPriceItemCount } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { getItemPanel } from "../../services/itemIntelligenceService";
 import { resolveDocumentAuthoringContext } from "../../services/authoring/authoringContext";
@@ -181,6 +181,52 @@ describe.skipIf(!DB)("M8 emenda — declaração fictícia do ARQUIVO até a ref
     const [item] = await listIntelligentItems(pid, ORG);
     expect(item.fictitiousQuoteCount).toBe(0);
     expect((await getItemPanel(item.id, ORG)).governance!.referenceBlockedReason).toBeNull();
+  });
+
+  it("[21] declaração GLOBAL com ANO em célula separada ⇒ aviso, evidência `global`, sem item fantasma; `ficticia` mesmo após correção; referência suspensa; emissão bloqueada; replay idempotente", async () => {
+    const pid = await newProcess(ORG);
+    const sid = await csvSession(ORG, pid, [
+      "Descrição;Quantidade;Unidade;Valor unitário;Fornecedor",
+      "Caneta azul;10;UN;1,50;Empresa Alfa", "Caneta azul;10;UN;1,70;Empresa Beta",
+      "DADOS FICTÍCIOS PARA HOMOLOGAÇÃO;2026;;;",
+    ].join("\n"), U.operator);
+    const [s] = await rows("SELECT CAST(warnings AS CHAR) w, CAST(extractionSummary AS CHAR) e FROM import_sessions WHERE id = ?", [sid]);
+    expect(String(s.w)).toContain(DOCUMENT_DECLARES_FICTITIOUS);                         // 1-2) aviso persistido na sessão
+    expect(JSON.parse(String(s.e)).provenanceScan).toMatchObject({ declaration: "global" }); // 3) evidência coerente
+    const staged = await rows("SELECT id, correctionRevision revision, rawSupplier FROM import_staging_items WHERE importSessionId = ? AND organizationId = ? ORDER BY id", [sid, ORG]);
+    expect(staged.map((r) => r.rawSupplier)).toEqual(["Empresa Alfa", "Empresa Beta"]);     // a nota não virou cotação
+    // 7) decisão humana legítima (correção supervisionada) preservada e sem efeito sobre a declaração do arquivo.
+    await (await asUser(U.operator)).ingestion.correctItem({
+      sessionId: sid, procurementProcessId: pid, itemId: Number(staged[0].id), expectedRevision: Number(staged[0].revision ?? 0),
+      corrections: { supplier: "Empresa Gama Ltda" }, justification: "razão social conferida", idempotencyKey: `m8fd-corr21-${sid}`,
+    });
+    const promo = await approveAndPromote(sid, pid);
+    expect(promo).toMatchObject({ idempotent: false, itemsPromoted: 2 });
+    const q = await rows("SELECT supplier, provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ? ORDER BY supplier", [ORG, pid]);
+    expect(q.map((r) => [r.supplier, r.k])).toEqual([["Empresa Beta", "ficticia"], ["Empresa Gama Ltda", "ficticia"]]); // 4)
+    const [item] = await listIntelligentItems(pid, ORG);
+    await (await asUser(U.operator)).procurementProcess.approveItem({ itemId: item.id });
+    expect((await getItemPanel(item.id, ORG)).governance!.referenceBlockedReason).toBe("FICTITIOUS_SOURCE");            // 5)
+    const db = (await getDb())!;
+    expect(await db.transaction((tx) => lockedFictitiousPriceItemCount(tx, ORG, pid, false))).toBeGreaterThan(0);         // 6)
+    const again = await (await asUser(U.manager)).ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `m8fd-promo-${sid}` });
+    expect(again.idempotent).toBe(true);
+    expect((await rows("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid]))[0].n).toBe(2);
+  });
+
+  it("[22] arquivo LEGÍTIMO com números, ano e 'homologação' ⇒ nada declarado, evidência sem declaração, `declarada`", async () => {
+    const pid = await newProcess(ORG);
+    const sid = await csvSession(ORG, pid, [
+      "Pesquisa de preços — homologação de fornecedor 2026 — processo 15/2026",
+      "Descrição;Quantidade;Unidade;Valor unitário;Fornecedor",
+      "Lápis HB;20;UN;0,90;Papelaria Central", "Lápis HB;20;UN;1,10;Comercial Beta",
+      "Não foram utilizadas cotações fictícias em 2026.;;;;",
+    ].join("\n"), U.operator);
+    const [s] = await rows("SELECT CAST(warnings AS CHAR) w, CAST(extractionSummary AS CHAR) e FROM import_sessions WHERE id = ?", [sid]);
+    expect(String(s.w ?? "")).not.toContain("DOCUMENT_");
+    expect(JSON.parse(String(s.e)).provenanceScan).toMatchObject({ declaration: null });
+    await approveAndPromote(sid, pid);
+    expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((r) => r.k)).toEqual(["declarada"]);
   });
 
   it("[18] outro órgão não vê a sessão, as cotações nem o item do órgão A", async () => {
