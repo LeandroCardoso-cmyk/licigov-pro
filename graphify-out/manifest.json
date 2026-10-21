@@ -8570,8 +8570,8 @@
     "semantic_hash": ""
   },
   "server/parsers/tabularExtraction.ts": {
-    "mtime": 1792595188.3830159,
-    "ast_hash": "3040a5cd89caf14e9198b93ed558e952",
+    "mtime": 1792595882.8678694,
+    "ast_hash": "10726dc7c9fc63f078d71aa0c73c7603",
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
@@ -15010,8 +15010,8 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearchParser.ts": {
-    "mtime": 1792595106.123276,
-    "ast_hash": "d30161575436738a75f3e97e9e096735",
+    "mtime": 1792595774.871018,
+    "ast_hash": "a8e03a839a5f3164252db4128cbbd2ce",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-dfd-justification-contract.test.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/domain/quoteProvenance.ts": {
-    "mtime": 1792550838.5240204,
-    "ast_hash": "a74a41619a79b837c1b6182540c4cef2",
+    "mtime": 1792595774.8694143,
+    "ast_hash": "d7e8923f4b1786b30c7789e3f816110b",
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
@@ -15200,8 +15200,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
-    "mtime": 1792595429.1958795,
-    "ast_hash": "c6647b4d2371c1e12e926a4620109856",
+    "mtime": 1792595989.1195629,
+    "ast_hash": "0b54ea0a7aa63fef55b9b8a91df35055",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts": {
@@ -15210,8 +15210,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts": {
-    "mtime": 1792595239.8001754,
-    "ast_hash": "c84db01f6a834549a61ac679bec06fb0",
+    "mtime": 1792595954.9590185,
+    "ast_hash": "55c9ab939cae2fd29ac16346faf0e5a6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-ocr-declaration.test.ts": {
@@ -15245,8 +15245,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-numeric-declaration.test.ts": {
-    "mtime": 1792595188.3837047,
-    "ast_hash": "a7a248009e8b40de3b7d70bf327a29ab",
+    "mtime": 1792595744.076753,
+    "ast_hash": "a48d5e8c93eea1f38f2a6fae262d63c0",
     "semantic_hash": ""
   }
 }

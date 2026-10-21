@@ -89,6 +89,14 @@ export function isPriceToken(t: string): boolean {
   const s = t.trim();
   return isMoneyLike(s) && (/R\$/.test(s) || /[.,]\d{2}$/.test(s));
 }
+/**
+ * Linha de TEXTO SEM ESTRUTURA (página de PDF/OCR, outra aba, tabela sem coluna de preço) com cara de cotação: preço com
+ * moeda/centavos, moeda seguida de número ("R$ 2") ou ≥ 2 números (quantidade + valor). Uma declaração com ano tem um só.
+ */
+export function looksLikeQuoteText(text: string): boolean {
+  const toks = text.split(/\s+/).filter((t) => t !== "");
+  return toks.some((t) => isPriceToken(t)) || /R\$\s*\d/.test(text) || toks.filter((t) => isMoneyLike(t) || isNumericLike(t)).length >= 2;
+}
 
 /**
  * M8 (emenda de integridade) — declaração do DOCUMENTO em linhas que NÃO são cotação (título acima do cabeçalho, notas,
@@ -96,12 +104,16 @@ export function isPriceToken(t: string): boolean {
  * item não exclui a linha. Global × parcial × negação é decidido por `classifyDocumentDeclaration`. Devolve no máximo um
  * aviso estruturado por tipo (global / parcial), com a evidência (≤ 200 caracteres) e a localização.
  */
-export function documentDeclarationWarnings(lines: ReadonlyArray<string | { text: string; location?: string }>, opts: { fromOcr?: boolean } = {}): ImportWarning[] {
+export function documentDeclarationWarnings(
+  lines: ReadonlyArray<string | { text: string; location?: string }>,
+  /** `structural`: as linhas já foram classificadas como NÃO-cotação pela estrutura da tabela (dispensa a heurística). */
+  opts: { fromOcr?: boolean; structural?: boolean } = {},
+): ImportWarning[] {
   const out: ImportWarning[] = [];
   const seen = new Set<string>();
   for (const l of lines) {
     const text = (typeof l === "string" ? l : l.text).replace(/\s+/g, " ").trim();
-    if (!text || text.split(" ").some((tok) => isPriceToken(tok))) continue;
+    if (!text || (!opts.structural && looksLikeQuoteText(text))) continue;
     const kind = classifyDocumentDeclaration(text);
     if (!kind) continue;
     const code = kind === "global" ? DOCUMENT_DECLARES_FICTITIOUS : DOCUMENT_PARTIAL_FICTITIOUS_DECLARATION;
@@ -371,15 +383,25 @@ export function tableToRawItems(
   // cotação" vem da estrutura já reconhecida: valor nas colunas de preço (ou de fornecedor, no mapa comparativo) ou
   // fornecedor informado; sem colunas de preço mapeadas, um token com cara de preço. Ano/quantidade/código numa nota não a
   // tornam cotação — e uma cotação nunca vira declaração do documento.
-  const priceCols = [map.unitPrice, map.totalPrice, ...(wide.kind === "wide" ? wide.supplierColumns : [])].filter((c) => c >= 0);
+  const priceCols = [
+    map.unitPrice, map.totalPrice,
+    ...(wide.kind === "wide" ? wide.supplierColumns : wide.kind === "ambiguous" ? wide.candidateColumns : []),
+  ].filter((c) => c >= 0);
   const supplierCol = map.supplier;
+  const rowText = (row: string[]) => row.filter((c) => c !== "").join(" ");
+  // Estrutura CONFIÁVEL só com cabeçalho reconhecido + colunas de preço; mapa posicional de reserva não é prova de estrutura.
+  const structural = headerRowIdx >= 0 && priceCols.length > 0;
   const quoteRow = (row: string[]) =>
-    (priceCols.length > 0 ? priceCols.some((c) => isPriceCell(row[c] ?? "")) : row.some((c) => isPriceToken(c))) ||
+    priceCols.some((c) => isPriceCell(row[c] ?? "")) || (!structural && looksLikeQuoteText(rowText(row))) ||
     (supplierCol >= 0 && (row[supplierCol] ?? "").trim() !== "");
-  warnings.push(...documentDeclarationWarnings(matrix
-    .map((row, i) => ({ row, i }))
-    .filter(({ row, i }) => (headerRowIdx >= 0 && i < headerRowIdx) || (i >= startRow && !quoteRow(row)))
-    .map(({ row, i }) => ({ text: row.filter((c) => c !== "").join(" "), location: `${opts.sheetName ? `sheet:${opts.sheetName}, ` : ""}row:${i + 1}` }))));
+  const lineOf = (row: string[], i: number) => ({ text: rowText(row), location: `${opts.sheetName ? `sheet:${opts.sheetName}, ` : ""}row:${i + 1}` });
+  // Título acima do cabeçalho: texto livre (heurística). Notas após o cabeçalho com colunas de preço mapeadas: já são
+  // NÃO-cotação pela estrutura (a declaração parcial "itens 3 e 4…" continua gerando revisão).
+  warnings.push(...documentDeclarationWarnings(matrix.slice(0, Math.max(0, headerRowIdx)).map(lineOf)));
+  warnings.push(...documentDeclarationWarnings(
+    matrix.map((row, i) => ({ row, i })).filter(({ row, i }) => i >= startRow && !quoteRow(row)).map(({ row, i }) => lineOf(row, i)),
+    { structural },
+  ));
   if (wide.kind === "wide") {
     warnings.push({
       code: "WIDE_FORMAT_EXPANDED",
@@ -412,7 +434,7 @@ export function tableToRawItems(
     if (!rawDescription) { skipped++; continue; }
     // M8 — linha SEM preço e SEM fornecedor que declara o DOCUMENTO (ex.: "DADOS FICTÍCIOS…;2026") é nota, não cotação: a
     // declaração já foi registrada acima e a linha nunca vira item de revisão (mesma regra estrutural da colagem).
-    if (!quoteRow(row) && classifyDocumentDeclaration(row.filter((c) => c !== "").join(" ")) !== null) { skipped++; continue; }
+    if (!quoteRow(row) && classifyDocumentDeclaration(rowText(row)) === "global") { skipped++; continue; }
     const base = {
       rawDescription,
       rawQuantity: at(row, map.quantity),

@@ -34,14 +34,14 @@ vi.mock("../../services/featureFlagService", async (orig) => {
 import { runMigrations } from "../../bootstrap";
 import { getDb } from "../../db/connection";
 import { importSessions } from "../../../drizzle/schema";
-import { enqueueImport } from "../../services/importQueueService";
+import { enqueueImport, isSessionInFlight } from "../../services/importQueueService";
 import { getImportSession } from "../../services/fileIngestionService";
 import { insertProcess, listIntelligentItems, lockedFictitiousPriceItemCount } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { getItemPanel } from "../../services/itemIntelligenceService";
 import { resolveDocumentAuthoringContext } from "../../services/authoring/authoringContext";
 import { FICTITIOUS_PRICE_CELL_TEXT } from "../../domain/authoritativeItems";
-import { DOCUMENT_DECLARES_FICTITIOUS } from "../../domain/quoteProvenance";
+import { DOCUMENT_DECLARES_FICTITIOUS, PROVENANCE_SCAN_REQUIRED, PROVENANCE_SCAN_VERSION } from "../../domain/quoteProvenance";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -227,6 +227,37 @@ describe.skipIf(!DB)("M8 emenda — declaração fictícia do ARQUIVO até a ref
     expect(JSON.parse(String(s.e)).provenanceScan).toMatchObject({ declaration: null });
     await approveAndPromote(sid, pid);
     expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((r) => r.k)).toEqual(["declarada"]);
+  });
+
+  it("[23] sessão com evidência v1 (análise anterior ignorou 'DADOS FICTÍCIOS…;2026') ⇒ recusada; revalidação grava v2 `global`, devolve a aprovação à revisão; depois `ficticia`", async () => {
+    expect(PROVENANCE_SCAN_VERSION).toBe(2);
+    const pid = await newProcess(ORG);
+    const sid = await csvSession(ORG, pid, [
+      "Descrição;Quantidade;Unidade;Valor unitário;Fornecedor",
+      "Caneta azul;10;UN;1,50;Empresa Alfa", "Caneta azul;10;UN;1,70;Empresa Beta",
+      "DADOS FICTÍCIOS PARA HOMOLOGAÇÃO;2026;;;",
+    ].join("\n"), U.operator);
+    // Estado exato deixado pela análise v1: sem o aviso e com evidência v1 "nada declarado".
+    const [{ checksum }] = await rows("SELECT checksum FROM import_sessions WHERE id = ?", [sid]);
+    const v1 = { version: 1, sourceChecksum: String(checksum), parserType: "csv", parserVersion: "1.1.0", declaration: null, origin: "extraction", scannedAt: new Date(0).toISOString() };
+    await conn.execute("UPDATE import_sessions SET warnings = JSON_ARRAY(), extractionSummary = JSON_SET(extractionSummary, '$.provenanceScan', CAST(? AS JSON)) WHERE id = ?", [JSON.stringify(v1), sid]);
+    const op = await asUser(U.operator);
+    const rev = await op.ingestion.getPriceResearchReview({ sessionId: sid, procurementProcessId: pid });
+    await op.ingestion.reviewPriceResearchGroups({ sessionId: sid, procurementProcessId: pid, action: "approved", groups: rev.groups.map((g: any) => ({ groupKey: g.groupKey, expectedRevision: g.revision })) });
+    await op.ingestion.approveSession({ sessionId: sid, procurementProcessId: pid });
+    const mgr = await asUser(U.manager);
+    const err = await mgr.ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `m8fd-promo-${sid}` }).then(() => null, (e: any) => String(e.message));
+    expect(err).toContain(PROVENANCE_SCAN_REQUIRED);
+    expect((await rows("SELECT COUNT(*) n FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid]))[0].n).toBe(0);
+    await op.ingestion.revalidateProvenance({ sessionId: sid, procurementProcessId: pid });
+    for (let i = 0; i < 600 && isSessionInFlight(sid); i++) await new Promise((r) => setTimeout(r, 50));
+    const [s] = await rows("SELECT status, CAST(warnings AS CHAR) w, CAST(extractionSummary AS CHAR) e FROM import_sessions WHERE id = ?", [sid]);
+    expect(JSON.parse(String(s.e)).provenanceScan).toMatchObject({ version: 2, declaration: "global", origin: "revalidation" });
+    expect(String(s.w)).toContain(DOCUMENT_DECLARES_FICTITIOUS);
+    expect(s.status).toBe("awaiting_review"); // declaração nova para o revisor ⇒ nova confirmação humana
+    await op.ingestion.approveSession({ sessionId: sid, procurementProcessId: pid });
+    await mgr.ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `m8fd-promo-${sid}` });
+    expect((await rows("SELECT DISTINCT provenance_kind k FROM price_research_items WHERE organization_id = ? AND process_id = ?", [ORG, pid])).map((r) => r.k)).toEqual(["ficticia"]);
   });
 
   it("[18] outro órgão não vê a sessão, as cotações nem o item do órgão A", async () => {

@@ -118,3 +118,42 @@ describe("sem falso positivo", () => {
     }
   });
 });
+
+describe("auditoria — cotação com preço inteiro/moeda separada/número nativo nunca vira declaração do documento", () => {
+  it("PDF: linha de cotação com preço INTEIRO e nota coletiva ⇒ não global", async () => {
+    const buf = await new Promise<Buffer>((res) => {
+      const d = new PDFDocument({ margin: 40 }); const c: Buffer[] = [];
+      d.on("data", (x: Buffer) => c.push(x)); d.on("end", () => res(Buffer.concat(c))); d.fontSize(10);
+      d.text("Descrição               Qtd      Unid     V.Unit       Total");
+      d.text("Caneta azul             100      UN       2            200      valores demonstrativos");
+      d.end();
+    });
+    const r = await new PdfParser().safeParse(buf, opts("application/pdf"));
+    expect(documentFictitiousDeclaration(r.warnings)).not.toBe("global");
+  });
+  it("texto com 'R$ 2' separado por espaço e nota coletiva ⇒ não global", async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Descrição", "Quantidade", "Unidade", "Valor unitário", "Fornecedor"], ["Caneta azul", 10, "UN", 1.5, "Empresa Alfa"]]), "Cotações");
+    // Outra aba (varrida como texto): cotação com moeda separada e número nativo + nota coletiva de UMA cotação.
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Caneta azul", 10, "UN", "R$ 2", "R$ 20", "Empresa Alfa — valores fictícios"], ["Lápis", 20, "UN", 1.5, 30, "preços demonstrativos"]]), "Rascunho");
+    const r = await new XlsxParser().safeParse(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer, opts(XLSX_MIME));
+    expect(documentFictitiousDeclaration(r.warnings)).not.toBe("global");
+  });
+  it("tabela SEM coluna de preço reconhecida: cotação com preço inteiro e nota coletiva ⇒ não global e item preservado", async () => {
+    const { r, decl } = await csv(["Descrição;Quantidade;Unidade;Vlr ofertado;Obs", "Caneta;10;UN;2;valores demonstrativos", "Lápis;20;UN;3;"]);
+    expect(decl).not.toBe("global");
+    expect(r.items.length).toBe(2);
+  });
+  it("item sem preço com nota PARCIAL/singular é preservado (não descartado) e não vira global", async () => {
+    const { r, decl } = await csv(["Descrição;Quantidade;Unidade;Valor unitário;Fornecedor;Observação", "Caneta azul;10;UN;1,50;Empresa Alfa;", "Grampeador;5;UN;;;cotação fictícia descartada"]);
+    expect(decl).not.toBe("global");
+    expect(r.items.map((i) => i.rawDescription)).toEqual(["Caneta azul", "Grampeador"]);
+  });
+  it("colagem: linha singular/rótulo sem valor NÃO torna o documento fictício", () => {
+    for (const l of ["Fantasia de personagem fictício;10;UN;;", "Cotação fictícia desconsiderada;;;;", "Fornecedor fictício X foi excluído;;;;"]) {
+      expect(parsePriceResearchText([HEAD, ...QUOTES, l].join("\n")).synthetic).toBe(false);
+    }
+  });
+});
+

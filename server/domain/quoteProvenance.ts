@@ -257,8 +257,9 @@ export function dedupeDocumentDeclarations<T extends { code: string; field?: str
 // promoção a exige (fail-closed); nenhum parâmetro do cliente participa.
 
 /** Versão do contrato da análise de declaração do documento. Mudou o que a análise examina ⇒ INCREMENTAR (sessões antigas
- *  passam a exigir revalidação). 1 = emenda P1-B (título/notas/parágrafos/demais abas/OCR). */
-export const PROVENANCE_SCAN_VERSION = 1;
+ *  passam a exigir revalidação). 1 = emenda P1-B (título/notas/parágrafos/demais abas/OCR); 2 = declaração acompanhada de
+ *  número (ano/código) também examinada — evidência v1 pode ter ignorado "DADOS FICTÍCIOS…;2026". */
+export const PROVENANCE_SCAN_VERSION = 2;
 
 /** Código acionável da promoção recusada por falta de análise compatível. */
 export const PROVENANCE_SCAN_REQUIRED = "PROVENANCE_SCAN_REQUIRED";

@@ -147,13 +147,16 @@ Sem migration (coluna JSON existente).
 ## Emenda final — declaração acompanhada de número
 
 Ano, número de item ou código não fazem de uma linha de texto uma cotação.
-- **Tabelas (`tableToRawItems`, CSV/XLSX/DOCX/layout de PDF/OCR):** a linha é cotação quando a estrutura já reconhecida
-  mostra preço nas colunas de preço (ou de fornecedor, no mapa comparativo) ou um fornecedor informado. As demais linhas
-  (título, notas) são examinadas. Uma nota que declara o documento ("DADOS FICTÍCIOS PARA HOMOLOGAÇÃO;2026;;;") não vira
-  item de revisão.
-- **Linhas sem estrutura (texto de PDF/OCR, parágrafos, demais abas):** só um token com cara de PREÇO (`isPriceToken`:
-  moeda ou centavos) exclui a linha.
-- **Colagem:** linha delimitada sem valor e sem fornecedor que declara o documento é nota.
+- **Tabelas com cabeçalho reconhecido (`tableToRawItems`):** a linha é cotação quando a estrutura mostra preço nas colunas
+  de preço (no mapa comparativo, de fornecedor; no ambíguo, as candidatas) ou um fornecedor informado. As demais linhas
+  (notas) são examinadas sem heurística. Uma nota que declara o documento INTEIRO ("DADOS FICTÍCIOS PARA
+  HOMOLOGAÇÃO;2026;;;") não vira item. Uma linha parcial ou singular continua sendo item, para revisão.
+- **Sem estrutura confiável** (título acima do cabeçalho, mapa posicional de reserva, texto de PDF/OCR, parágrafos, demais
+  abas): `looksLikeQuoteText` exclui a linha se ela tiver preço com moeda/centavos, moeda seguida de número ("R$ 2") ou dois
+  ou mais números. Uma declaração com ano tem um só número.
+- **Colagem:** linha delimitada sem valor e sem fornecedor com declaração GLOBAL é nota.
+- **Versão da análise:** `PROVENANCE_SCAN_VERSION` passou para 2. Evidência v1 pode ter ignorado a declaração com
+  número, então sessões não promovidas com v1 exigem revalidação (fluxo P1-C).
 - **Classificação:** global × parcial × negação × genérico segue com `classifyDocumentDeclaration` (sem regra nova). Uma
   declaração parcial com números ("Somente os itens 3 e 4 são fictícios") passa a gerar o aviso de revisão; antes era
   descartada.
