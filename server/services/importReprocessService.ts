@@ -249,7 +249,7 @@ async function provenanceRevalidationFacts(session: Session, hasLedger: boolean,
   return assessProvenanceRevalidation({
     importType: session.importType, status: session.status, promotionStatus: session.promotionStatus ?? "none",
     hasPromotionLedger: hasLedger, stage: session.stage ?? null, updatedAt: session.updatedAt ?? null, now,
-    checksum: session.checksum ?? null, scanCurrent: assessProvenanceScan(session.extractionSummary, session.checksum).ok,
+    checksum: session.checksum ?? null, scanCurrent: assessProvenanceScan(session.extractionSummary, session.checksum, session.warnings).ok,
     fileCoverageGap: hasFileCoverageGap(session.warnings),
   });
 }

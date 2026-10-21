@@ -289,7 +289,9 @@ export interface ProvenanceScanEvidence {
  * limite de páginas do parser (`PAGE_LIMIT`). O texto dessas páginas não foi examinado — uma declaração ali não seria
  * vista — então não há evidência de análise concluída (a extração parcial continua disponível para revisão).
  */
-export const DECLARATION_SCAN_COVERAGE_GAPS: ReadonlySet<string> = new Set(["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT", "PAGE_LIMIT"]);
+export const DECLARATION_SCAN_COVERAGE_GAPS: ReadonlySet<string> = new Set([
+  "OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT", "OCR_PAGES_INCOMPLETE", "PAGE_LIMIT",
+]);
 /** Lacuna do próprio ARQUIVO (não do ambiente): reanalisar o mesmo arquivo nunca a remove — revalidar é inútil. */
 const FILE_COVERAGE_GAPS: ReadonlySet<string> = new Set(["PAGE_LIMIT"]);
 
@@ -357,10 +359,14 @@ export interface ProvenanceRevalidationRecord {
 
 export type ProvenanceScanAssessment =
   | { ok: true; declaration: "global" | "suspected" | null }
-  | { ok: false; reason: "MISSING" | "OUTDATED" | "CHECKSUM_MISMATCH" };
+  | { ok: false; reason: "MISSING" | "OUTDATED" | "CHECKSUM_MISMATCH" | "COVERAGE_INCOMPLETE" };
 
-/** Confere a evidência gravada na sessão (versão vigente + mesmo arquivo). Qualquer dúvida ⇒ não ok (fail-closed). */
-export function assessProvenanceScan(extractionSummary: unknown, sessionChecksum: string | null | undefined): ProvenanceScanAssessment {
+/**
+ * Confere a evidência gravada na sessão (versão vigente + mesmo arquivo). Qualquer dúvida ⇒ não ok (fail-closed). Com os
+ * avisos da sessão, lacuna do próprio ARQUIVO (ex.: PAGE_LIMIT) invalida até evidência gravada antes de ela ser lacuna.
+ */
+export function assessProvenanceScan(extractionSummary: unknown, sessionChecksum: string | null | undefined, sessionWarnings?: unknown): ProvenanceScanAssessment {
+  if (hasFileCoverageGap(sessionWarnings)) return { ok: false, reason: "COVERAGE_INCOMPLETE" };
   const summary = typeof extractionSummary === "string"
     ? (() => { try { return JSON.parse(extractionSummary) as unknown; } catch { return null; } })()
     : extractionSummary;

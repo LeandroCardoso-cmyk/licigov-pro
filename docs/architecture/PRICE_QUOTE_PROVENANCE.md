@@ -107,8 +107,11 @@ Sem migration (coluna JSON existente).
 - **Quem grava:** o worker, na extração, na reextração governada e na revalidação. Só grava se o parser declarar que a
   análise rodou naquele caminho (`ParseResult.declarationScan`: CSV, XLSX, DOCX e PDF nativo/OCR no modo de linhas) e se o
   sha256 do arquivo lido for igual ao `checksum` da sessão. Também exige que todas as páginas tenham sido lidas: com
-  `OCR_REQUIRED`, `OCR_REQUIRED_PARTIAL`, `OCR_FAILED`, `OCR_PAGE_LIMIT` ou `PAGE_LIMIT` (PDF acima do limite de páginas
-  do parser), há texto que não foi examinado e, por isso, não há evidência.
+  `OCR_REQUIRED`, `OCR_REQUIRED_PARTIAL`, `OCR_FAILED`, `OCR_PAGE_LIMIT`, `OCR_PAGES_INCOMPLETE` (o OCR devolveu menos
+  páginas do que recebeu) ou `PAGE_LIMIT` (PDF acima do limite de páginas do parser), há texto que não foi examinado e,
+  por isso, não há evidência.
+  - Uma lacuna do arquivo registrada nos avisos invalida inclusive evidência gravada antes de ela ser considerada lacuna.
+  - Tabela de DOCX pulada pelo limite de itens continua tendo a declaração examinada.
   - A extração parcial continua disponível para revisão, mas nunca é apresentada como análise integral.
   - Quando a lacuna é do próprio ARQUIVO (`PAGE_LIMIT`), reanalisá-lo não resolve. Por isso a revalidação é recusada
     (`COVERAGE_INCOMPLETE`), o painel não oferece a ação, e tanto a promoção quanto a prévia orientam a dividir o

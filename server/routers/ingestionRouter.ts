@@ -216,12 +216,14 @@ function provenanceScanView(s: NonNullable<Awaited<ReturnType<typeof getImportSe
   if (s.importType !== "price_research" || (s.status !== "awaiting_review" && s.status !== "approved") || (s.promotionStatus ?? "none") !== "none") {
     return { status: "not_applicable", message: null, revalidable: false };
   }
-  if (assessProvenanceScan(s.extractionSummary, s.checksum).ok) return { status: "current", message: null, revalidable: false };
+  if (assessProvenanceScan(s.extractionSummary, s.checksum, s.warnings).ok) return { status: "current", message: null, revalidable: false };
   if (isSessionInFlight(s.id)) return { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…", revalidable: false };
   // Lacuna do próprio arquivo (limite de páginas): reanalisar não conclui — orienta sem oferecer a ação inútil.
   if (hasFileCoverageGap(s.warnings)) return { status: "required", message: provenanceScanRequiredMessage(s.warnings), revalidable: false };
   if (!s.checksum) return { status: "required", message: `${PROVENANCE_SCAN_REQUIRED_MESSAGE} ${PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.NO_CHECKSUM}`, revalidable: false };
   const failure = getProvenanceRevalidationFailure(s.id);
+  // A reanálise revelou lacuna do próprio arquivo (aviso ausente na extração antiga): não oferecer a ação de novo.
+  if (failure?.code === "COVERAGE_INCOMPLETE") return { status: "required", message: provenanceScanRequiredMessage([{ code: "PAGE_LIMIT" }]), revalidable: false };
   const base = provenanceScanRequiredMessage(s.warnings);
   return { status: "required", message: failure ? `${base} Última tentativa não concluída: ${failure.message}` : base, revalidable: true };
 }

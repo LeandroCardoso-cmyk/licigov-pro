@@ -488,6 +488,14 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
     const b = await (await asUser(U.managerB)).ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `p1c-b9-${sid}` }).then(() => null, codeOf);
     expect(["NOT_FOUND", "FORBIDDEN"]).toContain(b?.code);
+    // Evidência v1 gravada ANTES desta correção (versão P1-C anterior) numa sessão com PAGE_LIMIT ⇒ continua sem valor.
+    const [{ checksum }] = await rows("SELECT checksum FROM import_sessions WHERE id = ?", [sid]);
+    const stale = { version: PROVENANCE_SCAN_VERSION, sourceChecksum: String(checksum), parserType: "pdf", parserVersion: "2.3.0", declaration: null, origin: "extraction", scannedAt: new Date(0).toISOString() };
+    await conn.execute("UPDATE import_sessions SET extractionSummary = JSON_SET(extractionSummary, '$.provenanceScan', CAST(? AS JSON)) WHERE id = ?", [JSON.stringify(stale), sid]);
+    expect((await op.ingestion.getSessionStatus({ sessionId: sid, procurementProcessId: pid })).session.provenanceScan).toMatchObject({ status: "required", revalidable: false });
+    const err2 = await promote(sid, pid, `p1c-promo-${sid}`).then(() => null, codeOf);
+    expect(err2?.message).toContain(PROVENANCE_SCAN_REQUIRED);
+    expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
   });
 
   it("[8] legado JÁ promovido: replay intacto, revalidação recusada, nada reclassificado", async () => {

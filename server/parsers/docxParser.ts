@@ -233,7 +233,11 @@ export class DocxParser extends BaseParser {
     const tables = parseHtmlTables(html);
     if (tables.length) {
       tables.forEach((matrix, tableIndex) => {
-        if (items.length >= maxItems) return;
+        if (items.length >= maxItems) {
+          // M8 — tabela PULADA pelo limite de itens: a declaração do documento ainda é examinada (linhas sem valor).
+          warnings.push(...documentDeclarationWarnings(matrix.map((row, r) => ({ text: row.filter((c) => c !== "").join(" "), location: `tabela:${tableIndex + 1}, row:${r + 1}` }))));
+          return;
+        }
         ctx.maxItems = maxItems - items.length;
         const out = matrixToRawItems(matrix, ctx, (r) => ({
           location: { row: r + 1 }, extras: { tableIndex },

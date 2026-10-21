@@ -419,6 +419,10 @@ export class PdfParser extends BaseParser {
       }
       if (remaining() <= 0) throw new OcrError("OCR_TIMEOUT", `Tempo de OCR excedido (${cfg.timeoutMs} ms).`);
       const result = await cfg.port.recognize(images, { timeoutMs: Math.max(1, remaining()) });
+      // M8 — página selecionada que não voltou do OCR (render vazio ou motor parcial): texto não examinado ⇒ lacuna.
+      if (result.pages.length < selected.length) {
+        warnings.push({ code: "OCR_PAGES_INCOMPLETE", message: `O OCR devolveu ${result.pages.length} de ${selected.length} página(s) digitalizada(s); as demais não foram lidas.`, severity: "warning" });
+      }
 
       const items: RawExtractedItem[] = [];
       const layouts: PageLayoutResult[] = [];

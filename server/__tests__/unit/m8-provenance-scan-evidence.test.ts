@@ -26,6 +26,7 @@ import {
 } from "../../domain/quoteProvenance";
 import { assessProvenanceRevalidation } from "../../domain/importReprocess";
 import { nativeTextPdf } from "../fixtures/pageLimitPdfFixture";
+import { scannedPdf, PRICE_TABLE } from "../fixtures/ocrPdfFixtures";
 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const opts = (mime: string, over: Partial<ParseOptions> = {}): ParseOptions => ({
@@ -138,6 +139,37 @@ describe("P1-C — evidência só com análise vigente sobre o MESMO arquivo", (
     const ev = buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings });
     expect(ev).toMatchObject({ version: PROVENANCE_SCAN_VERSION, declaration: "global" });
     expect(provenanceScanRequiredMessage(r.warnings)).toBe(PROVENANCE_SCAN_REQUIRED_MESSAGE);
+  }, 60_000);
+
+  it("evidência v1 gravada ANTES da correção numa sessão com PAGE_LIMIT não vale (lacuna do arquivo prevalece)", () => {
+    const ev = buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [] })!;
+    expect(assessProvenanceScan({ provenanceScan: ev }, sha(buf), [{ code: "PAGE_LIMIT" }])).toEqual({ ok: false, reason: "COVERAGE_INCOMPLETE" });
+    // Lacuna de AMBIENTE antiga (OCR) não invalida evidência de revalidação bem-sucedida (avisos são somados).
+    expect(assessProvenanceScan({ provenanceScan: ev }, sha(buf), [{ code: "OCR_REQUIRED_PARTIAL" }]).ok).toBe(true);
+  });
+
+  it("DOCX: tabela PULADA pelo limite de itens ainda é examinada (declaração numa nota da 2ª tabela)", async () => {
+    const cell = (t: string) => new TableCell({ children: [new Paragraph(t)] });
+    const table = (rows: string[][]) => new Table({ rows: rows.map((r) => new TableRow({ children: r.map(cell) })) });
+    const buf = await Packer.toBuffer(new Document({ sections: [{ children: [
+      table([["Descrição", "Qtd", "Unid", "V.Unit"], ["Caneta azul", "10", "UN", "1,50"], ["Lápis HB", "20", "UN", "0,90"]]),
+      new Paragraph("Anexo"),
+      table([["Observação"], ["DADOS FICTÍCIOS PARA HOMOLOGAÇÃO"]]),
+    ] }] }));
+    const r = await new DocxParser().safeParse(buf, opts("application/vnd.openxmlformats-officedocument.wordprocessingml.document", { maxItems: 1 }));
+    expect(r.items.length).toBe(1);
+    expect(r.warnings.some((w) => w.code === DOCUMENT_DECLARES_FICTITIOUS)).toBe(true);
+  });
+
+  it("OCR que devolve MENOS páginas do que as enviadas ⇒ lacuna OCR_PAGES_INCOMPLETE ⇒ sem evidência", async () => {
+    const buf = await scannedPdf([PRICE_TABLE, PRICE_TABLE]);
+    const port = {
+      identity: () => ({ engine: "fake", engineVersion: "0", coreVersion: "0", language: "por", languageDataVersion: "0", config: {} }),
+      recognize: async () => ({ text: "", pages: [], warnings: [], confidence: 0, engine: "fake", engineVersion: "0", language: "por", durationMs: 0, metadata: {} }),
+    };
+    const r = await new PdfParser().safeParse(buf, opts("application/pdf", { ocr: { port, maxPages: 5, timeoutMs: 60_000, renderWidth: 800, minConfidence: 60 } }));
+    expect(r.warnings.map((w) => w.code)).toContain("OCR_PAGES_INCOMPLETE");
+    expect(buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings })).toBeNull();
   }, 60_000);
 
   it("não gera: análise não executada, versão diferente, arquivo divergente, sessão sem checksum", () => {

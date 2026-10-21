@@ -40,8 +40,8 @@ import { persistDocumentStaging } from "./documentIntakeService";
 import {
   commitReextraction, releaseReextraction, ReextractionAbortedError, commitProvenanceRevalidation, recordProvenanceRevalidationNotApplied,
 } from "./importReprocessService";
-import { buildProvenanceScanEvidence, type ProvenanceScanOrigin } from "../domain/quoteProvenance";
-import { REEXTRACTION_STAGE } from "../domain/importReprocess";
+import { buildProvenanceScanEvidence, hasFileCoverageGap, type ProvenanceScanOrigin } from "../domain/quoteProvenance";
+import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE } from "../domain/importReprocess";
 
 const log = serviceLogger("ImportQueueService");
 
@@ -555,6 +555,7 @@ async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
     if (documentMode) { await notApplied("DOCUMENT_IMPORT", "Importação de documento não usa a análise de cotações."); return; }
     const result = await parser.safeParse(buffer, opts); // FORA de transação (parser/OCR pesado)
     if (result.errors.some((e) => e.fatal)) { await notApplied("PARSER_FAILED", "Não foi possível reanalisar o arquivo original."); return; }
+    if (hasFileCoverageGap(result.warnings)) { await notApplied("COVERAGE_INCOMPLETE", PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.COVERAGE_INCOMPLETE); return; }
     if (result.items.length === 0) { await notApplied("SCAN_INCOMPLETE", "A reanálise do arquivo original não reconheceu as cotações; a análise não foi concluída."); return; }
     const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "revalidation");
     if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "A análise não pôde ser concluída: o arquivo lido não corresponde ao da sessão ou há páginas não lidas (além do limite de páginas, ou digitalizadas com OCR indisponível ou incompleto)."); return; }

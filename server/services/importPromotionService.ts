@@ -285,7 +285,7 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
 
 /** M8 (P1-C) — sem evidência vigente da análise de proveniência ⇒ PRECONDITION_FAILED acionável (revalidar o arquivo). */
 function requireProvenanceScan(session: { extractionSummary: unknown; checksum: string | null; warnings: unknown }): { declaration: "global" | "suspected" | null } {
-  const scan = assessProvenanceScan(session.extractionSummary, session.checksum);
+  const scan = assessProvenanceScan(session.extractionSummary, session.checksum, session.warnings);
   if (!scan.ok) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${PROVENANCE_SCAN_REQUIRED}: ${provenanceScanRequiredMessage(session.warnings)}` });
   return scan;
 }
