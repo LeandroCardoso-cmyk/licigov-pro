@@ -20,10 +20,12 @@ import { PdfParser } from "../../parsers/pdfParser";
 import { parserRegistry } from "../../parsers/parserRegistry";
 import type { ParseOptions } from "../../parsers/baseParser";
 import {
-  assessProvenanceScan, buildProvenanceScanEvidence, DOCUMENT_DECLARES_FICTITIOUS,
+  assessProvenanceScan, buildProvenanceScanEvidence, DOCUMENT_DECLARES_FICTITIOUS, hasFileCoverageGap,
+  PROVENANCE_SCAN_INCOMPLETE_MESSAGE, PROVENANCE_SCAN_REQUIRED_MESSAGE, provenanceScanRequiredMessage,
   DECLARATION_SCAN_PERFORMED, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration, PROVENANCE_SCAN_VERSION,
 } from "../../domain/quoteProvenance";
 import { assessProvenanceRevalidation } from "../../domain/importReprocess";
+import { nativeTextPdf } from "../fixtures/pageLimitPdfFixture";
 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const opts = (mime: string, over: Partial<ParseOptions> = {}): ParseOptions => ({
@@ -97,7 +99,7 @@ describe("P1-C — evidência só com análise vigente sobre o MESMO arquivo", (
   });
 
   it("não gera quando há página digitalizada NÃO lida (OCR indisponível, falho, parcial ou limitado)", () => {
-    for (const code of ["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT"]) {
+    for (const code of ["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT", "PAGE_LIMIT"]) {
       expect(buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [{ code }] })).toBeNull();
     }
     expect(buildProvenanceScanEvidence({ ...base, performed: DECLARATION_SCAN_PERFORMED, warnings: [{ code: "OCR_LOW_CONFIDENCE" }] })).not.toBeNull();
@@ -116,6 +118,27 @@ describe("P1-C — evidência só com análise vigente sobre o MESMO arquivo", (
     expect(r.warnings.some((w) => w.code === "OCR_REQUIRED")).toBe(true);
     expect(buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings })).toBeNull();
   });
+
+  it("PDF de 501 páginas (declaração fictícia SÓ na 501ª): PAGE_LIMIT, extração parcial preservada, SEM evidência", async () => {
+    const buf = await nativeTextPdf(501, 501);
+    const r = await new PdfParser().safeParse(buf, opts("application/pdf"));
+    expect(r.warnings.map((w) => w.code)).toContain("PAGE_LIMIT");
+    expect(r.items.length).toBe(2);                                                     // revisão continua possível
+    expect(r.warnings.some((w) => w.code === DOCUMENT_DECLARES_FICTITIOUS)).toBe(false); // a página 501 não foi lida
+    expect(buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings })).toBeNull();
+    expect(hasFileCoverageGap(r.warnings)).toBe(true);
+    expect(provenanceScanRequiredMessage(r.warnings)).toBe(PROVENANCE_SCAN_INCOMPLETE_MESSAGE);
+  }, 60_000);
+
+  it("PDF no limite (500 páginas, declaração na 500ª): análise completa ⇒ evidência legítima com veredito `global`", async () => {
+    const buf = await nativeTextPdf(500, 500);
+    const r = await new PdfParser().safeParse(buf, opts("application/pdf"));
+    expect(r.warnings.map((w) => w.code)).not.toContain("PAGE_LIMIT");
+    expect(r.items.length).toBe(2);
+    const ev = buildProvenanceScanEvidence({ ...base, sessionChecksum: sha(buf), analyzedChecksum: sha(buf), performed: r.declarationScan, warnings: r.warnings });
+    expect(ev).toMatchObject({ version: PROVENANCE_SCAN_VERSION, declaration: "global" });
+    expect(provenanceScanRequiredMessage(r.warnings)).toBe(PROVENANCE_SCAN_REQUIRED_MESSAGE);
+  }, 60_000);
 
   it("não gera: análise não executada, versão diferente, arquivo divergente, sessão sem checksum", () => {
     expect(buildProvenanceScanEvidence({ ...base, performed: undefined, warnings: [] })).toBeNull();
@@ -165,6 +188,9 @@ describe("P1-C — revalidação", () => {
     expect(assessProvenanceRevalidation({ ...facts, scanCurrent: true }).blockers).toContain("ALREADY_CURRENT");
     expect(assessProvenanceRevalidation({ ...facts, importType: "tr_items" }).blockers).toContain("NOT_PRICE_RESEARCH");
     expect(assessProvenanceRevalidation({ ...facts, status: "failed" }).blockers).toContain("NOT_REVIEWABLE");
+    // Lacuna do próprio arquivo (limite de páginas): reanalisar não conclui ⇒ revalidação recusada (sem trabalho inútil).
+    expect(assessProvenanceRevalidation({ ...facts, fileCoverageGap: true }).blockers).toContain("COVERAGE_INCOMPLETE");
+    expect(hasFileCoverageGap([{ code: "OCR_REQUIRED_PARTIAL" }])).toBe(false); // OCR pode passar a estar disponível
   });
 });
 

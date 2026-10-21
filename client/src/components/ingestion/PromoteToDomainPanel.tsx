@@ -61,7 +61,7 @@ interface PromoteToDomainPanelProps {
   /** Solicita (ou recalcula) a prévia ao abrir a confirmação. */
   onRequestPreview?: () => void;
   /** M8 (P1-C) — estado da análise de proveniência da sessão (servidor). */
-  provenanceScan?: { status: string; message: string | null } | null;
+  provenanceScan?: { status: string; message: string | null; revalidable?: boolean } | null;
   onRevalidateProvenance?: () => void;
   isRevalidatingProvenance?: boolean;
   provenanceRevalidationError?: string | null;
@@ -69,7 +69,7 @@ interface PromoteToDomainPanelProps {
 
 /** M8 (P1-C) — orientação + ação de revalidação da análise de proveniência (sessão legada). */
 export function ProvenanceRevalidationNotice({ scan, onRevalidate, isRevalidating, error }: {
-  scan: { status: string; message: string | null }; onRevalidate?: () => void; isRevalidating: boolean; error: string | null;
+  scan: { status: string; message: string | null; revalidable?: boolean }; onRevalidate?: () => void; isRevalidating: boolean; error: string | null;
 }) {
   const inProgress = scan.status === "in_progress" || isRevalidating;
   return (
@@ -77,7 +77,7 @@ export function ProvenanceRevalidationNotice({ scan, onRevalidate, isRevalidatin
       <AlertTitle>Revalidação da proveniência necessária</AlertTitle>
       <AlertDescription className="space-y-2">
         <p>{scan.message}</p>
-        {onRevalidate && (
+        {onRevalidate && (scan.revalidable !== false || inProgress) && (
           <Button size="sm" className={DISABLED_BUTTON} onClick={onRevalidate} disabled={inProgress} aria-busy={inProgress}>
             {inProgress ? "Revalidando o arquivo original…" : "Revalidar arquivo original"}
           </Button>

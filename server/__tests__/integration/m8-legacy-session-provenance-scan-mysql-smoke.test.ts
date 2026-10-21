@@ -46,6 +46,7 @@ import { commitProvenanceRevalidation } from "../../services/importReprocessServ
 import { insertProcess, listIntelligentItems, lockedFictitiousPriceItemCount } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { getItemPanel } from "../../services/itemIntelligenceService";
+import { nativeTextPdf } from "../fixtures/pageLimitPdfFixture";
 import {
   DOCUMENT_DECLARES_FICTITIOUS, PROVENANCE_SCAN_REQUIRED, PROVENANCE_SCAN_VERSION, type ProvenanceScanEvidence,
 } from "../../domain/quoteProvenance";
@@ -80,14 +81,14 @@ async function newProcess(org: number): Promise<string> {
   return p.id;
 }
 /** Sessão REAL: CSV pelo worker (parser real) ⇒ staging pendente. */
-async function csvSession(org: number, processId: string, csv: string, uploader: number): Promise<{ sid: number; checksum: string }> {
+async function csvSession(org: number, processId: string, csv: string | Buffer, uploader: number, file = { name: "pesquisa.csv", mime: "text/csv" }): Promise<{ sid: number; checksum: string }> {
   const db = (await getDb())!;
-  const buf = Buffer.from(csv, "utf8");
-  const key = `imports/${org}/${stamp}-${++seq}-pesquisa.csv`;
+  const buf = typeof csv === "string" ? Buffer.from(csv, "utf8") : csv;
+  const key = `imports/${org}/${stamp}-${++seq}-${file.name}`;
   mem.set(key, buf);
   const checksum = createHash("sha256").update(buf).digest("hex");
   const [s] = await db.insert(importSessions).values({
-    organizationId: org, uploadedBy: uploader, sourceFileId: key, sourceFileName: "pesquisa.csv", sourceMimeType: "text/csv",
+    organizationId: org, uploadedBy: uploader, sourceFileId: key, sourceFileName: file.name, sourceMimeType: file.mime,
     sourceSize: buf.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",
     status: "uploaded", stage: "file_stored", correlationId: `p1c-${seq}`,
   }).$returningId();
@@ -455,6 +456,38 @@ describe.skipIf(!DB)("M8 emenda P1-C — sessão legada sem análise de proveni�
     expect(e?.message).toContain(PROVENANCE_SCAN_REQUIRED);
     expect(await domainFootprint(ORG_B, pidB, sidB)).toEqual(NOTHING);
     expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
+  });
+
+  it("[9] PDF de 501 páginas (declaração fictícia SÓ na 501ª) pelo worker ⇒ extração parcial revisável, sem evidência; promoção/prévia recusadas sem efeito; revalidação recusada; outro órgão não alcança", async () => {
+    const pid = await newProcess(ORG);
+    const { sid } = await csvSession(ORG, pid, await nativeTextPdf(501, 501), U.operator, { name: "mapa-501.pdf", mime: "application/pdf" });
+    const s = await summaryOf(sid);
+    expect(s.warnings).toContain("PAGE_LIMIT");
+    expect(s.warnings).not.toContain(DOCUMENT_DECLARES_FICTITIOUS);   // a página 501 nunca foi lida
+    expect(s.summary.provenanceScan).toBeUndefined();                  // sem evidência de análise completa
+    expect(Number((await rows("SELECT COUNT(*) n FROM import_staging_items WHERE importSessionId = ?", [sid]))[0].n)).toBe(2); // revisão possível
+    await approveAll(sid, pid);
+    const op = await asUser(U.operator);
+    const st = await op.ingestion.getSessionStatus({ sessionId: sid, procurementProcessId: pid });
+    expect(st.session.provenanceScan).toMatchObject({ status: "required", revalidable: false });
+    expect(st.session.provenanceScan.message).toMatch(/não cobriu todo o arquivo/);
+    const mgr = await asUser(U.manager);
+    const prev = await mgr.ingestion.previewPromotion({ sessionId: sid, procurementProcessId: pid }).then(() => null, codeOf);
+    expect(prev?.message).toContain(PROVENANCE_SCAN_REQUIRED);
+    for (let i = 0; i < 2; i++) { // retry com a mesma chave: continua recusado (nenhum sucesso idempotente gravado)
+      const err = await promote(sid, pid, `p1c-promo-${sid}`).then(() => null, codeOf);
+      expect(err).toMatchObject({ code: "PRECONDITION_FAILED" });
+      expect(err!.message).toContain(PROVENANCE_SCAN_REQUIRED);
+      expect(err!.message).toMatch(/não cobriu todo o arquivo/);
+    }
+    const reval = await op.ingestion.revalidateProvenance({ sessionId: sid, procurementProcessId: pid }).then(() => null, codeOf);
+    expect(reval).toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(reval!.message).toMatch(/limite de páginas/);
+    expect(isSessionInFlight(sid)).toBe(false);                          // nada enfileirado
+    expect((await summaryOf(sid)).status).toBe("approved");             // decisões humanas intactas
+    expect(await domainFootprint(ORG, pid, sid)).toEqual(NOTHING);
+    const b = await (await asUser(U.managerB)).ingestion.promoteSession({ sessionId: sid, procurementProcessId: pid, idempotencyKey: `p1c-b9-${sid}` }).then(() => null, codeOf);
+    expect(["NOT_FOUND", "FORBIDDEN"]).toContain(b?.code);
   });
 
   it("[8] legado JÁ promovido: replay intacto, revalidação recusada, nada reclassificado", async () => {

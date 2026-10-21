@@ -27,7 +27,7 @@ import { toDbDatetime } from "../db/institutionalConsultations";
 import { computeEffectiveContent, resolveEffectiveMoney, resolveEffectiveQuantity } from "../domain/importCorrectionFields";
 import { createPriceResearchItem, type PriceResearchSource } from "../domain/priceResearch";
 import {
-  assessProvenanceScan, classifyIncomingQuote, documentFictitiousDeclaration, PROVENANCE_SCAN_REQUIRED, PROVENANCE_SCAN_REQUIRED_MESSAGE,
+  assessProvenanceScan, classifyIncomingQuote, documentFictitiousDeclaration, PROVENANCE_SCAN_REQUIRED, provenanceScanRequiredMessage,
 } from "../domain/quoteProvenance";
 import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { centsToReais, centsToDecimalString } from "../domain/money";
@@ -284,9 +284,9 @@ export async function promoteApprovedSessionToDomain(params: PromoteParams): Pro
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** M8 (P1-C) — sem evidência vigente da análise de proveniência ⇒ PRECONDITION_FAILED acionável (revalidar o arquivo). */
-function requireProvenanceScan(session: { extractionSummary: unknown; checksum: string | null }): { declaration: "global" | "suspected" | null } {
+function requireProvenanceScan(session: { extractionSummary: unknown; checksum: string | null; warnings: unknown }): { declaration: "global" | "suspected" | null } {
   const scan = assessProvenanceScan(session.extractionSummary, session.checksum);
-  if (!scan.ok) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${PROVENANCE_SCAN_REQUIRED}: ${PROVENANCE_SCAN_REQUIRED_MESSAGE}` });
+  if (!scan.ok) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${PROVENANCE_SCAN_REQUIRED}: ${provenanceScanRequiredMessage(session.warnings)}` });
   return scan;
 }
 

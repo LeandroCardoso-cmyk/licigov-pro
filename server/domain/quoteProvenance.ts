@@ -285,10 +285,33 @@ export interface ProvenanceScanEvidence {
 }
 
 /**
- * Lacunas de COBERTURA da análise: página digitalizada não lida (OCR indisponível/falho/limite de páginas). O texto dessas
- * páginas não foi examinado — uma declaração ali não seria vista — então não há evidência de análise concluída.
+ * Lacunas de COBERTURA da análise: página não lida — digitalizada sem OCR (indisponível/falho/limite do OCR) ou além do
+ * limite de páginas do parser (`PAGE_LIMIT`). O texto dessas páginas não foi examinado — uma declaração ali não seria
+ * vista — então não há evidência de análise concluída (a extração parcial continua disponível para revisão).
  */
-export const DECLARATION_SCAN_COVERAGE_GAPS: ReadonlySet<string> = new Set(["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT"]);
+export const DECLARATION_SCAN_COVERAGE_GAPS: ReadonlySet<string> = new Set(["OCR_REQUIRED", "OCR_REQUIRED_PARTIAL", "OCR_FAILED", "OCR_PAGE_LIMIT", "PAGE_LIMIT"]);
+/** Lacuna do próprio ARQUIVO (não do ambiente): reanalisar o mesmo arquivo nunca a remove — revalidar é inútil. */
+const FILE_COVERAGE_GAPS: ReadonlySet<string> = new Set(["PAGE_LIMIT"]);
+
+const codesOf = (warnings: unknown): string[] => (Array.isArray(warnings) ? warnings : [])
+  .map((w) => (w as { code?: unknown } | null)?.code).filter((c): c is string => typeof c === "string");
+
+/** Lacunas de cobertura registradas nos avisos da extração. */
+export function declarationScanCoverageGaps(warnings: unknown): string[] {
+  return [...new Set(codesOf(warnings).filter((c) => DECLARATION_SCAN_COVERAGE_GAPS.has(c)))];
+}
+/** O arquivo excede o que a análise examina (revalidar o MESMO arquivo não conclui a análise). */
+export function hasFileCoverageGap(warnings: unknown): boolean {
+  return codesOf(warnings).some((c) => FILE_COVERAGE_GAPS.has(c));
+}
+
+export const PROVENANCE_SCAN_INCOMPLETE_MESSAGE =
+  "A análise de proveniência não cobriu todo o arquivo (páginas além do limite de processamento ou digitalizadas não lidas). As cotações extraídas podem ser revisadas, mas não promovidas como pesquisa de preços utilizável: envie o arquivo dividido em partes menores ou em versão com texto legível.";
+
+/** Orientação da recusa: cobertura incompleta registrada na extração × análise anterior/ausente. */
+export function provenanceScanRequiredMessage(warnings: unknown): string {
+  return declarationScanCoverageGaps(warnings).length > 0 ? PROVENANCE_SCAN_INCOMPLETE_MESSAGE : PROVENANCE_SCAN_REQUIRED_MESSAGE;
+}
 
 /** Veredito mais restritivo (global > suspected > nada). */
 export function mostRestrictiveDeclaration(...vs: Array<"global" | "suspected" | null | undefined>): "global" | "suspected" | null {
@@ -311,8 +334,7 @@ export function buildProvenanceScanEvidence(p: {
   now?: Date;
 }): ProvenanceScanEvidence | null {
   if (p.performed?.version !== PROVENANCE_SCAN_VERSION) return null;
-  const codes = (Array.isArray(p.warnings) ? p.warnings : []).map((w) => (w as { code?: unknown } | null)?.code);
-  if (codes.some((c) => typeof c === "string" && DECLARATION_SCAN_COVERAGE_GAPS.has(c))) return null;
+  if (declarationScanCoverageGaps(p.warnings).length > 0) return null;
   const session = (p.sessionChecksum ?? "").toLowerCase();
   if (!session || session !== p.analyzedChecksum.toLowerCase()) return null;
   return {

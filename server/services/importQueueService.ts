@@ -557,7 +557,7 @@ async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
     if (result.errors.some((e) => e.fatal)) { await notApplied("PARSER_FAILED", "Não foi possível reanalisar o arquivo original."); return; }
     if (result.items.length === 0) { await notApplied("SCAN_INCOMPLETE", "A reanálise do arquivo original não reconheceu as cotações; a análise não foi concluída."); return; }
     const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "revalidation");
-    if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "A análise não pôde ser concluída: o arquivo lido não corresponde ao da sessão ou há páginas digitalizadas não lidas (OCR indisponível ou incompleto)."); return; }
+    if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "A análise não pôde ser concluída: o arquivo lido não corresponde ao da sessão ou há páginas não lidas (além do limite de páginas, ou digitalizadas com OCR indisponível ou incompleto)."); return; }
     await commitProvenanceRevalidation({
       sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, correlationId,
       scan, warnings: result.warnings,

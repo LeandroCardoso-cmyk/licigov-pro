@@ -98,7 +98,7 @@ export interface ReextractionRecord {
  * Nunca para sessão promovida (o histórico concluído é imutável) nem durante uma reextração.
  */
 export type ProvenanceRevalidationBlocker =
-  | "NOT_PRICE_RESEARCH" | "NOT_REVIEWABLE" | "PROMOTED" | "REPROCESS_IN_PROGRESS" | "NO_CHECKSUM" | "ALREADY_CURRENT";
+  | "NOT_PRICE_RESEARCH" | "NOT_REVIEWABLE" | "PROMOTED" | "REPROCESS_IN_PROGRESS" | "NO_CHECKSUM" | "ALREADY_CURRENT" | "COVERAGE_INCOMPLETE";
 
 export const PROVENANCE_REVALIDATION_BLOCKER_MESSAGE: Record<ProvenanceRevalidationBlocker, string> = {
   NOT_PRICE_RESEARCH:    "A revalidação de proveniência só se aplica à Pesquisa de Preços.",
@@ -107,6 +107,7 @@ export const PROVENANCE_REVALIDATION_BLOCKER_MESSAGE: Record<ProvenanceRevalidat
   REPROCESS_IN_PROGRESS: "Há uma reextração em andamento; ela já registrará a análise vigente.",
   NO_CHECKSUM:           "A sessão não tem o checksum do arquivo original; reenvie o arquivo.",
   ALREADY_CURRENT:       "A análise de proveniência desta sessão já está na versão vigente.",
+  COVERAGE_INCOMPLETE:   "O arquivo excede o limite de páginas analisadas; reanalisá-lo não conclui a análise — envie o arquivo dividido em partes menores.",
 };
 
 export interface ProvenanceRevalidationFacts {
@@ -120,6 +121,8 @@ export interface ProvenanceRevalidationFacts {
   checksum: string | null;
   /** A evidência gravada já é a vigente (assessProvenanceScan ok). */
   scanCurrent: boolean;
+  /** A extração registrou lacuna do próprio arquivo (ex.: PAGE_LIMIT) — reanalisar o mesmo arquivo não a remove. */
+  fileCoverageGap?: boolean;
 }
 
 export function assessProvenanceRevalidation(f: ProvenanceRevalidationFacts): { eligible: boolean; blockers: ProvenanceRevalidationBlocker[]; message: string } {
@@ -130,5 +133,6 @@ export function assessProvenanceRevalidation(f: ProvenanceRevalidationFacts): { 
   if (isReextractionReservationActive(f.stage, f.updatedAt, f.now)) blockers.push("REPROCESS_IN_PROGRESS");
   if (!f.checksum) blockers.push("NO_CHECKSUM");
   if (f.scanCurrent) blockers.push("ALREADY_CURRENT");
+  if (f.fileCoverageGap) blockers.push("COVERAGE_INCOMPLETE");
   return { eligible: blockers.length === 0, blockers, message: blockers.length === 0 ? "" : PROVENANCE_REVALIDATION_BLOCKER_MESSAGE[blockers[0]] };
 }

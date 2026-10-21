@@ -26,7 +26,7 @@ import {
   type ProvenanceRevalidationBlocker, type ReextractionRecord, type ReprocessEligibility,
 } from "../domain/importReprocess";
 import {
-  assessProvenanceScan, documentFictitiousDeclaration, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration,
+  assessProvenanceScan, documentFictitiousDeclaration, hasFileCoverageGap, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration,
   type ProvenanceRevalidationRecord, type ProvenanceScanEvidence,
 } from "../domain/quoteProvenance";
 import type { ExtractionSummary, ImportWarning } from "../domain/importTypes";
@@ -250,6 +250,7 @@ async function provenanceRevalidationFacts(session: Session, hasLedger: boolean,
     importType: session.importType, status: session.status, promotionStatus: session.promotionStatus ?? "none",
     hasPromotionLedger: hasLedger, stage: session.stage ?? null, updatedAt: session.updatedAt ?? null, now,
     checksum: session.checksum ?? null, scanCurrent: assessProvenanceScan(session.extractionSummary, session.checksum).ok,
+    fileCoverageGap: hasFileCoverageGap(session.warnings),
   });
 }
 

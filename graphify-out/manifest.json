@@ -1230,8 +1230,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/PromoteToDomainPanel.tsx": {
-    "mtime": 1792527342.5937335,
-    "ast_hash": "307ec3d76e54efae674560693991be4b",
+    "mtime": 1792550068.6671226,
+    "ast_hash": "51f7a5e0cce734e7cc5bd8cad1ebf30d",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/ReprocessExtractionPanel.tsx": {
@@ -2740,8 +2740,8 @@
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useSupervisedIngestion.ts": {
-    "mtime": 1792527342.594202,
-    "ast_hash": "f65637e254fd63fcd484e47b6d184ec9",
+    "mtime": 1792550068.6677914,
+    "ast_hash": "4fff4e60ff2d392b29a27d7026fc77a6",
     "semantic_hash": ""
   },
   "client/src/hooks/useCatalogSearch.ts": {
@@ -7690,8 +7690,8 @@
     "semantic_hash": ""
   },
   "server/domain/importReprocess.ts": {
-    "mtime": 1792527163.80881,
-    "ast_hash": "b7c8d8a17dfba911657cf37c526c920b",
+    "mtime": 1792550068.6037815,
+    "ast_hash": "61bd94ef4ebdf710deb9c5144a2343c4",
     "semantic_hash": ""
   },
   "server/domain/importReviewState.ts": {
@@ -8815,8 +8815,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1792528529.2464635,
-    "ast_hash": "a98475f613ffc9ffc728631432b541c1",
+    "mtime": 1792550068.605378,
+    "ast_hash": "9f146608f5df70750e64e117b441584d",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9815,18 +9815,18 @@
     "semantic_hash": ""
   },
   "server/services/importPromotionService.ts": {
-    "mtime": 1792527792.6182473,
-    "ast_hash": "ded4dcbf8deff4abca922c8fe4f3eb31",
+    "mtime": 1792550068.6019778,
+    "ast_hash": "83594790f84f47a0fbc253bd8a713b33",
     "semantic_hash": ""
   },
   "server/services/importQueueService.ts": {
-    "mtime": 1792528529.2456837,
-    "ast_hash": "03352297301d23d41ba6ceef47efe406",
+    "mtime": 1792550068.6047995,
+    "ast_hash": "7827bf1dad4670455e8b83d7dd0dfa8b",
     "semantic_hash": ""
   },
   "server/services/importReprocessService.ts": {
-    "mtime": 1792528529.2447379,
-    "ast_hash": "aea8c010bb034c2c12bb3d4f6db476e0",
+    "mtime": 1792550068.6043732,
+    "ast_hash": "722e6763f2395b73846af92f9725070a",
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/domain/quoteProvenance.ts": {
-    "mtime": 1792528529.2451656,
-    "ast_hash": "fe6be89dfd88e2479e26e2b79bdce4e8",
+    "mtime": 1792550347.178701,
+    "ast_hash": "34e290483e3b123ddcd2a800b66f9d5e",
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
@@ -15200,8 +15200,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
-    "mtime": 1792528666.5480666,
-    "ast_hash": "beffd2c71881d2b5be2a9a0e7a6600e3",
+    "mtime": 1792550374.6710885,
+    "ast_hash": "117341e6a80d9eeaa48cb7f7c0441776",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts": {
@@ -15230,13 +15230,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-legacy-session-provenance-scan-mysql-smoke.test.ts": {
-    "mtime": 1792528820.7366538,
-    "ast_hash": "66ecc784620e3b101cb5637b5a312daf",
+    "mtime": 1792550200.1975892,
+    "ast_hash": "70e4dc91f0e260802610693e9ef6ef3b",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-provenance-scan-evidence.test.ts": {
-    "mtime": 1792528640.9857779,
-    "ast_hash": "93e42462b8d396bd556a37a804d952de",
+    "mtime": 1792550173.2867336,
+    "ast_hash": "404e07e4ee7ac5c564a95ed487ded7ef",
+    "semantic_hash": ""
+  },
+  "server/__tests__/fixtures/pageLimitPdfFixture.ts": {
+    "mtime": 1792550173.26818,
+    "ast_hash": "bbbc3b0e9f26b70457d0731178600440",
     "semantic_hash": ""
   }
 }

@@ -64,7 +64,7 @@ import type { ExtractionLineage } from "../domain/extractionLineage";
 import {
   assertProvenanceRevalidationAllowed, getReprocessEligibility, releaseReextraction, reserveReextraction,
 } from "../services/importReprocessService";
-import { assessProvenanceScan, PROVENANCE_SCAN_REQUIRED_MESSAGE } from "../domain/quoteProvenance";
+import { assessProvenanceScan, hasFileCoverageGap, PROVENANCE_SCAN_REQUIRED_MESSAGE, provenanceScanRequiredMessage } from "../domain/quoteProvenance";
 import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
 import { getPriceResearchReview, reviewPriceResearchGroups } from "../services/priceResearchReviewService";
 import type { PriceResearchReviewProjection } from "../domain/priceResearchReviewGroups";
@@ -212,15 +212,18 @@ async function reprocessView(s: NonNullable<Awaited<ReturnType<typeof getImportS
 }
 
 /** M8 (P1-C) — estado da análise de proveniência para a UI (o servidor revalida tudo na promoção/revalidação). */
-function provenanceScanView(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>): { status: "current" | "required" | "in_progress" | "not_applicable"; message: string | null } {
+function provenanceScanView(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>): { status: "current" | "required" | "in_progress" | "not_applicable"; message: string | null; revalidable: boolean } {
   if (s.importType !== "price_research" || (s.status !== "awaiting_review" && s.status !== "approved") || (s.promotionStatus ?? "none") !== "none") {
-    return { status: "not_applicable", message: null };
+    return { status: "not_applicable", message: null, revalidable: false };
   }
-  if (assessProvenanceScan(s.extractionSummary, s.checksum).ok) return { status: "current", message: null };
-  if (isSessionInFlight(s.id)) return { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…" };
-  if (!s.checksum) return { status: "required", message: `${PROVENANCE_SCAN_REQUIRED_MESSAGE} ${PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.NO_CHECKSUM}` };
+  if (assessProvenanceScan(s.extractionSummary, s.checksum).ok) return { status: "current", message: null, revalidable: false };
+  if (isSessionInFlight(s.id)) return { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…", revalidable: false };
+  // Lacuna do próprio arquivo (limite de páginas): reanalisar não conclui — orienta sem oferecer a ação inútil.
+  if (hasFileCoverageGap(s.warnings)) return { status: "required", message: provenanceScanRequiredMessage(s.warnings), revalidable: false };
+  if (!s.checksum) return { status: "required", message: `${PROVENANCE_SCAN_REQUIRED_MESSAGE} ${PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.NO_CHECKSUM}`, revalidable: false };
   const failure = getProvenanceRevalidationFailure(s.id);
-  return { status: "required", message: failure ? `${PROVENANCE_SCAN_REQUIRED_MESSAGE} Última tentativa não concluída: ${failure.message}` : PROVENANCE_SCAN_REQUIRED_MESSAGE };
+  const base = provenanceScanRequiredMessage(s.warnings);
+  return { status: "required", message: failure ? `${base} Última tentativa não concluída: ${failure.message}` : base, revalidable: true };
 }
 
 /** Serializa a sessão para o cliente, ocultando nada sensível (não há segredos aqui). */

@@ -107,8 +107,12 @@ Sem migration (coluna JSON existente).
 - **Quem grava:** o worker, na extração, na reextração governada e na revalidação. Só grava se o parser declarar que a
   análise rodou naquele caminho (`ParseResult.declarationScan`: CSV, XLSX, DOCX e PDF nativo/OCR no modo de linhas) e se o
   sha256 do arquivo lido for igual ao `checksum` da sessão. Também exige que todas as páginas tenham sido lidas: com
-  `OCR_REQUIRED`, `OCR_REQUIRED_PARTIAL`, `OCR_FAILED` ou `OCR_PAGE_LIMIT`, o texto de páginas digitalizadas não foi
-  examinado e, por isso, não há evidência. Nenhum parâmetro do cliente participa. A reextração substitui
+  `OCR_REQUIRED`, `OCR_REQUIRED_PARTIAL`, `OCR_FAILED`, `OCR_PAGE_LIMIT` ou `PAGE_LIMIT` (PDF acima do limite de páginas
+  do parser), há texto que não foi examinado e, por isso, não há evidência.
+  - A extração parcial continua disponível para revisão, mas nunca é apresentada como análise integral.
+  - Quando a lacuna é do próprio ARQUIVO (`PAGE_LIMIT`), reanalisá-lo não resolve. Por isso a revalidação é recusada
+    (`COVERAGE_INCOMPLETE`), o painel não oferece a ação, e tanto a promoção quanto a prévia orientam a dividir o
+    arquivo. Nenhum parâmetro do cliente participa. A reextração substitui
   o sumário inteiro, então a evidência anterior nunca sobrevive a uma nova extração.
 - **Quem exige:** `promoteApprovedSessionToDomain`, dentro da transação, com a sessão travada (FOR UPDATE) e antes de
   qualquer escrita, e também `previewSessionPromotion`. Se a evidência faltar, estiver em versão antiga ou for de outro

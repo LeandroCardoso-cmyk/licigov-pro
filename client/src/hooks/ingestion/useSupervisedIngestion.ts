@@ -341,7 +341,7 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
     isReprocessing: reprocessMut.isPending,
     reprocessError,
     // M8 (P1-C) — análise de proveniência vigente × sessão legada (revalidação)
-    provenanceScan: (session as { provenanceScan?: { status: string; message: string | null } } | null)?.provenanceScan ?? null,
+    provenanceScan: (session as { provenanceScan?: { status: string; message: string | null; revalidable?: boolean } } | null)?.provenanceScan ?? null,
     revalidateProvenance,
     isRevalidatingProvenance: revalidateMut.isPending,
     provenanceRevalidationError,
