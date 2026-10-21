@@ -18,14 +18,16 @@ import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
-import type { PriceResearchSource } from "../domain/priceResearch";
+import { FICTITIOUS_QUOTE_MARKER, type PriceResearchSource } from "../domain/priceResearch";
+import { effectiveQuoteProvenance } from "../domain/quoteProvenance";
+import { demonstrativePricesAllowed } from "./priceGovernanceService";
 import {
   planDirectPriceImport, computeDirectPriceImportPayloadHash, computeDirectPriceImportContentHash, deriveDirectPriceImportId,
 } from "../domain/directPriceImport";
 import {
   PRICE_REFERENCE_METHODS, PRICE_METHOD_LABELS, PRICE_RESEARCH_REQUIRED, PRICE_RESEARCH_AMBIGUOUS, PRICE_RESEARCH_NOT_FOUND,
-  PRICE_RESEARCH_INTEGRITY, PRICE_RESEARCH_INCONSISTENT, PRICE_METHOD_REQUIRED, PRICE_REFERENCE_DIVERGES, PRICE_LINEAGE_NOT_ALLOWED,
-  summarizePriceResearch, proposalMatchesServerValue, buildResearchLineage, encodeLineage, isLineageToken, describeLineage,
+  PRICE_RESEARCH_INTEGRITY, PRICE_RESEARCH_INCONSISTENT, PRICE_RESEARCH_FICTITIOUS, PRICE_METHOD_REQUIRED, PRICE_REFERENCE_DIVERGES, PRICE_LINEAGE_NOT_ALLOWED,
+  summarizePriceResearch, proposalMatchesServerValue, buildResearchLineage, encodeLineage, isLineageToken, describeLineage, splitLineage,
   type PriceReferenceMethod, type PriceResearchSummary, type PriceLineage,
 } from "../domain/directPriceReference";
 import { recordProcessEvent } from "../db/procurement";
@@ -338,12 +340,21 @@ async function loadGovernedPriceResearches(workspaceId: string, organizationId: 
   const imports = await listDirectPriceImports(db, organizationId, workspaceId);
   const verified: GovernedPriceResearch[] = [];
   const integrityFailed: string[] = [];
+  let demonstrativeAllowed: boolean | null = null;
   for (const imp of imports) {
     const items = await listDirectPriceImportItems(db, imp.importId, organizationId);
     const contentHash = computeDirectPriceImportContentHash(items);
     const governed = deriveDirectPriceImportId(organizationId, workspaceId, contentHash) === imp.importId && items.length === imp.itemCount;
     if (!governed) { integrityFailed.push(imp.importId); continue; }
-    verified.push({ researchId: imp.importId, contentHash, importedAt: imp.createdAt, importSource: imp.source, quoteCount: items.length, summary: summarizePriceResearch(items) });
+    // M8 (política de 20/10/2026): cotação fictícia é excluída do valor de referência (salvo homologação sintética
+    // autorizada no backend). A proveniência NÃO entra no contentHash: a identidade da importação não muda.
+    const fictitious = items.map((it) => effectiveQuoteProvenance({
+      stored: it.provenanceKind, supplierName: it.supplier, legacyMarker: it.observations.includes(FICTITIOUS_QUOTE_MARKER),
+      legacyNotes: it.observations.split(FICTITIOUS_QUOTE_MARKER).join(" "),
+    }) === "ficticia");
+    if (fictitious.some(Boolean) && demonstrativeAllowed === null) demonstrativeAllowed = await demonstrativePricesAllowed(organizationId);
+    const rows = items.map((it, i) => ({ ...it, fictitious: fictitious[i] && demonstrativeAllowed !== true, demonstrative: fictitious[i] && demonstrativeAllowed === true }));
+    verified.push({ researchId: imp.importId, contentHash, importedAt: imp.createdAt, importSource: imp.source, quoteCount: items.length, summary: summarizePriceResearch(rows) });
   }
   return { verified, integrityFailed };
 }
@@ -353,11 +364,37 @@ export async function listPriceResearchesForJustification(workspaceId: string, o
   researchId: string; contentHash: string; importedAt: string; importSource: string; quoteCount: number;
   consistent: boolean; inconsistencyDetail: string | null; itemCount: number; minQuotesPerItem: number;
   values: PriceResearchSummary["values"] | null;
+  /** M8 — cotações fictícias excluídas do cálculo (0 = nenhuma). */
+  excludedFictitiousQuoteCount: number;
 }>> {
   const { verified } = await loadGovernedPriceResearches(workspaceId, organizationId);
   return verified.map((r) => r.summary.ok
-    ? { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: true, inconsistencyDetail: null, itemCount: r.summary.summary.itemCount, minQuotesPerItem: r.summary.summary.minQuotesPerItem, values: r.summary.summary.values }
-    : { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: false, inconsistencyDetail: r.summary.detail, itemCount: 0, minQuotesPerItem: 0, values: null });
+    ? { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: true, inconsistencyDetail: null, itemCount: r.summary.summary.itemCount, minQuotesPerItem: r.summary.summary.minQuotesPerItem, values: r.summary.summary.values, excludedFictitiousQuoteCount: r.summary.summary.excludedFictitiousQuoteCount }
+    : { researchId: r.researchId, contentHash: r.contentHash, importedAt: r.importedAt, importSource: r.importSource, quoteCount: r.quoteCount, consistent: false, inconsistencyDetail: r.summary.detail, itemCount: 0, minQuotesPerItem: 0, values: null, excludedFictitiousQuoteCount: 0 });
+}
+
+/**
+ * M8 (política de 20/10/2026) — a Ratificação reaproveita o valor da Justificativa de Preço registrada. Antes de publicar,
+ * a pesquisa da LINHAGEM é recalculada com a proveniência ATUAL: se o valor não se sustenta (só fictícias, ou o valor
+ * mudaria por exclusão de cotação fictícia — ex.: justificativa legada anterior à política), a publicação é recusada e a
+ * justificativa precisa ser registrada de novo. Justificativa declarada/sem linhagem de pesquisa não é afetada.
+ */
+export async function assertPriceLineageStillEligible(workspaceId: string, organizationId: number, refs: readonly string[]): Promise<void> {
+  const { lineage } = splitLineage(refs);
+  if (!lineage || lineage.kind !== "pesquisa") return;
+  const { verified } = await loadGovernedPriceResearches(workspaceId, organizationId);
+  const research = verified.find((r) => r.researchId === lineage.researchId);
+  if (!research) return; // integridade/ausência já tratadas no registro; nada a recalcular aqui
+  if (!research.summary.ok) {
+    if (research.summary.code === PRICE_RESEARCH_FICTITIOUS) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Publicação bloqueada: a pesquisa que fundamenta a Justificativa de Preço não sustenta valor oficial (${research.summary.detail}). Registre novamente a justificativa de preço; nada foi publicado (${PRICE_RESEARCH_FICTITIOUS}).` });
+    }
+    return;
+  }
+  const current = research.summary.summary.values[lineage.method];
+  if (!proposalMatchesServerValue(current, lineage.computedValue)) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Publicação bloqueada: o valor da Justificativa de Preço (R$ ${lineage.computedValue.toFixed(2)}) não corresponde mais à pesquisa com a proveniência atual das cotações (R$ ${current.toFixed(2)}; cotações fictícias são excluídas). Registre novamente a justificativa de preço; nada foi publicado (${PRICE_RESEARCH_FICTITIOUS}).` });
+  }
 }
 
 const refuse = (code: "BAD_REQUEST" | "PRECONDITION_FAILED" | "NOT_FOUND", message: string, token: string): never => {
@@ -434,6 +471,9 @@ export async function generatePriceJustification(params: {
       research = verified[0];
     }
     if (!research.summary.ok) {
+      if (research.summary.code === PRICE_RESEARCH_FICTITIOUS) {
+        return refuse("PRECONDITION_FAILED", `A pesquisa de preços não fundamenta um valor de referência oficial: ${research.summary.detail}. Importe cotações reais ou registre uma justificativa manual.`, PRICE_RESEARCH_FICTITIOUS);
+      }
       return refuse("PRECONDITION_FAILED", `A pesquisa de preços não permite calcular um valor (${research.summary.detail}).`, PRICE_RESEARCH_INCONSISTENT);
     }
     const serverValue = research.summary.summary.values[params.method];
@@ -696,6 +736,7 @@ export async function generatePublications(params: {
   // e evidências) + referências às justificativas de contratação e de preço já registradas.
   const contractJustification = await getContractJustification(ws.id, params.organizationId);
   const priceJustification = await getPriceJustification(ws.id, params.organizationId);
+  await assertPriceLineageStillEligible(ws.id, params.organizationId, priceJustification?.documentReferences ?? []);
 
   const out: Array<{ id: string; kind: string; title: string }> = [];
   const contents: string[] = [];

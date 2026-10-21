@@ -144,7 +144,7 @@ describe("R9 / SEM-052 — ItemSourceUpdateConfirm: comparativo antes de aplicar
     st.preview = { ...st.preview, data: PREVIEW };
     const html = render(ItemSourceUpdateConfirm, { itemId: "i1", onClose: () => {} });
     expect(html).toContain("Comparativo de cotações — Papel A4");
-    expect(html).toMatch(/Cotações válidas<\/th><td[^>]*>1<\/td><td[^>]*>2<\/td>/);
+    expect(html).toMatch(/Cotações com preço<\/th><td[^>]*>1<\/td><td[^>]*>2<\/td>/);
     expect(html).toMatch(/Preço médio \(referência\)<\/th><td[^>]*>R\$ 100,00<\/td><td[^>]*>R\$ 300,00<\/td>/);
     expect(html).toContain("+R$ 200,00");
     expect(html).toContain("Papelaria Y — R$ 500,00");
@@ -304,18 +304,30 @@ describe("M8 hardening — cotações fictícias nunca aparecem como válidas", 
     expect(html).toContain("Referência canônica ao aprovar");
   });
 
-  it("Painel: média com fonte fictícia ⇒ aviso explícito e consequência da aprovação declarada", () => {
-    st.panel = { data: {
-      item: { id: "i1", organizationId: 1, processId: "p1", sourceResearchId: "r1", description: "Caneta", quantity: 10, unit: "un", averagePrice: 150, suppliers: [], suggestedCATMAT: null, alternativeCATMAT: [], specifications: [], risks: [], recommendations: [], status: "pendente", approvedBy: null, correlationId: "c", createdAt: "", updatedAt: "" },
-      catmat: [], recommendations: [], risks: [], history: [], graphNodeIds: [],
-      governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 15000, validQuoteCount: 2, priceOutliers: [], fictitiousQuoteCount: 2 },
-    }, isLoading: false };
+  const fictitiousPanel = (referenceBlockedReason: "FICTITIOUS_SOURCE" | null) => ({ data: {
+    item: { id: "i1", organizationId: 1, processId: "p1", sourceResearchId: "r1", description: "Caneta", quantity: 10, unit: "un", averagePrice: 150, suppliers: [], suggestedCATMAT: null, alternativeCATMAT: [], specifications: [], risks: [], recommendations: [], status: "pendente", approvedBy: null, correlationId: "c", createdAt: "", updatedAt: "" },
+    catmat: [], recommendations: [], risks: [], history: [], graphNodeIds: [],
+    governance: { sourceState: "current", sourceStateReason: null, approvalBlock: null, referencePriceCents: 15000, validQuoteCount: 2, priceOutliers: [], fictitiousQuoteCount: 2, referenceBlockedReason },
+  }, isLoading: false });
+
+  it("Painel (órgão real): fonte fictícia ⇒ aprovação operacional disponível, mas NÃO vira referência oficial", () => {
+    st.panel = fictitiousPanel("FICTITIOUS_SOURCE");
     const html = render(ProcurementItemPanel, { itemId: "i1" });
-    expect(html).toContain("Valor demonstrativo (fonte fictícia) — ao aprovar, vira a referência do item");
+    expect(html).toContain("Média operacional (fonte fictícia) — ao aprovar, NÃO vira preço de referência oficial");
     expect(html).toContain('data-testid="fictitious-quotes-warning"');
-    expect(html).toContain("não constitui pesquisa de preços válida");
+    expect(html).toContain("não constitui(em) pesquisa de preços oficial");
+    expect(html).toContain("A aprovação operacional continua disponível");
+    expect(html).not.toContain("vira a referência do item");
     expect(html).not.toContain("Ao aprovar, o preço de referência canônico será");
     expect(html).not.toContain("válida(s)");
+  });
+
+  it("Painel (homologação sintética autorizada pelo backend): valor demonstrativo declarado como tal", () => {
+    st.panel = fictitiousPanel(null);
+    const html = render(ProcurementItemPanel, { itemId: "i1" });
+    expect(html).toContain("Valor demonstrativo (homologação sintética autorizada) — ao aprovar, vira a referência do item");
+    expect(html).toContain("não constituem pesquisa de preços oficial");
+    expect(html).not.toContain("Ao aprovar, o preço de referência canônico será");
   });
 });
 

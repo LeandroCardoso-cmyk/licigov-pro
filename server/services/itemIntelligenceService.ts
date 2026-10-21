@@ -31,8 +31,8 @@ import {
 import {
   insertIntelligentItem,
   insertCatmatMatch,
-  listFictitiousQuoteIds,
-  countFictitiousPricedQuotes,
+  listQuoteProvenance,
+  quoteProvenanceCounts,
   insertItemRecommendation,
   insertItemRisk,
   getIntelligentItem,
@@ -43,6 +43,8 @@ import {
   listItemRisks,
   listItemHistory,
 } from "../db/procurement";
+import { deriveItemRisks, describeQuoteSet, type QuoteProvenanceCounts } from "../domain/quoteProvenance";
+import { demonstrativePricesAllowed } from "./priceGovernanceService";
 import {
   findPriceOutliers, itemApprovalBlock, itemApprovalBlockMessage, type ItemApprovalBlock, type PriceOutlier,
 } from "@shared/itemApprovalGate";
@@ -249,8 +251,17 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   governance: {
     sourceState: string; sourceStateReason: string | null; approvalBlock: ItemApprovalBlock | null;
     referencePriceCents: number; validQuoteCount: number; priceOutliers: PriceOutlier[];
-    /** M8 hardening — cotações com preço de fonte FICTÍCIA (demonstrativas), que hoje compõem a média. */
+    /** M8 hardening — cotações com preço de fonte FICTÍCIA (demonstrativas). */
     fictitiousQuoteCount: number;
+    /** M8 (política de 20/10/2026) — contagem por proveniência efetiva das cotações com preço. */
+    quoteProvenance: QuoteProvenanceCounts | null;
+    /** Texto honesto do conjunto de cotações (nunca "válidas" só por ter preço). */
+    quoteSetText: string;
+    /**
+     * `FICTITIOUS_SOURCE` ⇒ o preço médio deste item NÃO vira referência institucional nem entra em documento oficial
+     * (a aprovação operacional continua disponível). null ⇒ sem bloqueio (inclui homologação sintética autorizada).
+     */
+    referenceBlockedReason: "FICTITIOUS_SOURCE" | null;
   } | null;
 }> {
   const item = await getIntelligentItem(itemId, organizationId);
@@ -264,14 +275,19 @@ export async function getItemPanel(itemId: string, organizationId: number): Prom
   const source = item ? await getIntelligentItemSourceState(item.id, organizationId) : null;
   // Fornecedores persistidos em REAIS → CENTAVOS explicitamente (contrato monetário do cliente).
   const quotesCents = item ? item.suppliers.map(s => ({ name: s.name, valueCents: reaisToCents(s.value) })) : [];
-  const fictitiousIds = item ? await listFictitiousQuoteIds(organizationId, item.suppliers.map(s => s.quoteId ?? "")) : new Set<string>();
+  const provenance = item ? await listQuoteProvenance(organizationId, item.suppliers.map(s => s.quoteId ?? "")) : new Map();
+  const quoteProvenance = item ? quoteProvenanceCounts(item.suppliers, provenance) : null;
+  const referenceBlocked = (quoteProvenance?.ficticia ?? 0) > 0 && !(await demonstrativePricesAllowed(organizationId));
   const governance = item ? {
     sourceState: source?.sourceState ?? "current", sourceStateReason: source?.sourceStateReason ?? null,
     approvalBlock: itemApprovalBlock(source?.sourceState ?? "current"),
     referencePriceCents: reaisToCents(item.averagePrice),
     validQuoteCount: quotesCents.filter(q => q.valueCents > 0).length,
     priceOutliers: findPriceOutliers(quotesCents),
-    fictitiousQuoteCount: countFictitiousPricedQuotes(item.suppliers, fictitiousIds),
+    fictitiousQuoteCount: quoteProvenance?.ficticia ?? 0,
+    quoteProvenance,
+    quoteSetText: quoteProvenance ? describeQuoteSet(quoteProvenance) : "",
+    referenceBlockedReason: referenceBlocked ? "FICTITIOUS_SOURCE" as const : null,
   } : null;
-  return { item, catmat, recommendations, risks, history, graphNodeIds: graphNodes.map(n => n.id), governance };
+  return { item, catmat, recommendations, risks: item ? deriveItemRisks(item.id, risks, quoteProvenance) : risks, history, graphNodeIds: graphNodes.map(n => n.id), governance };
 }

@@ -5244,6 +5244,14 @@ export const priceResearchItemsTable = mysqlTable("price_research_items", {
   organizationId: int("organization_id").notNull(),
   researchId:    varchar("research_id", { length: 20 }).notNull(),
   processId:     varchar("process_id", { length: 20 }).notNull(),
+  /**
+   * M8 (0319) — proveniência ESTRUTURADA da cotação: `ficticia` | `declarada` | `verificada`; NULL = legado/desconhecido
+   * (sem backfill). Fonte da verdade da elegibilidade institucional — ver server/domain/quoteProvenance.ts.
+   * POSIÇÃO DELIBERADA (antes de supplier/value): o Drizzle emite o SET do ON DUPLICATE KEY UPDATE na ordem das colunas
+   * deste objeto e o MySQL avalia as atribuições da esquerda para a direita — a regra de reimportação
+   * (`provenanceOnReimportSql`) precisa ler supplier/value ANTIGOS. Fisicamente a coluna fica no fim da tabela (0319).
+   */
+  provenanceKind: varchar("provenance_kind", { length: 16 }),
   description:   text("description"),
   quantity:      decimal("quantity", { precision: 14, scale: 3 }).notNull().default("0"),
   unit:          varchar("unit", { length: 30 }).notNull().default("un"),

@@ -48,10 +48,12 @@ const dump = async (c: mysql.Connection, t: string) => JSON.stringify(await rows
 /** Assinatura estrutural (colunas + índices + FKs) das tabelas SELECIONADAS. */
 /** Tabelas criadas por migrations POSTERIORES (0318 — marco de transição da Governance V2): fora do que esta migration promete preservar. */
 const LATER_MIGRATION_TABLES = ["template_governance_transitions"];
+/** Coluna acrescentada por migration POSTERIOR (0319 — proveniência das cotações; aditiva, anulável, sem índice/FK): fora do que esta migration promete preservar. */
+const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')";
 async function signature(c: mysql.Connection, tables: string[] | "EXISTING"): Promise<string> {
   const filter = tables === "EXISTING" ? `NOT IN (${inList([...NEW, LATER_MIGRATION_TABLES].flat())})` : `IN (${inList(tables)})`;
   const cols = await rows(c, `SELECT TABLE_NAME t, COLUMN_NAME c, COLUMN_TYPE ty, IS_NULLABLE n, COLUMN_DEFAULT d, COLLATION_NAME k, EXTRA e, GENERATION_EXPRESSION g
-    FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME ${filter} ORDER BY TABLE_NAME, ORDINAL_POSITION`);
+    FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME ${filter}${LATER_COLUMN_FILTER} ORDER BY TABLE_NAME, ORDINAL_POSITION`);
   const idx = await rows(c, `SELECT TABLE_NAME t, INDEX_NAME i, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) c, MIN(NON_UNIQUE) nu FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME ${filter} GROUP BY TABLE_NAME, INDEX_NAME ORDER BY TABLE_NAME, INDEX_NAME`);
   const fks = await rows(c, `SELECT rc.TABLE_NAME t, rc.CONSTRAINT_NAME n, rc.REFERENCED_TABLE_NAME r, rc.DELETE_RULE d, rc.UPDATE_RULE u FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc

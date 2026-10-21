@@ -14,6 +14,7 @@ import { getDb } from "../../db/connection";
 import { importSessions, importStagingItems } from "../../../drizzle/schema";
 import { runMigrations } from "../../bootstrap";
 import { previewSessionPromotion, promoteApprovedSessionToDomain } from "../../services/importPromotionService";
+import { currentProvenanceScanSummary } from "../helpers/provenanceScanFixture";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 960482;
@@ -30,7 +31,7 @@ async function seedApprovedSession(rows: Row[], over: Record<string, unknown> = 
     organizationId: ORG, uploadedBy: U, sourceFileId: `imports/${ORG}/${++seq}-cot.xlsx`, sourceFileName: "cot.xlsx",
     sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", checksum: `${seq}`.padStart(64, "b"),
     procurementProcessId: PROC, importType: "price_research", parserType: "xlsx", parserVersion: "1.0.0",
-    status: "approved", stage: "approved", ...over,
+    status: "approved", stage: "approved", extractionSummary: currentProvenanceScanSummary(`${seq}`.padStart(64, "b")), ...over,
   }).$returningId();
   for (const r of rows) {
     await db.insert(importStagingItems).values({

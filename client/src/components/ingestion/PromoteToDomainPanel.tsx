@@ -9,6 +9,9 @@
  * Itens Inteligentes novos, existentes mesclados/recalculados (nº de cotações e média antes × depois), decididos
  * marcados "Fonte alterada" e itens marcados "Identidade a revisar". "Confirmar promoção" só habilita com a prévia
  * carregada E o reconhecimento explícito do impacto.
+ *
+ * M8 (P1-C) — sessão extraída antes da análise de proveniência vigente: a promoção fica indisponível (o servidor a recusa)
+ * e a ação de um clique "Revalidar arquivo original" reanalisa o arquivo preservando as revisões já feitas.
  */
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -57,6 +60,32 @@ interface PromoteToDomainPanelProps {
   previewError?: string | null;
   /** Solicita (ou recalcula) a prévia ao abrir a confirmação. */
   onRequestPreview?: () => void;
+  /** M8 (P1-C) — estado da análise de proveniência da sessão (servidor). */
+  provenanceScan?: { status: string; message: string | null; revalidable?: boolean } | null;
+  onRevalidateProvenance?: () => void;
+  isRevalidatingProvenance?: boolean;
+  provenanceRevalidationError?: string | null;
+}
+
+/** M8 (P1-C) — orientação + ação de revalidação da análise de proveniência (sessão legada). */
+export function ProvenanceRevalidationNotice({ scan, onRevalidate, isRevalidating, error }: {
+  scan: { status: string; message: string | null; revalidable?: boolean }; onRevalidate?: () => void; isRevalidating: boolean; error: string | null;
+}) {
+  const inProgress = scan.status === "in_progress" || isRevalidating;
+  return (
+    <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100" data-testid="provenance-revalidation">
+      <AlertTitle>Revalidação da proveniência necessária</AlertTitle>
+      <AlertDescription className="space-y-2">
+        <p>{scan.message}</p>
+        {onRevalidate && (scan.revalidable !== false || inProgress) && (
+          <Button size="sm" className={DISABLED_BUTTON} onClick={onRevalidate} disabled={inProgress} aria-busy={inProgress}>
+            {inProgress ? "Revalidando o arquivo original…" : "Revalidar arquivo original"}
+          </Button>
+        )}
+        {error && <p className="text-destructive" role="alert">{error}</p>}
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 function ImpactItemList({ title, items, total, limit }: { title: string; items: PromotionPreviewItemView[]; total: number; limit: number }) {
@@ -165,6 +194,7 @@ export function PromotionImpactConfirmation({
 export function PromoteToDomainPanel({
   status, importType, canPromote, requiresManager = false, isPromoting, error, result, onPromote, onReviewItems,
   preview = null, isPreviewLoading = false, previewError = null, onRequestPreview,
+  provenanceScan = null, onRevalidateProvenance, isRevalidatingProvenance = false, provenanceRevalidationError = null,
 }: PromoteToDomainPanelProps) {
   const [confirming, setConfirming] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -200,6 +230,16 @@ export function PromoteToDomainPanel({
         A promoção ao domínio está disponível apenas para Pesquisa de Preços nesta versão. Para este tipo
         de documento, os itens permanecem em revisão e não são promovidos automaticamente.
       </p>
+    );
+  }
+
+  // M8 (P1-C) — sem a análise vigente não há promoção: orienta e oferece a revalidação (revisões preservadas).
+  if ((canPromote || requiresManager) && provenanceScan && (provenanceScan.status === "required" || provenanceScan.status === "in_progress")) {
+    return (
+      <ProvenanceRevalidationNotice
+        scan={provenanceScan} onRevalidate={onRevalidateProvenance}
+        isRevalidating={isRevalidatingProvenance} error={provenanceRevalidationError}
+      />
     );
   }
 

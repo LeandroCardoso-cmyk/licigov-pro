@@ -2145,6 +2145,13 @@
       "when": 1791979436362,
       "tag": "0318_template_governance_transition",
       "breakpoints": true
+    },
+    {
+      "idx": 319,
+      "version": "5",
+      "when": 1792505053795,
+      "tag": "0319_price_quote_provenance",
+      "breakpoints": true
     }
   ]
 }

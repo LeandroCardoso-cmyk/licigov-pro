@@ -19,6 +19,7 @@
 
 import { parseBRL } from "./money";
 import { normalizeDecimal } from "./importCorrectionFields";
+import { classifyDocumentDeclaration, declaresFictitious, suggestsDemonstrative, isPartialDeclarationScope } from "./quoteProvenance";
 
 export const PRICE_RESEARCH_PARSER_VERSION = "price-research-parser/2";
 
@@ -40,8 +41,13 @@ export interface ParsedQuote {
   readonly valueCents: number | null;
   readonly date: string;
   readonly notes: string;
-  /** Fonte declarada fictícia/sintética/teste — nunca constitui cotação válida para fins oficiais. */
+  /**
+   * Fonte DECLARADA fictícia/demonstrativa (declaração explícita: "Fornecedor Fictício A", "dados fictícios",
+   * "valores demonstrativos") — nunca fundamenta referência institucional. Ver `server/domain/quoteProvenance.ts`.
+   */
   readonly fictitious: boolean;
+  /** Suspeita heurística (termos genéricos: "teste", "exemplo", "homologação"…) — só aviso de revisão, nunca fictícia. */
+  readonly suspected: boolean;
 }
 
 export interface ParsedPriceItem {
@@ -59,7 +65,7 @@ export interface ParsedPriceItem {
 
 export type PriceParseIssueCode =
   | "EMPTY" | "QUOTE_WITHOUT_ITEM" | "ITEM_WITHOUT_DESCRIPTION" | "ITEM_WITHOUT_PRICE" | "MULTIPLE_PRICES"
-  | "QUANTITY_MISSING" | "QUANTITY_CONFLICT" | "UNIT_CONFLICT" | "DECLARED_SUMMARY_MISMATCH" | "FICTITIOUS_SOURCE"
+  | "QUANTITY_MISSING" | "QUANTITY_CONFLICT" | "UNIT_CONFLICT" | "DECLARED_SUMMARY_MISMATCH" | "FICTITIOUS_SOURCE" | "SUSPECTED_DEMONSTRATIVE"
   | "FEW_QUOTES" | "UNRECOGNIZED_LINES";
 
 export interface PriceParseIssue {
@@ -75,7 +81,10 @@ export interface PriceResearchParse {
   readonly lines: readonly PriceParseLine[];
   readonly quoteCount: number;
   /** Texto declara dados sintéticos/fictícios (homologação) — sinalizado no registro, nunca ocultado. */
+  /** Declaração EXPLÍCITA de dados fictícios/demonstrativos (documento ou alguma cotação). */
   readonly synthetic: boolean;
+  /** Só suspeita heurística (termos genéricos) — revisar a fonte; nada é gravado como fictício. */
+  readonly suspected: boolean;
   /** Impedem a importação (zero gravação): o servidor corrige o texto a partir da prévia. */
   readonly blocking: readonly PriceParseIssue[];
   readonly warnings: readonly PriceParseIssue[];
@@ -104,6 +113,10 @@ const MONEY_BARE = /(?<![\d/.,])(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})(?![\d/])/g
 const SUMMARY = /^(?:valor\s+(?:total|global|estimado|m[ée]dio|de refer[êe]ncia)|total(?:\s+(?:geral|estimado|do item))?|pre[çc]o\s+(?:m[ée]dio|de refer[êe]ncia|estimado)|m[ée]dia(?:\s+(?:aritm[ée]tica|simples))?|mediana|menor\s+pre[çc]o)\b/i;
 const METADATA = /^(?:processo|objeto|data(?: da pesquisa)?|respons[aá]vel|elaborad[oa]|[óo]rg[ãa]o|entidade|munic[ií]pio|prefeitura|secretaria|unidade requisitante|setor|exerc[ií]cio|modalidade|refer[êe]ncia|metodologia|par[âa]metros?|crit[ée]rio|forma de pesquisa|pesquisa de pre[çc]os|mapa de pre[çc]os|cnpj|telefone|e-?mail|endere[çc]o)\b/i;
 const NOTE = /^(?:obs(?:erva[çc][ãa]o|\.)?|nota|aviso|aten[çc][ãa]o|importante|ressalva|advert[êe]ncia)\b/i;
+/**
+ * Classificação ESTRUTURAL de linha-aviso (inalterada): linhas com estes termos são notas, não itens/cotações. A
+ * PROVENIÊNCIA não vem desta regex ampla — só de `declaresFictitious` (explícita) / `suggestsDemonstrative` (suspeita).
+ */
 const FICTITIOUS = /fict[íi]ci|sint[ée]tic|homologa[çc][ãa]o|dados? de teste|\bteste\b|exemplo|inexistente|simulad/i;
 const HEADER_DELIMITED = /descri|produto|item|quant|qtd|unid|valor|pre[çc]o|fornecedor/i;
 const UNIT_PER_PRICE = /unit[áa]ri|p\/\s*un|por unidade|\/un\b|cada/i;
@@ -168,7 +181,7 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
   const drafts: Draft[] = [];
   const delimitedDrafts = new Map<string, Draft>();
   let current: Draft | null = null;
-  let pending: { supplier: string; date: string; notes: string[]; fictitious: boolean } | null = null;
+  let pending: { supplier: string; date: string; notes: string[]; fictitious: boolean; suspected: boolean } | null = null;
   let columns: readonly Col[] = DEFAULT_COLUMNS;
   let delimitedRows = 0;
   let documentalSignals = 0;
@@ -198,14 +211,15 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
     const firstMoney = line.search(/R\$|\d{1,3}(?:\.\d{3})*,\d{2}/);
     const before = (firstMoney >= 0 ? line.slice(0, firstMoney) : line).replace(QUOTE_LABEL, "").replace(DATE, " ").replace(/\(\s*\)/g, "").replace(/[\s:—–\-|,;]+$/g, "").trim();
     const after = line.slice(Math.max(0, firstMoney)).replace(MONEY_RS, " ").replace(DATE, " ").replace(/\(?\s*(?:unit[áa]rio|cada|por unidade)\s*\)?/gi, " ").replace(/^[\s—–\-|,;:]+|[\s—–\-|,;:]+$/g, "").replace(/\s{2,}/g, " ").trim();
-    const p = pending as { supplier: string; date: string; notes: string[]; fictitious: boolean } | null;
+    const p = pending as { supplier: string; date: string; notes: string[]; fictitious: boolean; suspected: boolean } | null;
     // "Valor unitário: R$ …" — rótulo do preço, não nome de fornecedor.
     const named = before.replace(/(?:^|\s*[—–\-|]\s*)(?:valor|pre[çc]o)(?:\s+(?:unit[áa]rio|cotado|ofertado))?\s*:?\s*$/i, "").trim();
     const supplier = named || p?.supplier || "";
     const date = line.match(DATE)?.[1] ?? p?.date ?? "";
     const notes = [...(p?.notes ?? []), ...(after ? [after] : [])].join(" — ");
-    const fictitious = FICTITIOUS.test(`${supplier} ${notes}`) || (p?.fictitious ?? false);
-    (current as Draft).quotes.push({ index, supplier, valueCents: cents !== null && cents > 0 ? cents : null, date, notes, fictitious });
+    const fictitious = declaresFictitious(`${supplier} ${notes}`) || (p?.fictitious ?? false);
+    const suspected = !fictitious && (suggestsDemonstrative(`${supplier} ${notes}`) || (p?.suspected ?? false));
+    (current as Draft).quotes.push({ index, supplier, valueCents: cents !== null && cents > 0 ? cents : null, date, notes, fictitious, suspected });
     pending = null;
     return true;
   };
@@ -232,6 +246,9 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
       const unit = at("unit") || q.unitHint;
       const cents = at("value") ? parseBRL(at("value")) : null;
       const supplier = at("supplier");
+      // M8 — linha SEM valor e SEM fornecedor que declara o documento ("DADOS FICTÍCIOS…;2026;;;") é NOTA, não cotação:
+      // o ano/código na coluna de quantidade não a torna cotação (global × parcial × negação: classifyDocumentDeclaration).
+      if (cents === null && !supplier && classifyDocumentDeclaration(line) === "global") { mark(index, "note", original); return; }
       const key = `${strip(description).replace(/\s+/g, " ")}|${strip(unit)}|${q.quantity ?? ""}`;
       let d = delimitedDrafts.get(key);
       if (!d) {
@@ -239,7 +256,7 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
         delimitedDrafts.set(key, d);
         drafts.push(d);
       }
-      d.quotes.push({ index, supplier, valueCents: cents !== null && cents > 0 ? cents : null, date: at("date"), notes: "", fictitious: FICTITIOUS.test(supplier) });
+      d.quotes.push({ index, supplier, valueCents: cents !== null && cents > 0 ? cents : null, date: at("date"), notes: "", fictitious: declaresFictitious(supplier), suspected: suggestsDemonstrative(supplier) });
       delimitedRows++;
       current = null;
       mark(index, "quote", original);
@@ -282,7 +299,7 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
       return;
     }
     if (QUOTE_HEADER_ONLY.test(line)) {
-      pending = { supplier: "", date: "", notes: [], fictitious: false };
+      pending = { supplier: "", date: "", notes: [], fictitious: false, suspected: false };
       mark(index, "quote", original);
       return;
     }
@@ -334,8 +351,9 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
     }
     const sup = line.match(SUPPLIER);
     if (sup) {
-      pending = { ...(pending ?? { date: "", notes: [], fictitious: false }), supplier: sup[1].trim() };
-      pending.fictitious = pending.fictitious || FICTITIOUS.test(sup[1]);
+      pending = { ...(pending ?? { date: "", notes: [], fictitious: false, suspected: false }), supplier: sup[1].trim() };
+      pending.fictitious = pending.fictitious || declaresFictitious(sup[1]);
+      pending.suspected = pending.suspected || suggestsDemonstrative(sup[1]);
       mark(index, "supplier", original);
       return;
     }
@@ -350,11 +368,14 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
       return;
     }
     if (NOTE.test(line) || FICTITIOUS.test(line)) {
-      if (FICTITIOUS.test(line)) {
+      // Nota vizinha: declaração explícita marca a cotação; termo genérico só levanta suspeita (nunca fictícia).
+      const explicit = declaresFictitious(line);
+      if (explicit || suggestsDemonstrative(line)) {
         const cur = current as Draft | null;
         const last = cur?.quotes[cur.quotes.length - 1];
-        if (pending) pending.fictitious = true;
-        else if (cur && last && last.index === index - 1) cur.quotes[cur.quotes.length - 1] = { ...last, fictitious: true };
+        const flag = explicit ? { fictitious: true, suspected: false } : { suspected: true };
+        if (pending) Object.assign(pending, flag);
+        else if (cur && last && last.index === index - 1) cur.quotes[cur.quotes.length - 1] = { ...last, ...(explicit ? flag : { suspected: !last.fictitious }) };
       }
       mark(index, "note", original);
       return;
@@ -371,7 +392,19 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
     mark(index, "unrecognized", original);
   });
 
-  const synthetic = raw.some((l) => FICTITIOUS.test(l));
+  // Declaração explícita do DOCUMENTO (nota/cabeçalho/metadado/resumo — não linha de cotação), ex.: "Observação: dados
+  // fictícios, exclusivamente para homologação." ⇒ TODAS as cotações do documento são fictícias. Linha NÃO reconhecida
+  // não declara nada (só suspeita), e negação ("não foram aceitas cotações fictícias") não é declaração.
+  const NON_QUOTE: ReadonlySet<PriceLineKind> = new Set(["header", "metadata", "note", "summary"]);
+  // Colagem: a linha já foi classificada estruturalmente como NÃO-cotação ⇒ declaração explícita vale para o conjunto, salvo
+  // escopo restrito ("itens 3 e 4…", "algumas…") ⇒ só suspeita (revisão).
+  const documentDeclaresFictitious = lines.some((l) => NON_QUOTE.has(l.kind) && declaresFictitious(l.text) && !isPartialDeclarationScope(l.text));
+  const documentPartial = lines.some((l) => NON_QUOTE.has(l.kind) && declaresFictitious(l.text) && isPartialDeclarationScope(l.text));
+  if (documentDeclaresFictitious) {
+    for (const d of drafts) d.quotes = d.quotes.map((q) => ({ ...q, fictitious: true, suspected: false }));
+  }
+  const synthetic = documentDeclaresFictitious || drafts.some((d) => d.quotes.some((q) => q.fictitious));
+  const suspected = !synthetic && (documentPartial || drafts.some((d) => d.quotes.some((q) => q.suspected)) || lines.some((l) => suggestsDemonstrative(l.text)));
   const items: ParsedPriceItem[] = [];
   for (const d of drafts) {
     if (!d.description) {
@@ -392,6 +425,10 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
     const fict = d.quotes.filter((q) => q.fictitious).length;
     if (fict > 0) {
       warnings.push({ code: "FICTITIOUS_SOURCE", lineIndex: d.startIndex, message: `Item "${d.description.slice(0, 80)}": ${fict} cotação(ões) de fonte fictícia/sintética — servem só para homologação, não como pesquisa de preços válida.` });
+    }
+    const susp = d.quotes.filter((q) => q.suspected && !q.fictitious).length;
+    if (susp > 0) {
+      warnings.push({ code: "SUSPECTED_DEMONSTRATIVE", lineIndex: d.startIndex, message: `Item "${d.description.slice(0, 80)}": ${susp} cotação(ões) com termos como "teste", "exemplo" ou "homologação" — confira se a fonte é real (registradas como declaradas, sem verificação).` });
     }
     items.push({
       description: d.description, specification: d.specification.join(" "), quantity: d.quantity, unit: d.unit || "UN",
@@ -416,7 +453,7 @@ export function parsePriceResearchText(text: string): PriceResearchParse {
   return {
     version: PRICE_RESEARCH_PARSER_VERSION,
     format: raw.length === 0 ? "empty" : documentalSignals > 0 && documentalSignals >= delimitedRows ? "documental" : delimitedRows > 0 ? "delimited" : "documental",
-    items, lines, quoteCount: items.reduce((n, i) => n + i.quotes.length, 0), synthetic, blocking, warnings,
+    items, lines, quoteCount: items.reduce((n, i) => n + i.quotes.length, 0), synthetic, suspected, blocking, warnings,
   };
 }
 
@@ -439,11 +476,13 @@ export interface PriceResearchPreview {
   readonly parserVersion: string;
   readonly format: PriceResearchParse["format"];
   readonly synthetic: boolean;
+  /** Termos genéricos sugerem dado de teste sem declarar — revisar a fonte (nada é classificado como fictício). */
+  readonly suspected: boolean;
   readonly quoteCount: number;
   readonly items: ReadonlyArray<{
     description: string; specification: string; quantity: number | null; unit: string;
     averageCents: number | null; totalCents: number | null;
-    quotes: ReadonlyArray<{ line: number; supplier: string; valueCents: number | null; date: string; fictitious: boolean; notes: string }>;
+    quotes: ReadonlyArray<{ line: number; supplier: string; valueCents: number | null; date: string; fictitious: boolean; suspected: boolean; notes: string }>;
   }>;
   /** Linhas que NÃO viraram item nem cotação (cabeçalho, metadado, resumo, aviso, não reconhecida). */
   readonly ignored: ReadonlyArray<{ line: number; kind: PriceLineKind; text: string }>;
@@ -456,11 +495,11 @@ const STRUCTURAL: ReadonlySet<PriceLineKind> = new Set(["item", "description", "
 
 export function previewOfParse(p: PriceResearchParse): PriceResearchPreview {
   return {
-    parserVersion: p.version, format: p.format, synthetic: p.synthetic, quoteCount: p.quoteCount,
+    parserVersion: p.version, format: p.format, synthetic: p.synthetic, suspected: p.suspected, quoteCount: p.quoteCount,
     items: p.items.map((i) => ({
       description: i.description, specification: i.specification, quantity: i.quantity, unit: i.unit,
       averageCents: i.averageCents, totalCents: i.totalCents,
-      quotes: i.quotes.map((q) => ({ line: q.index + 1, supplier: q.supplier, valueCents: q.valueCents, date: q.date, fictitious: q.fictitious, notes: q.notes })),
+      quotes: i.quotes.map((q) => ({ line: q.index + 1, supplier: q.supplier, valueCents: q.valueCents, date: q.date, fictitious: q.fictitious, suspected: q.suspected, notes: q.notes })),
     })),
     ignored: p.lines.filter((l) => !STRUCTURAL.has(l.kind)).map((l) => ({ line: l.index + 1, kind: l.kind, text: l.text.slice(0, 200) })),
     blocking: p.blocking, warnings: p.warnings, canImport: p.blocking.length === 0,

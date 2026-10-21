@@ -33,6 +33,8 @@ export interface PriceQuote {
    * Calculada quando ausente.
    */
   readonly contentHash?: string;
+  /** M8 — proveniência da cotação (`ficticia` | `declarada` | `verificada`); NÃO participa do contentHash. */
+  readonly provenanceKind?: string;
 }
 
 /** Versão da fórmula do hash de conteúdo (compõe o hash; mudar a fórmula ⇒ mudar a versão). */

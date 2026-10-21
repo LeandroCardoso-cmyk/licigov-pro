@@ -104,6 +104,10 @@ export interface ExtractionSummary {
   extraction?:         import("./extractionLineage").ExtractionLineage;
   /** Layout v2 — reextrações aplicadas à MESMA sessão (append-only; versões anteriores/novas, ator, motivo). */
   reextractions?:      import("./importReprocess").ReextractionRecord[];
+  /** M8 (P1-C) — evidência versionada de que a análise da declaração do documento rodou sobre ESTE arquivo (só backend). */
+  provenanceScan?:     import("./quoteProvenance").ProvenanceScanEvidence;
+  /** M8 (P1-C) — revalidações da análise aplicadas à sessão (append-only; sem conteúdo do documento). */
+  provenanceRevalidations?: import("./quoteProvenance").ProvenanceRevalidationRecord[];
 }
 
 // ─── MIME type registry ───────────────────────────────────────────────────────

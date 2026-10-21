@@ -107,7 +107,7 @@ export default function PriceJustificationWorkspace({ workspaceId }: PriceJustif
               {selected && !selected.consistent && <p className="text-xs text-red-600 dark:text-red-400">Esta pesquisa não permite calcular um valor ({selected.inconsistencyDetail}).</p>}
               {selected && selected.consistent && (
                 <>
-                  <p className="text-xs text-muted-foreground">Pesquisa {selected.researchId} · {selected.quoteCount} cotação(ões) em {selected.itemCount} item(ns) · conteúdo sha256 {selected.contentHash.slice(0, 12)}…{selected.minQuotesPerItem < 3 ? ` · menor nº de cotações por item: ${selected.minQuotesPerItem}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">Pesquisa {selected.researchId} · {selected.quoteCount} cotação(ões) em {selected.itemCount} item(ns) · conteúdo sha256 {selected.contentHash.slice(0, 12)}…{selected.minQuotesPerItem < 3 ? ` · menor nº de cotações por item: ${selected.minQuotesPerItem}` : ""}{(selected.excludedFictitiousQuoteCount ?? 0) > 0 ? ` · ${selected.excludedFictitiousQuoteCount} cotação(ões) identificada(s) como fictícia(s) excluída(s) do cálculo — não constituem pesquisa de preços oficial` : ""}</p>
                   <label className="block text-xs font-medium text-foreground">Método de cálculo (escolha da pessoa — sem padrão)
                     <select value={method} onChange={(e) => setMethod(e.target.value as Method | "")} className="mt-1 w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm">
                       <option value="">Selecione…</option>

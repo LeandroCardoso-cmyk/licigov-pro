@@ -24,13 +24,14 @@ import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
-  fictitiousQuotesReviewText, type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
+  fictitiousQuotesReviewText, suspectedQuotesReviewText, type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
 import { formatBRL, reaisToCents } from "../../domain/money";
 import { draftContentHash } from "../../domain/generatedDocument";
 import { canonicalDigest, selectDocumentExcerpt, sha256Hex, type CanonicalValue } from "../../domain/canonicalJson";
 import { listProcurementItems } from "../../db/procurementItems";
 import { resolveProcurementContext } from "../canonicalContextService";
+import { fictitiousPriceBlocker } from "../priceGovernanceService";
 import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
 import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
@@ -192,6 +193,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
         averagePriceCents: r.averagePriceCents, quoteCount: r.quoteCount,
         // M8 hardening: só quando há cotação fictícia (renderizada) — sem ela, snapshot byte-idêntico.
         ...(r.fictitiousQuoteCount ? { fq: r.fictitiousQuoteCount } : {}),
+        ...(r.suspectedQuoteCount ? { sus: r.suspectedQuoteCount } : {}),
         confirmedCatalogCode: r.confirmedCatalogCode ?? null, suggested: !!r.suggestedCatalogCode,
         sourceState: src.sourceState,
         // Só campos RENDERIZADOS no prompt (o quoteId não aparece no prompt ⇒ não entra no digest).
@@ -248,7 +250,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       const src = byId.get(r.id)!;
       const catalog = r.confirmedCatalogCode ? ` · catálogo confirmado: ${r.confirmedCatalogCode}` : " · catálogo: a revisar";
       const flag = src.sourceState !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
-      const fict = r.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(r.fictitiousQuoteCount)}` : "";
+      const fict = (r.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(r.fictitiousQuoteCount)}` : "")
+        + (r.suspectedQuoteCount ? ` · ${suspectedQuotesReviewText(r.suspectedQuoteCount)}` : "");
       lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}${fict}`);
       for (const q of sortQuotes(src.quotes)) {
         const bm = [q.brand.trim(), q.model.trim()].filter(Boolean).join(" / ");
@@ -363,6 +366,7 @@ export function canonicalDocumentItems(
       priceBlockedReason: it.priceContext.priceBlockedReason,
       quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
       fictitiousQuoteCount: evid.reduce((n, e) => n + (e.fictitiousQuoteCount ?? 0), 0),
+      suspectedQuoteCount: evid.reduce((n, e) => n + (e.suspectedQuoteCount ?? 0), 0),
       confirmedCatalogCode: catalogs.length === 1 ? catalogs[0] : null,
       suggestedCatalogCode: evid.find((e) => e.suggestedCatalogCode)?.suggestedCatalogCode ?? null,
       sourceState: evid.find((e) => e.sourceState !== "current")?.sourceState ?? "current",
@@ -422,9 +426,15 @@ export async function loadApprovedContextItems(params: {
   const items = await listIntelligentItems(params.processId, params.organizationId);
   const approved = items.filter((i) => i.status === "aprovado");
   const decisions = await getLatestCatmatDecisionsForItems(approved.map((i) => i.id), params.organizationId);
+  // M8 (política de 20/10/2026): cotação fictícia nunca forma preço de referência — mesmo bloqueio do contexto
+  // canônico (`FICTITIOUS_SOURCE`), salvo homologação sintética autorizada no backend. A mudança entra no digest.
+  const priceBlocked = await fictitiousPriceBlocker(params.organizationId, approved);
   const approvedItems: ContextItem[] = approved.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-    averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount, fictitiousQuoteCount: i.fictitiousQuoteCount,
+    ...(priceBlocked(i)
+      ? { averagePriceCents: 0, priceBlockedReason: "FICTITIOUS_SOURCE" }
+      : { averagePriceCents: i.averagePriceCents }),
+    quoteCount: i.quoteCount, fictitiousQuoteCount: i.fictitiousQuoteCount, suspectedQuoteCount: i.suspectedQuoteCount,
     confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
     suggestedCatalogCode: i.suggestedCATMAT,
     sourceState: i.sourceState ?? "current",

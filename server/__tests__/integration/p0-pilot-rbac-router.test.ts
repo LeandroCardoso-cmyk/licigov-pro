@@ -33,7 +33,7 @@ vi.mock("../../services/fileIngestionService", () => ({
   findResumableSessionForProcess: vi.fn().mockResolvedValue(null),
   updateSessionStatus: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn().mockReturnValue("job") }));
+vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn().mockReturnValue("job"), isSessionInFlight: vi.fn(() => false), getProvenanceRevalidationFailure: vi.fn(() => null) }));
 
 const intake = vi.hoisted(() => ({
   getDocumentIntake: vi.fn(async () => ({ staging: null, draft: { exists: false, contentHash: null, origin: null, title: null } })),

@@ -130,7 +130,14 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           </p>
           {p.synthetic && (
             <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-              Dados sintéticos/fictícios identificados: servem para homologação e não constituem pesquisa de preços válida.
+              Fonte declarada fictícia/demonstrativa: estas cotações ficam registradas como fictícias e não fundamentam preço de
+              referência nem documento oficial (só homologação sintética autorizada).
+            </p>
+          )}
+          {!p.synthetic && p.suspected && (
+            <p data-testid="price-research-suspected" className="rounded-md border border-amber-300 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-200">
+              Possíveis dados demonstrativos (termos como "teste", "exemplo" ou "homologação"): confira a fonte. Sem declaração
+              explícita, as cotações são registradas como declaradas — nunca como fictícias nem como verificadas.
             </p>
           )}
           {p.blocking.length > 0 && (
@@ -152,7 +159,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
                   {it.quotes.map((q) => (
                     <li key={q.line}>
                       Linha {q.line}: {q.supplier || "fornecedor não informado"} — {q.valueCents !== null ? formatCentsBRL(q.valueCents) : "sem preço"}
-                      {q.date ? ` — ${q.date}` : ""}{q.fictitious ? " (fonte fictícia)" : ""}
+                      {q.date ? ` — ${q.date}` : ""}{q.fictitious ? " (fonte fictícia)" : q.suspected ? " (possivelmente demonstrativa — confira)" : ""}
                     </li>
                   ))}
                 </ul>

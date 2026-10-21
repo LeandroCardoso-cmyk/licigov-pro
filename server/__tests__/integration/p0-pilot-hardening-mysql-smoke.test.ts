@@ -64,6 +64,7 @@ import {
 } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { confirmCanonicalItemsFromResearch, createCanonicalManualItem } from "../helpers/canonicalItems";
+import { currentProvenanceScanSummary } from "../helpers/provenanceScanFixture";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -284,6 +285,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
       const [s] = await db.insert(importSessions).values({
         organizationId: ORG, uploadedBy: U1, sourceFileId: `imports/x/${k}`, sourceFileName: "mapa.csv", sourceMimeType: "text/csv",
         checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved",
+        extractionSummary: currentProvenanceScanSummary(checksum, null, "csv"),
       }).$returningId();
       for (const [sup, v] of [["A", "100,00"], ["B", "110,00"], ["C", "90,00"]]) {
         await db.insert(importStagingItems).values({ importSessionId: s.id, organizationId: ORG, rawDescription: "Cadeira", rawQuantity: "10", rawUnit: "un", rawUnitPrice: v, rawSupplier: sup, reviewStatus: "approved" });
@@ -304,7 +306,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     const [it] = await listIntelligentItems(pid, ORG);
     expect([it.quoteCount, it.averagePriceCents]).toEqual([3, 10000]);
     // Mesmo arquivo / mesmo processId em OUTRO tenant não colide (UNIQUE é tenant-aware).
-    const [s2] = await db.insert(importSessions).values({ organizationId: ORG2, uploadedBy: U1, sourceFileId: "imports/y", sourceFileName: "mapa.csv", sourceMimeType: "text/csv", checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved" }).$returningId();
+    const [s2] = await db.insert(importSessions).values({ organizationId: ORG2, uploadedBy: U1, sourceFileId: "imports/y", sourceFileName: "mapa.csv", sourceMimeType: "text/csv", checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved", extractionSummary: currentProvenanceScanSummary(checksum, null, "csv") }).$returningId();
     await db.insert(importStagingItems).values({ importSessionId: s2.id, organizationId: ORG2, rawDescription: "Cadeira", rawQuantity: "10", rawUnit: "un", rawUnitPrice: "100,00", reviewStatus: "approved" });
     await expect(promoteApprovedSessionToDomain({ sessionId: s2.id, organizationId: ORG2, procurementProcessId: pid, actorUserId: U2, idempotencyKey: `race-other-${s2.id}`, correlationId: "o" })).resolves.toMatchObject({ idempotent: false });
   }, 60_000);

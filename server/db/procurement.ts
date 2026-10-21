@@ -6,7 +6,7 @@
  * Padrão getDb(): degrada graciosamente sem DB. Multi-tenant por organization_id.
  */
 
-import { and, asc, desc, eq, inArray, like, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./connection";
@@ -23,6 +23,8 @@ import {
   processTimelineTable,
   generatedDocumentsTable,
   generatedDocumentEditsTable,
+  procurementItemSourceLinksTable,
+  procurementItemsTable,
 } from "../../drizzle/schema";
 import { draftContentHash } from "../domain/generatedDocument";
 import { withHumanEditMarker } from "../domain/humanEditMarker";
@@ -30,7 +32,8 @@ import { ProcessAlreadyExistsError } from "../domain/processCreateContract";
 import { reaisToCents } from "../domain/money";
 import { normalizeCatalogDescription } from "../domain/officialCatalog";
 import type { ProcurementWorkspace, ProcessStage, ProcessStatus, StartOption } from "../domain/procurementProcess";
-import { FICTITIOUS_QUOTE_MARKER, isFictitiousQuote, type PriceResearchWorkspace, type PriceResearchItem } from "../domain/priceResearch";
+import { FICTITIOUS_QUOTE_MARKER, type PriceResearchWorkspace, type PriceResearchItem } from "../domain/priceResearch";
+import { countProvenance, effectiveQuoteProvenance, isQuoteProvenanceKind, type QuoteProvenanceCounts } from "../domain/quoteProvenance";
 import type { IntelligentProcurementItem, ItemStatus, IntelligentItemSupplier } from "../domain/intelligentItem";
 import type { CATMATMatch } from "../domain/catmatMatching";
 import type { ItemRecommendation, ItemRisk } from "../domain/itemRecommendation";
@@ -193,6 +196,18 @@ export async function insertResearch(r: PriceResearchWorkspace, executor?: Procu
   return r;
 }
 
+/**
+ * M8 — proveniência na REIMPORTAÇÃO da mesma linha (espelho SQL de `mergeReimportedProvenance`): declaração nova de
+ * `ficticia` prevalece; mesmo fornecedor + valor já `ficticia`/`verificada` mantém (remover a nota do texto não torna
+ * real uma fictícia; reimportar não apaga verificação); conteúdo econômico diferente ⇒ vale a nova. Avaliada ANTES
+ * de `supplier`/`value` no mesmo UPDATE (MySQL aplica as atribuições da esquerda para a direita), comparando com a
+ * linha EXISTENTE.
+ */
+export function provenanceOnReimportSql() {
+  const t = priceResearchItemsTable;
+  return sql`CASE WHEN VALUES(provenance_kind) = 'ficticia' THEN 'ficticia' WHEN ${t.supplier} = VALUES(supplier) AND ${t.value} = VALUES(value) AND ${t.provenanceKind} IN ('ficticia', 'verificada') THEN ${t.provenanceKind} ELSE VALUES(provenance_kind) END`;
+}
+
 export async function insertResearchItem(it: PriceResearchItem, executor?: ProcurementExecutor): Promise<PriceResearchItem | null> {
   const db = executor ?? await getDb();
   if (!db) return null;
@@ -200,10 +215,11 @@ export async function insertResearchItem(it: PriceResearchItem, executor?: Procu
     id: it.id, organizationId: it.organizationId, researchId: it.researchId, processId: it.processId,
     description: it.description, quantity: String(it.quantity), unit: it.unit, supplier: it.supplier,
     brand: it.brand, model: it.model, value: String(it.value), observations: it.observations,
-    source: it.source, createdAt: toDb(it.createdAt),
+    source: it.source, provenanceKind: it.provenanceKind, createdAt: toDb(it.createdAt),
   // Hardening P0 — reimportação converge TODO o conteúdo da cotação (antes só valor/quantidade: fornecedor,
   // marca etc. ficavam defasados em relação ao Item Inteligente).
   }).onDuplicateKeyUpdate({ set: {
+    provenanceKind: provenanceOnReimportSql(),
     value: String(it.value), quantity: String(it.quantity), description: it.description, unit: it.unit,
     supplier: it.supplier, brand: it.brand, model: it.model, observations: it.observations, source: it.source,
   } });
@@ -277,27 +293,125 @@ export async function getIntelligentItem(id: string, orgId: number): Promise<Int
  * (cotações que compõem a média), `quoteCount` e `enrichmentStatus`.
  */
 /**
- * M8 hardening — ids (tenant-scoped) das cotações cujo registro canônico carrega o marcador de fonte FICTÍCIA do parser.
- * Somente leitura; nada é alterado nos registros.
+ * Proveniência gravada de uma cotação (coluna 0319) + marcador textual LEGADO (só fallback de leitura) + o conteúdo
+ * econômico ATUAL da linha (fornecedor/valor), para vincular a proveniência ao conteúdo que o item realmente usa.
  */
-export async function listFictitiousQuoteIds(orgId: number, quoteIds: readonly string[]): Promise<Set<string>> {
-  const ids = [...new Set(quoteIds.filter(Boolean))];
-  const db = await getDb();
-  if (!db || ids.length === 0) return new Set();
-  const rows = await db.select({ id: priceResearchItemsTable.id }).from(priceResearchItemsTable)
-    .where(and(eq(priceResearchItemsTable.organizationId, orgId), inArray(priceResearchItemsTable.id, ids),
-      like(priceResearchItemsTable.observations, `%${FICTITIOUS_QUOTE_MARKER}%`)));
-  return new Set(rows.map((r) => r.id));
+export interface StoredQuoteProvenance {
+  readonly stored: string | null; readonly legacyMarker: boolean;
+  readonly supplier?: string; readonly valueCents?: number; readonly legacyNotes?: string | null;
 }
 
-/** Cotações COM PREÇO (as que compõem a média) que são fictícias/demonstrativas. */
-export function countFictitiousPricedQuotes(suppliers: readonly IntelligentItemSupplier[], fictitiousIds: ReadonlySet<string>): number {
-  return suppliers.filter((x) => Number(x.value) > 0 && ((x.quoteId && fictitiousIds.has(x.quoteId)) || isFictitiousQuote({ name: x.name }))).length;
+/**
+ * M8 — proveniência (tenant-scoped) das cotações canônicas referidas pelos fornecedores dos Itens Inteligentes.
+ * Somente leitura; a coluna `provenance_kind` é a fonte da verdade, o marcador textual só vale para linhas legadas.
+ */
+export async function listQuoteProvenance(orgId: number, quoteIds: readonly string[], executor?: ProcurementExecutor): Promise<Map<string, StoredQuoteProvenance>> {
+  const ids = [...new Set(quoteIds.filter(Boolean))];
+  const db = executor ?? await getDb();
+  if (!db || ids.length === 0) return new Map();
+  const rows = await db.select({
+    id: priceResearchItemsTable.id, kind: priceResearchItemsTable.provenanceKind, obs: priceResearchItemsTable.observations,
+    supplier: priceResearchItemsTable.supplier, value: priceResearchItemsTable.value,
+  }).from(priceResearchItemsTable)
+    .where(and(eq(priceResearchItemsTable.organizationId, orgId), inArray(priceResearchItemsTable.id, ids)));
+  return new Map(rows.map((r) => {
+    const obs = r.obs ?? "";
+    const legacyMarker = obs.includes(FICTITIOUS_QUOTE_MARKER);
+    return [r.id, {
+      stored: r.kind ?? null, legacyMarker, supplier: r.supplier ?? "", valueCents: reaisToCents(r.value),
+      ...(legacyMarker ? { legacyNotes: obs.split(FICTITIOUS_QUOTE_MARKER).join(" ") } : {}),
+    }];
+  }));
+}
+
+/** Contagem, por proveniência EFETIVA, das cotações COM PREÇO (as que compõem a média) de um Item Inteligente. */
+export function quoteProvenanceCounts(
+  suppliers: readonly IntelligentItemSupplier[], provenance: ReadonlyMap<string, StoredQuoteProvenance>,
+): QuoteProvenanceCounts {
+  return countProvenance(suppliers.filter((x) => Number(x.value) > 0).map((x) => {
+    const row = x.quoteId ? provenance.get(x.quoteId) : undefined;
+    // A proveniência da LINHA só descreve o retrato do item quando o conteúdo econômico coincide (um item decidido
+    // preserva o retrato antigo enquanto a linha pode ter sido reimportada com outro fornecedor/valor).
+    const sameContent = !row || row.supplier === undefined
+      || ((row.supplier ?? "").trim() === (x.name ?? "").trim() && row.valueCents === reaisToCents(x.value));
+    const snapshot = isQuoteProvenanceKind(x.provenanceKind) ? x.provenanceKind : null;
+    const stored = sameContent
+      ? (row?.stored === "ficticia" ? "ficticia" : snapshot ?? row?.stored ?? null)
+      : snapshot;
+    return effectiveQuoteProvenance({
+      stored, supplierName: x.name, legacyMarker: sameContent ? row?.legacyMarker : false, legacyNotes: row?.legacyNotes,
+    });
+  }));
+}
+
+/**
+ * M8 (emenda de integridade) — FRONTEIRA DECISIVA da elegibilidade de preço na EMISSÃO, dentro da transação do chamador:
+ * trava as fontes do processo (FOR SHARE, locks de REGISTRO por chave primária das linhas existentes — sem gap/next-key
+ * lock, sem contenção com outros processos/órgãos) e conta, a partir das MESMAS leituras com trava (que veem o último
+ * estado CONFIRMADO, independentemente do snapshot da transação), os itens cujo preço deriva de cotação fictícia — sem
+ * conexões extras do pool. Ordem ESTÁVEL de aquisição, a mesma dos escritores:
+ *   1. price_research_items (upsert de cotação: importação/promoção) →
+ *   2. intelligent_items (materialização FOR UPDATE, aprovação CAS, atualização de fonte) →
+ *   3. procurement_items (Itens da contratação: status ativo) →
+ *   4. procurement_item_source_links (vínculos existentes).
+ * Linha NOVA (cotação/item/vínculo ainda inexistente) não fundamenta o conteúdo revisado que está sendo emitido. Espera,
+ * timeout ou deadlock ⇒ retry governado/erro explícito — nunca fail-open. Regra idêntica a `fictitiousPriceItemCount`
+ * (modo legado: itens aprovados com fictícia; canônico: itens ativos vinculados a evidência aprovada com preço e fictícia).
+ */
+export async function lockedFictitiousPriceItemCount(
+  tx: ProcurementExecutor, orgId: number, processId: string, demonstrativeAllowed: boolean,
+): Promise<number> {
+  const scopeIds = async <T extends { id: unknown }>(rows: Promise<T[]>) => (await rows).map((r) => r.id);
+  const quoteIds = await scopeIds(tx.select({ id: priceResearchItemsTable.id }).from(priceResearchItemsTable)
+    .where(and(eq(priceResearchItemsTable.organizationId, orgId), eq(priceResearchItemsTable.processId, processId))));
+  const quotes = quoteIds.length ? await tx.select({
+    id: priceResearchItemsTable.id, kind: priceResearchItemsTable.provenanceKind, obs: priceResearchItemsTable.observations,
+    supplier: priceResearchItemsTable.supplier, value: priceResearchItemsTable.value,
+  }).from(priceResearchItemsTable).where(inArray(priceResearchItemsTable.id, quoteIds as string[])).for("share") : [];
+  const itemIds = await scopeIds(tx.select({ id: intelligentItemsTable.id }).from(intelligentItemsTable)
+    .where(and(eq(intelligentItemsTable.organizationId, orgId), eq(intelligentItemsTable.processId, processId))));
+  const items = itemIds.length ? await tx.select({
+    id: intelligentItemsTable.id, status: intelligentItemsTable.status, suppliers: intelligentItemsTable.suppliers, averagePrice: intelligentItemsTable.averagePrice,
+  }).from(intelligentItemsTable).where(inArray(intelligentItemsTable.id, itemIds as string[])).for("share") : [];
+  const pItemIds = await scopeIds(tx.select({ id: procurementItemsTable.id }).from(procurementItemsTable)
+    .where(and(eq(procurementItemsTable.organizationId, orgId), eq(procurementItemsTable.processId, processId))));
+  const pItems = pItemIds.length ? await tx.select({ id: procurementItemsTable.id, status: procurementItemsTable.status })
+    .from(procurementItemsTable).where(inArray(procurementItemsTable.id, pItemIds as string[])).for("share") : [];
+  const linkIds = await scopeIds(tx.select({ id: procurementItemSourceLinksTable.id }).from(procurementItemSourceLinksTable)
+    .where(and(eq(procurementItemSourceLinksTable.organizationId, orgId), eq(procurementItemSourceLinksTable.processId, processId))));
+  const links = linkIds.length ? await tx.select({ itemId: procurementItemSourceLinksTable.itemId, sourceType: procurementItemSourceLinksTable.sourceType, sourceId: procurementItemSourceLinksTable.sourceId })
+    .from(procurementItemSourceLinksTable).where(inArray(procurementItemSourceLinksTable.id, linkIds as number[])).for("share") : [];
+  if (demonstrativeAllowed) return 0;
+
+  const provenance = new Map<string, StoredQuoteProvenance>(quotes.map((r) => {
+    const obs = r.obs ?? "";
+    const legacyMarker = obs.includes(FICTITIOUS_QUOTE_MARKER);
+    return [r.id, {
+      stored: r.kind ?? null, legacyMarker, supplier: r.supplier ?? "", valueCents: reaisToCents(r.value),
+      ...(legacyMarker ? { legacyNotes: obs.split(FICTITIOUS_QUOTE_MARKER).join(" ") } : {}),
+    }];
+  }));
+  const approved = items.filter((i) => i.status === "aprovado").map((i) => {
+    const suppliers = parseArr<IntelligentItemSupplier>(i.suppliers);
+    return {
+      id: i.id, fictitious: quoteProvenanceCounts(suppliers, provenance).ficticia,
+      priced: reaisToCents(i.averagePrice) > 0 && suppliers.some((x) => Number(x.value) > 0),
+    };
+  });
+  const active = new Set(pItems.filter((p) => p.status === "active").map((p) => p.id));
+  if (active.size === 0) return approved.filter((a) => a.fictitious > 0).length;
+  const blockedEvidence = new Set(approved.filter((a) => a.fictitious > 0 && a.priced).map((a) => a.id));
+  const blockedItems = new Set(links.filter((l) => l.sourceType === "price_research" && active.has(l.itemId) && blockedEvidence.has(l.sourceId)).map((l) => l.itemId));
+  return blockedItems.size;
 }
 
 export async function listIntelligentItems(processId: string, orgId: number): Promise<Array<{
   id: string; description: string; quantity: number; unit: string; averagePrice: number; suggestedCATMAT: string | null; status: string;
   averagePriceCents: number; suppliers: IntelligentItemSupplier[]; quoteCount: number; fictitiousQuoteCount: number;
+  /** M8 — cotações LEGADAS com o marcador antigo sem declaração explícita: [REVISAR] no documento, sem bloqueio. */
+  suspectedQuoteCount: number;
+  /** M8 — cotações com preço por proveniência efetiva (fictícias nunca compõem referência institucional). */
+  quoteProvenance: QuoteProvenanceCounts;
   enrichmentStatus: string; sourceResearchId: string;
   sourceState: string; sourceStateReason: string | null; pendingQuoteCount: number | null; approvedBy: number | null;
 }>> {
@@ -305,12 +419,13 @@ export async function listIntelligentItems(processId: string, orgId: number): Pr
   if (!db) return [];
   const rows = await db.select().from(intelligentItemsTable)
     .where(and(eq(intelligentItemsTable.processId, processId), eq(intelligentItemsTable.organizationId, orgId)));
-  const fictitiousIds = await listFictitiousQuoteIds(orgId, rows.flatMap((r) => parseArr<IntelligentItemSupplier>(r.suppliers).map((x) => x.quoteId ?? "")));
+  const provenance = await listQuoteProvenance(orgId, rows.flatMap((r) => parseArr<IntelligentItemSupplier>(r.suppliers).map((x) => x.quoteId ?? "")));
   return rows.map(r => {
     const suppliers = parseArr<IntelligentItemSupplier>(r.suppliers);
     const pending = r.pendingSuppliers ? parseArr<IntelligentItemSupplier>(r.pendingSuppliers) : null;
+    const quoteProvenance = quoteProvenanceCounts(suppliers, provenance);
     return {
-      fictitiousQuoteCount: countFictitiousPricedQuotes(suppliers, fictitiousIds),
+      fictitiousQuoteCount: quoteProvenance.ficticia, suspectedQuoteCount: quoteProvenance.suspeita, quoteProvenance,
       id: r.id, description: r.description ?? "", quantity: Number(r.quantity), unit: r.unit, averagePrice: Number(r.averagePrice),
       suggestedCATMAT: r.suggestedCatmat ?? null, status: r.status,
       averagePriceCents: reaisToCents(r.averagePrice), suppliers,

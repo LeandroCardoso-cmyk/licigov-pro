@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { parsePriceResearchText } from "../../domain/priceResearchParser";
-import { extractItemsFromText, isFictitiousQuote, FICTITIOUS_QUOTE_MARKER } from "../../domain/priceResearch";
+import { extractItemsFromText } from "../../domain/priceResearch";
+import { effectiveQuoteProvenance } from "../../domain/quoteProvenance";
 import { consolidateQuotes } from "../../domain/priceQuoteConsolidation";
 import { isCatalogItemCandidate } from "../../domain/priceResearchParser";
 
@@ -176,12 +177,12 @@ describe("M8-PRICE-IMPORT-001 — guarda do CATMAT", () => {
 });
 
 describe("M8 hardening — cotação fictícia (demonstrativa)", () => {
-  it("marcador persistido do parser ou fornecedor declarado fictício ⇒ fictícia; fornecedor real ⇒ não", () => {
-    expect(isFictitiousQuote({ name: "Fornecedor Fictício A" })).toBe(true);
-    expect(isFictitiousQuote({ name: "Couros Sintéticos Ltda" })).toBe(false); // razão social real: só o marcador do parser conta
-    expect(isFictitiousQuote({ name: "Alfa Comércio", observations: `Data: 05/10/2026 | ${FICTITIOUS_QUOTE_MARKER}` })).toBe(true);
-    expect(isFictitiousQuote({ name: "Alfa Comércio", observations: "Data: 05/10/2026" })).toBe(false);
-    expect(isFictitiousQuote({ name: "Papelaria Teste & Cia" })).toBe(false); // heurística estreita: "teste"/"exemplo" no nome não marcam
-    expect(isFictitiousQuote({})).toBe(false);
+  it("leitura legada: fornecedor declarado fictício ⇒ fictícia; marcador antigo ⇒ só suspeita; fornecedor real ⇒ desconhecida", () => {
+    expect(effectiveQuoteProvenance({ stored: null, supplierName: "Fornecedor Fictício A" })).toBe("ficticia");
+    expect(effectiveQuoteProvenance({ stored: null, supplierName: "Couros Sintéticos Ltda" })).toBe("desconhecida"); // razão social real
+    expect(effectiveQuoteProvenance({ stored: null, supplierName: "Alfa Comércio", legacyMarker: true })).toBe("suspeita");
+    expect(effectiveQuoteProvenance({ stored: null, supplierName: "Alfa Comércio" })).toBe("desconhecida");
+    expect(effectiveQuoteProvenance({ stored: null, supplierName: "Papelaria Teste & Cia" })).toBe("desconhecida");
+    expect(effectiveQuoteProvenance({ stored: undefined })).toBe("desconhecida");
   });
 });

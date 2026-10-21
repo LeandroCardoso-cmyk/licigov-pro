@@ -47,7 +47,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
           label={`${s.approvedItems} Item(ns) Inteligente(s) aprovado(s)`}
           detail={s.pendingItems > 0 ? `${s.pendingItems} ainda pendente(s) de aprovação (não entram)` : undefined}
         />
-        <Row ok={s.quoteCount > 0} label={`Baseado em ${s.quoteCount} cotação(ões) válida(s)`} />
+        <Row ok={s.quoteCount > 0} label={`Baseado em ${s.quoteCount} cotação(ões) importada(s) com preço`} />
         {s.approvedItems > 0 && (
           <Row
             ok={s.pendingClassifications === 0}
