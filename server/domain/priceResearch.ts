@@ -226,8 +226,11 @@ export class PriceQuoteReplacementRequiresConfirmationError extends Error {
   readonly code = "QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED";
   constructor(readonly replacements: readonly QuoteReplacement[]) {
     const brl = (c: number) => (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const who = (q: QuoteReplacement["before"]) => `${q.supplier || "sem fornecedor"} ${brl(q.valueCents)}`;
     const sample = replacements.slice(0, 3)
-      .map((r) => `${r.description}: ${r.before.supplier || "sem fornecedor"} ${brl(r.before.valueCents)} → ${r.after.supplier || "sem fornecedor"} ${brl(r.after.valueCents)}`)
+      .map((r) => who(r.before) === who(r.after)
+        ? `${r.description}: ${who(r.before)} — quantidade, unidade, marca, modelo ou observações alteradas`
+        : `${r.description}: ${who(r.before)} → ${who(r.after)}`)
       .join("; ");
     super(
       `QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED: esta importação substituiria ${replacements.length} cotação(ões) já registrada(s) ` +

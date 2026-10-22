@@ -66,7 +66,8 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
     importResearch.mutate({ processId, source, text: text.trim(), ...(confirmReplace ? { confirmReplace: true } : {}) });
   };
   // PR-04 (SEM-005): o servidor recusou porque a importação substituiria cotações já registradas — nada foi gravado.
-  const needsReplaceConfirmation = importResearch.isError
+  // Só vale para o texto conferido: se o texto mudou, a confirmação some (confira de novo antes de importar).
+  const needsReplaceConfirmation = previewCurrent && importResearch.isError
     && (importResearch.error?.message ?? "").startsWith("QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED");
 
   return (
@@ -181,7 +182,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           )}
         </div>
       )}
-      {importResearch.isError && !needsReplaceConfirmation && (
+      {importResearch.isError && !(importResearch.error?.message ?? "").startsWith("QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED") && (
         <p className="mt-2 text-sm text-destructive" role="alert">{importResearch.error.message || "Falha ao importar a pesquisa."}</p>
       )}
       {needsReplaceConfirmation && (

@@ -21916,7 +21916,7 @@
       "label": "PesquisaPrecosWorkspace()",
       "file_type": "code",
       "source_file": "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
-      "source_location": "L232",
+      "source_location": "L233",
       "_origin": "ast",
       "id": "client_src_components_procurement_pesquisaprecosworkspace_pesquisaprecosworkspace",
       "community": 203,
@@ -324543,7 +324543,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
-      "source_location": "L232",
+      "source_location": "L233",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_procurement_pesquisaprecosworkspace",
@@ -324708,7 +324708,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
-      "source_location": "L159",
+      "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_procurement_pesquisaprecosworkspace_legacypriceresearchpanel",
@@ -324721,7 +324721,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "client/src/components/procurement/PesquisaPrecosWorkspace.tsx",
-      "source_location": "L233",
+      "source_location": "L234",
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_procurement_pesquisaprecosworkspace_pesquisaprecosworkspace",
@@ -907266,5 +907266,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "13c3761c4213fcd1b87d30e13796d287ad9a4d06"
+  "built_at_commit": "ea80490022e24e7d763c65f0a59c09411d461dc3"
 }

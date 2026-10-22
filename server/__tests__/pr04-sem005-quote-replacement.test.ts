@@ -67,4 +67,11 @@ describe("PR-04 · findQuoteReplacements", () => {
     expect(err.message).toContain("Fornecedor A");
     expect(err.message).toMatch(/ACRESCENTAR[\s\S]*CORRIGIR/);
   });
+
+  it("mesma fonte e mesmo valor, outro campo alterado ⇒ mensagem diz o que mudou (nunca 'X → X')", () => {
+    const [q] = extract("Papel A4;10;resma;R$ 100,00;Papelaria X");
+    const err = new PriceQuoteReplacementRequiresConfirmationError(findQuoteReplacements([{ ...stored(q), quantity: "12.000" }], [q]));
+    expect(err.message).toContain("quantidade, unidade, marca, modelo ou observações alteradas");
+    expect(err.message).not.toContain("→");
+  });
 });
