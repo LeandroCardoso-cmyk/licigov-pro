@@ -14,7 +14,8 @@ import { formatCentsBRL } from "@shared/money";
  * ambas pela fundação canônica (fila, staging, revisão; nada grava direto no domínio): "Enviar arquivo"
  * (padrão; formatos reais do parserRegistry, PDF digitalizado via OCR governado) e "Colar texto".
  * U2B-MIN: o painel legado (gravação direta em Itens Inteligentes) NÃO é oferecido com a flag ligada.
- * Com a flag DESLIGADA (ou falha ao consultar a capacidade), o comportamento legado permanece idêntico.
+ * Com a flag DESLIGADA, o painel legado permanece. PR-04 (SEM-005): falha ao consultar a capacidade NÃO cai no
+ * caminho legado (a flag pode estar ligada — o servidor recusaria); a tela oferece "Tentar novamente".
  */
 
 type ResearchSource = "pdf" | "docx" | "xlsx" | "csv" | "colar" | "manual";
@@ -60,10 +61,13 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
     importResearch.reset();
     preview.mutate({ processId, text: t }, { onSuccess: () => setCheckedText(t) });
   };
-  const handleImport = () => {
+  const handleImport = (confirmReplace = false) => {
     if (!processId || !previewCurrent || !p?.canImport) return;
-    importResearch.mutate({ processId, source, text: text.trim() });
+    importResearch.mutate({ processId, source, text: text.trim(), ...(confirmReplace ? { confirmReplace: true } : {}) });
   };
+  // PR-04 (SEM-005): o servidor recusou porque a importação substituiria cotações já registradas — nada foi gravado.
+  const needsReplaceConfirmation = importResearch.isError
+    && (importResearch.error?.message ?? "").startsWith("QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED");
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -105,7 +109,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
         </button>
         <button
           type="button"
-          onClick={handleImport}
+          onClick={() => handleImport()}
           disabled={!processId || !previewCurrent || !p?.canImport || importResearch.isPending}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
@@ -177,8 +181,21 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
           )}
         </div>
       )}
-      {importResearch.isError && (
+      {importResearch.isError && !needsReplaceConfirmation && (
         <p className="mt-2 text-sm text-destructive" role="alert">{importResearch.error.message || "Falha ao importar a pesquisa."}</p>
+      )}
+      {needsReplaceConfirmation && (
+        <div role="alert" data-testid="quote-replace-confirmation" className="mt-3 rounded-md border border-amber-400 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:text-amber-200">
+          <p className="mb-2">{importResearch.error!.message.replace(/^QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED:\s*/, "")}</p>
+          <button
+            type="button"
+            onClick={() => handleImport(true)}
+            disabled={importResearch.isPending}
+            className="rounded-lg border border-amber-500 px-3 py-1.5 text-xs font-medium hover:bg-amber-50 disabled:pointer-events-none disabled:opacity-60 dark:hover:bg-amber-950"
+          >
+            Substituir as cotações anteriores
+          </button>
+        </div>
       )}
       {importResearch.isSuccess && (
         <div className="mt-4 border-t border-border pt-4">
@@ -213,7 +230,7 @@ function LegacyPriceResearchPanel({ processId, onReviewItems }: { processId: str
 }
 
 export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems }: PesquisaPrecosWorkspaceProps) {
-  const { enabled, isLoading, error } = useIngestionCapabilities();
+  const { enabled, isLoading, error, isFetching, refetch } = useIngestionCapabilities();
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 p-6">
@@ -232,14 +249,21 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           <Spinner className="size-4" /> Carregando…
         </div>
       ) : error ? (
-        // Falha ao consultar capabilities: a ingestão canônica por arquivo permanece FAIL-CLOSED (launcher
-        // não é exposto, nada é habilitado implicitamente), mas o caminho legado por texto continua disponível.
-        <div className="space-y-3">
-          <p role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
-            Não foi possível consultar as opções de importação por arquivo, que permanece indisponível no momento.
-            A entrada por texto continua disponível abaixo.
+        // Falha ao consultar capabilities: FAIL-CLOSED para as DUAS entradas (PR-04 / SEM-005). Sem saber se a
+        // ingestão canônica está ligada, nem o launcher nem o painel legado (gravação direta) são oferecidos.
+        <div role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4 text-sm text-destructive">
+          <p>
+            Não foi possível consultar as opções de importação da pesquisa de preços. Nada foi importado; tente novamente
+            em instantes.
           </p>
-          <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
+          <button
+            type="button"
+            onClick={() => { void refetch(); }}
+            disabled={isFetching}
+            className="rounded-lg border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+          >
+            {isFetching ? "Consultando..." : "Tentar novamente"}
+          </button>
         </div>
       ) : enabled ? (
         <DocumentIngestionLauncher

@@ -305,6 +305,11 @@ jobs:
       - name: Smoke — proveniência das cotações e preço de referência
         run: pnpm exec vitest run server/__tests__/integration/m8-price-reference-governance-mysql-smoke.test.ts
 
+      # PR-04 (SEM-005): cotações nunca substituídas em silêncio — flag de ingestão canônica ligada ⇒ gravação direta
+      # legada recusada sem efeito; 2 importações canônicas somam 6 cotações; flag desligada ⇒ substituição só confirmada.
+      - name: Smoke — Pesquisa de Preços sem sobrescrita silenciosa (SEM-005)
+        run: pnpm exec vitest run server/__tests__/integration/pr04-sem005-price-research-no-overwrite-mysql-smoke.test.ts
+
       # Emenda de integridade (P1-A): fonte que vira fictícia durante a emissão ⇒ recusa sob trava (barreiras
       # determinísticas: alteração vence / emissão vence / rollback, replay, lock timeout, isolamento entre órgãos).
       - name: Smoke — corrida proveniência × emissão oficial
