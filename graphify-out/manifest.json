@@ -1830,7 +1830,7 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1792693550.3272219,
+    "mtime": 1792703087.088632,
     "ast_hash": "e9ad3a6d20b2c08dda394e50d6f1e3ea",
     "semantic_hash": ""
   },
@@ -2725,7 +2725,7 @@
     "semantic_hash": ""
   },
   "client/src/hooks/ingestion/useIngestionCapabilities.ts": {
-    "mtime": 1792692376.4974978,
+    "mtime": 1792703087.088632,
     "ast_hash": "a45136fa29f628b1719dfb00561f8ad6",
     "semantic_hash": ""
   },
@@ -3270,7 +3270,7 @@
     "semantic_hash": ""
   },
   "client/src/procurement-presentation-fallbacks.test.ts": {
-    "mtime": 1792692397.0519485,
+    "mtime": 1792703087.090732,
     "ast_hash": "a2d919274db8ee98382850725e619bd2",
     "semantic_hash": ""
   },
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792680839.0072381,
-    "ast_hash": "85c3acfd5f9a4228349607bebd26a071",
+    "mtime": 1792703091.8031847,
+    "ast_hash": "d3884b96d87a671f89613611c464bfb7",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5930,7 +5930,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts": {
-    "mtime": 1792692810.3757517,
+    "mtime": 1792703087.4001641,
     "ast_hash": "0bb0a9554449c1a642644d8afee500cf",
     "semantic_hash": ""
   },
@@ -6035,7 +6035,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-candidate-eligibility-mysql-smoke.test.ts": {
-    "mtime": 1792692797.0017986,
+    "mtime": 1792703087.4072585,
     "ast_hash": "1ea4c800f70e6b12c73079bc5cb0df46",
     "semantic_hash": ""
   },
@@ -8325,7 +8325,7 @@
     "semantic_hash": ""
   },
   "server/domain/priceResearch.ts": {
-    "mtime": 1792693550.3277972,
+    "mtime": 1792703087.716164,
     "ast_hash": "8388366bde5386ee1c6cc9e6a5050f70",
     "semantic_hash": ""
   },
@@ -8935,7 +8935,7 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792693002.6220274,
+    "mtime": 1792703087.716164,
     "ast_hash": "5aa2f1dc25d72dcbe80fe36c58d3218e",
     "semantic_hash": ""
   },
@@ -9905,7 +9905,7 @@
     "semantic_hash": ""
   },
   "server/services/itemMaterializationService.ts": {
-    "mtime": 1792693002.622515,
+    "mtime": 1792703087.720164,
     "ast_hash": "7388076bc5d9662be059c8fd5eedb9ff",
     "semantic_hash": ""
   },
@@ -10590,7 +10590,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792693093.7181535,
+    "mtime": 1792703087.088632,
     "ast_hash": "6e66ba61d8b9126b57bca81c3f85c19b",
     "semantic_hash": ""
   },
@@ -13140,7 +13140,7 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/r9-sem052-054-item-source-gate-mysql-smoke.test.ts": {
-    "mtime": 1792692818.1603158,
+    "mtime": 1792703087.527907,
     "ast_hash": "ef592de61cdc4e2cabfa9d106d3a9b72",
     "semantic_hash": ""
   },
@@ -15245,17 +15245,17 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr04-sem005-legacy-price-import-router.test.ts": {
-    "mtime": 1792692476.6061676,
+    "mtime": 1792703087.404164,
     "ast_hash": "a20ccca5dabe74eb8cf454feb28923eb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr04-sem005-price-research-no-overwrite-mysql-smoke.test.ts": {
-    "mtime": 1792692967.6221564,
+    "mtime": 1792703087.4072585,
     "ast_hash": "064bac2065c0bf265e9833dfe582e0c8",
     "semantic_hash": ""
   },
   "server/__tests__/pr04-sem005-quote-replacement.test.ts": {
-    "mtime": 1792693550.3282025,
+    "mtime": 1792703087.5282514,
     "ast_hash": "fde03f7bab79e987b7d24852d7fbedc4",
     "semantic_hash": ""
   }
