@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   assertAllowedTarget, assertOrgRoleAtLeast, assertSyntheticCredential, parseOrganizationId, assertSyntheticTenant, looksLike, parseExercicio, pendingMarkers,
   SYNTHETIC_TENANT_SLUG, syntheticDecision, syntheticProcessNumber, technicalResidue,
+  priceImportMode, priceResearchCsv, sha256Hex,
 } from "../../../scripts/homologation-e2e";
 import { processNumberParts } from "../../domain/institutionalTemplates/processYear";
 
@@ -74,5 +75,19 @@ describe("executor de homologação — guardas", () => {
     expect(() => assertOrgRoleAtLeast("owner", "manager", "u1")).not.toThrow();
     expect(() => assertOrgRoleAtLeast("operator", "manager", "u1")).toThrow(/necessário 'manager'/);
     expect(() => assertOrgRoleAtLeast(null, "operator", "u2")).toThrow(/papel 'nenhum'/);
+  });
+
+  // PR-04 (SEM-005): Pesquisa de Preços pela ingestão canônica quando o tenant a tem ligada.
+  it("modo da Pesquisa de Preços pela capability oficial; ligada sem CSV ⇒ erro explícito (nunca cai no legado)", () => {
+    expect(priceImportMode({ enabled: false, supportedFormats: [] })).toBe("legacy");
+    expect(priceImportMode({ enabled: true, supportedFormats: [{ key: "xlsx", supported: true }, { key: "csv", supported: true }] })).toBe("canonical");
+    expect(() => priceImportMode({ enabled: true, supportedFormats: [{ key: "csv", supported: false }] })).toThrow(/CSV/);
+    expect(() => priceImportMode({ enabled: true, supportedFormats: [] })).toThrow(/CSV/);
+  });
+
+  it("CSV da pesquisa: cabeçalho reconhecido, uma linha por cotação; checksum SHA-256 real", () => {
+    const csv = priceResearchCsv([{ description: "Papel A4", planned: 10, unit: "resma", price: "25,50", supplier: "Fornecedor Fictício A" }]);
+    expect(csv.split("\n")).toEqual(["Descrição;Quantidade;Unidade;Valor unitário;Fornecedor", "Papel A4;10;resma;25,50;Fornecedor Fictício A"]);
+    expect(sha256Hex(new TextEncoder().encode("abc"))).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   });
 });

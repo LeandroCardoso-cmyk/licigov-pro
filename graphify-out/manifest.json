@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792703087.088632,
-    "ast_hash": "6e66ba61d8b9126b57bca81c3f85c19b",
+    "mtime": 1792764056.880537,
+    "ast_hash": "32f8f5d09f2b5fd4d6d50d0a49700dff",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -14975,18 +14975,18 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1792680839.0125775,
-    "ast_hash": "7eaed7adad0ebb7cf18a1e543e9113a8",
+    "mtime": 1792763802.988257,
+    "ast_hash": "300b93098e385e88243dc78ab8b18dd6",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1792680839.0152383,
-    "ast_hash": "2e282b6bfa4dc027c394f155e45b1b93",
+    "mtime": 1792763864.647244,
+    "ast_hash": "4ae0ed7ed4ac5bee9eeaef051092ed75",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
-    "mtime": 1792680839.0640068,
-    "ast_hash": "991a73dd2af9f72909a68aa5596b950d",
+    "mtime": 1792764056.8797562,
+    "ast_hash": "d2033d7a70b21a2dda1a06861a7bba00",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legacy-import-extraction.test.ts": {
@@ -15257,6 +15257,11 @@
   "server/__tests__/pr04-sem005-quote-replacement.test.ts": {
     "mtime": 1792703087.5282514,
     "ast_hash": "fde03f7bab79e987b7d24852d7fbedc4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts": {
+    "mtime": 1792764644.941365,
+    "ast_hash": "b3f6d2326b0093f8b53038f7a3108715",
     "semantic_hash": ""
   }
 }
