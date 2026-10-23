@@ -3,7 +3,7 @@
  * Executor de homologação × INGESTÃO CANÔNICA (PR-04 / SEM-005) — o cliente HTTP REAL do executor (`homologSession`,
  * `uploadIngestionFile`, `runCanonicalPriceResearch`) contra a MESMA pilha do servidor: Express + rota de upload multipart
  * + tRPC, login com cookie, MySQL real e flag REAL por tenant. Storage em memória (só bytes; nunca S3).
- * Órgãos sintéticos 996601 (A, `FF_CANONICAL_INGESTION` LIGADA) e 996602 (B, desligada). Nunca a org 1.
+ * Órgãos sintéticos 997741 (A, `FF_CANONICAL_INGESTION` LIGADA) e 997742 (B, desligada). Nunca a org 1.
  *
  *  [C1] modo pela capability oficial: A ⇒ canonical; B ⇒ legacy.
  *  [C2] A: duas sessões canônicas (fornecedor A, depois B) ⇒ cotações SOMADAS por item (2), proveniência fictícia declarada,
@@ -18,8 +18,8 @@ import type { Server } from "node:http";
 import mysql from "mysql2/promise";
 
 const DB = process.env.DATABASE_URL;
-const ORG_A = 996601;
-const ORG_B = 996602;
+const ORG_A = 997741;
+const ORG_B = 997742;
 const RUN = Date.now().toString(36);
 const PASSWORD = `Homolog-${RUN}-Senha!`;
 
