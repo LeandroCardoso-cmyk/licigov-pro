@@ -20,7 +20,10 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
 import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
-import { getGeneratedDocumentByKind, getProcess } from "../db/procurement";
+import { getGeneratedDocumentByKind, getProcess, listIntelligentItems, lockedFictitiousPriceItemCount } from "../db/procurement";
+import { listProcurementItems } from "../db/procurementItems";
+import { resolveProcurementContext } from "./canonicalContextService";
+import { demonstrativePricesAllowed, fictitiousPriceBlocker } from "./priceGovernanceService";
 import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
@@ -52,6 +55,30 @@ function payloadHashOf(p: { organizationId: number; processId: string; kind: str
 }
 
 /**
+ * Barreira de TESTE (interleavings determinísticos, smoke MySQL): `after_preconditions` = pré-condições aprovadas, antes da
+ * transação; `after_source_locks` = dentro da transação, com as fontes de preço travadas. Nunca configurada em produção.
+ */
+export type EmissionHookPhase = "after_preconditions" | "after_source_locks";
+let emissionHook: ((phase: EmissionHookPhase) => Promise<void>) | null = null;
+export function __setEmissionHookForTests(fn: typeof emissionHook): void { emissionHook = fn; }
+
+/**
+ * M8 (política de 20/10/2026) — itens do documento cuja referência de preço deriva de cotação fictícia, lidos das
+ * FONTES (mesma decisão do contexto canônico/legado da autoria). Sem cotação fictícia aprovada ⇒ 0 sem leituras extras;
+ * homologação sintética autorizada no backend ⇒ 0.
+ */
+async function fictitiousPriceItemCount(organizationId: number, processId: string): Promise<number> {
+  const approved = (await listIntelligentItems(processId, organizationId)).filter((i) => i.status === "aprovado");
+  const blocked = approved.filter(await fictitiousPriceBlocker(organizationId, approved));
+  if (blocked.length === 0) return 0;
+  // Mesmo gate dos documentos: Itens da contratação ativos ⇒ só conta o que está VINCULADO a eles (canônico).
+  const canonical = (await listProcurementItems(organizationId, processId)).some((i) => i.status === "active");
+  if (!canonical) return blocked.length;
+  const ctx = await resolveProcurementContext({ organizationId, processId });
+  return ctx.items.filter((i) => i.priceContext.priceBlockedReason === "FICTITIOUS_SOURCE").length;
+}
+
+/**
  * R9 / SEM-057 — reúne as entradas das pré-condições semânticas da emissão (leituras tenant-scoped, sem efeito).
  */
 async function resolveEmissionPreconditions(params: {
@@ -59,13 +86,14 @@ async function resolveEmissionPreconditions(params: {
 }): Promise<{ blockers: EmissionBlocker[]; lastEmittedContent: string | null }> {
   const process = await getProcess(params.processId, params.organizationId);
   const object = process?.object ?? "";
-  const [source, lastPromotion, lastEmitted, trEmitted] = await Promise.all([
+  const [source, lastPromotion, lastEmitted, trEmitted, fictitiousItems] = await Promise.all([
     params.kind === "edital"
       ? getEditalSourceState({ organizationId: params.organizationId, processId: params.processId, object })
       : getAuthoringSourceState({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, object }),
     getLatestOfficialPromotion(params.organizationId, params.processId, params.kind),
     getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, params.kind),
     params.kind === "edital" ? getLatestEmittedByOrigin(params.organizationId, BUSINESS_DOMAIN, params.processId, "tr") : Promise.resolve(null),
+    fictitiousPriceItemCount(params.organizationId, params.processId),
   ]);
   // Sem objeto AUTORITATIVO no processo (legado/ausente), a autoria usou o objeto informado na geração, que não é
   // reconstituível aqui: a fonte "processo" não é comparável (e o digest global legado também não) — não bloqueia.
@@ -78,6 +106,7 @@ async function resolveEmissionPreconditions(params: {
       sourceState, changedSourceLabels: changed.map((c) => c.label),
       trEmitted: trEmitted !== null,
       lastEmittedContentHash: lastPromotion?.contentHash ?? null, lastEmittedVersion: lastPromotion?.version ?? null,
+      fictitiousPriceItemCount: fictitiousItems,
     }),
     lastEmittedContent: lastEmitted?.content ?? null,
   };
@@ -199,6 +228,7 @@ export async function promoteOfficialDocument(params: {
         message: `Emissão bloqueada: ${blockers.map((b) => `${b.message} (${b.code})`).join(" ")}`,
       });
     }
+    if (emissionHook) await emissionHook("after_preconditions");
 
     // Institutional Templates — revalidação canônica + M2 preparado (leituras FORA da transação; bloqueio sem efeito).
     const templated = params.templateIssuance
@@ -218,9 +248,11 @@ export async function promoteOfficialDocument(params: {
     // R7 / PR-15 (SEM-013) — a versão emitida CONGELA a identidade institucional e a referência do processo da
     // época (mesmo mecanismo do Document Engine: `metadata.institutionalIdentitySnapshot`). Sem isso a reexportação
     // da MESMA versão mostrava a identidade vigente. Leituras determinísticas FORA da transação.
-    const [identity, process] = await Promise.all([
+    const [identity, process, demonstrativeAllowed] = await Promise.all([
       snapshotInstitutionalIdentity(params.organizationId),
       getProcess(params.processId, params.organizationId),
+      // Exceção de homologação: configuração do backend + identidade da org (lida FORA da transação; só relaxa em org sintética).
+      demonstrativePricesAllowed(params.organizationId),
     ]);
 
     let result!: PromoteOfficialResult;
@@ -229,6 +261,18 @@ export async function promoteOfficialDocument(params: {
       // INSTANTE OFICIAL DO ATO: capturado AQUI, dentro da TENTATIVA transacional que pode commitar (o retry de deadlock reexecuta este
       // callback e captura de novo — a tentativa desfeita não deixa autoridade temporal). Alimenta data de emissão, bindings, M2,
       // createdAt/updatedAt do documento, ledger de promoção e timeline: todos representam o MESMO ato.
+      // M8 (emenda de integridade) — FRONTEIRA DECISIVA da elegibilidade de preço: trava as fontes do processo (FOR SHARE,
+      // ordem estável) e RECALCULA o bloqueio sob a trava. Uma cotação que se tornou fictícia depois das pré-condições
+      // (ou cujo escritor ainda não commitou) é vista aqui; nenhum escritor confirma mudança até este commit.
+      const lockedFictitious = await lockedFictitiousPriceItemCount(tx, params.organizationId, params.processId, demonstrativeAllowed);
+      if (emissionHook) await emissionHook("after_source_locks");
+      if (lockedFictitious > 0) {
+        const [b] = emissionBlockers({
+          kind: params.kind, content: "", contentHash, sourceState: "current", changedSourceLabels: [], trEmitted: true,
+          lastEmittedContentHash: null, lastEmittedVersion: null, fictitiousPriceItemCount: lockedFictitious,
+        });
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Emissão bloqueada: ${b.message} (${b.code})` });
+      }
       const officialIssuanceAt = templated ? templated.clock.now() : null;
       // Conteúdo OFICIAL final: o revisado + os campos de sistema do ciclo de vida materializados NESTE instante (ex.: data de emissão).
       // Sem modelo/sem campo late-bound é exatamente o rascunho revisado. O ledger e a idempotência seguem no hash do RASCUNHO revisado.

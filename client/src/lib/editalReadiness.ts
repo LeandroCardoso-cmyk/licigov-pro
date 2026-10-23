@@ -51,7 +51,21 @@ export const ORIGIN_LABEL: Record<EntryPoint, string> = {
   CERTAME_CONFIG: "Configuração do certame",
 };
 
+/**
+ * M8-EDITAL-UX-001 — o que cada pendência IMPEDE: elaborar a minuta, emitir o documento oficial, publicar o certame — ou nada
+ * (pode ser feita depois). Explicativo: os gates reais continuam no servidor (preflight/composição/promoção oficial).
+ */
+export type BlockingLevel = "ELABORACAO" | "EMISSAO" | "PUBLICACAO" | "NENHUM";
+export const BLOCKING_LEVEL_LABEL: Record<BlockingLevel, string> = {
+  ELABORACAO: "Impede a elaboração da minuta",
+  EMISSAO: "Impede a emissão oficial",
+  PUBLICACAO: "Necessário só para a publicação — pode ser preenchido depois",
+  NENHUM: "Não bloqueia",
+};
+
 export interface ReadinessStep {
+  /** M8-EDITAL-UX-001: nível de bloqueio da pendência deste passo (NENHUM quando pronto). */
+  blocks: BlockingLevel;
   key: ReadinessStepKey;
   category: ReadinessCategory;
   title: string;
@@ -116,6 +130,8 @@ export interface EditalPreparationReadinessView {
   decisionsDefaultOpen: boolean;
   /** Fontes e configurações prontas (decisões do certame podem ou não restar). */
   sourcesReady: boolean;
+  /** M8-EDITAL-UX-001: pendências agrupadas pelo que impedem (só níveis com contagem > 0, na ordem do fluxo). */
+  pendingByLevel: ReadonlyArray<{ level: BlockingLevel; label: string; count: number }>;
 }
 
 const AUTO_STATUSES: readonly FieldStatus[] = ["AUTO", "ORG_REUSED", "UPSTREAM", "ORG_DEFAULT"];
@@ -227,31 +243,37 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
 
   const steps: ReadinessStep[] = [
     {
-      key: "TR_OFFICIAL", category: trRequired ? "BLOCKING_OFFICIAL_SOURCE_REQUIRED" : "READY", count: trRequired ? 1 : 0, done: !trRequired,
+      blocks: "ELABORACAO", key: "TR_OFFICIAL", category: trRequired ? "BLOCKING_OFFICIAL_SOURCE_REQUIRED" : "READY", count: trRequired ? 1 : 0, done: !trRequired,
       title: "TR oficial exato",
       summary: trRequired
         ? (state.trPin.state === "INVALID" ? "O TR selecionado não é mais válido: selecione novamente a versão oficial exata do TR." : "Selecione a versão oficial do TR.")
         : "TR oficial exato confirmado.",
     },
     {
-      key: "ONE_TIME_CONFIG", category: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL > 0 ? "ONE_TIME_CONFIGURATION_REQUIRED" : "READY", count: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, done: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL === 0,
+      blocks: "ELABORACAO", key: "ONE_TIME_CONFIG", category: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL > 0 ? "ONE_TIME_CONFIGURATION_REQUIRED" : "READY", count: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, done: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL === 0,
       title: "Configuração institucional",
       summary: ONE_TIME_CONFIGURATION_REQUIRED_TOTAL > 0
         ? `${plural(ONE_TIME_CONFIGURATION_REQUIRED_TOTAL, "informação necessária para este Edital ainda não está configurada", "informações necessárias para este Edital ainda não estão configuradas")}. Complete os dados do órgão uma única vez.`
-        : "Configuração do órgão completa para este Edital.",
+        : "Configuração do órgão completa para este Edital (salva uma vez e reutilizada por todos os processos).",
     },
     {
-      key: "ORIGIN", category: originIssues > 0 ? "ACTION_REQUIRED_AT_ORIGIN" : "READY", count: originIssues, done: originIssues === 0,
+      blocks: "ELABORACAO", key: "ORIGIN", category: originIssues > 0 ? "ACTION_REQUIRED_AT_ORIGIN" : "READY", count: originIssues, done: originIssues === 0,
       title: "Dados na origem",
       summary: originIssues > 0 ? `${plural(originIssues, "informação precisa ser corrigida", "informações precisam ser corrigidas")} nas fontes (não se digitam no Edital).` : "Nenhum dado a corrigir nas fontes.",
     },
     {
-      key: "PROCESS_DECISIONS", category: PROCESS_DECISIONS_TOTAL > 0 ? "PROCESS_DECISIONS_REQUIRED" : "READY", count: PROCESS_DECISIONS_TOTAL, done: PROCESS_DECISIONS_TOTAL === 0,
+      blocks: "ELABORACAO", key: "PROCESS_DECISIONS", category: PROCESS_DECISIONS_TOTAL > 0 ? "PROCESS_DECISIONS_REQUIRED" : "READY", count: PROCESS_DECISIONS_TOTAL, done: PROCESS_DECISIONS_TOTAL === 0,
       title: "Decisões deste certame",
       summary: PROCESS_DECISIONS_TOTAL > 0 ? `${plural(PROCESS_DECISIONS_TOTAL, "decisão ainda precisa ser definida", "decisões ainda precisam ser definidas")}.` : "Nenhuma decisão pendente.",
     },
   ];
 
+  for (const st of steps) if (st.done) st.blocks = "NENHUM";
+  const elaboracao = steps.filter((st) => !st.done).reduce((n, st) => n + st.count, 0);
+  const pendingByLevel = ([
+    { level: "ELABORACAO", count: elaboracao },
+    { level: "PUBLICACAO", count: DEFERRED_PUBLICATION_TOTAL },
+  ] as const).filter((l) => l.count > 0).map((l) => ({ ...l, label: BLOCKING_LEVEL_LABEL[l.level] }));
   const blockingPrerequisites = steps.some((s) => s.key !== "PROCESS_DECISIONS" && !s.done);
   const nextStep = steps.find((s) => !s.done)?.key ?? null;
 
@@ -275,6 +297,7 @@ export function buildEditalReadiness(state: PreparationStateView, edits: Readonl
     nextStep,
     decisionsDefaultOpen: !blockingPrerequisites,
     sourcesReady: !blockingPrerequisites,
+    pendingByLevel,
   };
 }
 
@@ -325,4 +348,23 @@ export function readinessHeadline(c: ReadinessCounters): string {
   return c.DEFERRED_PUBLICATION_TOTAL > 0
     ? `${line} · ${c.DEFERRED_PUBLICATION_TOTAL} ${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "dado para publicação pode" : "dados para publicação podem"} ser preenchido${c.DEFERRED_PUBLICATION_TOTAL === 1 ? "" : "s"} depois`
     : line;
+}
+
+// ─── dados de PUBLICAÇÃO ainda não definidos (informativo; nunca bloqueia a elaboração) ───────────────────────────────────
+
+export interface PublicationPendingView {
+  /** O modelo vinculado declara dados de publicação diferidos (`DEFERRED_PUBLICATION`); senão o aviso não existe (a Revisão 1 exige os dados na preparação). */
+  readonly applicable: boolean;
+  readonly complete: boolean;
+  /** Dados ainda sem valor (ordem do servidor — determinística), com o rótulo operacional já usado na preparação. */
+  readonly items: readonly { readonly name: string; readonly label: string }[];
+}
+
+/** Deriva do ESTADO do servidor (autoridade); o texto da minuta nunca é a fonte. Sem regra nova no cliente: só apresenta `publication.readiness`. */
+export function publicationPending(state: PreparationStateView | null | undefined): PublicationPendingView {
+  const pub = state?.publication;
+  if (!state || !pub?.deferredPolicy) return { applicable: false, complete: true, items: [] };
+  const byName = new Map(state.sections.flatMap((s) => s.fields).map((f) => [f.name, f.question ?? f.description] as const));
+  const items = pub.readiness.missingVariables.map((name) => ({ name, label: byName.get(name) ?? name }));
+  return { applicable: true, complete: pub.readiness.complete && items.length === 0, items };
 }

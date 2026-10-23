@@ -3,15 +3,40 @@
  *
  * Fluxo: pesquisa → matching → ranking → alternativas → SERVIDOR escolhe.
  * NUNCA substitui automaticamente. Sempre permite aceitar/rejeitar/pesquisar de
- * novo/informar manual. Determinístico (sem chamadas reais à API neste domínio).
+ * novo/informar manual. Determinístico (sem chamadas reais à API neste domínio): os candidatos
+ * vêm do catálogo oficial (`itemCatalogClassificationService`), nunca são gerados aqui.
  */
 
 import { createHash } from "crypto";
 
-export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual";
+export type CATMATDecision = "sugerido" | "aceito" | "rejeitado" | "manual" | SuggestionStateValue;
 
-/** Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. */
-export type CATMATSource = "catalogo-interno" | "api-comprasgov" | "sugestao-ia" | "manual" | (string & {});
+/**
+ * M8 hardening — estado da SUGESTÃO (coluna `decision` de `item_catmat_matches`; a decisão institucional vive só no
+ * ledger `catmat_decisions`). Verificação oficial ≠ recomendação atual ≠ decisão:
+ *   - `busca_atual`       — candidato da busca oficial MAIS RECENTE concluída para o item;
+ *   - `historico`         — candidato de busca anterior que a busca mais recente não trouxe (preservado, nunca apagado);
+ *   - `codigo_verificado` — código informado pelo servidor e verificado na fonte oficial ("Verificar código").
+ * Linhas gravadas antes desta regra (`sugerido`, `rejeitado`…) não têm origem identificável ⇒ `origem_nao_identificada`
+ * (nunca apresentadas como atuais). Só `busca_atual` e `codigo_verificado` podem ser CONFIRMADAS.
+ */
+export type SuggestionStateValue = "busca_atual" | "historico" | "codigo_verificado";
+export type SuggestionState = SuggestionStateValue | "origem_nao_identificada";
+
+export function suggestionStateOf(decision: string): SuggestionState {
+  return decision === "busca_atual" || decision === "historico" || decision === "codigo_verificado" ? decision : "origem_nao_identificada";
+}
+
+/** Estados que podem ser confirmados como classificação oficial (além da verificação na fonte). */
+export function isConfirmableSuggestionState(state: SuggestionState | null | undefined): boolean {
+  return state === "busca_atual" || state === "codigo_verificado";
+}
+
+/**
+ * Proveniência da sugestão (auditável). Aberto a novas fontes sem quebra de contrato. O catálogo oficial é
+ * `api-comprasgov:catmat` / `api-comprasgov:catser`; sem fonte declarada ⇒ `sem-proveniencia` (nunca "catálogo").
+ */
+export type CATMATSource = "catalogo-interno" | "api-comprasgov" | "sugestao-ia" | "manual" | "sem-proveniencia" | (string & {});
 
 export interface CATMATMatch {
   readonly id: string;
@@ -88,17 +113,31 @@ export function rankCATMAT(params: {
   const scored = params.candidates
     .map(c => ({ ...c, score: scoreMatch(params.description, c.description) }))
     .sort((a, b) => b.score - a.score || (a.code < b.code ? -1 : 1));
+  return matchesFromRanked({ ...params, ranked: scored });
+}
 
-  return scored.map((c, i) => ({
+/**
+ * Converte candidatos JÁ ranqueados (ex.: motor de busca local sobre o catálogo oficial) em sugestões, preservando a
+ * ordem e o score recebidos. Mesmos ids determinísticos de `rankCATMAT`. Nunca marca como aceito.
+ */
+export function matchesFromRanked(params: {
+  itemId: string;
+  organizationId: number;
+  ranked: ReadonlyArray<{ code: string; description: string; score: number; source?: CATMATSource }>;
+  correlationId: string;
+  createdAt?: string;
+  defaultSource?: CATMATSource;
+}): CATMATMatch[] {
+  return params.ranked.map((c, i) => ({
     id: createHash("sha256").update(`cmm:${params.organizationId}:${params.itemId}:${c.code}`).digest("hex").slice(0, 20),
     itemId: params.itemId,
     organizationId: params.organizationId,
     catmatCode: c.code,
     catmatDescription: c.description,
-    score: c.score,
+    score: Math.max(0, Math.min(1, c.score)),
     rank: i,
     decision: "sugerido" as CATMATDecision,
-    source: c.source ?? params.defaultSource ?? "catalogo-interno",
+    source: c.source ?? params.defaultSource ?? "sem-proveniencia",
     correlationId: params.correlationId,
     createdAt: params.createdAt ?? new Date().toISOString(),
   }));

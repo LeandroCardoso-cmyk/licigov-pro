@@ -5,6 +5,7 @@
  * consequência do fluxo. tenantProcedure, multi-tenant, timeline auditável.
  * Todo acesso ao Kernel ocorre via kernelAccessService (nos serviços).
  */
+import { displayLateBoundForDraft } from "../domain/institutionalTemplates/lifecycleLateBound";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
@@ -45,6 +46,10 @@ import {
 import { listContextFacts } from "../db/procurementContext";
 import { getOrganizationById } from "../db/organizations";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
+import { isFeatureEnabled } from "../services/featureFlagService";
+import { CANONICAL_INGESTION_FLAG } from "../services/ingestionUploadService";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
   listIntelligentItems,
@@ -299,7 +304,9 @@ export const procurementProcessRouter = router({
 
       const exported = await exportDocumentCore({
         organizationId: orgId,
-        content: document.content, // conteúdo persistido, renderizado FIELMENTE (sem correção)
+        // conteúdo persistido, renderizado FIELMENTE (sem correção); só o marcador INTERNO de campo de sistema (data de emissão,
+        // atribuída no ato oficial) vira texto legível na minuta — o rascunho persistido e seu hash não mudam.
+        content: displayLateBoundForDraft(document.content),
         baseName: `${input.kind.toUpperCase()}_${process.processNumber}`,
         // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
         downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,
@@ -474,24 +481,56 @@ export const procurementProcessRouter = router({
       return { document };
     }),
 
+  // M8-PRICE-IMPORT-001: PRÉVIA sem gravação — o servidor confere itens, cotações, linhas ignoradas e
+  // ambiguidades antes de importar (mesmo leitor da importação; nada é persistido aqui).
+  previewPriceResearch: orgRoleProcedure("operator")
+    .input(z.object({ processId: z.string().min(1), text: z.string().min(1).max(200_000) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireProcess(input.processId, ctx.organizationId!);
+      return previewOfParse(parsePriceResearchText(input.text));
+    }),
+
   importPriceResearch: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       source: z.enum(["pdf", "docx", "xlsx", "csv", "colar", "manual"]),
       text: z.string().min(1),
+      /** PR-04 (SEM-005): confirma a substituição de cotações já registradas (correção por reimportação). */
+      confirmReplace: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
+      // PR-04 (SEM-005, CUTOVER): com a ingestão canônica ligada para o órgão, a pesquisa entra SÓ pela ingestão
+      // supervisionada (uma pesquisa por sessão — importações se somam). A gravação direta legada é recusada no
+      // servidor, antes de qualquer escrita, inclusive para chamadas diretas à API.
+      if (await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId)) {
+        log.warn("legacy_price_import_refused_canonical_enabled", {
+          organizationId: orgId, userId: ctx.user!.id, processId: input.processId, correlationId: ctx.correlationId,
+        });
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "LEGACY_PRICE_IMPORT_DISABLED: nesta organização a pesquisa de preços é importada pela ingestão supervisionada " +
+            "(Enviar arquivo ou Colar texto, com revisão antes da promoção). Nenhuma cotação foi gravada.",
+        });
+      }
       // DATA-039 + hardening P0: pesquisa + cotações + BASE dos Itens Inteligentes numa ÚNICA transação
       // (nunca Pesquisa=200 com Item=100) — ver itemMaterializationService.importManualPriceResearch.
       let imported;
       try {
         imported = await importManualPriceResearch({
           organizationId: orgId, processId: input.processId, source: input.source, text: input.text,
-          actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+          actorUserId: ctx.user!.id, correlationId: ctx.correlationId, confirmReplace: input.confirmReplace === true,
         });
       } catch (err) {
+        if (err instanceof PriceQuoteReplacementRequiresConfirmationError) {
+          // Substituiria cotações já registradas ⇒ nada gravado; o cliente pede a confirmação explícita.
+          throw new TRPCError({ code: "CONFLICT", message: err.message, cause: err });
+        }
+        if (err instanceof PriceResearchAmbiguousError) {
+          // Ambígua ⇒ nada gravado; o cliente mostra a prévia com as pendências.
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message, cause: err });
+        }
         log.error("import_price_research_persist_failed", {
           organizationId: orgId, userId: ctx.user!.id, processId: input.processId,
           source: input.source, correlationId: ctx.correlationId,
@@ -509,7 +548,7 @@ export const procurementProcessRouter = router({
         id: m.id, description: byId.get(m.id)?.description ?? "", suggestedCATMAT: byId.get(m.id)?.suggestedCATMAT ?? null,
       }));
       return {
-        research: imported.research, intelligentItems: enriched,
+        research: imported.research, intelligentItems: enriched, synthetic: imported.synthetic,
         materialization: {
           created: materialized.created.length, updated: materialized.updated.length,
           unchanged: materialized.unchanged.length, preserved: materialized.preserved.length,
@@ -530,6 +569,9 @@ export const procurementProcessRouter = router({
         items: items.map((it) => ({
           ...it,
           priceOutliers: findPriceOutliers(it.suppliers.map((s) => ({ name: s.name, valueCents: reaisToCents(s.value) }))),
+          // M8-PRICE-IMPORT-001: item que não parece bem/serviço (metadado, aviso, rótulo, sem cotação com preço) — típico do leitor
+          // antigo ("uma linha = um item"). Só SINALIZA: a limpeza é decisão humana explícita (rejeitar), nunca exclusão automática.
+          suspectedFragment: !isCatalogItemCandidate({ description: it.description ?? "", pricedQuotes: it.suppliers.filter((s) => s.value > 0).length }),
         })),
         total: items.length,
       };
@@ -878,8 +920,9 @@ export const procurementProcessRouter = router({
       const sources = doc.sources ?? [];
       const groundingSource = sources.find((s) => s.startsWith("grounding:"))?.slice("grounding:".length) ?? null;
       const evidenceSource = sources.find((s) => s.startsWith("evidencias:"))?.slice("evidencias:".length);
+      // M8 (ETP): fundamentação NORMATIVA ≠ suficiência FACTUAL — lacunas [REVISAR: …] contadas no conteúdo ATUAL (reflete edições humanas).
       const grounding = groundingSource
-        ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0 }
+        ? { state: groundingSource, evidenceCount: evidenceSource ? Number(evidenceSource) : 0, factualGaps: (doc.content.match(/\[REVISAR[^\]]*\]/g) ?? []).length }
         : null;
       // PR-09 (SEM-014) — o conteúdo vigente carrega trabalho HUMANO? (ledger + sources; read-only). A UI
       // pede confirmação explícita antes de regenerar; o servidor recusa sem `confirmReplace` de todo modo.

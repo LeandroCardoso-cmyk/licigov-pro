@@ -63,6 +63,25 @@ export interface DepartmentSnapshot {
   readonly upcomingEvents: Array<ReturnType<typeof recordCalendarEvent>>;
 }
 
+/** Janela do primeiro alerta automático de vencimento (90/60/30/15/7 dias). */
+export const EXPIRING_WINDOW_DAYS = 90;
+
+/**
+ * Contratos (por referência) cujo VENCIMENTO cai em [hoje, hoje + 90 dias]. Conta o contrato uma vez —
+ * os alertas 90/60/30/15/7d do mesmo vencimento não inflam o indicador.
+ */
+export function expiringContractRefs(
+  events: ReadonlyArray<{ eventType: string; eventDate: string; referenceId: string; alertOffsetDays: number }>,
+  today: string,
+): Set<string> {
+  const limit = new Date(`${today}T00:00:00Z`);
+  limit.setUTCDate(limit.getUTCDate() + EXPIRING_WINDOW_DAYS);
+  const until = limit.toISOString().slice(0, 10);
+  return new Set(events
+    .filter(e => e.eventType === "vencimento_contrato" && e.alertOffsetDays === 0 && e.eventDate >= today && e.eventDate <= until)
+    .map(e => e.referenceId));
+}
+
 /** ÁREA 1 — Centro de Operações: indicadores + eventos de hoje e futuros. */
 export async function getDashboard(params: { organizationId: number; today: string }): Promise<DepartmentSnapshot> {
   assertKernelAccess(DOMAIN, "observability");
@@ -72,8 +91,7 @@ export async function getDashboard(params: { organizationId: number; today: stri
   const allEvents = [...events.map(e => ({ ...e, eventEndDate: "" })), ...scheduled]
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.eventTime.localeCompare(b.eventTime));
 
-  const contractsExpiringSoon = events.filter(e =>
-    e.eventType === "vencimento_contrato" && e.eventDate >= params.today).length;
+  const contractsExpiringSoon = expiringContractRefs(events, params.today).size;
 
   const indicators = computeIndicators({
     processes, directProcurements: directs, contracts,
@@ -162,11 +180,11 @@ export async function getRecommendations(params: { organizationId: number; today
   const events = await listOperationalEvents(params.organizationId, { limit: 500 });
   const out: OperationalRecommendation[] = [];
 
-  const expiring = events.filter(e => e.eventType === "vencimento_contrato" && e.eventDate >= params.today);
-  if (expiring.length > 0) {
+  const expiring = expiringContractRefs(events, params.today);
+  if (expiring.size > 0) {
     const base = recommendStep({ step: "aditivo" });
     out.push({
-      kind: "vencimento", title: `${expiring.length} contrato(s) com vencimento próximo`,
+      kind: "vencimento", title: `${expiring.size} contrato(s) com vencimento próximo`,
       reasoning: "Contratos próximos do vencimento podem exigir aditivo de prorrogação ou nova contratação.",
       legalBasis: base.legalBasis, confidence: 0.85, impact: "alto",
       alternatives: ["Elaborar aditivo de prazo", "Iniciar nova contratação", "Encerrar o contrato"],

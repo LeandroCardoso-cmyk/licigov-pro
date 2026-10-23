@@ -31,6 +31,9 @@ export const OPERATION_RECORD_TYPES: readonly OperationRecordType[] = [
   "aditivo_externo", "ata_externa", "parecer_externo", "reuniao", "evento", "tarefa", "outro",
 ];
 
+/** Tipos com vigência (contrato/aditivo/ata externos) — fonte única em `shared/`. */
+export { expirationKindFor } from "@shared/operationRecordExpiration";
+
 export interface OperationRecord {
   readonly id: string;
   readonly organizationId: number;
@@ -114,11 +117,17 @@ export interface LegacyExtractedFields {
   readonly modality: string;
 }
 
+/** Fim do trecho de um campo: quebra de linha ou separador usual de texto corrido (" — ", " – ", ";", " | "). */
+const FIELD_SEGMENT_END = /\n| [—–] |;| \| /;
+/** Limites das colunas de `operation_records` (texto importado nunca pode derrubar a gravação). */
+const NUMBER_MAX = 80;
+const MODALITY_MAX = 60;
+
 function matchAfter(text: string, labels: string[]): string {
   for (const label of labels) {
     const re = new RegExp(`${label}\\s*[:\\-]?\\s*(.+)`, "i");
     const m = text.match(re);
-    if (m && m[1]) return m[1].trim().split(/\n/)[0].trim();
+    if (m && m[1]) return m[1].trim().split(FIELD_SEGMENT_END)[0].trim();
   }
   return "";
 }
@@ -126,9 +135,9 @@ function matchAfter(text: string, labels: string[]): string {
 /** Extração determinística (assistida) dos campos de um processo/contrato legado. */
 export function reconstructLegacyRecord(text: string): LegacyExtractedFields {
   return {
-    number: matchAfter(text, ["processo n[ºo°]", "contrato n[ºo°]", "número", "n[ºo°]"]),
+    number: matchAfter(text, ["processo n[ºo°]", "contrato n[ºo°]", "número", "n[ºo°]"]).slice(0, NUMBER_MAX),
     object: matchAfter(text, ["objeto", "do objeto"]),
-    modality: matchAfter(text, ["modalidade", "dispensa", "inexigibilidade", "preg[ãa]o"]),
+    modality: matchAfter(text, ["modalidade", "dispensa", "inexigibilidade", "preg[ãa]o"]).slice(0, MODALITY_MAX),
   };
 }
 

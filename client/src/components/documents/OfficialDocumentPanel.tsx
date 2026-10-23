@@ -26,7 +26,15 @@ export interface OfficialDocumentPanelProps {
    * cliente. Omitido → nenhuma dica de UI (demais domínios inalterados).
    */
   requireStatusForExport?: "emitido";
+  /**
+   * Homologação visual M8 (P1): restringe ao tipo de documento do contexto (ex.: a seção do ETP não lista DFD/TR/Edital).
+   * Omitido → todos os tipos da origem (comportamento anterior).
+   */
+  documentType?: string;
 }
+
+/** Status de exibição: "gerado"/"revisado" são snapshots TÉCNICOS do pipeline, não versões oficiais emitidas. */
+const STATUS_LABEL: Record<string, string> = { gerado: "snapshot técnico (não emitido)", revisado: "snapshot técnico revisado (não emitido)", emitido: "emitido" };
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   dfd: "DFD", etp: "ETP", tr: "TR", edital: "Edital",
@@ -36,7 +44,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   contrato: "Contrato", aditivo: "Termo Aditivo", apostilamento: "Apostilamento", rescisao: "Rescisão", outro: "Documento",
 };
 
-export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais", requireStatusForExport }: OfficialDocumentPanelProps) {
+export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais", requireStatusForExport, documentType }: OfficialDocumentPanelProps) {
   const enabled = origin.trim().length > 0;
   const { data, isLoading } = trpc.documentEngine.list.useQuery({ businessDomain, origin }, { enabled });
   const [previewId, setPreviewId] = React.useState<string>("");
@@ -65,7 +73,51 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
       ? exportDoc.variables?.inline === true
       : exportDoc.variables?.format === action && !exportDoc.variables?.inline);
 
-  const documents = data?.documents ?? [];
+  const all = (data?.documents ?? []).filter((d) => !documentType || d.documentType === documentType);
+  // Com a política de emissão (processo licitatório), a lista principal mostra SÓ versões emitidas; snapshots técnicos
+  // ("gerado") ficam à parte, recolhidos — nunca sob o título de versões oficiais. Dados, versões e hashes inalterados.
+  const documents = requireStatusForExport ? all.filter((d) => d.status === requireStatusForExport) : all;
+  const technical = requireStatusForExport ? all.filter((d) => d.status !== requireStatusForExport) : [];
+  const renderList = (list: typeof all) => (
+    <ul className="divide-y divide-border">
+      {list.map((d) => (
+        <li key={d.id} className="py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="line-clamp-1 text-sm font-medium text-foreground">{d.title}</p>
+              <p className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.documentType] ?? d.documentType} · v{d.version} · {requireStatusForExport ? (STATUS_LABEL[d.status] ?? d.status) : d.status}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button type="button" onClick={() => setPreviewId(previewId === d.id ? "" : d.id)} className={btn}>Preview</button>
+              {requireStatusForExport && d.status !== requireStatusForExport ? (
+                <span className="text-[11px] text-muted-foreground">exportar só quando emitido</span>
+              ) : (
+                <>
+                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "docx" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "docx") ? "…" : "DOCX"}</button>
+                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "pdf") ? "…" : "PDF"}</button>
+                  <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", inline: true })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "print") ? "…" : "Imprimir"}</button>
+                </>
+              )}
+            </div>
+          </div>
+          {previewId === d.id && (
+            <div className="mt-2 rounded-md border border-border bg-muted/50 p-3">
+              {preview.isLoading ? (
+                <p className="text-xs text-muted-foreground">Carregando prévia…</p>
+              ) : (
+                <>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs text-muted-foreground">{preview.data?.document?.content ?? "Sem conteúdo."}</pre>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    replayHash: {preview.data?.document?.replayHash?.slice(0, 12)}… · template: {preview.data?.document?.template} · autor: {preview.data?.document?.author}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
   const btn = "rounded border border-input px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground";
 
   return (
@@ -80,46 +132,17 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
       ) : isLoading ? (
         <div className="h-14 animate-pulse rounded-md bg-muted" />
       ) : documents.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nenhum documento oficial gerado ainda.</p>
+        <p className="text-xs text-muted-foreground">{requireStatusForExport ? "Nenhuma versão emitida ainda." : "Nenhum documento oficial gerado ainda."}</p>
       ) : (
-        <ul className="divide-y divide-border">
-          {documents.map((d) => (
-            <li key={d.id} className="py-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="line-clamp-1 text-sm font-medium text-foreground">{d.title}</p>
-                  <p className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.documentType] ?? d.documentType} · v{d.version} · {d.status}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button type="button" onClick={() => setPreviewId(previewId === d.id ? "" : d.id)} className={btn}>Preview</button>
-                  {requireStatusForExport && d.status !== requireStatusForExport ? (
-                    <span className="text-[11px] text-muted-foreground">exportar só quando emitido</span>
-                  ) : (
-                    <>
-                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "docx" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "docx") ? "…" : "DOCX"}</button>
-                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "pdf") ? "…" : "PDF"}</button>
-                      <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", inline: true })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "print") ? "…" : "Imprimir"}</button>
-                    </>
-                  )}
-                </div>
-              </div>
-              {previewId === d.id && (
-                <div className="mt-2 rounded-md border border-border bg-muted/50 p-3">
-                  {preview.isLoading ? (
-                    <p className="text-xs text-muted-foreground">Carregando prévia…</p>
-                  ) : (
-                    <>
-                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs text-muted-foreground">{preview.data?.document?.content ?? "Sem conteúdo."}</pre>
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        replayHash: {preview.data?.document?.replayHash?.slice(0, 12)}… · template: {preview.data?.document?.template} · autor: {preview.data?.document?.author}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        renderList(documents)
+      )}
+      {technical.length > 0 && (
+        <details className="rounded-md border border-dashed border-border px-3 py-2" data-testid="technical-snapshots">
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            Versões técnicas (snapshots gerados na elaboração — não são versões oficiais emitidas) — {technical.length}
+          </summary>
+          {renderList(technical)}
+        </details>
       )}
     </div>
   );

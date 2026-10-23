@@ -18,6 +18,7 @@
 
 import { createHash } from "crypto";
 import { getProcess, listIntelligentItems } from "../../db/procurement";
+import { fictitiousPriceBlocker } from "../priceGovernanceService";
 import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
 import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import { draftContentHash } from "../../domain/generatedDocument";
@@ -25,6 +26,8 @@ import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import { formatBRL, reaisToCents } from "../../domain/money";
 import {
   AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
+  fictitiousQuotesReviewText,
+  suspectedQuotesReviewText,
 } from "../../domain/authoritativeItems";
 import {
   confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
@@ -71,6 +74,12 @@ export interface EditalApprovedItem {
   readonly confirmedCatalogCode?: string | null;
   /** Nº de cotações VÁLIDAS que compõem o preço médio. */
   readonly quoteCount?: number;
+  /** M8 hardening — das cotações, quantas são de fonte fictícia (demonstrativas); ausente/0 ⇒ nenhuma. */
+  readonly fictitiousQuoteCount?: number;
+  /** M8 — cotações legadas possivelmente demonstrativas (só [REVISAR]). */
+  readonly suspectedQuoteCount?: number;
+  /** M8 — preço suspenso (`FICTITIOUS_SOURCE`): `averagePrice` já vem 0; renderizado ⇒ entra no digest via preço. */
+  readonly priceBlockedReason?: string | null;
   /** current | source_changed | review_required (renderizado ⇒ entra no digest). */
   readonly sourceState?: string;
 }
@@ -144,6 +153,8 @@ function itemsSignature(items: readonly EditalApprovedItem[]): Array<Record<stri
     .map((i) => ({
       id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: reaisToCents(i.averagePrice),
       cm: i.suggestedCATMAT ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount ?? 0, ss: i.sourceState ?? "current",
+      ...(i.fictitiousQuoteCount ? { fq: i.fictitiousQuoteCount } : {}),
+      ...(i.suspectedQuoteCount ? { sus: i.suspectedQuoteCount } : {}),
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -214,7 +225,8 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
     ? computeItemEstimates(canonical.items, { preserveOrder: true })
     : computeItemEstimates(input.approvedItems.map((i) => ({
       id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-      averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+      averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0, fictitiousQuoteCount: i.fictitiousQuoteCount,
+      priceBlockedReason: i.priceBlockedReason ?? null, suspectedQuoteCount: i.suspectedQuoteCount,
       confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
     })));
   const itemCount = canonical ? canonical.items.length : input.approvedItems.length;
@@ -233,7 +245,9 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
       const changed = stateOf(it.id);
       const flag = changed && changed !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
       const lot = lotOf(it.id);
-      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}`);
+      const fict = (it.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(it.fictitiousQuoteCount)}` : "")
+        + (it.suspectedQuoteCount ? ` · ${suspectedQuotesReviewText(it.suspectedQuoteCount)}` : "");
+      lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}${fict}`);
     }
     lines.push(`- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`);
     lines.push("");
@@ -320,6 +334,8 @@ function canonicalItemsSignature(items: readonly ContextItem[]): Array<Record<st
   return items.map((i) => ({
     id: i.id, d: i.description.trim(), q: i.quantity, u: i.unit.trim(), c: i.averagePriceCents, l: i.lotCode ?? null,
     cm: i.suggestedCatalogCode ?? null, cc: i.confirmedCatalogCode ?? null, n: i.quoteCount, ss: i.sourceState,
+    ...(i.fictitiousQuoteCount ? { fq: i.fictitiousQuoteCount } : {}),
+    ...(i.suspectedQuoteCount ? { sus: i.suspectedQuoteCount } : {}),
   }));
 }
 
@@ -361,15 +377,21 @@ export async function resolveEditalSources(params: {
   ]);
   const approved = items.filter((i) => i.status === "aprovado");
   const decisions = await getLatestCatmatDecisionsForItems(approved.map((i) => i.id), params.organizationId);
+  // M8 (política de 20/10/2026): mesmo bloqueio de fonte fictícia do contexto canônico e do ETP/TR legado.
+  const priceBlocked = await fictitiousPriceBlocker(params.organizationId, approved);
   const approvedItems: EditalApprovedItem[] = approved.map((i) => ({
-    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit, averagePrice: i.averagePrice,
+    id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
+    ...(priceBlocked(i)
+      ? { averagePrice: 0, priceBlockedReason: "FICTITIOUS_SOURCE" }
+      : { averagePrice: i.averagePrice }),
     suggestedCATMAT: i.suggestedCATMAT, confirmedCatalogCode: confirmedCatalogFromDecision(decisions.get(i.id)),
-    quoteCount: i.quoteCount, sourceState: i.sourceState,
+    quoteCount: i.quoteCount, fictitiousQuoteCount: i.fictitiousQuoteCount, suspectedQuoteCount: i.suspectedQuoteCount, sourceState: i.sourceState,
   }));
   // Gate determinístico COMPARTILHADO com ETP/TR: Itens da contratação ativos ⇒ modo canônico obrigatório.
   const canonical = await resolveCanonicalDocumentItems(params, approvedItems.map((i) => ({
     id: i.id, description: i.description, quantity: i.quantity, unit: i.unit,
-    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0,
+    averagePriceCents: reaisToCents(i.averagePrice), quoteCount: i.quoteCount ?? 0, fictitiousQuoteCount: i.fictitiousQuoteCount,
+    suspectedQuoteCount: i.suspectedQuoteCount,
     confirmedCatalogCode: i.confirmedCatalogCode ?? null, suggestedCatalogCode: i.suggestedCATMAT,
     sourceState: i.sourceState ?? "current", quotes: [],
   })));

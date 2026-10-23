@@ -13,6 +13,7 @@
  * baixa o arquivo inteiro na memória APENAS durante o parse (nunca dentro do job/fila). A
  * evolução para parsing em streaming remove essa materialização.
  */
+import { createHash } from "crypto";
 import { serviceLogger } from "./observabilityService";
 import {
   getImportSession,
@@ -36,8 +37,11 @@ import { MAX_FILE_SIZE_BYTES, type ParserType } from "../domain/importTypes";
 import type { ParseOptions } from "../parsers/baseParser";
 import { isDocumentImportType } from "../domain/documentProjection";
 import { persistDocumentStaging } from "./documentIntakeService";
-import { commitReextraction, releaseReextraction, ReextractionAbortedError } from "./importReprocessService";
-import { REEXTRACTION_STAGE } from "../domain/importReprocess";
+import {
+  commitReextraction, releaseReextraction, ReextractionAbortedError, commitProvenanceRevalidation, recordProvenanceRevalidationNotApplied,
+} from "./importReprocessService";
+import { buildProvenanceScanEvidence, hasFileCoverageGap, type ProvenanceScanOrigin } from "../domain/quoteProvenance";
+import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE } from "../domain/importReprocess";
 
 const log = serviceLogger("ImportQueueService");
 
@@ -54,6 +58,11 @@ export interface ReextractionRequest {
   previousStage: string | null;
 }
 
+/** M8 (P1-C) — revalidação da análise de proveniência do arquivo original (não toca no staging nem nas revisões). */
+export interface ProvenanceRevalidationRequest {
+  actorUserId: number;
+}
+
 /** Job da fila — SOMENTE identificadores/metadados seguros. Nunca contém o arquivo. */
 export interface ImportJob {
   jobId:          string;
@@ -65,6 +74,7 @@ export interface ImportJob {
   attempts:       number;
   lastError?:     string;
   reextract?:     ReextractionRequest;
+  revalidateProvenance?: ProvenanceRevalidationRequest;
 }
 
 type JobStatus = "queued" | "processing" | "done" | "failed" | "dlq";
@@ -94,6 +104,8 @@ export interface EnqueueOptions {
   attempt?:       number;
   /** Reextração governada de sessão em revisão (reserva já feita por importReprocessService). */
   reextract?:     ReextractionRequest;
+  /** M8 (P1-C) — revalidação da análise de proveniência (sessão legada; revisões preservadas). */
+  revalidateProvenance?: ProvenanceRevalidationRequest;
 }
 
 /**
@@ -122,7 +134,9 @@ export function enqueueImport(
     enqueuedAt:    new Date(),
     attempts:      opts.attempt ?? 0,
     ...(opts.reextract ? { reextract: opts.reextract } : {}),
+    ...(opts.revalidateProvenance ? { revalidateProvenance: opts.revalidateProvenance } : {}),
   };
+  if (opts.revalidateProvenance) revalidationFailures.delete(sessionId);
 
   inFlight.add(sessionId);
   queue.push(job);
@@ -177,6 +191,22 @@ function buildParseOptions(session: NonNullable<Awaited<ReturnType<typeof getImp
   return { opts, documentMode };
 }
 
+/**
+ * M8 (P1-C) — evidência da análise de declaração do documento: SÓ quando o parser a executou neste caminho e o arquivo
+ * lido é o da sessão (sha256 do conteúdo = checksum da sessão). Caso contrário, nada é gravado e a promoção exige revalidação.
+ */
+function provenanceScanFor(
+  result: { declarationScan?: { version: number }; warnings: unknown },
+  session: { checksum: string | null },
+  analyzedBytes: Buffer, parserType: string, parserVersion: string, origin: ProvenanceScanOrigin,
+) {
+  return buildProvenanceScanEvidence({
+    performed: result.declarationScan, sessionChecksum: session.checksum,
+    analyzedChecksum: createHash("sha256").update(analyzedBytes).digest("hex"),
+    parserType, parserVersion, warnings: result.warnings, origin,
+  });
+}
+
 /** Linhas com atenção obrigatória (OCR, avisos de página ou de item com severidade "warning"). */
 function itemsNeedAttention(result: Awaited<ReturnType<NonNullable<ReturnType<typeof parserRegistry.resolve>>["safeParse"]>>, lineage: ExtractionLineage | undefined): boolean {
   return (lineage?.extractionMode ?? "native_text") !== "native_text" ||
@@ -209,6 +239,7 @@ async function processJob(job: ImportJob): Promise<void> {
   const rec = jobs.get(job.jobId);
   if (rec) rec.status = "processing";
   if (job.reextract) { await processReextractJob(job); return; }
+  if (job.revalidateProvenance) { await processProvenanceRevalidationJob(job); return; }
 
   job.attempts++;
   log.info("job_processing", { jobId: job.jobId, attempt: job.attempts, sessionId: job.sessionId, correlationId: job.correlationId });
@@ -286,7 +317,8 @@ async function processJob(job: ImportJob): Promise<void> {
     const lineage: ExtractionLineage | undefined = result.extraction
       ? { ...result.extraction, correlationId: job.correlationId ?? session.correlationId ?? null, startedAt: startedAtIso, finishedAt: new Date().toISOString() }
       : undefined;
-    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}) };
+    const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "extraction");
+    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}), ...(scan ? { provenanceScan: scan } : {}) };
 
     // Artefato DERIVADO do OCR (texto bruto por página) — gravado ao lado do original, que é imutável.
     // Fora de transação; falha não derruba a extração (cada item já preserva o texto bruto da sua linha).
@@ -467,7 +499,9 @@ async function processReextractJob(job: ImportJob): Promise<void> {
       try { await storagePut(artifactKey, JSON.stringify({ lineage, pages: result.ocrArtifact.pages }), "application/json"); lineage.ocr.artifactKey = artifactKey; }
       catch { lineage.ocr.artifactKey = null; }
     }
-    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}) };
+    // Reextração substitui o sumário inteiro: a evidência anterior nunca sobrevive a uma nova extração.
+    const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "reextraction");
+    const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}), ...(scan ? { provenanceScan: scan } : {}) };
     const committed = await commitReextraction({
       sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, reason: req.reason,
       correlationId, items: result.items, parserVersion: parser.capabilities.parserVersion,
@@ -487,6 +521,68 @@ async function processReextractJob(job: ImportJob): Promise<void> {
     await release("REEXTRACTION_FAILED", err instanceof Error ? err.message : "Erro desconhecido.");
     log.error("import_reextraction_failed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
   }
+}
+
+// ─── M8 (P1-C) — Revalidação da análise de proveniência ──────────────────────────
+
+/**
+ * Sessão legada (extraída antes da análise vigente) com revisões já feitas: reanalisa o ARQUIVO ORIGINAL (mesmo checksum)
+ * pelo MESMO parser da extração — fora de transação — e grava apenas a evidência + os avisos de declaração do documento
+ * (commitProvenanceRevalidation, sob lock da sessão). Staging, correções e decisões humanas não mudam; nada é promovido.
+ * Falha ⇒ nada muda (a promoção continua bloqueada) e o motivo é auditado. Sem auto-retry: a nova tentativa é explícita.
+ */
+async function processProvenanceRevalidationJob(job: ImportJob): Promise<void> {
+  const rec = jobs.get(job.jobId);
+  const req = job.revalidateProvenance!;
+  const correlationId = job.correlationId ?? null;
+  const finish = (status: JobStatus, error?: string) => {
+    if (rec) { rec.status = status; if (error) rec.error = error; }
+    inFlight.delete(job.sessionId);
+  };
+  const notApplied = async (code: string, message: string) => {
+    revalidationFailures.set(job.sessionId, { code, message });
+    await recordProvenanceRevalidationNotApplied({ sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, correlationId, code, message }).catch(() => {});
+    finish("failed", code);
+  };
+  try {
+    const session = await getImportSession(job.sessionId, job.organizationId);
+    if (!session) { finish("failed", "SESSION_NOT_FOUND"); return; }
+    const buffer = await storageGetBytes(job.storageKey);
+    if (buffer.length > MAX_FILE_SIZE_BYTES) { await notApplied("FILE_TOO_LARGE", "Arquivo excede o limite permitido."); return; }
+    const parser = parserRegistry.resolve(session.sourceMimeType, session.sourceFileName, session.parserType as ParserType);
+    if (!parser) { await notApplied("PARSER_NOT_FOUND", `Parser não encontrado para ${session.parserType}`); return; }
+    const { opts, documentMode } = buildParseOptions(session, job);
+    if (documentMode) { await notApplied("DOCUMENT_IMPORT", "Importação de documento não usa a análise de cotações."); return; }
+    const result = await parser.safeParse(buffer, opts); // FORA de transação (parser/OCR pesado)
+    if (result.errors.some((e) => e.fatal)) { await notApplied("PARSER_FAILED", "Não foi possível reanalisar o arquivo original."); return; }
+    if (hasFileCoverageGap(result.warnings)) { await notApplied("COVERAGE_INCOMPLETE", PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.COVERAGE_INCOMPLETE); return; }
+    if (result.items.length === 0) { await notApplied("SCAN_INCOMPLETE", "A reanálise do arquivo original não reconheceu as cotações; a análise não foi concluída."); return; }
+    const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "revalidation");
+    if (!scan) { await notApplied("SCAN_NOT_PERFORMED", "A análise não pôde ser concluída: o arquivo lido não corresponde ao da sessão ou há páginas não lidas (além do limite de páginas, ou digitalizadas com OCR indisponível ou incompleto)."); return; }
+    await commitProvenanceRevalidation({
+      sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, correlationId,
+      scan, warnings: result.warnings,
+    });
+    revalidationFailures.delete(job.sessionId);
+    finish("done");
+    log.info("import_provenance_revalidated", {
+      jobId: job.jobId, correlationId, organizationId: job.organizationId, processId: session.procurementProcessId ?? null,
+      sessionId: job.sessionId, declaration: scan.declaration,
+    });
+  } catch (err) {
+    if (err instanceof ReextractionAbortedError) { await notApplied(err.code, err.message); return; }
+    await notApplied("REVALIDATION_FAILED", err instanceof Error ? err.message : "Erro desconhecido.");
+    log.error("import_provenance_revalidation_failed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
+  }
+}
+
+/** Revalidação em andamento neste processo (UI: estado "em andamento"; o servidor revalida tudo no commit). */
+export function isSessionInFlight(sessionId: number): boolean { return inFlight.has(sessionId); }
+
+/** Último motivo de revalidação NÃO aplicada neste processo (UI explica o bloqueio; a auditoria fica em activity_logs). */
+const revalidationFailures = new Map<number, { code: string; message: string }>();
+export function getProvenanceRevalidationFailure(sessionId: number): { code: string; message: string } | null {
+  return revalidationFailures.get(sessionId) ?? null;
 }
 
 // ─── Recovery (replay-safe) ─────────────────────────────────────────────────────

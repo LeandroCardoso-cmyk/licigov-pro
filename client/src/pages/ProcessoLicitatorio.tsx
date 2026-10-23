@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   ChevronRight,
@@ -10,7 +10,6 @@ import {
   FileSignature,
   ScrollText,
   Gauge,
-  X,
 } from "lucide-react";
 import ProcessoLicitatorioHome from "@/components/procurement/ProcessoLicitatorioHome";
 import NovoProcessoWizard from "@/components/procurement/NovoProcessoWizard";
@@ -22,7 +21,7 @@ import ProcurementItemsWorkspace from "@/components/procurement/ProcurementItems
 import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
-import ProcurementItemPanel from "@/components/procurement/ProcurementItemPanel";
+import ProcurementItemPanel, { ITEM_PANEL_TITLE_ID } from "@/components/procurement/ProcurementItemPanel";
 import { startTargetFor } from "@/components/procurement/startOptions";
 
 /**
@@ -273,13 +272,29 @@ function StagePanel({
   }
 }
 
-function ItemDrawer({
+/**
+ * Drawer do item: o painel (`ProcurementItemPanel`) é o ÚNICO dono do título e do botão Fechar (um cabeçalho só);
+ * aqui ficam o fundo, o diálogo acessível (nome pelo título do painel) e o Escape.
+ */
+export function ItemDrawer({
   itemId,
   onClose,
 }: {
   itemId: string;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // Foco: entra no diálogo ao abrir e volta ao gatilho ao fechar.
+  useEffect(() => {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    return () => trigger?.focus();
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
@@ -288,19 +303,14 @@ function ItemDrawer({
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
-      <div className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">
-            Inteligência do item
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={ITEM_PANEL_TITLE_ID}
+        className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto bg-card shadow-xl focus:outline-none"
+      >
         <ProcurementItemPanel itemId={itemId} onClose={onClose} />
       </div>
     </div>

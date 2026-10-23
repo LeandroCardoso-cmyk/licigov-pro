@@ -78,12 +78,22 @@ describe("SEM-034 — escritores CATMAT/itens legados", () => {
     expect(filesMatching(/\bupdateItemCatmat\b/)).toEqual(["server/db/procurement.ts", "server/routers/itemIntelligenceRouter.ts"]);
     const router = code("server/routers/itemIntelligenceRouter.ts");
     expect(router.match(/\bupdateItemCatmat\(/g)).toHaveLength(1);
-    // a escrita fica DEPOIS de decideCatmat (ledger) e só fora de replay
+    // M8 hardening — a escrita é a `lineage` da decisão: roda na MESMA transação do ledger, DEPOIS do insert e só para
+    // decisão NOVA (replay/recuperação por chave devolvem o registro sem lineage).
     const decideAt = router.indexOf("await decideCatmat(");
+    const lineageAt = router.indexOf("lineage: async (tx, rec)");
     const writeAt = router.indexOf("await updateItemCatmat(");
     expect(decideAt).toBeGreaterThan(-1);
-    expect(writeAt).toBeGreaterThan(decideAt);
-    expect(router.slice(decideAt, writeAt)).toContain("if (!replayed)");
+    expect(lineageAt).toBeGreaterThan(decideAt);
+    expect(writeAt).toBeGreaterThan(lineageAt);
+    expect(router.slice(writeAt, writeAt + 120)).toContain(", tx)");
+    const svc = code("server/services/catmatGovernanceService.ts");
+    const insertAt = svc.indexOf("await insertCatmatDecision(");
+    const priorAt = svc.indexOf("if (prior) {");
+    const lineageCall = svc.indexOf("await params.lineage?.(tx, record)");
+    expect(priorAt).toBeGreaterThan(-1);
+    expect(insertAt).toBeGreaterThan(priorAt);
+    expect(lineageCall).toBeGreaterThan(insertAt);
     // as 3 mutations que decidem passam por governedCatmatDecision (nenhuma escreve código direto)
     expect(router.match(/await governedCatmatDecision\(/g)).toHaveLength(3);
   });

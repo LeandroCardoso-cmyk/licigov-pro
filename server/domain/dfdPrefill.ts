@@ -751,10 +751,20 @@ function reconcileItemRow(lines: string[], content: string, sources: readonly st
 }
 
 /** Insere o rascunho de IA na seção 2 (justificativa) e grava o marcador de explicabilidade. */
+/**
+ * M8-AI-DFD-001 — corpo da seção 2 sem cabeçalhos: um título de seção ("## 2. …", "JUSTIFICATIVA DA NECESSIDADE")
+ * colado no texto aceito duplicaria o cabeçalho do DFD (ou abriria uma seção falsa). Só linhas de título são retiradas.
+ */
+export function justificationBody(text: string): string[] {
+  const lines = text.trim().split("\n").filter((l) => !/^\s*#{1,6}\s/.test(l));
+  while (lines.length > 0 && (lines[0].trim() === "" || /^\s*(?:\d+(?:\.\d+)*\s*[-.)–—]?\s*)?justificativa(?:\s+da\s+(?:necessidade|contrata[çc][ãa]o|demanda))?[^.!?]{0,60}$/i.test(lines[0]))) lines.shift();
+  return lines;
+}
+
 export function applyAIJustification(
   content: string, sources: readonly string[], text: string, executionId: string, contextDigest: string,
 ): { content: string; sources: string[] } {
-  const body = text.trim().split("\n");
+  const body = justificationBody(text);
   const lines = replaceSectionBody(content.split("\n"), 2, body);
   const mk = readMarkers(sources);
   mk.ai.justificativa = { hash: fieldHash(normalizeText(body.join("\n"))), executionId: executionId.replace(/[^A-Za-z0-9_-]/g, "") || "exec", contextDigest: contextDigest.slice(0, 16) };
@@ -772,7 +782,7 @@ export function applyReviewedJustification(
   ai: { executionId: string; contextDigest: string } | null,
 ): { content: string; sources: string[] } {
   if (ai) return applyAIJustification(content, sources, text, ai.executionId, ai.contextDigest);
-  const lines = replaceSectionBody(content.split("\n"), 2, text.trim().split("\n"));
+  const lines = replaceSectionBody(content.split("\n"), 2, justificationBody(text));
   const mk = readMarkers(sources);
   delete mk.ai.justificativa;
   delete mk.prefill.justificativa;

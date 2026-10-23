@@ -2,7 +2,7 @@
 /**
  * LICIGOV-FAST — MySQL REAL, tenants SINTÉTICOS, pelas rotas reais (tRPC): decisão registrada ELETRONICAMENTE pelo usuário autenticado (sem digitar autoridade/cargo/ato),
  * "Disponibilizar para elaboração" em um ato (aprovar + publicar no catálogo INTERNO, readiness recalculada no servidor), com RBAC, isolamento de tenant, idempotência/replay e
- * o gate jurídico do regime legado intacto. Só roda com DATABASE_URL. Nenhum dado real, nenhum modelo de produção, nenhuma organização real.
+ * o gate jurídico do regime legado intacto; M8-UX-GOV-001: escritas governadas (orçamento, TR/certame, itens, Perfil) também sem redigitar autoridade. Só roda com DATABASE_URL. Nenhum dado real, nenhum modelo de produção, nenhuma organização real.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
@@ -26,7 +26,7 @@ import { getModelPackage } from "../../services/institutionalTemplates/modelPack
 import { summarizePackageInventory } from "../../services/institutionalTemplates/modelRegistrationService";
 import { ELECTRONIC_BASIS } from "../../services/institutionalTemplates/electronicAuthority";
 import { makeContext, mockUser } from "../helpers/fixtures";
-import { BLL, U_MANAGER, cleanupOrgs, ctxOf, decision, markTemplateOrgLegacy, seedWorld } from "../helpers/institutionalTemplatesE2eWorld";
+import { BLL, BLL_CATALOG, E2E_BUDGET_BASE_DATE, SYNTHETIC_PLATFORMS, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, markTemplateOrgLegacy, seedWorld } from "../helpers/institutionalTemplatesE2eWorld";
 import { createHash } from "node:crypto";
 
 const DB = process.env.DATABASE_URL;
@@ -183,5 +183,45 @@ describe.skipIf(!DB)("LICIGOV-FAST (MySQL real)", () => {
     expect(der.revision.status).toBe("DRAFT"); expect(der.origin.ownership).toBe("DERIVED");
     // operator não disponibiliza (piso manager) — o que já protegia continua protegendo
     await expect(available(org, der.revision.id, {}, "operator")).rejects.toThrow();
+  }, 300_000);
+
+  it("FAST-6 (M8-UX-GOV-001) — fontes governadas SEM digitar autoridade/cargo/ato: orçamento, TR, itens e Perfil gravados com o usuário autenticado; replay; ato parcial recusado; RBAC; isolamento", async () => {
+    const o = BASE_ORG + orgSeq++; ORGS.push(o);
+    const w = await seedWorld(conn, o, "fast6", { flagOn: true });
+    const gov = (role = "manager") => tpl(o, role).governed;
+    const dk = key("disc");
+    const disc = (over: Record<string, unknown> = {}, role = "manager") => gov(role).recordBudgetDisclosure({ processId: w.processId, disclosure: "sigiloso", confirm: true, idempotencyKey: dk, expectedRevision: 0, ...over } as any) as Promise<any>;
+    const first = await disc();
+    expect(first.replayed).toBe(false);
+    const [d] = await decisionsOf(o, "procurement.budget_disclosure");
+    expect(d).toMatchObject({
+      outcome: "sigiloso", decided_by_name: "Usuário Teste", decided_by_role: "Gestor do órgão (manager)", decided_by_user_id: U_MANAGER, recorded_by_user_id: U_MANAGER,
+      basis_reference: ELECTRONIC_BASIS, authority_validation: "NOT_VALIDATED_POLICY_PENDING",
+    });
+    expect(d.reason).toMatch(/^Registro da divulgação do orçamento — registrado eletronicamente/);
+    expect(d.correlation_id).toMatch(/^corr-fast-/);
+    expect((await disc()).replayed).toBe(true);                                                                              // replay idempotente
+    expect(await decisionsOf(o, "procurement.budget_disclosure")).toHaveLength(1);
+    // ato PARCIAL é recusado; operator/viewer recusados; outro tenant ≡ processo inexistente — nada gravado
+    await expect(disc({ idempotencyKey: key("d2"), expectedRevision: 1, decision: { decidedByName: "Ana" } })).rejects.toThrow();
+    for (const role of ["operator", "viewer"]) await expect(disc({ idempotencyKey: key(`d-${role}`), expectedRevision: 1 }, role)).rejects.toThrow();
+    const other = await newOrg("fast6b");
+    tenant.org = other;
+    await expect(tpl(other).governed.recordBudgetDisclosure({ processId: w.processId, disclosure: "publico", confirm: true, idempotencyKey: key("x"), expectedRevision: 0 })).rejects.toThrow(/não encontrad|NOT_FOUND/i);
+    expect(await decisionsOf(o, "procurement.budget_disclosure")).toHaveLength(1);
+    expect(await decisionsOf(other, "procurement.budget_disclosure")).toHaveLength(0);
+    // demais fontes governadas do mesmo processo/órgão, todas sem `decision`
+    await gov().recordBudgetBaseDate({ processId: w.processId, catalogVersion: BLL_CATALOG.version, baseDate: E2E_BUDGET_BASE_DATE, confirm: true, idempotencyKey: key("bd"), expectedRevision: 0 });
+    await gov().recordProcessFields({ processId: w.processId, source: "TR", catalogVersion: BLL_CATALOG.version, fields: governedFieldsFor("TR"), confirm: true, idempotencyKey: key("tr"), expectedRevision: 1, note: "Conferido com a área demandante." });
+    await gov().recordItemsParticipation({ processId: w.processId, catalogVersion: BLL_CATALOG.version, participation: { default: "Ampla participação, com os benefícios da LC nº 123/2006" }, confirm: true, idempotencyKey: key("part"), expectedRevision: 2 });
+    await gov().recordLicitacoesProfile({ catalogVersion: BLL_CATALOG.version, platforms: SYNTHETIC_PLATFORMS, confirm: true, idempotencyKey: key("plat"), expectedRevision: 0 });
+    const proc = await decisionsOf(o, "procurement.source_fields");
+    expect(proc.map((x) => x.reason)).toEqual([
+      expect.stringMatching(/^Registro da data-base do orçamento/), "Conferido com a área demandante.", expect.stringMatching(/^Registro do regime de participação dos itens/),
+    ]);
+    for (const x of [...proc, ...(await decisionsOf(o, "institutional.policy"))]) {
+      expect(x).toMatchObject({ basis_reference: ELECTRONIC_BASIS, decided_by_user_id: U_MANAGER, recorded_by_user_id: U_MANAGER, decided_by_role: "Gestor do órgão (manager)" });
+    }
+    expect((await decisionsOf(o, "institutional.policy")).map((x) => x.reason)).toEqual([expect.stringMatching(/^Registro do Perfil de Licitações do órgão/)]);
   }, 300_000);
 });

@@ -1,0 +1,12 @@
+-- 0319 — M8: PROVENIÊNCIA ESTRUTURADA das cotações da Pesquisa de Preços (política aprovada pelo Owner em 20/10/2026).
+--
+-- ADITIVA e NÃO destrutiva: uma coluna ANULÁVEL em `price_research_items`; nenhuma linha existente é alterada.
+--   `ficticia`   — fonte declarada fictícia/demonstrativa (declaração explícita no dado);
+--   `declarada`  — fonte informada/importada, sem verificação institucional;
+--   `verificada` — reservado a procedimento legítimo de verificação (nenhum caminho atual o grava);
+--   NULL         — legado/desconhecido: SEM backfill (nunca presumido fictício nem verificado).
+-- Os valores são validados na aplicação (server/domain/quoteProvenance.ts), como os demais estados textuais do módulo.
+-- Replay-safe via ledger do Drizzle (aplicada uma única vez pelo predeploy canônico, sob lock).
+-- ROLLBACK lógico: o build anterior ignora a coluna; removê-la exigiria DDL manual (não incluído) e faria o build novo
+-- tratar todas as cotações como legadas (sem bloqueio estrutural de fictícias).
+ALTER TABLE `price_research_items` ADD `provenance_kind` varchar(16);

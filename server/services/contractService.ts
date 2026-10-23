@@ -18,6 +18,12 @@ import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { requestInstitutionalReview } from "./institutionalRequestService";
 import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
 import { recordProcessEvent } from "../db/procurement";
+import { registerExpiration, rescheduleExpiration, releaseRecordExpiration, linkRecordToContract } from "./operationRecordService";
+import { getOperationRecordById } from "../db/departmentOperation";
+import {
+  buildPriorAmendmentRow, composeAddendumTerm, DECLARED_OUTSIDE_SYSTEM, LEGACY_RECORD_TYPES_FOR_CONTRACT, mergeLegacyRecordFields,
+  validatePriorAmendments, type LegacyRecordTypeForContract, type PriorAmendmentInput,
+} from "../domain/legacyContractContinuity";
 import { timelineActor } from "../domain/timelineActor";
 import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
@@ -42,7 +48,7 @@ import { computeLineageId } from "../domain/officialDocument";
 import { getLatestByLineage } from "../db/officialDocuments";
 import {
   buildAddendumTermContent, buildApostilleTermContent, INSTRUMENT_NOT_FOUND, INSTRUMENT_REFERENCE_REQUIRED,
-  type AddendumData, type ApostilleData,
+  type AddendumData, type ApostilleData, type PriorAddendumLine,
 } from "../domain/instrumentTerms";
 import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import { inheritanceDiverges } from "../domain/contractInheritance";
@@ -251,6 +257,115 @@ export async function createManualContract(params: {
   return ws;
 }
 
+/** Rótulo de procedência do registro legado (informação declarada × importada × verificada). */
+export const LEGACY_CONTRACT_DECLARED = "DECLARADO";
+
+/**
+ * Registro de contrato VIGENTE de processo anterior (legado) — entrada independente, sem recriar DFD/ETP/TR/Edital.
+ *
+ * O contrato foi formalizado FORA do sistema; o usuário autenticado DECLARA os dados mínimos para a operação atual
+ * (acompanhar e emitir aditivo/apostilamento). Nasce `vigente` com origem `legado`, e a timeline registra a declaração
+ * (quem, quando, correlationId) como informação DECLARADA, não verificada. Não é ativação de minuta: nenhum contrato
+ * existente muda de estado por aqui. Informado o término da vigência, o vencimento e os alertas entram no Centro de
+ * Operações pela regra existente (registerExpiration).
+ */
+export async function registerInForceLegacyContract(params: {
+  organizationId: number; contractNumber: string; contractor: string; object?: string; term: string;
+  value?: number; manager?: string; inspector?: string;
+  /** Término da vigência (AAAA-MM-DD) — opcional; quando informado, gera vencimento + alertas. */
+  endDate?: string;
+  /** Referência declarada ao processo/ato de origem (ex.: "Pregão 12/2023") — texto livre, só para a timeline. */
+  sourceReference?: string;
+  /**
+   * Registro operacional (processo/contratação legados ou contrato externo já monitorado) de que o contrato PARTE: objeto e
+   * origem são reaproveitados (o que o usuário digitar prevalece), o registro é VINCULADO ao contrato e, se monitorava um
+   * vencimento, ele passa para o contrato (sem alertas duplicados). Outro órgão ⇒ NOT_FOUND; já ligado a outro alvo ⇒ CONFLICT.
+   */
+  legacyRecordId?: string;
+  /** Aditivos JÁ formalizados fora do sistema: histórico DECLARADO (continua a numeração; sem termo; sem efeito no contrato). */
+  priorAmendments?: readonly PriorAmendmentInput[];
+  correlationId: string; createdBy: number;
+}): Promise<{
+  workspace: ContractWorkspace; created: boolean; provenance: typeof LEGACY_CONTRACT_DECLARED;
+  legacyRecord: { id: string; reusedFields: readonly string[]; adoptedExpiration: string | null } | null;
+  priorAmendmentsRecorded: number;
+}> {
+  const contractNumber = requireContractNumber(params.contractNumber);
+  const priorIssues = validatePriorAmendments(params.priorAmendments);
+  if (priorIssues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Aditivos anteriores inválidos: ${priorIssues.join("; ")}.` });
+
+  // Registro operacional de origem — leitura e recusas ANTES de qualquer escrita.
+  let record: NonNullable<Awaited<ReturnType<typeof getOperationRecordById>>> | null = null;
+  if (params.legacyRecordId) {
+    record = await getOperationRecordById(params.organizationId, params.legacyRecordId);
+    if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Registro de processo anterior não encontrado nesta organização." });
+    if (!(LEGACY_RECORD_TYPES_FOR_CONTRACT as readonly string[]).includes(record.recordType)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Este tipo de registro não origina um contrato (use processo/contratação legados ou contrato externo)." });
+    }
+    if (record.referenceId) {
+      throw new TRPCError({ code: "CONFLICT", message: "Este registro já está vinculado a outro contrato; nada foi gravado." });
+    }
+  }
+  const merged = record
+    ? mergeLegacyRecordFields({ object: params.object, sourceReference: params.sourceReference }, { recordType: record.recordType as LegacyRecordTypeForContract, number: record.number, object: record.object, modality: record.modality })
+    : { object: (params.object ?? "").trim(), sourceReference: (params.sourceReference ?? "").trim(), reused: [] as readonly string[] };
+  if (!merged.object) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o objeto do contrato (ou parta de um registro que o contenha)." });
+
+  const candidate = createContractWorkspace({
+    organizationId: params.organizationId, originType: "legado", originProcess: "",
+    contractNumber, contractor: params.contractor, object: merged.object,
+    value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
+    status: "vigente", correlationId: params.correlationId, createdBy: params.createdBy,
+  });
+  const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
+  if (!created) return { workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED, legacyRecord: null, priorAmendmentsRecorded: 0 };
+  const ref = merged.sourceReference ? ` Origem declarada: ${merged.sourceReference.slice(0, 200)}.` : "";
+  await recordProcessEvent({
+    organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`,
+    summary: `Contrato ${ws.contractNumber} registrado como VIGENTE (processo anterior, formalizado fora do sistema) — informação ${LEGACY_CONTRACT_DECLARED} pelo usuário, não verificada.${ref}`,
+    refId: ws.id, correlationId: params.correlationId,
+  });
+  log.info("legacy_contract_registered", { organizationId: params.organizationId, contractId: ws.id, actorUserId: params.createdBy, provenance: LEGACY_CONTRACT_DECLARED, correlationId: params.correlationId });
+
+  // Histórico de aditivos anteriores (DECLARADO): linhas finalizadas, origem documento externo, sem termo e sem efeito no contrato.
+  const prior = params.priorAmendments ?? [];
+  if (prior.length) {
+    const at = new Date().toISOString();
+    for (let i = 0; i < prior.length; i++) {
+      await insertContractAddendum(buildPriorAmendmentRow({ organizationId: params.organizationId, contractId: ws.id, sequence: i + 1, input: prior[i], correlationId: params.correlationId, createdAt: at }));
+    }
+    await recordProcessEvent({
+      organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: `user:${params.createdBy}`,
+      summary: `${prior.length} aditivo(s) anterior(es) registrado(s) como histórico — ${DECLARED_OUTSIDE_SYSTEM}. O próximo termo continua a numeração (nº ${prior.length + 1}).`,
+      refId: ws.id, correlationId: params.correlationId,
+    });
+  }
+
+  // Vigência: o término informado vence; sem ele, reaproveita o que o registro de origem já monitorava (sem duplicar alertas).
+  let adoptedExpiration: string | null = null;
+  let endDate = params.endDate;
+  if (record) {
+    const link = await linkRecordToContract({ organizationId: params.organizationId, recordId: record.id, contractId: ws.id, actor: `user:${params.createdBy}`, correlationId: params.correlationId });
+    if (link.status === "conflict" || link.status === "not_found") {
+      throw new TRPCError({ code: "CONFLICT", message: "O registro de origem mudou durante a operação; recarregue e tente novamente." });
+    }
+    if (record.recordType === "contrato_externo") {
+      const { releasedDate } = await releaseRecordExpiration({ organizationId: params.organizationId, recordId: record.id, actor: `user:${params.createdBy}`, correlationId: params.correlationId, toContractId: ws.id });
+      if (releasedDate) { adoptedExpiration = releasedDate; endDate = endDate ?? releasedDate; }
+    }
+  }
+  if (endDate) {
+    await registerExpiration({
+      organizationId: params.organizationId, kind: "contrato", referenceId: ws.id, title: `Contrato ${ws.contractNumber}`,
+      expirationDate: endDate, actor: `user:${params.createdBy}`, correlationId: params.correlationId,
+    });
+  }
+  return {
+    workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED,
+    legacyRecord: record ? { id: record.id, reusedFields: merged.reused, adoptedExpiration } : null, priorAmendmentsRecorded: prior.length,
+  };
+}
+
 /**
  * FLUXO 3 (obrigatório) — RECONSTRUÇÃO ASSISTIDA de contrato externo (PDF/DOCX →
  * texto). Identifica fornecedor/objeto/prazo/valor/cláusulas e APRESENTA ao servidor
@@ -328,8 +443,13 @@ export async function generateContractDocument(params: {
   });
 
   const contractHeader = { contractNumber: ws.contractNumber, contractor: ws.contractor ?? "", object: ws.object ?? "", term: ws.term ?? "" };
+  // Alterações ANTERIORES do mesmo contrato (histórico declarado ou do sistema) entram no termo — nada é inventado.
+  const priorAddenda: PriorAddendumLine[] = instrument?.kind === "aditivo"
+    ? (await listContractAddenda(ws.id, params.organizationId)).filter((x) => x.sequence < instrument.data.sequence)
+      .map((x) => ({ sequence: x.sequence, addendumType: x.addendumType, newTerm: x.newTerm, newValue: x.newValue, requestOrigin: x.requestOrigin }))
+    : [];
   const content = instrument?.kind === "aditivo"
-    ? buildAddendumTermContent(contractHeader, instrument.data, orchestration.consolidated.suggestions, orchestration.consolidated.legalBasis)
+    ? buildAddendumTermContent(contractHeader, instrument.data, orchestration.consolidated.suggestions, orchestration.consolidated.legalBasis, priorAddenda)
     : instrument?.kind === "apostilamento"
       ? buildApostilleTermContent(contractHeader, instrument.data, orchestration.consolidated.suggestions)
       : [
@@ -660,6 +780,8 @@ async function runInstrumentCommand<I extends { id: string }, R, P>(c: {
    *  da chave); devolvem o contrato LIDO, reutilizado pela criação (uma única leitura prévia, como antes do SEM084-B). */
   precheck: () => Promise<P>;
   create: (id: string, pre: P) => Promise<I>;
+  /** Efeito derivado IDEMPOTENTE do instrumento (ex.: reagendar a vigência); roda na 1ª gravação E na retomada. */
+  settle?: (instrument: I) => Promise<void>;
   result: (instrument: I, flags: { resumed: boolean; documentGenerated: boolean }) => R;
 }): Promise<R> {
   // A chave é escopada por (órgão, usuário): sem ator humano identificado não há tentativa lógica rastreável — recusa
@@ -692,6 +814,7 @@ async function runInstrumentCommand<I extends { id: string }, R, P>(c: {
       throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_PAYLOAD_MISMATCH}: esta chave já registrou outro ${c.kind} com dados diferentes; nada foi gravado.` });
     }
     const instrument = existing ?? await c.create(id, pre ?? await c.precheck());
+    if (c.settle) await c.settle(instrument);
     const { generated } = await ensureInstrumentDocument({
       organizationId: c.organizationId, contractId: c.contractId, kind: c.kind, instrumentId: instrument.id, actorUserId: c.actorUserId, correlationId: c.correlationId,
     });
@@ -712,13 +835,27 @@ async function runInstrumentCommand<I extends { id: string }, R, P>(c: {
  */
 export async function createAddendum(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
-  newValue?: number; newTerm?: string; requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId: number;
+  newValue?: number; newTerm?: string;
+  /**
+   * Novo término da vigência (AAAA-MM-DD) — SÓ aditivo de prazo. Entra no texto do termo e REAGENDA o vencimento e os alertas
+   * do contrato no Centro de Operações (o calendário nunca fica com o vencimento antigo).
+   */
+  newEndDate?: string;
+  requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId: number;
   idempotencyKey: string;
-}): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean }> {
+}): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean; expiration: { previousDate: string | null; newDate: string } | null }> {
+  // Recusa ANTES de qualquer efeito: data inválida, data em aditivo que não é de prazo, texto longo demais.
+  const term = composeAddendumTerm({ addendumType: params.addendumType, newTerm: params.newTerm, newEndDate: params.newEndDate });
+  if (!term.ok) {
+    const msg = term.issue === "END_DATE_ONLY_FOR_TERM_ADDENDUM" ? "O término da vigência só se aplica a aditivo de prazo."
+      : term.issue === "END_DATE_INVALID" ? "Término da vigência inválido (use AAAA-MM-DD)." : "Prazo/vigência longo demais (máx. 255 caracteres).";
+    throw new TRPCError({ code: "BAD_REQUEST", message: `${msg} Nada foi gravado.` });
+  }
   const normalized = {
     addendumType: params.addendumType, justification: params.justification ?? "", newValue: params.newValue ?? 0,
-    newTerm: params.newTerm ?? "", requestOrigin: params.requestOrigin ?? "contract_workspace",
+    newTerm: term.newTerm, newEndDate: params.newEndDate ?? "", requestOrigin: params.requestOrigin ?? "contract_workspace",
   };
+  let expiration: { previousDate: string | null; newDate: string } | null = null;
   return runInstrumentCommand({
     op: "contract.createAddendum", kind: "aditivo", organizationId: params.organizationId, contractId: params.contractId,
     actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId, payload: normalized,
@@ -730,8 +867,19 @@ export async function createAddendum(params: {
       planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion: addendumRequiresLegalOpinion(params.addendumType) });
       return ws;
     },
-    create: (id, ws) => createAddendumInstrument({ ...params, id, ws }),
-    result: (addendum, flags) => ({ addendum, requiresLegalOpinion: addendumRequiresLegalOpinion(addendum.addendumType), resumed: flags.resumed }),
+    create: (id, ws) => createAddendumInstrument({ ...params, newTerm: normalized.newTerm, id, ws }),
+    // Efeito derivado e IDEMPOTENTE (roda também na retomada): o aditivo de prazo EFETIVO (sem parecer pendente) move o vencimento.
+    settle: async (addendum) => {
+      if (!normalized.newEndDate || addendum.addendumType !== "prazo" || addendum.status !== "finalizado") return;
+      const ws = await requireContract(params.contractId, params.organizationId);
+      const r = await rescheduleExpiration({
+        organizationId: params.organizationId, kind: "contrato", referenceId: ws.id, title: `Contrato ${ws.contractNumber}`,
+        expirationDate: normalized.newEndDate, actor: `user:${params.actorUserId}`, correlationId: params.correlationId,
+        reason: `aditivo nº ${addendum.sequence}`,
+      });
+      expiration = { previousDate: r.previousDate, newDate: r.newDate };
+    },
+    result: (addendum, flags) => ({ addendum, requiresLegalOpinion: addendumRequiresLegalOpinion(addendum.addendumType), resumed: flags.resumed, expiration }),
   });
 }
 

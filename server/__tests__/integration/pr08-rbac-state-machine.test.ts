@@ -167,7 +167,10 @@ describe("SEM-026 — itemIntelligence.decidirCATMAT exige operator (paridade RB
       const res = await ii().decidirCATMAT(input);
       expect(res.success).toBe(true);
       expect(item.decideCatmat).toHaveBeenCalledWith(expect.objectContaining({ organizationId: 77, itemId: "i1", decision: "substituido" }));
-      expect(item.updateItemCatmat).toHaveBeenCalledWith("i1", 77, "654321", expect.any(String));
+      // Lineage (código no item) roda DENTRO da transação da decisão, com o órgão do contexto autenticado.
+      const { lineage } = (item.decideCatmat.mock.calls[0] as unknown as [{ lineage: (tx: unknown, rec: unknown) => Promise<void> }])[0];
+      await lineage({ __tx: true }, { catmatCode: "654321", source: null });
+      expect(item.updateItemCatmat).toHaveBeenCalledWith("i1", 77, "654321", expect.any(String), { __tx: true });
     }
   });
 
@@ -186,7 +189,8 @@ describe("SEM-026 — itemIntelligence.decidirCATMAT exige operator (paridade RB
     await ii().getCATMATDecisions({ itemId: "i1" }).catch(() => undefined);
     const e = await err(ii().getCATMATSuggestions({ itemId: "i1" }));
     expect(e).toBeNull();
-    expect(item.getIntelligentItem).toHaveBeenCalledWith("i1", 1);
+    // Leitura escopada ao tenant do viewer (só sugestões persistidas — nenhuma gerada localmente).
+    expect(item.listCatmatMatches).toHaveBeenCalledWith("i1", 1, undefined);
   });
 });
 

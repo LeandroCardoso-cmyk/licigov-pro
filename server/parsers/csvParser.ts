@@ -6,6 +6,7 @@
 import { BaseParser } from "./baseParser";
 import { tableToRawItems, type TabularContext } from "./tabularExtraction";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
+import { DECLARATION_SCAN_PERFORMED } from "../domain/quoteProvenance";
 
 const MAX_SIZE = 20 * 1024 * 1024; // 20 MB for CSV
 const MAX_ITEMS = 5000;
@@ -86,7 +87,7 @@ export class CsvParser extends BaseParser {
 
     const processingMs = Date.now() - startMs;
     const summary = this.buildSummary(out.rowsRead, out.items, out.skipped, out.warnings, [], processingMs);
-    return { items: out.items, warnings: out.warnings, errors: [], summary, rawMetadata: { delimiter: delim, parserVersion: PARSER_VERSION } };
+    return { items: out.items, warnings: out.warnings, errors: [], summary, declarationScan: DECLARATION_SCAN_PERFORMED, rawMetadata: { delimiter: delim, parserVersion: PARSER_VERSION } };
   }
 }
 

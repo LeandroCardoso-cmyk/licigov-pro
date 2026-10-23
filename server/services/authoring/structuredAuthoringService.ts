@@ -213,7 +213,7 @@ function renderMarkdown(doc: StructuredAuthoring): string {
     not_applicable: "Não aplicável", legacy_unclassified: "Não classificado",
   };
   const lines: string[] = [`# ${heading} — ${doc.object}`, ""];
-  lines.push(`> Estado de fundamentação: **${stateLabel[doc.groundingState]}** — ${doc.evidenceCount} evidência(s) normativa(s) utilizada(s).`, "");
+  lines.push(`> Estado de fundamentação normativa: **${stateLabel[doc.groundingState]}** — ${doc.evidenceCount} evidência(s) normativa(s) utilizada(s). A suficiência factual depende das lacunas marcadas para revisão no texto.`, "");
   for (const s of doc.sections) {
     const statusTag = s.contentMode !== "provided"
       ? (s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)")
@@ -238,8 +238,16 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
 function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
+  const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
   const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
-    `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.`;
+    `Cite apenas dispositivos legais REAIS e vigentes; declare as referências jurídicas de forma estruturada.\n` +
+    // Homologação visual M8: a IA real omitia seção de MÍNIMO LEGAL sem fatos (ex.: fundamentação do TR) e o rascunho era recusado.
+    `Seções de MÍNIMO LEGAL — sempre contentMode "provided", NUNCA omitidas nem "não aplicável": ${mandatory}. ` +
+    `Se faltar fato para elas, redija o que o contexto sustenta e marque o que falta com '[REVISAR: <o que falta>]'.\n` +
+    // ETP/TR: fato × hipótese × decisão humana — nada de conclusões sem análise demonstrada.
+    `Distinga fato do processo, fundamentação normativa e conclusão: NÃO afirme como conclusão (ex.: parcelamento ou lote único, economicidade, ` +
+    `vantajosidade, benefícios) o que não estiver demonstrado no contexto; quando depender de análise ou decisão humana, escreva ` +
+    `'[REVISAR: decisão/análise necessária — <qual>]'.`;
   if (!sourceContext) return base;
   // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
   return [
@@ -385,7 +393,14 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
     // Referências estruturadas: citadas validadas + declaradas validadas + âncora canônica quando aterrada.
     const refs = new Map<string, AuthoredLegalReference>();
     for (const r of cite.valid) refs.set(r.locatorId, r);
-    if (fill) for (const r of validateProviderRef(index, fill)) refs.set(r.locatorId, r);
+    const declaredRefs = fill ? validateProviderRef(index, fill) : [];
+    for (const r of declaredRefs) refs.set(r.locatorId, r);
+    // M8 (ETP): a base legal citada no TEXTO deve coincidir com a declarada na ESTRUTURA — divergência vira ressalva (sem novo motor).
+    const textIds = new Set(cite.valid.map((r) => r.locatorId));
+    const declaredIds = new Set(declaredRefs.map((r) => r.locatorId));
+    if (textIds.size > 0 && declaredIds.size > 0 && ([...textIds].some((x) => !declaredIds.has(x)) || [...declaredIds].some((x) => !textIds.has(x)))) {
+      limitations.push(`${section.title}: referência normativa citada no texto difere da base legal estruturada da seção — conferir.`);
+    }
     if (grounded && locatorExistsAndCurrent(index, sourceId, locatorPath)) {
       const anchorRef: AuthoredLegalReference = { sourceId, locatorId: section.legalAnchor, display: `Lei nº 14.133/2021 — ${section.legalAnchorLabel}`, status: "vigente" };
       refs.set(anchorRef.locatorId, anchorRef);
@@ -398,6 +413,17 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
       grounded, legalReferences: [...refs.values()].slice(0, 24),
     };
   });
+
+  // M8 (ETP): fundamentação normativa ≠ suficiência factual. Com lacunas factuais ([REVISAR] na prosa ou fontes ausentes),
+  // a conclusão de viabilidade é explicitamente PRELIMINAR — nunca uma conclusão definitiva sobre evidência insuficiente.
+  const factualGaps = sections.reduce((n, s) => n + (s.prose.match(/\[REVISAR[^\]]*\]/g) ?? []).length, 0) + (input.sourceContext?.missing.length ?? 0);
+  if (input.kind === "etp" && factualGaps > 0) {
+    const v = sections.findIndex((s) => s.key === "viabilidade" && s.contentMode === "provided" && s.prose.trim() !== "");
+    if (v >= 0) {
+      sections[v] = { ...sections[v], prose: truncate(`Conclusão preliminar, condicionada ao saneamento de ${factualGaps} lacuna(s) factual(is) marcada(s) para revisão neste estudo. ${sections[v].prose}`, 8000) };
+      limitations.push(`Suficiência factual pendente: ${factualGaps} lacuna(s) — a conclusão de viabilidade é preliminar até a complementação pelo servidor.`);
+    }
+  }
 
   // 7) Cobertura FINAL do documento (Gaps 3/4) — recalculada APÓS a validação do output do provider.
   const finalCoverage = assessDocumentCoverage(input.kind, sections);

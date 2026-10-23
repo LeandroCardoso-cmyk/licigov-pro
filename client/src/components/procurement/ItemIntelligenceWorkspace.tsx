@@ -4,7 +4,7 @@ import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import CatmatThresholdConfig from "./CatmatThresholdConfig";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { ITEM_STATUS_LABELS, approveButtonState, outlierSummary } from "./itemSourceUpdateView";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary, quoteCountText } from "./itemSourceUpdateView";
 
 /**
  * ItemIntelligenceWorkspace — REAL (wired to tRPC). *** NÚCLEO DO DOMÍNIO ***
@@ -116,7 +116,7 @@ export default function ItemIntelligenceWorkspace({
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Un.</th>
                 <th className="px-4 py-3">Preço médio</th>
-                <th className="px-4 py-3">CATMAT sugerido</th>
+                <th className="px-4 py-3" title="Classificação só é oficial após a decisão registrada no item (Inteligência do Item).">CATMAT/CATSER</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
@@ -124,7 +124,7 @@ export default function ItemIntelligenceWorkspace({
             <tbody className="divide-y divide-border">
               {items.map((it) => {
                 // R9 / SEM-054 — mesma regra do servidor: fonte não vigente ⇒ "Aprovar" bloqueado com motivo.
-                const approve = approveButtonState(it.sourceState, approveItem.isPending);
+                const approve = approveAction(it.sourceState, it.status, approveItem.isPending, true);
                 const outliers = outlierSummary(it.priceOutliers);
                 const confirming = confirmingId === it.id;
                 return (
@@ -138,13 +138,22 @@ export default function ItemIntelligenceWorkspace({
                         >
                           {it.description}
                         </button>
+                        {it.suspectedFragment && it.status !== "rejeitado" && (
+                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="suspected-fragment">
+                            Não parece um item da contratação (texto administrativo ou sem cotação com preço) — confira; se for resíduo de importação, rejeite.
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-foreground">{it.quantity}</td>
                       <td className="px-4 py-3 text-foreground">{it.unit}</td>
                       <td className="px-4 py-3 text-foreground">
                         {/* R9 / SEM-054 — média em CENTAVOS (servidor) = preço que vira a referência canônica ao aprovar. */}
                         <span className="font-mono">{formatCentsBRL(it.averagePriceCents)}</span>
-                        {!approve.block && it.status !== "aprovado" && (
+                        {(it.fictitiousQuoteCount ?? 0) > 0 ? (
+                          <div data-testid="fictitious-price" className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                            Valor demonstrativo (fonte fictícia) — não é referência oficial
+                          </div>
+                        ) : !approve.block && it.status !== "aprovado" && (
                           <div className="mt-1 text-xs text-muted-foreground">Referência canônica ao aprovar</div>
                         )}
                         {outliers.length > 0 && (
@@ -180,7 +189,7 @@ export default function ItemIntelligenceWorkspace({
                             Identidade a revisar
                           </span>
                         )}
-                        <div className="mt-1 text-xs text-muted-foreground">{it.quoteCount} cotação(ões) válida(s)</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{quoteCountText(it.quoteCount, it.fictitiousQuoteCount)}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -202,7 +211,7 @@ export default function ItemIntelligenceWorkspace({
                             title={approve.block?.reason}
                             className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
                           >
-                            Aprovar
+                            {approve.label}
                           </button>
                           <button
                             type="button"

@@ -15,7 +15,7 @@ type QueryState = { data: unknown; isLoading: boolean; isFetching: boolean; isEr
 const state = vi.hoisted(() => ({
   processes: undefined as unknown as QueryState,
   items: undefined as unknown as QueryState,
-  capabilities: { enabled: false, isLoading: false, error: null as unknown, capabilities: undefined },
+  capabilities: { enabled: false, isLoading: false, error: null as unknown, capabilities: undefined, isFetching: false, refetch: (() => Promise.resolve()) as () => Promise<unknown> },
 }));
 
 const mutation = vi.hoisted(() => () => ({ mutate: () => {}, isPending: false, isError: false, isSuccess: false, error: null, data: undefined }));
@@ -30,6 +30,7 @@ vi.mock("@/lib/trpc", () => ({
       rejectItem: { useMutation: mutation },
       applyItemSourceUpdate: { useMutation: mutation },
       importPriceResearch: { useMutation: mutation },
+      previewPriceResearch: { useMutation: mutation },
     },
   },
 }));
@@ -71,7 +72,7 @@ const LEGACY_MARKER = "Importar e gerar Itens Inteligentes";
 const STALE_WARNING = "Não foi possível atualizar os dados agora. As informações abaixo são da última consulta bem-sucedida.";
 
 describe("PesquisaPrecosWorkspace — capabilities governam SÓ a ingestão canônica por arquivo", () => {
-  beforeEach(() => { state.capabilities = { enabled: false, isLoading: false, error: null, capabilities: undefined }; });
+  beforeEach(() => { state.capabilities = { enabled: false, isLoading: false, error: null, capabilities: undefined, isFetching: false, refetch: () => Promise.resolve() }; });
 
   it("success + enabled → launcher canônico (U2B-MIN: arquivo + colar texto; sem painel legado)", () => {
     state.capabilities = { ...state.capabilities, enabled: true };
@@ -87,23 +88,33 @@ describe("PesquisaPrecosWorkspace — capabilities governam SÓ a ingestão can�
     expect(html).toContain(LEGACY_MARKER);
   });
 
-  it("error → FAIL-CLOSED para arquivo (sem launcher), aviso claro e painel legado por texto PRESERVADO", () => {
+  // PR-04 (SEM-005): falha de capabilities NÃO cai no painel legado (gravação direta) — a flag pode estar ligada.
+  it("error → FAIL-CLOSED para as duas entradas: sem launcher, sem painel legado, aviso + 'Tentar novamente'", () => {
     state.capabilities = { ...state.capabilities, enabled: false, error: new Error("getCapabilities falhou") };
     const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
     expect(html).not.toContain("CANONICAL_LAUNCHER");
-    expect(html).toMatch(/role="alert"[^>]*>Não foi possível consultar as opções de importação por arquivo/);
-    expect(html).toContain("A entrada por texto continua disponível abaixo.");
-    expect(html).toContain(LEGACY_MARKER);
-    expect(html).toContain("Conteúdo da pesquisa");
+    expect(html).not.toContain(LEGACY_MARKER);
+    expect(html).not.toContain("Conteúdo da pesquisa");
+    expect(html).toMatch(/role="alert"[^>]*>.*Não foi possível consultar as opções de importação da pesquisa de preços/s);
+    expect(html).toContain("Nada foi importado");
+    expect(html).toContain("Tentar novamente");
     // Nada é apresentado como habilitado implicitamente.
     expect(html).not.toContain("ingestão supervisionada");
   });
 
-  it("error mesmo com capabilities anteriores 'enabled' em cache → launcher continua oculto (fail-closed)", () => {
+  it("error mesmo com capabilities anteriores 'enabled' em cache → nem launcher nem painel legado (fail-closed)", () => {
     state.capabilities = { ...state.capabilities, enabled: true, error: new Error("refetch falhou") };
     const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
     expect(html).not.toContain("CANONICAL_LAUNCHER");
-    expect(html).toContain(LEGACY_MARKER);
+    expect(html).not.toContain(LEGACY_MARKER);
+    expect(html).toContain("Tentar novamente");
+  });
+
+  it("error durante nova consulta → botão indica a consulta em andamento", () => {
+    state.capabilities = { ...state.capabilities, error: new Error("falhou"), isFetching: true };
+    const html = render(PesquisaPrecosWorkspace, { processId: "p1" });
+    expect(html).toContain("Consultando...");
+    expect(html).not.toContain(LEGACY_MARKER);
   });
 });
 
@@ -168,7 +179,7 @@ describe("ItemIntelligenceWorkspace — falha de refetch não esconde itens vál
     expect(html).toContain("Fonte alterada");
     expect(html).toContain("Identidade a revisar");
     expect(html).toContain("461234");
-    expect(html).toContain("3 cotação(ões) válida(s)");
+    expect(html).toContain("3 cotação(ões) importada(s) com preço");
     expect(html).toContain("Aplicar cotações atualizadas (2)");
     expect(html).toContain("Aprovar");
     expect(html).toContain("Rejeitar");

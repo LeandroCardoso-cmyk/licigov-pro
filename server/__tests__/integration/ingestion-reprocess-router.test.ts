@@ -24,7 +24,7 @@ vi.mock("../../services/importStagingService", () => ({
   getStagingItems: vi.fn().mockResolvedValue([]), getStagingItem: vi.fn(), reviewStagingItem: vi.fn(), bulkReviewStagingItems: vi.fn(),
   getStagingSummary: vi.fn().mockResolvedValue({ total: 10, pending: 10, approved: 0, rejected: 0, skipped: 0 }), correctStagingItem: vi.fn(),
 }));
-vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn().mockReturnValue("job_100_1") }));
+vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn().mockReturnValue("job_100_1"), isSessionInFlight: vi.fn(() => false), getProvenanceRevalidationFailure: vi.fn(() => null) }));
 vi.mock("../../services/importReprocessService", () => ({
   reserveReextraction: vi.fn(), releaseReextraction: vi.fn().mockResolvedValue(undefined),
   getReprocessEligibility: vi.fn().mockResolvedValue({ eligible: true, blockers: [], message: "ok", stagedCount: 10 }),

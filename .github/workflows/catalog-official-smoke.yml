@@ -1,0 +1,88 @@
+name: Catálogo oficial CATMAT/CATSER — smoke real (manual)
+
+# Execução PRÉ-MERGE do `pnpm catalog:smoke` sobre o código do PR, contra a API PÚBLICA do Compras.gov.br.
+# Isolado: SEM segredos, SEM banco (nenhum DATABASE_URL), token só de leitura do repositório, somente leitura na API.
+# Não é gate do CI (a API externa não pode tornar o CI instável). Disparo MANUAL:
+#   - num PR: adicionar a label `catalog-smoke` (roda o workflow da PRÓPRIA branch do PR, antes do merge);
+#   - em branch já integrada: Actions → este workflow → "Run workflow".
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      term:
+        description: "Termo da sonda textual do CATMAT"
+        required: false
+        default: "notebook"
+      ranking_probe:
+        description: "Também comparar o ranking CATSER anterior × atual sobre as descrições oficiais (somente leitura)"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-official-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  catalog-smoke:
+    name: Smoke real do catálogo oficial (somente leitura)
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'catalog-smoke'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_VERSION: "22"
+      APP_ENV: development
+      CATALOG_OFFICIAL_ENABLED: "true"
+      CATALOG_OFFICIAL_TIMEOUT_MS: "15000"
+      CATALOG_TERM: ${{ github.event.inputs.term || 'notebook' }}
+    steps:
+      - name: Checkout do código do PR (HEAD exato)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0  # a sonda de ranking compara com o código de origin/staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Ativar pnpm (corepack — versão do packageManager)
+        run: corepack enable
+
+      - name: Instalar dependências (lockfile — reproduzível)
+        run: pnpm install --frozen-lockfile
+
+      - name: Registrar o código testado
+        run: |
+          echo "HEAD testado: $(git rev-parse HEAD)"
+
+      - name: Smoke real (sondas de contrato da API oficial)
+        run: |
+          set -o pipefail
+          pnpm catalog:smoke -- "$CATALOG_TERM" 2>&1 | tee catalog-smoke.txt
+
+      - name: Sonda do ranking CATSER (anterior × atual, somente leitura)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ranking_probe == 'true'
+        run: |
+          set -o pipefail
+          # Referência = ranking em origin/staging (copiado só no runner; nunca versionado).
+          git show origin/staging:server/services/catalogRelevance.ts > server/services/catalogRelevance.baseline.ts
+          export CATALOG_PROBE_BASELINE_REF="origin/staging $(git rev-parse --short origin/staging)"
+          pnpm catalog:ranking-probe 2>&1 | tee catalog-ranking-probe.txt
+
+      - name: Publicar relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-smoke-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            catalog-smoke.txt
+            catalog-ranking-probe.txt
+          if-no-files-found: warn
+          retention-days: 30

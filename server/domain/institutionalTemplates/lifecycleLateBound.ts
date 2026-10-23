@@ -61,6 +61,14 @@ export interface LifecycleBinding {
 export const lateBoundMarker = (variable: string): string => `[[SYSTEM_LATE_BOUND:${variable}]]`;
 const MARKER_RE = /\[\[SYSTEM_LATE_BOUND:([A-Za-z0-9_.]+)\]\]/g;
 
+/** Texto legível que substitui o marcador APENAS na apresentação/exportação de uma MINUTA (o conteúdo persistido e seu hash não mudam). */
+export const LATE_BOUND_DISPLAY_TEXT = "(data atribuída automaticamente na emissão oficial)";
+
+/** Minuta para leitura humana (DOCX/PDF de rascunho): troca cada marcador interno pelo texto legível. Nunca usado na emissão oficial. */
+export function displayLateBoundForDraft(text: string): string {
+  return text.replace(MARKER_RE, LATE_BOUND_DISPLAY_TEXT);
+}
+
 /** Ocorrências de marcadores por variável (qualquer marcador, inclusive de variável que não é late-bound). */
 export function lateBoundCounts(text: string): Map<string, number> {
   const out = new Map<string, number>();

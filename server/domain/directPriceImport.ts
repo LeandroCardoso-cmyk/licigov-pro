@@ -27,6 +27,7 @@
  */
 
 import { createHash } from "crypto";
+import { parsePriceResearchText, type PriceParseIssue } from "./priceResearchParser";
 import {
   extractItemsFromText,
   type PriceResearchItem,
@@ -42,6 +43,8 @@ export interface DirectPriceImportPlan {
   readonly contentHash: string;
   readonly research: PriceResearchWorkspace;
   readonly items: readonly PriceResearchItem[];
+  /** M8-PRICE-IMPORT-001: ambiguidades da leitura estruturada — com pendência, a importação é recusada sem gravação. */
+  readonly blocking: readonly PriceParseIssue[];
 }
 
 const norm = (s: string): string => s.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -109,9 +112,10 @@ export function planDirectPriceImport(params: {
   createdAt?: string;
 }): DirectPriceImportPlan {
   const createdAt = params.createdAt ?? new Date().toISOString();
+  const parsed = parsePriceResearchText(params.text);
   const extracted = extractItemsFromText(params.text, {
     researchId: "pending", processId: params.workspaceId, organizationId: params.organizationId,
-  });
+  }, parsed);
   const contentHash = computeDirectPriceImportContentHash(extracted);
   const importId = deriveDirectPriceImportId(params.organizationId, params.workspaceId, contentHash);
   const items: PriceResearchItem[] = extracted.map((it, index) => ({
@@ -130,5 +134,5 @@ export function planDirectPriceImport(params: {
     correlationId: params.correlationId,
     createdAt,
   };
-  return { importId, contentHash, research, items };
+  return { importId, contentHash, research, items, blocking: parsed.blocking };
 }

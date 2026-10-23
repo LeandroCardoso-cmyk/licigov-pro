@@ -20,10 +20,10 @@ import {
   decisionSource,
   CATMAT_GOVERNANCE_DECISIONS,
 } from "../../domain/catmatGovernance";
-import { decideCatmat, type AvailableSuggestion } from "../../services/catmatGovernanceService";
+import { decideCatmat, assertConfirmableSuggestion, type AvailableSuggestion } from "../../services/catmatGovernanceService";
 
 const SUGGESTIONS: AvailableSuggestion[] = [
-  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "catalogo-interno" },
+  { id: "s1", catmatCode: "111111", catmatDescription: "caneta esferográfica azul", score: 0.92, source: "api-comprasgov:catmat", verified: true, state: "busca_atual" },
   { id: "s2", catmatCode: "222222", catmatDescription: "lápis preto nº 2", score: 0.40, source: "sugestao-ia" },
 ];
 const codes = SUGGESTIONS.map(s => s.catmatCode);
@@ -82,10 +82,13 @@ describe("PR C.2 — invariantes da decisão CATMAT/CATSER (domínio puro)", () 
     expect(withCode.ok === false && withCode.reason).toBe("catmat_code_not_allowed_for_decision");
   });
 
-  it("proveniência: confirmar herda a fonte da sugestão; substituir é sempre manual; rejeitar/none sem fonte", () => {
-    expect(decisionSource("confirmado", "sugestao-ia")).toBe("sugestao-ia");
-    expect(decisionSource("confirmado", null)).toBe("catalogo-interno");
+  it("proveniência: confirmar herda a fonte da sugestão; substituir é manual; rejeitar/none sem fonte; nunca inventa fonte", () => {
+    expect(decisionSource("confirmado", "api-comprasgov:catmat")).toBe("api-comprasgov:catmat");
+    // Sem fonte conhecida NUNCA declara "catálogo" (antes: "catalogo-interno" sem evidência).
+    expect(decisionSource("confirmado", null)).toBe("sem-proveniencia");
     expect(decisionSource("substituido", "sugestao-ia")).toBe("manual");
+    // Substituição manual com evidência oficial do MESMO código no item: rótulo explícito, ainda manual.
+    expect(decisionSource("substituido", null, "api-comprasgov:catser")).toBe("manual+api-comprasgov:catser");
     expect(decisionSource("rejeitado", "sugestao-ia")).toBeNull();
     expect(decisionSource("sem_correspondencia_segura", null)).toBeNull();
   });
@@ -118,6 +121,29 @@ describe("PR C.2 / V1 — decideCatmat (serviço, sem DB): valida e FAIL-CLOSED 
   // Sem DB não há limiar institucional ativo → FAIL-CLOSED real: mesmo decisões válidas são RECUSADAS
   // com PRECONDITION_FAILED antes de qualquer efeito (a resolução por limiar exige DB; a persistência e
   // as 4 decisões funcionais são cobertas pelo smoke MySQL com limiar configurado).
+
+  it("CATMAT/CATSER oficial — confirmar sugestão SEM verificação oficial (legada/gerada localmente) é recusado, mesmo existindo na lista", () => {
+    // s2 existe nas sugestões (passa na validação de domínio), mas não tem evidência oficial.
+    expect(() => assertConfirmableSuggestion("confirmado", SUGGESTIONS[1])).toThrow(/CATMAT_SUGGESTION_UNVERIFIED/);
+    expect(() => assertConfirmableSuggestion("confirmado", null)).toThrow(/CATMAT_SUGGESTION_UNVERIFIED/);
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: false })).toThrow(/PRECONDITION|CATMAT_SUGGESTION_UNVERIFIED/);
+    expect(() => assertConfirmableSuggestion("confirmado", SUGGESTIONS[0])).not.toThrow();
+    // Decisões que não fixam código oficial não dependem de verificação.
+    expect(() => assertConfirmableSuggestion("rejeitado", SUGGESTIONS[1])).not.toThrow();
+    expect(() => assertConfirmableSuggestion("substituido", null)).not.toThrow();
+  });
+
+  it("M8 hardening — verificada mas fora da busca mais recente (histórica/origem não identificada/sem estado) ⇒ CATMAT_SUGGESTION_NOT_CURRENT", () => {
+    for (const state of ["historico", "origem_nao_identificada", undefined] as const) {
+      expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state }), String(state)).toThrow(/CATMAT_SUGGESTION_NOT_CURRENT/);
+    }
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state: "busca_atual" })).not.toThrow();
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: true, state: "codigo_verificado" })).not.toThrow();
+    // Sem verificação oficial continua prevalecendo a recusa original; decisões que não fixam código não dependem do estado.
+    expect(() => assertConfirmableSuggestion("confirmado", { verified: false, state: "busca_atual" })).toThrow(/CATMAT_SUGGESTION_UNVERIFIED/);
+    expect(() => assertConfirmableSuggestion("rejeitado", { verified: true, state: "historico" })).not.toThrow();
+    expect(() => assertConfirmableSuggestion("substituido", { verified: true, state: "historico" })).not.toThrow();
+  });
 
   it("confirmar válido sem limiar (no-DB) → PRECONDITION_FAILED (fail-closed)", async () => {
     await expect(

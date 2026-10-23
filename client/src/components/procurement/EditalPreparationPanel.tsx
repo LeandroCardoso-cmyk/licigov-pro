@@ -3,7 +3,7 @@ import { trpc } from "../../lib/trpc";
 import EditalPreparationView from "./EditalPreparationView";
 import { useEditalPreparationState } from "./useEditalPreparationState";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
   STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveOptionalItems, livePendingItems,
   type FormValue, type PlannedWrite, type StageTarget, type PrepField, type SaveOutcome, type SectionEdits,
@@ -59,12 +59,12 @@ export default function EditalPreparationPanel({ processId, params, trPin = null
   const confirm = async () => {
     setShowErrors(true);
     if (!validateDecisionForm(decision).valid || plan.writes.length === 0) return;
-    const act = { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() };
+    const act = decisionPayload(decision);   // sem ato formal ⇒ `decision` omitida: o servidor registra com o usuário autenticado
     const key = (w: PlannedWrite) => (keys.current[w.id] ??= crypto.randomUUID());
     setBusy(true); setNotice(null); setOutcome(null);
     const writer = {
       async write(w: PlannedWrite, expectedRevision: number) {
-        const base = { confirm: true as const, idempotencyKey: key(w), decision: act, expectedRevision };
+        const base = { confirm: true as const, idempotencyKey: key(w), ...act, expectedRevision };
         if (w.kind === "ORG") {
           const r = await recordOrg.mutateAsync({ ...base, catalogVersion: state.catalogVersion, source: w.source as "POLICY" | "IDENTITY", fields: w.fields ?? {} });
           return { revision: r.decision.revision };

@@ -19,7 +19,8 @@
  * - Limites de segurança: tamanho, páginas, itens e tempo de processamento (inclusive orçamento de OCR).
  */
 import { BaseParser } from "./baseParser";
-import { matrixToRawItems, linesToRawItems, type TabularContext } from "./tabularExtraction";
+import { matrixToRawItems, linesToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
+import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import { buildDocumentProjection, pageTextToBlocks, type DocumentBlock } from "../domain/documentProjection";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning, ImportError } from "../domain/importTypes";
@@ -302,6 +303,9 @@ export class PdfParser extends BaseParser {
         const r = await this.runOcr(parser, ocrTargets, opts, ctx, maxItems - items.length, positioned);
         ocrInfo = r.info; ocrArtifact = r.artifact;
         warnings.push(...r.warnings);
+        // M8 — declaração do documento no TEXTO lido por OCR (título/notas fora da tabela); marcada como origem OCR.
+        warnings.push(...documentDeclarationWarnings((r.artifact?.pages ?? []).flatMap((p) => (p.text ?? "").split(/\r?\n/)
+          .map((t, li) => ({ text: t, location: `page:${p.pageNumber}, line:${li + 1}` }))), { fromOcr: true }));
         rowsRead += r.rowsRead; skipped += r.skipped;
         if (r.info.failure === null || r.info.failure === undefined) {
           // Página reconhecida por OCR substitui a leitura nativa (que não rendeu item).
@@ -358,10 +362,14 @@ export class PdfParser extends BaseParser {
         }),
       };
 
+      // M8 — declaração do documento no TEXTO das páginas (título/notas fora das tabelas); um aviso por tipo.
+      warnings.push(...documentDeclarationWarnings(pages.flatMap((p, pi) => (p.text ?? "").split(/\r?\n/).map((t, li) => ({ text: t, location: `page:${pi + 1}, line:${li + 1}` })))));
+      const declaredWarnings = dedupeDocumentDeclarations(warnings);
+      warnings.splice(0, warnings.length, ...declaredWarnings);
       const processingMs = Date.now() - startMs;
       const summary = this.buildSummary(rowsRead, items, skipped, warnings, [], processingMs, { pagesProcessed: pages.length });
       return {
-        items, warnings, errors: [], summary, extraction: lineage, ocrArtifact,
+        items, warnings, errors: [], summary, extraction: lineage, ocrArtifact, declarationScan: DECLARATION_SCAN_PERFORMED,
         rawMetadata: {
           pageCount, pagesProcessed: pages.length, tablesDetected: tablesByPage.size, parserVersion: PARSER_VERSION,
           extractionMode: lineage.extractionMode, layoutVersion: PDF_LAYOUT_VERSION, layoutMode: layoutInfo.mode,
@@ -411,6 +419,10 @@ export class PdfParser extends BaseParser {
       }
       if (remaining() <= 0) throw new OcrError("OCR_TIMEOUT", `Tempo de OCR excedido (${cfg.timeoutMs} ms).`);
       const result = await cfg.port.recognize(images, { timeoutMs: Math.max(1, remaining()) });
+      // M8 — página selecionada que não voltou do OCR (render vazio ou motor parcial): texto não examinado ⇒ lacuna.
+      if (result.pages.length < selected.length) {
+        warnings.push({ code: "OCR_PAGES_INCOMPLETE", message: `O OCR devolveu ${result.pages.length} de ${selected.length} página(s) digitalizada(s); as demais não foram lidas.`, severity: "warning" });
+      }
 
       const items: RawExtractedItem[] = [];
       const layouts: PageLayoutResult[] = [];

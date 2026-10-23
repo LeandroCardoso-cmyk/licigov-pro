@@ -64,6 +64,7 @@ import {
 } from "../../db/procurement";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { confirmCanonicalItemsFromResearch, createCanonicalManualItem } from "../helpers/canonicalItems";
+import { currentProvenanceScanSummary } from "../helpers/provenanceScanFixture";
 
 let conn: mysql.Connection;
 let seq = 0;
@@ -128,6 +129,9 @@ async function applyItemSourceUpdate(p: { organizationId: number; itemId: string
 
 const manual = (org: number, processId: string, text: string) =>
   importManualPriceResearch({ organizationId: org, processId, source: "colar", text, actorUserId: U1, correlationId: `m-${++seq}` });
+/** PR-04 (SEM-005): CORREÇÃO deliberada por reimportação (substitui cotação já registrada) exige confirmação explícita. */
+const manualCorrection = (org: number, processId: string, text: string) =>
+  importManualPriceResearch({ organizationId: org, processId, source: "colar", text, actorUserId: U1, correlationId: `m-${++seq}`, confirmReplace: true });
 
 const legacyId = (org: number, pid: string, desc: string) => createHash("sha256").update(`iitem:${org}:${pid}:${desc.toLowerCase().trim()}`).digest("hex").slice(0, 20);
 
@@ -192,14 +196,18 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     await manual(ORG, pid, "Papel A4;10;resma;R$ 100,00;Papelaria X");
     let [it] = await listIntelligentItems(pid, ORG);
     expect(it.averagePriceCents).toBe(10000);
-    const r2 = await manual(ORG, pid, "Papel A4;10;resma;R$ 200,00;Papelaria X"); // mesmo quoteId, conteúdo novo
+    // PR-04 (SEM-005): sem confirmação, a substituição é recusada e NADA é gravado.
+    await expect(manual(ORG, pid, "Papel A4;10;resma;R$ 200,00;Papelaria X")).rejects.toMatchObject({ code: "QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED" });
+    expect(await count("SELECT COUNT(*) n FROM price_research_items WHERE organization_id=? AND process_id=? AND value='100.00'", [ORG, pid])).toBe(1);
+    expect((await listIntelligentItems(pid, ORG))[0].averagePriceCents).toBe(10000);
+    const r2 = await manualCorrection(ORG, pid, "Papel A4;10;resma;R$ 200,00;Papelaria X"); // mesmo quoteId, conteúdo novo
     expect(r2.result.updated).toEqual([it.id]);
     [it] = await listIntelligentItems(pid, ORG);
     expect(it.averagePriceCents).toBe(20000);
     expect(await count("SELECT COUNT(*) n FROM price_research_items WHERE organization_id=? AND process_id=? AND value='200.00'", [ORG, pid])).toBe(1);
 
     await approveAllItems(ORG, pid);
-    const r3 = await manual(ORG, pid, "Papel A4;10;resma;R$ 300,00;Papelaria X");
+    const r3 = await manualCorrection(ORG, pid, "Papel A4;10;resma;R$ 300,00;Papelaria X");
     expect(r3.result.sourceChanged).toEqual([it.id]);
     [it] = await listIntelligentItems(pid, ORG);
     expect(it.status).toBe("aprovado");            // decisão preservada
@@ -284,6 +292,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
       const [s] = await db.insert(importSessions).values({
         organizationId: ORG, uploadedBy: U1, sourceFileId: `imports/x/${k}`, sourceFileName: "mapa.csv", sourceMimeType: "text/csv",
         checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved",
+        extractionSummary: currentProvenanceScanSummary(checksum, null, "csv"),
       }).$returningId();
       for (const [sup, v] of [["A", "100,00"], ["B", "110,00"], ["C", "90,00"]]) {
         await db.insert(importStagingItems).values({ importSessionId: s.id, organizationId: ORG, rawDescription: "Cadeira", rawQuantity: "10", rawUnit: "un", rawUnitPrice: v, rawSupplier: sup, reviewStatus: "approved" });
@@ -304,7 +313,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     const [it] = await listIntelligentItems(pid, ORG);
     expect([it.quoteCount, it.averagePriceCents]).toEqual([3, 10000]);
     // Mesmo arquivo / mesmo processId em OUTRO tenant não colide (UNIQUE é tenant-aware).
-    const [s2] = await db.insert(importSessions).values({ organizationId: ORG2, uploadedBy: U1, sourceFileId: "imports/y", sourceFileName: "mapa.csv", sourceMimeType: "text/csv", checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved" }).$returningId();
+    const [s2] = await db.insert(importSessions).values({ organizationId: ORG2, uploadedBy: U1, sourceFileId: "imports/y", sourceFileName: "mapa.csv", sourceMimeType: "text/csv", checksum, procurementProcessId: pid, importType: "price_research", parserType: "csv", status: "approved", extractionSummary: currentProvenanceScanSummary(checksum, null, "csv") }).$returningId();
     await db.insert(importStagingItems).values({ importSessionId: s2.id, organizationId: ORG2, rawDescription: "Cadeira", rawQuantity: "10", rawUnit: "un", rawUnitPrice: "100,00", reviewStatus: "approved" });
     await expect(promoteApprovedSessionToDomain({ sessionId: s2.id, organizationId: ORG2, procurementProcessId: pid, actorUserId: U2, idempotencyKey: `race-other-${s2.id}`, correlationId: "o" })).resolves.toMatchObject({ idempotent: false });
   }, 60_000);
@@ -374,12 +383,12 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     await conn.execute("UPDATE intelligent_items SET suppliers=? WHERE id=?", [JSON.stringify([...JSON.parse(r0.suppliers)].reverse()), r0.id]);
     expect(await dig()).toBe(d0);
     // 11) fornecedor alterado (fluxo real: nova cotação → aplicar → reaprovar).
-    await manual(ORG, pid, "Mesa;5;un;R$ 300,00;Móveis Z\nMesa;5;un;R$ 320,00;Móveis B");
+    await manualCorrection(ORG, pid, "Mesa;5;un;R$ 300,00;Móveis Z\nMesa;5;un;R$ 320,00;Móveis B");
     await applyItemSourceUpdate({ organizationId: ORG, itemId: r0.id, actorUserId: U1, correlationId: "s" });
     await approveAllItems(ORG, pid);
     const d1 = await dig(); expect(d1).not.toBe(d0);
     // 12) preço alterado.
-    await manual(ORG, pid, "Mesa;5;un;R$ 310,00;Móveis Z\nMesa;5;un;R$ 320,00;Móveis B");
+    await manualCorrection(ORG, pid, "Mesa;5;un;R$ 310,00;Móveis Z\nMesa;5;un;R$ 320,00;Móveis B");
     await applyItemSourceUpdate({ organizationId: ORG, itemId: r0.id, actorUserId: U1, correlationId: "s2" });
     await approveAllItems(ORG, pid);
     const d2 = await dig(); expect(d2).not.toBe(d1);
@@ -387,7 +396,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
     await conn.execute("UPDATE procurement_processes SET process_number = CONCAT(process_number, '-R') WHERE id=?", [pid]);
     const d3 = await dig(); expect(d3).not.toBe(d2);
     // 13) quantidade (nova chave lógica → novo item aprovado) altera o digest.
-    await manual(ORG, pid, "Mesa;6;un;R$ 310,00;Móveis Z");
+    await manualCorrection(ORG, pid, "Mesa;6;un;R$ 310,00;Móveis Z");
     await approveAllItems(ORG, pid);
     expect(await dig()).not.toBe(d3);
   }, 60_000);

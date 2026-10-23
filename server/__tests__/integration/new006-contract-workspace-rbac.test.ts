@@ -50,6 +50,7 @@ vi.mock("../../services/contractService", () => {
     createFromDirectProcurement: vi.fn(async () => h.contract),
     importExternalContract: vi.fn(async () => ({ workspace: h.contract, confidence: 1, reconstructed: {}, assisted: true, disclaimer: "" })),
     createManualContract: vi.fn(async () => h.contract),
+    registerInForceLegacyContract: vi.fn(async () => ({ workspace: h.contract, created: true, provenance: "DECLARADO" })),
     generateContractDocument: vi.fn(async () => ({ document: null, officialDocumentId: "od", recommendation: {} })),
     createAddendum: vi.fn(async () => ({ addendum: null, requiresLegalOpinion: false })),
     createApostille: vi.fn(async () => null),
@@ -113,6 +114,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   createFromDirectProcurement: { directWorkspaceId: "d-1", contractNumber: "CT-2" },
   createManual: { idempotencyKey: "k-1", contractNumber: "CT-3" },
   importExternalContract: { source: "pdf", rawText: "CONTRATO Nº 9/2026 — objeto: teste" },
+  registerInForceContract: { idempotencyKey: "k-legado", contractNumber: "CT-4", contractor: "Fornecedor", object: "Objeto", term: "12 meses" },
   loadContract: { contractId: CID },
   listContracts: undefined,
   listImported: undefined,
@@ -129,7 +131,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
 /** Todo efeito (serviço/escrita) que uma procedure pode disparar — tem de ficar em ZERO numa recusa. */
 const EFFECT_MOCKS = () => [
   contractService.createFromProcurement, contractService.createFromDirectProcurement, contractService.importExternalContract,
-  contractService.createManualContract, contractService.generateContractDocument, contractService.createAddendum,
+  contractService.createManualContract, contractService.registerInForceLegacyContract, contractService.generateContractDocument, contractService.createAddendum,
   contractService.createApostille, contractService.registerOccurrence, contractService.requestContractLegalOpinion,
   contractDb.insertContractWorkspace, idem.checkIdempotency, idem.saveIdempotencyResult, idem.failIdempotencyKey,
   h.cas, h.recordProcessEvent,
@@ -177,7 +179,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
 
   it("a matriz cobre EXATAMENTE as procedures do router (nova procedure ⇒ atualizar a matriz deliberadamente)", () => {
     expect(Object.keys(CONTRACT_WORKSPACE_RBAC_MATRIX).sort()).toEqual(procedures);
-    expect(procedures).toHaveLength(15);
+    expect(procedures).toHaveLength(16);
   });
 
   it("o builder declarado no código-fonte confere com a matriz, procedure a procedure", () => {
@@ -202,6 +204,8 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
   it("instrumentos que mudam o status do contrato (aditivo/apostilamento) têm piso manager; updateContract divide por status", () => {
     expect(CONTRACT_WORKSPACE_RBAC_MATRIX.createAddendum.minRole).toBe("manager");
     expect(CONTRACT_WORKSPACE_RBAC_MATRIX.createApostille.minRole).toBe("manager");
+    // LICIGOV-FAST: contrato vigente legado nasce vigente ⇒ mesmo piso técnico.
+    expect(CONTRACT_WORKSPACE_RBAC_MATRIX.registerInForceContract.minRole).toBe("manager");
     expect(CONTRACT_WORKSPACE_RBAC_MATRIX.updateContract.minRole).toBe("operator");
     expect(CONTRACT_WORKSPACE_RBAC_MATRIX.updateContract.conditionalMinRole.minRole).toBe("manager");
     expect(src).toMatch(/assertOrgRoleAtLeast\(ctx, "manager", "contractWorkspace\.updateContract#status"\)/);
@@ -245,16 +249,16 @@ describe("NEW-006 — comportamento por papel (router real, serviços mockados)"
     }
   }
 
-  it("viewer é recusado em TODAS as 10 mutations e aceito nas 5 leituras", () => {
+  it("viewer é recusado em TODAS as 11 mutations e aceito nas 5 leituras", () => {
     const denied = names.filter(n => !allowed("viewer", n));
     expect(denied.sort()).toEqual([
       "createAddendum", "createApostille", "createFromDirectProcurement", "createFromProcurement", "createManual",
-      "generateDocuments", "importExternalContract", "registerOccurrence", "requestLegalOpinion", "updateContract",
+      "generateDocuments", "importExternalContract", "registerInForceContract", "registerOccurrence", "requestLegalOpinion", "updateContract",
     ]);
   });
 
-  it("operator é recusado exatamente em createAddendum e createApostille", () => {
-    expect(names.filter(n => !allowed("operator", n)).sort()).toEqual(["createAddendum", "createApostille"]);
+  it("operator é recusado exatamente em createAddendum, createApostille e registerInForceContract", () => {
+    expect(names.filter(n => !allowed("operator", n)).sort()).toEqual(["createAddendum", "createApostille", "registerInForceContract"]);
   });
 });
 

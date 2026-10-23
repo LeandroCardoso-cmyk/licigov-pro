@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 
 const SELECT = "rounded-lg border border-input bg-background px-3 py-2 text-sm";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -44,7 +44,7 @@ export default function ItemsParticipationCard({ processId }: { processId: strin
       const payload: Participation = { ...(draft.default ? { default: draft.default } : {}), ...(draft.byLot && Object.keys(draft.byLot).length ? { byLot: draft.byLot } : {}) };
       await record.mutateAsync({
         confirm: true, idempotencyKey: key.current, expectedRevision: data.revision, catalogVersion: data.catalogVersion, processId, participation: payload,
-        decision: { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() },
+        ...decisionPayload(decision),
       });
       key.current = null; setDraft(null); setReviewing(false); setDecision((d) => ({ ...d, confirmed: false }));
       setNotice({ kind: "ok", text: "Regime de participação registrado. O Edital passa a derivá-lo daqui." });

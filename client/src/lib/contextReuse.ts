@@ -144,6 +144,37 @@ export function withoutDefault(current: readonly DefaultViewModel[], name: strin
   return Object.fromEntries(current.filter((d) => d.hasValue && !d.incompatibleReason && d.name !== name).map((d) => [d.name, d.value]));
 }
 
+/** O padrão institucional na forma de campo de formulário (reutiliza controles e validação da preparação). */
+export function defaultAsPrepField(d: DefaultViewModel): PrepField {
+  return {
+    name: d.name, source: "DEFAULTS", path: d.name, type: d.type, description: d.description, required: false, conditional: false,
+    requiredWhenVariables: [], ...(d.enumValues ? { enumValues: d.enumValues } : {}), hasValue: d.hasValue, class: "ORG_POLICY" as PrepField["class"],
+    rule: "ORG_DEFAULT", status: "PENDING" as PrepField["status"], editable: true,
+  };
+}
+
+/**
+ * M8-TR-UX-001 / M8-EDITAL-UX-001 — padrões institucionais definidos DIRETAMENTE no Perfil (uma vez, em lote), sem precisar de um
+ * processo anterior. Só os campos ELEGÍVEIS que a API lista (Authority Matrix); o servidor revalida. O padrão é PROPOSTA nos próximos
+ * processos — cada processo confirma (nunca preenchimento automático silencioso).
+ */
+export function buildDefaultsEdit(current: readonly DefaultViewModel[], edits: Readonly<Record<string, FormValue>>): {
+  defaults: Record<string, unknown>; errors: Record<string, string>; changed: { name: string; description: string; type: string; value: unknown }[];
+} {
+  const defaults: Record<string, unknown> = Object.fromEntries(current.filter((d) => d.hasValue && !d.incompatibleReason).map((d) => [d.name, d.value]));
+  const errors: Record<string, string> = {};
+  const changed: { name: string; description: string; type: string; value: unknown }[] = [];
+  for (const d of current) {
+    if (!(d.name in edits)) continue;
+    const r = parseField(defaultAsPrepField(d), edits[d.name]);
+    if (!r.ok) { errors[d.name] = r.error; continue; }
+    if (r.value === undefined) continue;
+    defaults[d.name] = r.value;
+    changed.push({ name: d.name, description: d.description, type: d.type, value: r.value });
+  }
+  return { defaults, errors, changed };
+}
+
 /** Texto do consentimento: a política criada/atualizada, mostrada ANTES da confirmação. */
 export function defaultConsentText(description: string, valueText: string, existing: boolean): string {
   return `${existing ? "Atualizar" : "Criar"} o padrão institucional "${description}" = ${valueText}. Vale para os PRÓXIMOS processos; nada é copiado do processo atual além deste valor, e você pode removê-lo no Perfil de Licitações.`;

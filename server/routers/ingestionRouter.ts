@@ -42,7 +42,7 @@ import {
   getDocumentReviewHistory,
 } from "../services/documentIntakeService";
 import { isDocumentImportType } from "../domain/documentProjection";
-import { enqueueImport } from "../services/importQueueService";
+import { enqueueImport, getProvenanceRevalidationFailure, isSessionInFlight } from "../services/importQueueService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
 import {
   assertCanonicalIngestionEnabled,
@@ -61,8 +61,11 @@ import {
   assertSessionApprovable, ImportInvariantViolation, OUTCOME_MESSAGE, OUTCOME_STAGE,
 } from "../domain/importOutcome";
 import type { ExtractionLineage } from "../domain/extractionLineage";
-import { getReprocessEligibility, releaseReextraction, reserveReextraction } from "../services/importReprocessService";
-import { REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
+import {
+  assertProvenanceRevalidationAllowed, getReprocessEligibility, releaseReextraction, reserveReextraction,
+} from "../services/importReprocessService";
+import { assessProvenanceScan, hasFileCoverageGap, PROVENANCE_SCAN_REQUIRED_MESSAGE, provenanceScanRequiredMessage } from "../domain/quoteProvenance";
+import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
 import { getPriceResearchReview, reviewPriceResearchGroups } from "../services/priceResearchReviewService";
 import type { PriceResearchReviewProjection } from "../domain/priceResearchReviewGroups";
 
@@ -208,6 +211,23 @@ async function reprocessView(s: NonNullable<Awaited<ReturnType<typeof getImportS
   return { eligible: e.eligible, inProgress: inProgress && e.blockers.includes("REPROCESS_IN_PROGRESS"), blockers: e.blockers, message: e.message };
 }
 
+/** M8 (P1-C) — estado da análise de proveniência para a UI (o servidor revalida tudo na promoção/revalidação). */
+function provenanceScanView(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>): { status: "current" | "required" | "in_progress" | "not_applicable"; message: string | null; revalidable: boolean } {
+  if (s.importType !== "price_research" || (s.status !== "awaiting_review" && s.status !== "approved") || (s.promotionStatus ?? "none") !== "none") {
+    return { status: "not_applicable", message: null, revalidable: false };
+  }
+  if (assessProvenanceScan(s.extractionSummary, s.checksum, s.warnings).ok) return { status: "current", message: null, revalidable: false };
+  if (isSessionInFlight(s.id)) return { status: "in_progress", message: "Revalidando a análise de proveniência do arquivo original…", revalidable: false };
+  // Lacuna do próprio arquivo (limite de páginas): reanalisar não conclui — orienta sem oferecer a ação inútil.
+  if (hasFileCoverageGap(s.warnings)) return { status: "required", message: provenanceScanRequiredMessage(s.warnings), revalidable: false };
+  if (!s.checksum) return { status: "required", message: `${PROVENANCE_SCAN_REQUIRED_MESSAGE} ${PROVENANCE_REVALIDATION_BLOCKER_MESSAGE.NO_CHECKSUM}`, revalidable: false };
+  const failure = getProvenanceRevalidationFailure(s.id);
+  // A reanálise revelou lacuna do próprio arquivo (aviso ausente na extração antiga): não oferecer a ação de novo.
+  if (failure?.code === "COVERAGE_INCOMPLETE") return { status: "required", message: provenanceScanRequiredMessage([{ code: "PAGE_LIMIT" }]), revalidable: false };
+  const base = provenanceScanRequiredMessage(s.warnings);
+  return { status: "required", message: failure ? `${base} Última tentativa não concluída: ${failure.message}` : base, revalidable: true };
+}
+
 /** Serializa a sessão para o cliente, ocultando nada sensível (não há segredos aqui). */
 function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSession>>>) {
   return {
@@ -229,6 +249,8 @@ function toSessionStatus(s: NonNullable<Awaited<ReturnType<typeof getImportSessi
     correlationId: s.correlationId ?? null,
     // U2A-OCR — resumo da linhagem da extração (sem conteúdo do documento): a UI explica OCR × texto nativo.
     extraction: extractionView(s.extractionSummary),
+    // M8 (P1-C) — a análise de proveniência vigente rodou sobre este arquivo? (a promoção exige; "required" ⇒ revalidar)
+    provenanceScan: provenanceScanView(s),
     // Erros/avisos são mensagens controladas internamente (sem PII/segredo); expõe code+message.
     warnings:      Array.isArray(s.warnings) ? s.warnings : [],
     errors:        Array.isArray(s.errors)
@@ -582,6 +604,36 @@ export const ingestionRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um processamento em andamento para esta sessão." });
       }
       return { sessionId: session.id, status: "reprocessing" as const, enqueued: true, jobId, previousStagedCount: reserved.stagedCount, notice: REPROCESS_EXPLANATION };
+    }),
+
+  /**
+   * M8 (P1-C) — REVALIDAR A ANÁLISE DE PROVENIÊNCIA de uma sessão de Pesquisa de Preços extraída antes da análise vigente.
+   * Reanalisa o ARQUIVO ORIGINAL (mesmo checksum) no worker e grava só a evidência + avisos de declaração do documento;
+   * staging, correções e decisões humanas são preservados; nada é aprovado ou promovido. Sessão promovida ⇒ FORBIDDEN
+   * (histórico concluído é imutável). RBAC: operator+ (mesmo papel do reprocessamento). Escopo: tenant + processo.
+   */
+  revalidateProvenance: orgRoleProcedure("operator")
+    .input(z.object({
+      sessionId:            z.number().int().positive(),
+      procurementProcessId: z.string().min(1).max(20),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      await assertCanonicalIngestionEnabled(orgId);
+      const session = await getImportSession(input.sessionId, orgId);
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+      assertSessionProcess(session, input.procurementProcessId);
+      await assertProvenanceRevalidationAllowed(session.id, orgId);
+      const jobId = enqueueImport(session.id, orgId, session.sourceFileId, {
+        correlationId: ctx.correlationId, revalidateProvenance: { actorUserId: ctx.user!.id },
+      });
+      if (jobId === null) throw new TRPCError({ code: "CONFLICT", message: "PROVENANCE_REVALIDATION_FORBIDDEN: Já existe um processamento em andamento para esta sessão." });
+      await logActivity({
+        organizationId: orgId, userId: ctx.user!.id, action: "import_provenance_revalidation_requested",
+        entityType: "import_session", entityId: session.id, correlationId: ctx.correlationId ?? undefined, requestId: ctx.requestId ?? undefined,
+        details: { procurementProcessId: session.procurementProcessId ?? null, sourceChecksum: session.checksum ?? null, jobId },
+      }).catch(() => {}); // pedido: auditoria best-effort; o commit da revalidação audita NA transação
+      return { sessionId: session.id, status: "revalidating" as const, enqueued: true, jobId };
     }),
 
   /** Lista itens de staging da sessão (paginado, tenant-safe) com confiança/proveniência/avisos. */

@@ -4,7 +4,8 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    # `staging` = linha de homologação integrada: PRs de integração passam pelos MESMOS gates (deploy segue só na main).
+    branches: [ main, staging ]
   # Permite rodar os gates manualmente em qualquer branch (ex.: validar a PR D antes do merge,
   # quando o Actions em PR aguarda aprovação). O job `deploy` continua restrito à `main`.
   workflow_dispatch:
@@ -279,6 +280,62 @@ jobs:
       # replay/source_changed/CONFLICT; ETP aprovado e Edital oficial intactos (GOVERNED_CHANGE_REQUIRED); legado; tenant.
       - name: Smoke — ETP/TR/Edital × quantidade prevista (fonte única)
         run: pnpm exec vitest run server/__tests__/integration/canonical-quantity-documents-mysql-smoke.test.ts
+
+      # LICIGOV-FAST — homologação integrada (tenant sintético): J1 DFD → ETP → TR → Edital → DOCX/PDF; J2 contrato vigente
+      # de processo anterior (declarado) → aditivo → termo exportado + vencimento; J3 registro externo com término ⇒
+      # vencimento/alertas no calendário, indicador por contrato; RBAC, replay e tenant. J1-BLL: a MESMA jornada com o TR gerado
+      # e EMITIDO na própria jornada alimentando o Edital BLL Revisão 2 (órgão sintético): minuta sem datas de publicação
+      # ("A DEFINIR PARA PUBLICAÇÃO"), DOCX/PDF, replay, tenant e nenhuma mutação no órgão de produção.
+      - name: Smoke — jornadas integradas (processo novo, legado→aditivo, monitoramento)
+        run: pnpm exec vitest run server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts
+
+      # CATMAT/CATSER sobre o catálogo OFICIAL (transporte injetado, fixtures contratuais — sem chamada externa no CI):
+      # importação M8 sem candidato fabricado → "Buscar classificação" → evidência (catalog_snapshots/entries) → confirmação
+      # governada + replay; hash/legado não confirmável com limiar configurado; indisponível sem fabricação; tenant.
+      - name: Smoke — CATMAT/CATSER oficial nos Itens Inteligentes
+        run: pnpm exec vitest run server/__tests__/integration/catalog-official-classification-mysql-smoke.test.ts
+
+      # Concorrência busca × confirmação (interleavings determinísticos por barreira): busca que rebaixa a sugestão antes do
+      # lock do item ⇒ recusa; confirmação com o lock ⇒ registrada; chaves/replay/rollback/CATMAT×CATSER/isolamento.
+      - name: Smoke — corrida busca × confirmação CATMAT/CATSER
+        run: pnpm exec vitest run server/__tests__/integration/m8-catmat-decision-race-mysql-smoke.test.ts
+
+      # Governança dos preços de referência (0319): proveniência explícita × suspeita; reimportação; FICTITIOUS_SOURCE na
+      # referência canônica; EMISSION_FICTITIOUS_PRICES mesmo sem [REVISAR]; Contratação Direta; homologação sintética.
+      - name: Smoke — proveniência das cotações e preço de referência
+        run: pnpm exec vitest run server/__tests__/integration/m8-price-reference-governance-mysql-smoke.test.ts
+
+      # PR-04 (SEM-005): cotações nunca substituídas em silêncio — flag de ingestão canônica ligada ⇒ gravação direta
+      # legada recusada sem efeito; 2 importações canônicas somam 6 cotações; flag desligada ⇒ substituição só confirmada.
+      - name: Smoke — Pesquisa de Preços sem sobrescrita silenciosa (SEM-005)
+        run: pnpm exec vitest run server/__tests__/integration/pr04-sem005-price-research-no-overwrite-mysql-smoke.test.ts
+
+      # Emenda de integridade (P1-A): fonte que vira fictícia durante a emissão ⇒ recusa sob trava (barreiras
+      # determinísticas: alteração vence / emissão vence / rollback, replay, lock timeout, isolamento entre órgãos).
+      - name: Smoke — corrida proveniência × emissão oficial
+        run: pnpm exec vitest run server/__tests__/integration/m8-emission-provenance-race-mysql-smoke.test.ts
+
+      # Emenda de integridade (P1-B): declaração fictícia no título do ARQUIVO (worker real) ⇒ cotações fictícias,
+      # Item Inteligente e referência suspensa; correção supervisionada, replay, legado e isolamento.
+      - name: Smoke — declaração fictícia do arquivo importado
+        run: pnpm exec vitest run server/__tests__/integration/m8-file-declaration-provenance-mysql-smoke.test.ts
+
+      # Emenda de integridade (P1-C): sessão extraída ANTES da análise de declaração (sem evidência versionada) ⇒ promoção
+      # recusada sem efeito; revalidação preserva revisões; reextração; replay/concorrência; isolamento; legado promovido.
+      - name: Smoke — sessão legada sem análise de proveniência
+        run: pnpm exec vitest run server/__tests__/integration/m8-legacy-session-provenance-scan-mysql-smoke.test.ts
+
+      # Executor de homologação — usuário com múltiplas organizações: sem X-Organization-Id ⇒ BAD_REQUEST; tenant sintético
+      # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
+      - name: Smoke — homologação com usuário de múltiplas organizações
+        run: pnpm exec vitest run server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts
+
+      # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
+      # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
+      # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem
+      # parecer produzido; contratação direta completa; RBAC, replay e tenant.
+      - name: Smoke — continuidade legado, contratos, aditivos e vigência
+        run: pnpm exec vitest run server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts
 
       # Hotfix — elegibilidade dos candidatos da Pesquisa: legado de importação manual sem revisão + Pesquisa em
       # revisão (5 itens / 30 cotações) ⇒ 0 candidatos; revisão + aprovação + promoção ⇒ EXATAMENTE 5; nova sessão

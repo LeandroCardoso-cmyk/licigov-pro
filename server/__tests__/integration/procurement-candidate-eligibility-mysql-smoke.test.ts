@@ -24,9 +24,12 @@ vi.mock("../../storage", () => ({
   storageGetBytes: async (key: string) => { const b = mem.get(key); if (!b) throw new Error(`storage vazio: ${key}`); return b; },
   storagePut: async (key: string, data: string | Buffer) => { mem.set(key, Buffer.from(data)); return { key, url: "" }; },
 }));
+// PR-04 (SEM-005): com FF_CANONICAL_INGESTION ligada o router recusa a gravação direta legada. Os cenários que
+// exercitam o caminho legado (órgão com a ingestão canônica DESLIGADA) desligam só essa flag.
+const flagState = vi.hoisted(() => ({ canonicalIngestionOff: false }));
 vi.mock("../../services/featureFlagService", async (orig) => {
   const actual = await orig<typeof import("../../services/featureFlagService")>();
-  return { ...actual, isFeatureEnabled: vi.fn(async () => true) };
+  return { ...actual, isFeatureEnabled: vi.fn(async (name: string) => !(name === "FF_CANONICAL_INGESTION" && flagState.canonicalIngestionOff)) };
 });
 
 import { runMigrations } from "../../bootstrap";
@@ -34,7 +37,9 @@ import { getDb } from "../../db/connection";
 import { importSessions } from "../../../drizzle/schema";
 import { enqueueImport } from "../../services/importQueueService";
 import { getImportSession } from "../../services/fileIngestionService";
-import { insertProcess, listIntelligentItems } from "../../db/procurement";
+import { insertProcess, insertResearch, insertResearchItem, listIntelligentItems } from "../../db/procurement";
+import { createPriceResearchItem, createPriceResearchWorkspace } from "../../domain/priceResearch";
+import { persistResearchAndMaterialize } from "../../services/itemMaterializationService";
 import { createProcurementWorkspace } from "../../domain/procurementProcess";
 import { goldenEPdf } from "../fixtures/layoutPdfFixtures";
 
@@ -56,11 +61,13 @@ async function newProcess(org: number): Promise<string> {
 async function goldenSession(org: number, processId: string, salt = "") {
   const db = (await getDb())!;
   const key = `imports/${org}/${Date.now()}-${++seq}-mapa.pdf`;
-  mem.set(key, GOLDEN);
-  const checksum = createHash("sha256").update(`${GOLDEN.length}-${seq}-${org}-${salt}`).update(GOLDEN).digest("hex");
+  // Conteúdo distinto por sessão (comentário PDF após %%EOF) e checksum = sha256 REAL do conteúdo, como no upload.
+  const bytes = Buffer.concat([GOLDEN, Buffer.from(`\n%elg-${seq}-${org}-${salt}\n`)]);
+  mem.set(key, bytes);
+  const checksum = createHash("sha256").update(bytes).digest("hex");
   const [s] = await db.insert(importSessions).values({
     organizationId: org, uploadedBy: users.operator ?? 1, sourceFileId: key, sourceFileName: "mapa.pdf", sourceMimeType: "application/pdf",
-    sourceSize: GOLDEN.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",
+    sourceSize: bytes.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",
     status: "uploaded", stage: "file_stored", correlationId: `elg-${seq}`,
   }).$returningId();
   expect(enqueueImport(s.id, org, key, { correlationId: `elg-${s.id}` })).not.toBeNull();
@@ -139,12 +146,27 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
 
   it("1) INCIDENTE: legado sem revisão (qtd 0, R$ 0) + Pesquisa em revisão (5/30 pendentes) ⇒ 0 candidatos; legado preservado", async () => {
     pid = await newProcess(ORG);
-    // Caminho LEGADO real (importação de texto): uma linha vira Item Inteligente sem revisão prévia.
+    // Estado LEGADO (leitor anterior ao M8-PRICE-IMPORT-001: uma linha solta virava Item Inteligente sem revisão).
+    // O leitor atual RECUSA esse texto (ambíguo), então o histórico é semeado pela mesma materialização que ele usava.
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" });
+    flagState.canonicalIngestionOff = true; // caminho legado (órgão sem ingestão canônica)
+    try {
+      await expect(op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" }))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("ambígua") });
+    } finally { flagState.canonicalIngestionOff = false; }
+    expect(await listIntelligentItems(pid, ORG)).toHaveLength(0); // recusa sem gravação
+    const research = createPriceResearchWorkspace({ processId: pid, organizationId: ORG, source: "pdf", correlationId: "elig-legacy" });
+    const legacyRow = createPriceResearchItem({ researchId: research.id, processId: pid, organizationId: ORG, description: "Fornecedor Exemplo Ltda", source: "colar", index: 0 });
+    await persistResearchAndMaterialize({
+      organizationId: ORG, processId: pid, researchId: research.id, correlationId: "elig-legacy",
+      quotes: [{ quoteId: legacyRow.id, researchId: research.id, description: legacyRow.description, quantity: 0, unit: "un", supplier: "", brand: "", model: "", source: "colar", valueCents: null }],
+      writeResearch: async (tx) => { await insertResearch({ ...research, itemCount: 1 }, tx); await insertResearchItem(legacyRow, tx); },
+    });
     const before = await listIntelligentItems(pid, ORG);
     expect(before).toHaveLength(1);
     legacyId = before[0].id;
+    // M8: o resíduo do leitor antigo é SINALIZADO na lista (decisão de rejeitar continua humana).
+    expect(((await op.procurementProcess.listItems({ processId: pid })).items[0] as { suspectedFragment?: boolean }).suspectedFragment).toBe(true);
     expect(before[0]).toMatchObject({ quantity: 0, averagePriceCents: 0, quoteCount: 0, status: "pendente" });
 
     const sid = await goldenSession(ORG, pid);
@@ -197,7 +219,15 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
   it("5) importação manual APROVADA por humano (decisão do Item Inteligente) ⇒ elegível; não aprovada ⇒ não", async () => {
     const p3 = await newProcess(ORG);
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
+    // Com a ingestão canônica LIGADA a gravação direta é recusada sem efeito (PR-04 / SEM-005)…
+    await expect(op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^LEGACY_PRICE_IMPORT_DISABLED:/) });
+    expect(await listIntelligentItems(p3, ORG)).toHaveLength(0);
+    // …e o caminho legado segue disponível para órgão com a flag DESLIGADA.
+    flagState.canonicalIngestionOff = true;
+    try {
+      await op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
+    } finally { flagState.canonicalIngestionOff = false; }
     expect((await candidatesOf(p3)).candidates).toHaveLength(0);
     const [it] = await listIntelligentItems(p3, ORG);
     await op.procurementProcess.approveItem({ itemId: it.id });

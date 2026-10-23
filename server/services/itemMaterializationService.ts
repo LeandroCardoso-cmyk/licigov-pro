@@ -28,7 +28,7 @@ import { createHash } from "crypto";
 import { and, eq, inArray, lt, or, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
-  intelligentItemsTable, catmatDecisionsTable, intelligentItemIdentityAliasesTable, priceResearchItemsTable,
+  intelligentItemsTable, intelligentItemIdentityAliasesTable, priceResearchItemsTable,
 } from "../../drizzle/schema";
 import { getDb } from "../db/connection";
 import { toDbDatetime } from "../db/institutionalConsultations";
@@ -41,14 +41,19 @@ import {
   buildSourceUpdatePreview, parseSourceUpdateToken, sourceUpdateTargetHash, type SourceUpdatePreview,
 } from "../domain/itemSourceUpdate";
 import type { IntelligentItemSupplier } from "../domain/intelligentItem";
-import { rankCATMAT, suggestedAndAlternatives } from "../domain/catmatMatching";
-import { createItemRecommendation, createItemRisk, detectPriceOutlier } from "../domain/itemRecommendation";
+import { createItemRisk, detectPriceOutlier } from "../domain/itemRecommendation";
 import {
-  insertCatmatMatch, insertItemRecommendation, insertItemRisk, recordProcessEvent, insertResearch, insertResearchItem,
+  insertItemRisk, recordProcessEvent, insertResearch, insertResearchItem,
   type ProcurementExecutor,
 } from "../db/procurement";
-import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchSource, type PriceResearchWorkspace } from "../domain/priceResearch";
-import { catmatCandidates, suggestSpecifications } from "./itemIntelligenceService";
+import {
+  createPriceResearchWorkspace, extractItemsFromText, findQuoteReplacements, PriceQuoteReplacementRequiresConfirmationError,
+  type PriceResearchSource, type PriceResearchWorkspace,
+} from "../domain/priceResearch";
+import { parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { LOW_QUOTE_COUNT_RISK_TEXT } from "../domain/quoteProvenance";
+import { suggestSpecifications } from "./itemIntelligenceService";
+import { runTransactionWithDeadlockRetry } from "./transactionDeadlockRetry";
 import { serviceLogger } from "./observabilityService";
 import { assertKernelAccess } from "./kernelAccessService";
 
@@ -129,6 +134,7 @@ function quoteToSupplier(q: PriceQuote): IntelligentItemSupplier {
     quoteId: q.quoteId,
     researchId: q.researchId,
     contentHash: h.contentHash,
+    ...(q.provenanceKind ? { provenanceKind: q.provenanceKind } : {}),
   };
 }
 
@@ -140,6 +146,7 @@ function supplierToQuote(s: IntelligentItemSupplier, idx: number, base: { descri
     description: base.description, quantity: base.quantity, unit: base.unit,
     supplier: s.name ?? "", brand: s.brand ?? "", model: s.model ?? "", source: s.source ?? "",
     valueCents: s.value > 0 ? reaisToCents(s.value) : null,
+    ...(s.provenanceKind ? { provenanceKind: s.provenanceKind } : {}),
   };
   return s.contentHash ? { ...q, contentHash: s.contentHash } : q;
 }
@@ -464,6 +471,7 @@ async function quotesForKeyHash(tx: ProcurementExecutor, org: number, processId:
     quoteId: q.id, researchId: q.researchId, description: q.description ?? "", quantity: normalizeQuantity(q.quantity), unit: q.unit,
     supplier: q.supplier ?? "", brand: q.brand ?? "", model: q.model ?? "", source: q.source ?? "",
     valueCents: reaisToCents(q.value) > 0 ? reaisToCents(q.value) : null,
+    ...(q.provenanceKind ? { provenanceKind: q.provenanceKind } : {}),
   })).filter((q) => logicalKeyHash(intelligentItemLogicalKey(q)) === keyHash);
 }
 
@@ -547,11 +555,9 @@ export async function enrichMaterializedItems(params: {
       assertKernelAccess("processo_licitatorio", "procurement_knowledge_graph");
       const description = it.description ?? "";
       const suppliers = parseSuppliers(it.suppliers);
-      const matches = rankCATMAT({
-        itemId: it.id, organizationId: params.organizationId, description,
-        candidates: catmatCandidates(description), correlationId: params.correlationId,
-      });
-      const { suggested, alternatives } = suggestedAndAlternatives(matches);
+      // CATMAT/CATSER: o enriquecimento NÃO gera candidatos (nem consulta a API externa, para não prender a importação de
+      // preços à latência do catálogo). A classificação fica pendente até "Buscar classificação" no catálogo oficial e a
+      // decisão humana. Sugestões, códigos e decisões já registrados não são tocados (nem limpos).
       const values = suppliers.map((s) => s.value).filter((v) => v > 0);
       const risks = [];
       const outlier = detectPriceOutlier(values);
@@ -565,29 +571,13 @@ export async function enrichMaterializedItems(params: {
       if (values.length < 3) {
         risks.push(createItemRisk({
           itemId: it.id, organizationId: params.organizationId, type: "baixa_competitividade", severity: "medio",
-          description: "Menos de 3 cotações válidas na pesquisa.",
+          description: LOW_QUOTE_COUNT_RISK_TEXT,
           explanation: "Amostra pequena pode comprometer a estimativa. Recomenda-se ampliar as fontes.", correlationId: params.correlationId,
         }));
       }
-      const recs = [];
-      if (suggested) {
-        recs.push(createItemRecommendation({
-          itemId: it.id, organizationId: params.organizationId, type: "catmat",
-          summary: `Sugestão de CATMAT ${suggested.catmatCode}.`,
-          reasoning: `Maior aderência de descrição (score ${suggested.score.toFixed(2)}) entre os candidatos.`,
-          explainability: "Ranking por interseção de tokens; SUGESTÃO — o servidor decide (confirmar/rejeitar/substituir).",
-          provenance: "catmat_matching", confidence: suggested.score, correlationId: params.correlationId,
-        }));
-      }
-      for (const m of matches) await insertCatmatMatch(m);
       for (const risk of risks) await insertItemRisk(risk);
-      for (const rec of recs) await insertItemRecommendation(rec);
 
-      const decidedCatalog = await db.select({ id: catmatDecisionsTable.id }).from(catmatDecisionsTable)
-        .where(and(eq(catmatDecisionsTable.organizationId, params.organizationId), eq(catmatDecisionsTable.itemId, it.id))).limit(1);
       await db.update(intelligentItemsTable).set({
-        ...(decidedCatalog.length === 0 && !it.suggestedCatmat ? { suggestedCatmat: suggested?.catmatCode ?? null } : {}),
-        alternativeCatmat: JSON.stringify(alternatives.map((a) => a.catmatCode)),
         specifications: JSON.stringify(suggestSpecifications(description)),
         risks: JSON.stringify(risks.map((x) => x.description)),
         enrichmentStatus: "done", enrichmentErrorCode: null,
@@ -661,10 +651,11 @@ export async function persistResearchAndMaterialize(params: {
 }): Promise<MaterializationResult> {
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — pesquisa não persistida (fail-closed).");
-  const result = await db.transaction(async (tx) => {
+  // M8 (emenda) — escritor da fonte de preço concorre com a trava da emissão: deadlock ⇒ repete a transação INTEIRA (SEM-084).
+  const result = await runTransactionWithDeadlockRetry({ label: "price_research.materialize", organizationId: params.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
     await params.writeResearch(tx);
     return materializeIntelligentItemsTx(tx, params);
-  });
+  }));
   await enrichMaterializedItems({
     organizationId: params.organizationId, processId: params.processId,
     itemIds: [...result.created, ...result.updated], correlationId: params.correlationId,
@@ -679,17 +670,42 @@ export async function persistResearchAndMaterialize(params: {
  */
 export async function importManualPriceResearch(p: {
   organizationId: number; processId: string; source: PriceResearchSource; text: string; actorUserId: number; correlationId: string;
-}): Promise<{ research: PriceResearchWorkspace; quoteCount: number; result: MaterializationResult }> {
+  /** PR-04 (SEM-005): substituir cotações já registradas exige confirmação explícita (correção por reimportação). */
+  confirmReplace?: boolean;
+}): Promise<{ research: PriceResearchWorkspace; quoteCount: number; synthetic: boolean; result: MaterializationResult }> {
+  // M8-PRICE-IMPORT-001: leitura estruturada; ambiguidade ⇒ recusa ANTES de qualquer escrita (o servidor revisa a prévia).
+  const parsed = parsePriceResearchText(p.text);
+  if (parsed.blocking.length > 0) throw new PriceResearchAmbiguousError(parsed.blocking);
   const research = createPriceResearchWorkspace({ processId: p.processId, organizationId: p.organizationId, source: p.source, correlationId: p.correlationId });
-  const rawItems = extractItemsFromText(p.text, { researchId: research.id, processId: p.processId, organizationId: p.organizationId });
+  const rawItems = extractItemsFromText(p.text, { researchId: research.id, processId: p.processId, organizationId: p.organizationId }, parsed);
+  let replacedCount = 0;
   const result = await persistResearchAndMaterialize({
     organizationId: p.organizationId, processId: p.processId, researchId: research.id, correlationId: p.correlationId,
     quotes: rawItems.map((it) => ({
       quoteId: it.id, researchId: research.id, description: it.description, quantity: it.quantity, unit: it.unit,
       supplier: it.supplier, brand: it.brand, model: it.model, source: it.source,
-      valueCents: it.value > 0 ? reaisToCents(it.value) : null,
+      valueCents: it.value > 0 ? reaisToCents(it.value) : null, provenanceKind: it.provenanceKind,
     })),
     writeResearch: async (tx) => {
+      // PR-04 (SEM-005): a colagem legada identifica a cotação por (pesquisa da fonte, linha, descrição) — uma 2ª colagem
+      // com o mesmo item na mesma linha SUBSTITUIRIA fornecedor/valor da anterior. Conteúdo diferente ⇒ recusa (rollback,
+      // nada gravado) salvo confirmação explícita; reimportação idêntica segue convergindo. Leitura travada na MESMA
+      // transação da escrita (sem janela entre conferir e gravar).
+      if (rawItems.length > 0) {
+        const existing = await tx.select().from(priceResearchItemsTable).where(and(
+          eq(priceResearchItemsTable.organizationId, p.organizationId),
+          inArray(priceResearchItemsTable.id, rawItems.map((it) => it.id)),
+        )).for("update");
+        const replacements = findQuoteReplacements(existing, rawItems);
+        if (replacements.length > 0 && !p.confirmReplace) throw new PriceQuoteReplacementRequiresConfirmationError(replacements);
+        replacedCount = replacements.length;
+        if (replacements.length > 0) {
+          log.info("price_research_quotes_replaced_confirmed", {
+            organizationId: p.organizationId, processId: p.processId, researchId: research.id,
+            replaced: replacements.length, actorUserId: p.actorUserId, correlationId: p.correlationId,
+          });
+        }
+      }
       await insertResearch({ ...research, itemCount: rawItems.length }, tx);
       for (const it of rawItems) await insertResearchItem(it, tx);
     },
@@ -697,8 +713,8 @@ export async function importManualPriceResearch(p: {
   await recordMaterializationSignals({ organizationId: p.organizationId, processId: p.processId, result, actorUserId: p.actorUserId, correlationId: p.correlationId });
   await recordProcessEvent({
     organizationId: p.organizationId, processId: p.processId, eventType: "change", actor: String(p.actorUserId),
-    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s).`,
+    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s) [${parsed.version}; ${parsed.lines.length - parsed.quoteCount} linha(s) não-cotação ignorada(s)]${replacedCount > 0 ? ` — ${replacedCount} cotação(ões) anterior(es) substituída(s) por confirmação do usuário` : ""}${parsed.synthetic ? " — DADOS SINTÉTICOS/FICTÍCIOS: não constituem pesquisa de preços válida" : ""}.`,
     refId: research.id, correlationId: p.correlationId,
   }).catch(() => {});
-  return { research: { ...research, itemCount: rawItems.length }, quoteCount: rawItems.length, result };
+  return { research: { ...research, itemCount: rawItems.length }, quoteCount: rawItems.length, synthetic: parsed.synthetic, result };
 }

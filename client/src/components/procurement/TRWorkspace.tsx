@@ -131,7 +131,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
       {draft && (
         <div className="mt-6">
           {/* A2 — explicabilidade mínima de fundamentação (estado + nº de evidências reais). */}
-          <GroundingNotice grounding={reviewable.data?.draft?.grounding ?? null} />
+          <GroundingNotice grounding={reviewable.data?.draft?.grounding ?? null} content={draft.content} />
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana) — gerado com base no
             processo ou importado. Edite e salve; a emissão oficial exige revisão de um terceiro (SoD).

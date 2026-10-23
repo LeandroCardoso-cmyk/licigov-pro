@@ -48,6 +48,9 @@ describe.skipIf(!DB)("R9 / SEM-052 + SEM-054 — confirmação de cotações e p
   }
   const manual = (pid: string, text: string) =>
     importManualPriceResearch({ organizationId: ORG, processId: pid, source: "colar", text, actorUserId: operator, correlationId: `m-${++seq}` });
+  /** PR-04 (SEM-005): CORREÇÃO deliberada por reimportação (substitui cotação já registrada) exige confirmação explícita. */
+  const manualCorrection = (pid: string, text: string) =>
+    importManualPriceResearch({ organizationId: ORG, processId: pid, source: "colar", text, actorUserId: operator, correlationId: `m-${++seq}`, confirmReplace: true });
   async function row(id: string) {
     const [r] = await conn.execute<mysql.RowDataPacket[]>("SELECT status, approved_by, average_price, source_state, pending_suppliers FROM intelligent_items WHERE id = ?", [id]);
     const x = r[0] as { status: string; approved_by: number | null; average_price: string; source_state: string; pending_suppliers: string | null };
@@ -102,7 +105,7 @@ describe.skipIf(!DB)("R9 / SEM-052 + SEM-054 — confirmação de cotações e p
     expect((await row(it.id)).status).toBe("aprovado");
 
     // A1 — nova pesquisa após a decisão ⇒ source_changed; aprovar é recusado, nada muda.
-    await manual(pid, "Papel A4;10;resma;R$ 300,00;Papelaria X");
+    await manualCorrection(pid, "Papel A4;10;resma;R$ 300,00;Papelaria X");
     const before = await row(it.id);
     expect(before).toMatchObject({ status: "aprovado", approvedBy: operator, averagePrice: "100.00", sourceState: "source_changed", hasPending: true });
     const approvalEvents = async () => (await listProcessTimeline(pid, ORG)).filter((e) => e.summary.startsWith("Item aprovado")).length;
@@ -122,7 +125,7 @@ describe.skipIf(!DB)("R9 / SEM-052 + SEM-054 — confirmação de cotações e p
     expect(p1.changed).toEqual([expect.objectContaining({ beforeCents: 10000, afterCents: 30000 })]);
 
     // A3 — a pesquisa muda DEPOIS da prévia: a confirmação antiga é stale ⇒ CONFLICT, nada aplicado.
-    await manual(pid, "Papel A4;10;resma;R$ 350,00;Papelaria X");
+    await manualCorrection(pid, "Papel A4;10;resma;R$ 350,00;Papelaria X");
     const stale = await err(c.procurementProcess.applyItemSourceUpdate({ itemId: it.id, expectedStateToken: p1.expectedStateToken }));
     expect(stale?.code).toBe("CONFLICT");
     expect(stale?.message).toMatch(/^SOURCE_UPDATE_STALE: /);
@@ -199,7 +202,7 @@ describe.skipIf(!DB)("R9 / SEM-052 + SEM-054 — confirmação de cotações e p
 
     const [it] = await listIntelligentItems(pid, ORG);
     await c.procurementProcess.approveItem({ itemId: it.id });
-    await manual(pid, "Cadeira;10;un;R$ 100,00;A\nCadeira;10;un;R$ 100,00;B\nCadeira;10;un;R$ 130,00;C");
+    await manualCorrection(pid, "Cadeira;10;un;R$ 100,00;A\nCadeira;10;un;R$ 100,00;B\nCadeira;10;un;R$ 130,00;C");
     const p = await c.procurementProcess.previewItemSourceUpdate({ itemId: it.id });
     const b = await caller(operatorB, ORG_B);
     expect((await err(b.procurementProcess.previewItemSourceUpdate({ itemId: it.id })))?.code).toBe("NOT_FOUND");

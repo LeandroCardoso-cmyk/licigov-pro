@@ -3,7 +3,7 @@ import PrepFieldControl from "./PrepFieldControl";
 import Disclosure from "./Disclosure";
 import { type FixAction, type StageTarget } from "@/lib/editalPreparation";
 import {
-  READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, isLargeOriginGroup, readinessHeadline,
+  BLOCKING_LEVEL_LABEL, READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, isLargeOriginGroup, readinessHeadline,
   type OriginGroup, type ReadinessStep,
 } from "@/lib/editalReadiness";
 import DecisionFieldset from "./DecisionFieldset";
@@ -111,7 +111,8 @@ function StepRow({ step, next, children }: { step: ReadinessStep; next: boolean;
       <div className="flex items-start gap-2">
         <span aria-hidden="true" className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${step.done ? "bg-emerald-600 text-white" : "bg-amber-500 text-black"}`}>{step.done ? ICON.ok : ICON.todo}</span>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">{step.title}{next && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">Próximo passo</span>}</p>
+          <p className="font-medium text-foreground">{step.title}{next && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">Próximo passo</span>}
+            {!step.done && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground" data-blocks={step.blocks}>{BLOCKING_LEVEL_LABEL[step.blocks]}</span>}</p>
           <p className={step.done ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}><span className="sr-only">{step.done ? "Pronto: " : "Pendente: "}</span>{step.summary}</p>
         </div>
       </div>
@@ -168,6 +169,11 @@ export default function EditalPreparationView(p: PreparationViewProps) {
       <header className="space-y-1">
         <h2 className="text-base font-semibold text-foreground">Preparação do Edital institucional</h2>
         <p className="text-sm text-muted-foreground" data-testid="readiness-headline">{readinessHeadline(counters)}</p>
+        {readiness.pendingByLevel.length > 0 && (
+          <ul className="mt-1 flex flex-wrap gap-2 text-xs" data-testid="pending-by-level">
+            {readiness.pendingByLevel.map((l) => <li key={l.level} data-level={l.level} className="rounded border border-border px-2 py-0.5 text-muted-foreground">{l.label}: <strong className="text-foreground">{l.count}</strong></li>)}
+          </ul>
+        )}
       </header>
 
       {/* C. Prontidão / o que falta — UM vocabulário, uma progressão (próximo passo destacado). */}

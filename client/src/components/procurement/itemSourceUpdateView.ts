@@ -48,7 +48,7 @@ export function sourceUpdateConfirmModel(p: SourceUpdatePreview): SourceUpdateCo
   return {
     title: `Comparativo de cotações — ${p.description}`,
     rows: [
-      { label: "Cotações válidas", before: String(p.current.quoteCount), after: String(p.proposed.quoteCount) },
+      { label: "Cotações com preço", before: String(p.current.quoteCount), after: String(p.proposed.quoteCount) },
       { label: "Preço médio (referência)", before: formatCentsBRL(p.current.averageCents), after: formatCentsBRL(p.proposed.averageCents) },
       { label: "Situação do item", before: statusLabel(p.status), after: statusLabel(p.statusAfter) },
     ],
@@ -82,7 +82,31 @@ export function approveButtonState(sourceState: string | null | undefined, isPen
   return { disabled: isPending || block !== null, block };
 }
 
+/**
+ * Homologação visual M8 (P2): o botão reflete a decisão JÁ registrada — item aprovado mostra "Item aprovado" e fica
+ * desabilitado (o servidor já ignora aprovação repetida; isto só evita a impressão de ação pendente).
+ */
+export function approveAction(sourceState: string | null | undefined, status: string | null | undefined, isPending: boolean, compact = false): ApproveButtonState & { alreadyApproved: boolean; label: string } {
+  const base = approveButtonState(sourceState, isPending);
+  // Fonte não vigente (alterada/identidade a revisar): a decisão anterior precisa ser revista — mantém "Aprovar" com o motivo.
+  const alreadyApproved = status === "aprovado" && base.block === null;
+  const label = isPending ? "Aprovando..." : alreadyApproved ? (compact ? "Aprovado ✓" : "Item aprovado") : (compact ? "Aprovar" : "Aprovar item");
+  return { ...base, disabled: base.disabled || alreadyApproved, alreadyApproved, label };
+}
+
 /** Texto curto das cotações fora da curva (valores em CENTAVOS). */
 export function outlierSummary(outliers: readonly PriceOutlier[] | null | undefined): string[] {
   return (outliers ?? []).map((o) => `${o.name || "Fornecedor não identificado"} — ${formatCentsBRL(o.valueCents)} (${o.deviationPercent > 0 ? "+" : ""}${o.deviationPercent}% da média)`);
+}
+
+/**
+ * M8 hardening — cotações importadas (declaradas pela pesquisa, não verificadas) × fictícias (demonstrativas). Nunca
+ * chama de "válida" uma cotação: "com preço" = entra na média; fictícia = valor demonstrativo, não é pesquisa oficial.
+ */
+export function quoteCountText(priced: number, fictitious: number | null | undefined): string {
+  const f = fictitious ?? 0;
+  if (f <= 0) return `${priced} cotação(ões) importada(s) com preço`;
+  const real = priced - f;
+  return `${f} cotação(ões) fictícia(s) — valor demonstrativo, não utilizável como pesquisa de preços oficial`
+    + (real > 0 ? ` · ${real} importada(s) com preço` : "");
 }

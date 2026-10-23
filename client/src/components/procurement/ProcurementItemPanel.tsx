@@ -7,8 +7,8 @@ import {
 import { formatCentsBRL } from "@/lib/money";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
-import { approveButtonState, outlierSummary } from "./itemSourceUpdateView";
-import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
+import { ITEM_STATUS_LABELS, approveAction, outlierSummary, quoteCountText } from "./itemSourceUpdateView";
+import { confirmGate, currentDecisionText, isPastSuggestion, SUGGESTION_STATE_LABEL, type CurrentCatmatDecisionUI } from "./catmatConfirmGate";
 
 /**
  * ProcurementItemPanel — REAL (wired to tRPC).
@@ -19,6 +19,9 @@ import { confirmGate, currentDecisionText, type CurrentCatmatDecisionUI } from "
  * CATMAT/CATSER passa pelo contrato GOVERNADO (`decidirCATMAT`: ledger imutável,
  * threshold institucional, idempotência) e a aprovação final do item é humana.
  */
+
+/** id do título do painel — nome acessível do diálogo que o hospeda (ex.: ItemDrawer). */
+export const ITEM_PANEL_TITLE_ID = "item-intelligence-panel-title";
 
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -84,6 +87,14 @@ export default function ProcurementItemPanel({
   const [manualCode, setManualCode] = React.useState<string>("");
   const [manualDesc, setManualDesc] = React.useState<string>("");
   const [justification, setJustification] = React.useState<string>("");
+  const [searchTerm, setSearchTerm] = React.useState<string>("");
+  const [searchMsg, setSearchMsg] = React.useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  // Explicação de cada alternativa na última consulta (não persiste nem decide): termos do objeto em comum, termos que
+  // a descrição oficial não contém e se a atividade principal da descrição é a do objeto.
+  type CandidateWhy = { matched: string[]; missing: string[]; activityMatch: boolean | null };
+  const [why, setWhy] = React.useState<Record<string, CandidateWhy>>({});
+  const whyOf = (c: { matchedTokens: string[]; missingTokens: string[]; activityMatch: boolean | null }): CandidateWhy =>
+    ({ matched: c.matchedTokens, missing: c.missingTokens, activityMatch: c.activityMatch });
   const keyStateRef = React.useRef<CatmatKeyState | null>(null);
   const lastRetryableRef = React.useRef<boolean>(false);
 
@@ -122,6 +133,56 @@ export default function ProcurementItemPanel({
           : msg,
       );
     },
+  });
+
+  // "Buscar classificação": consulta o catálogo oficial e persiste as alternativas REAIS (nada decidido aqui).
+  const buscar = trpc.itemIntelligence.buscarClassificacaoOficial.useMutation({
+    onSuccess: (res) => {
+      if (res.status === "unavailable" || res.status === "index_unavailable") {
+        setSearchMsg({ tone: "warn", text: res.message });
+        return;
+      }
+      setWhy(Object.fromEntries(res.candidates.map((c) => [c.id, whyOf(c)])));
+      // Ressalvas globais só no CATSER (índice de serviços); no CATMAT as descrições oficiais são listas de atributos.
+      const serviceIndex = res.catalogType === "catser" && res.candidates.length > 0;
+      const partial = (serviceIndex && res.candidates.every((c) => c.activityMatch === false)
+        ? " Nenhuma alternativa tem o objeto como atividade principal: as descrições oficiais apenas o mencionam."
+        : "") + (serviceIndex && res.candidates.every((c) => c.missingTokens.length > 0)
+        ? " Nenhuma alternativa contém todos os termos do objeto: são correspondências relacionadas, não equivalências comprovadas."
+        : "");
+      const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      const via = res.method === "indice-sincronizado" ? " (índice de serviços, cada código verificado na fonte)" : "";
+      const conflicts = res.identityConflicts.length > 0
+        ? ` Código(s) ${res.identityConflicts.join(", ")} não apresentado(s): já registrado(s) neste item com outra descrição oficial (outro catálogo ou redação anterior) — para não confundir CATMAT e CATSER; se for o correto, use a substituição manual com justificativa.`
+        : "";
+      const msg: { tone: "ok" | "warn"; text: string } = res.candidates.length > 0
+        ? { tone: "ok", text: `${res.candidates.length} alternativa(s) oficial(is) do ${label} para "${res.term}"${via}. Revise e confirme a que corresponde ao item.${partial}` }
+        : res.filterIgnoredSuspected
+          ? { tone: "warn", text: `O ${label} devolveu ${res.returned} registro(s) sem relação com "${res.term}" — nada foi sugerido. Informe o código em "Verificar código".` }
+          : res.catalogType === "catmat"
+            ? { tone: "warn", text: `Nenhuma correspondência no CATMAT para "${res.term}". A busca oficial do CATMAT só encontra a descrição oficial completa e exata do item — informe o código em "Verificar código", busque no outro catálogo ou declare "sem correspondência segura".` }
+            : { tone: "warn", text: `Nenhuma correspondência no ${label} para "${res.term}". Ajuste o termo, busque no outro catálogo, verifique um código ou declare "sem correspondência segura".` };
+      setSearchMsg(conflicts ? { tone: "warn", text: msg.text + conflicts } : msg);
+      invalidate();
+    },
+    onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao consultar o catálogo oficial." }),
+  });
+
+  // "Verificar código": consulta oficial POR CÓDIGO (o servidor informa o código; a fonte confirma).
+  const [verifyCode, setVerifyCode] = React.useState<string>("");
+  const verificar = trpc.itemIntelligence.verificarCodigoOficial.useMutation({
+    onSuccess: (res) => {
+      const label = res.catalogType === "catmat" ? "CATMAT" : "CATSER";
+      if (res.status === "verified") {
+        setWhy((m) => ({ ...m, [res.candidate.id]: whyOf(res.candidate) }));
+        setSearchMsg({ tone: "ok", text: `Código ${res.candidate.catmatCode} verificado no ${label}: "${res.candidate.catmatDescription}". Confirme abaixo se corresponde ao item.` });
+        setVerifyCode("");
+        invalidate();
+        return;
+      }
+      setSearchMsg({ tone: "warn", text: res.message });
+    },
+    onError: (err) => setSearchMsg({ tone: "warn", text: err.message ?? "Falha ao verificar o código no catálogo oficial." }),
   });
 
   const decide = (opts: {
@@ -171,13 +232,16 @@ export default function ProcurementItemPanel({
   const [confirmingSourceUpdate, setConfirmingSourceUpdate] = React.useState<boolean>(false);
   // R9 / SEM-054 — o que a aprovação confirmaria (servidor): bloqueio da fonte, referência canônica e outliers.
   const governance = data?.governance ?? null;
-  const approve = approveButtonState(governance?.sourceState, approveItem.isPending);
+  const approve = approveAction(governance?.sourceState, item?.status, approveItem.isPending);
   const outliers = outlierSummary(governance?.priceOutliers);
+  const fictitious = governance?.fictitiousQuoteCount ?? 0;
+  // M8 (política de 20/10/2026) — o servidor decide se a fonte fictícia suspende a referência (fora da homologação autorizada).
+  const referenceBlocked = governance?.referenceBlockedReason === "FICTITIOUS_SOURCE";
 
   return (
     <aside className="flex h-full w-full max-w-md flex-col border-l border-border bg-card">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="font-semibold text-foreground">Inteligência do Item</h2>
+        <h2 id={ITEM_PANEL_TITLE_ID} className="font-semibold text-foreground">Inteligência do Item</h2>
         {onClose && (
           <button
             type="button"
@@ -214,7 +278,7 @@ export default function ProcurementItemPanel({
                   "bg-muted text-foreground"
                 }`}
               >
-                {item.status}
+                {ITEM_STATUS_LABELS[item.status] ?? item.status}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -264,27 +328,59 @@ export default function ProcurementItemPanel({
 
           {/* 3. CATMAT sugerido + alternativas (servidor decide) */}
           <Block title="CATMAT (decisão do servidor)">
-            <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 p-3">
-              <p className="text-xs text-indigo-600 dark:text-indigo-400">Sugerido</p>
-              <p className="font-mono text-sm font-semibold text-indigo-900 dark:text-indigo-200">
-                {item.suggestedCATMAT ?? "—"}
+            {/* Classificação sobre o catálogo OFICIAL: o servidor indica a natureza (material/serviço) e o sistema consulta o
+                CATMAT/CATSER; só códigos retornados pela fonte viram alternativas confirmáveis. Nada é fabricado. */}
+            <div data-testid="catmat-official-search" className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Buscar a classificação no catálogo oficial (Compras.gov.br) com a descrição do item. Indique a natureza:
               </p>
-            </div>
-            {item.alternativeCATMAT.length > 0 && (
-              <div className="mt-2">
-                <p className="mb-1 text-xs text-muted-foreground">Alternativas</p>
-                <div className="flex flex-wrap gap-1">
-                  {item.alternativeCATMAT.map((c) => (
-                    <span
-                      key={c}
-                      className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Termo de busca (opcional — padrão: descrição do item)"
+                className="mt-2 w-full rounded border border-border px-2 py-1 text-xs"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(["catmat", "catser"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => buscar.mutate({ itemId: item.id, catalogType: t, term: searchTerm.trim() || undefined })}
+                    disabled={buscar.isPending}
+                    className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                  >
+                    {buscar.isPending && buscar.variables?.catalogType === t ? "Consultando…" : t === "catmat" ? "Buscar no CATMAT (material)" : "Buscar no CATSER (serviço)"}
+                  </button>
+                ))}
               </div>
-            )}
+              <div data-testid="catmat-verify-code" className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Código CATMAT/CATSER"
+                  className="w-36 rounded border border-border px-2 py-1 font-mono text-xs"
+                />
+                {(["catmat", "catser"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => verificar.mutate({ itemId: item.id, catalogType: t, code: verifyCode })}
+                    disabled={verificar.isPending || verifyCode.length === 0}
+                    className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
+                  >
+                    {t === "catmat" ? "Verificar código no CATMAT" : "Verificar código no CATSER"}
+                  </button>
+                ))}
+              </div>
+              {searchMsg && (
+                <p data-testid="catmat-search-result" role="status" className={`mt-2 text-xs ${searchMsg.tone === "warn" ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
+                  {searchMsg.text}
+                </p>
+              )}
+            </div>
             {/* Justificativa humana — OBRIGATÓRIA para rejeitar / substituir / sem correspondência segura
                 (o domínio exige; confirmar dispensa). */}
             <div className="mt-3">
@@ -303,33 +399,60 @@ export default function ProcurementItemPanel({
             <p data-testid="catmat-current-decision" className="mt-2 text-xs font-medium text-foreground">
               {currentDecisionText(currentDecision, !decisionsQuery.isLoading)}
             </p>
-            {/* Candidatos CATMAT com score/rank (a decisão vigente vem do ledger, acima) */}
-            {data.catmat.length > 0 && (
-              <ul className="mt-3 space-y-2">
-                {data.catmat.map((c) => (
+            {/* Candidatos: busca atual / código verificado (confirmáveis) × anteriores (só consulta). Decisão vigente: ledger, acima. */}
+            {(() => {
+              const current = data.catmat.filter((c) => !isPastSuggestion(c.state));
+              const previous = data.catmat.filter((c) => isPastSuggestion(c.state));
+              const renderCandidate = (c: (typeof data.catmat)[number], past: boolean) => (
                   <li
                     key={c.id}
-                    className="rounded-md border border-border p-2 text-xs"
+                    data-testid={past ? "catmat-candidate-past" : "catmat-candidate-current"}
+                    className={`rounded-md border border-border p-2 text-xs ${past ? "opacity-80" : ""}`}
                   >
+                    <p data-testid="catmat-candidate-state" className={`mb-1 text-[11px] font-medium ${past ? "text-muted-foreground" : "text-foreground"}`}>
+                      {SUGGESTION_STATE_LABEL[c.state]}
+                      {currentDecision && (currentDecision.decision === "confirmado" || currentDecision.decision === "substituido") && currentDecision.catmatCode === c.catmatCode
+                        ? " · decisão vigente (ledger)" : ""}
+                    </p>
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-semibold text-foreground">
-                        #{c.rank} {c.catmatCode}
+                        {c.state === "busca_atual" ? `#${c.rank + 1} ` : ""}{c.catmatCode}
                       </span>
                       <span className="text-muted-foreground">
-                        score {c.score.toFixed(2)}
+                        similaridade textual {Math.round(c.score * 100)}%
                       </span>
                     </div>
                     <p className="text-muted-foreground">{c.catmatDescription}</p>
-                    <p className="mt-0.5 text-muted-foreground">sugestão do sistema (ainda não é decisão)</p>
+                    {(why[c.id]?.matched.length ?? 0) > 0 && (
+                      <p data-testid="catmat-candidate-matched-terms" className="text-[11px] text-muted-foreground">
+                        Termos do objeto em comum: {why[c.id].matched.join(", ")}
+                      </p>
+                    )}
+                    {(why[c.id]?.missing.length ?? 0) > 0 && (
+                      <p data-testid="catmat-candidate-missing-terms" className="text-[11px] text-amber-700 dark:text-amber-300">
+                        Não consta da descrição oficial: {why[c.id].missing.join(", ")} — avalie se o código atende ao objeto.
+                      </p>
+                    )}
+                    {why[c.id]?.activityMatch === false && (
+                      <p data-testid="catmat-candidate-activity-mismatch" className="text-[11px] text-amber-700 dark:text-amber-300">
+                        A atividade principal desta descrição oficial é outra; o código apenas menciona o objeto.
+                      </p>
+                    )}
+                    <p data-testid="catmat-candidate-provenance" className={`mt-0.5 ${c.verified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                      {c.verified
+                        ? `Verificado no catálogo oficial ${c.catalogType === "catser" ? "CATSER" : "CATMAT"}${c.retrievedAt ? ` · consultado em ${new Date(c.retrievedAt).toLocaleDateString("pt-BR")}` : ""} — ${past ? "verificação não é recomendação atual" : "ainda não é decisão"}`
+                        : `Sem proveniência verificável (${c.verificationNote ?? "não consta de consulta oficial"}) — não pode ser confirmado`}
+                    </p>
                     {(() => {
                       const gate = confirmGate({
                         candidateCode: c.catmatCode, current: currentDecision, currentLoaded: !decisionsQuery.isLoading,
                         thresholdConfigured: thresholdQuery.data?.configured, pending: decidirCATMAT.isPending,
+                        verified: c.verified, verificationNote: c.verificationNote, state: c.state,
                       });
                       return (<>
                     {gate.note && <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">{gate.note}</p>}
                     {gate.reason && <p role="status" className="mt-1 text-[11px] text-muted-foreground">{gate.reason}</p>}
-                    <div className="mt-2 flex gap-2">
+                    {!past && <div className="mt-2 flex gap-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -355,18 +478,34 @@ export default function ProcurementItemPanel({
                       >
                         Rejeitar
                       </button>
-                    </div>
+                    </div>}
                       </>);
                     })()}
                   </li>
-                ))}
-              </ul>
-            )}
+              );
+              return (<>
+                {current.length > 0 && (
+                  <ul className="mt-3 space-y-2">{current.map((c) => renderCandidate(c, false))}</ul>
+                )}
+                {previous.length > 0 && (
+                  <details data-testid="catmat-previous-suggestions" className="mt-3 rounded-md border border-dashed border-border p-2">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">
+                      Sugestões anteriores ({previous.length}) — não pertencem à busca mais recente; não podem ser confirmadas
+                    </summary>
+                    <ul className="mt-2 space-y-2">{previous.map((c) => renderCandidate(c, true))}</ul>
+                  </details>
+                )}
+              </>);
+            })()}
 
             {/* Substituição manual (decisão governada = substituido) — código explícito do servidor */}
             <div className="mt-3 rounded-md border border-border p-2">
               <p className="mb-1 text-xs font-medium text-muted-foreground">
                 Substituir por código manual
+              </p>
+              <p className="mb-1 text-[11px] text-muted-foreground">
+                Código declarado pelo servidor, com justificativa e responsabilidade registradas. Só aparece como verificado se o
+                mesmo código constar de uma consulta oficial deste item.
               </p>
               <div className="flex flex-col gap-1">
                 <input
@@ -514,7 +653,7 @@ export default function ProcurementItemPanel({
                         {r.type}
                       </span>
                       <span className="rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-blue-700 dark:text-blue-300">
-                        confiança {Math.round(r.confidence * 100)}%
+                        {r.type === "catmat" ? "similaridade textual" : "confiança"} {Math.round(r.confidence * 100)}%
                       </span>
                     </div>
                     <p className="text-foreground">{r.summary}</p>
@@ -544,14 +683,25 @@ export default function ProcurementItemPanel({
             {governance && (
               <div className="rounded-md border border-border p-3 text-xs" data-testid="approval-impact">
                 <p className="text-muted-foreground">
-                  {item.status === "aprovado" ? "Preço de referência canônico vigente" : "Ao aprovar, o preço de referência canônico será"}
+                  {referenceBlocked
+                    ? (item.status === "aprovado" ? "Média operacional (fonte fictícia) — suspensa como preço de referência" : "Média operacional (fonte fictícia) — ao aprovar, NÃO vira preço de referência oficial")
+                    : fictitious > 0
+                      ? (item.status === "aprovado" ? "Valor demonstrativo em uso como referência (homologação sintética autorizada)" : "Valor demonstrativo (homologação sintética autorizada) — ao aprovar, vira a referência do item")
+                      : (item.status === "aprovado" ? "Preço de referência canônico vigente" : "Ao aprovar, o preço de referência canônico será")}
                 </p>
                 <p className="font-mono text-sm font-semibold text-foreground">
                   {formatCentsBRL(governance.referencePriceCents)}
                 </p>
                 <p className="text-muted-foreground">
-                  Média de {governance.validQuoteCount} cotação(ões) válida(s).
+                  Média de {quoteCountText(governance.validQuoteCount, fictitious)}.
                 </p>
+                {fictitious > 0 && (
+                  <p role="status" data-testid="fictitious-quotes-warning" className="mt-2 rounded border border-amber-400 p-2 text-amber-800 dark:border-amber-700 dark:text-amber-300">
+                    {referenceBlocked
+                      ? `Esta média inclui ${fictitious} cotação(ões) identificada(s) como fictícia(s), que não constitui(em) pesquisa de preços oficial. A aprovação operacional continua disponível, mas o preço fica suspenso na referência da contratação e nos documentos oficiais até que cotações reais substituam as fictícias.`
+                      : `Esta média inclui ${fictitious} cotação(ões) de fonte fictícia: valores demonstrativos permitidos só nesta organização de homologação sintética — não constituem pesquisa de preços oficial.`}
+                  </p>
+                )}
                 {outliers.length > 0 ? (
                   <div className="mt-2 text-orange-700 dark:text-orange-300">
                     <p className="font-medium">{outliers.length} cotação(ões) fora da curva (&gt;50% da média) — compõem esta média:</p>
@@ -601,7 +751,7 @@ export default function ProcurementItemPanel({
               title={approve.block?.reason}
               className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
             >
-              {approveItem.isPending ? "Aprovando..." : "Aprovar item"}
+              {approve.label}
             </button>
           </div>
         </div>

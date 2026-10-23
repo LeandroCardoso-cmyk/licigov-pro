@@ -111,3 +111,4 @@ temp/
 
 # venv isolado do Graphify (toolchain reproduzível — ver tools/graphify/README.md)
 .venv-graphify/
+server/services/catalogRelevance.baseline.ts

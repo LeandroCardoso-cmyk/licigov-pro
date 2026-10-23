@@ -148,6 +148,7 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     createFromDirectProcurement: { directWorkspaceId: "dir-new006", contractNumber: "CT-NEW006-FD" },
     createManual: { idempotencyKey: `idem-new006-${contractId}`, contractNumber: "CT-NEW006-MAN" },
     importExternalContract: { source: "pdf", rawText: "CONTRATO Nº 77/2026\nCONTRATADA: Empresa X\nOBJETO: teste\nVALOR: R$ 10.000,00\nVIGÊNCIA: 12 meses", contractNumber: "CT-NEW006-IMP" },
+    registerInForceContract: { idempotencyKey: `idem-new006-leg-${contractId}`, contractNumber: "CT-NEW006-LEG", contractor: "Empresa Legada", object: "teste", term: "12 meses" },
     loadContract: { contractId },
     listContracts: undefined,
     listImported: undefined,
@@ -182,9 +183,9 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     expect(logs[0]).toMatchObject({ procedure, requiredRole, userId: users[userTag], organizationId: ORG_A, correlationId: corr });
   }
 
-  it("matriz: 10 mutations protegidas (8 operator, 2 manager)", () => {
-    expect(MUTATIONS).toHaveLength(10);
-    expect(MUTATIONS.filter(n => CONTRACT_WORKSPACE_RBAC_MATRIX[n].minRole === "manager").sort()).toEqual(["createAddendum", "createApostille"]);
+  it("matriz: 11 mutations protegidas (8 operator, 3 manager)", () => {
+    expect(MUTATIONS).toHaveLength(11);
+    expect(MUTATIONS.filter(n => CONTRACT_WORKSPACE_RBAC_MATRIX[n].minRole === "manager").sort()).toEqual(["createAddendum", "createApostille", "registerInForceContract"]);
   });
 
   it("viewer: FORBIDDEN em TODAS as mutations, zero escrita em qualquer tabela, zero IA, log com correlationId", async () => {
@@ -203,8 +204,8 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     await expect(call("viewerA", "getLegalOpinion", { requestId: "req-inexistente" })).resolves.toBeDefined();
   }, 30_000);
 
-  it("operator: FORBIDDEN em createAddendum/createApostille (instrumento muda status do contrato) — zero escrita, zero IA", async () => {
-    for (const name of ["createAddendum", "createApostille"] as const) {
+  it("operator: FORBIDDEN em createAddendum/createApostille (instrumento muda status do contrato) e registerInForceContract (nasce vigente) — zero escrita, zero IA", async () => {
+    for (const name of ["createAddendum", "createApostille", "registerInForceContract"] as const) {
       await expectDeniedWithoutEffects("operatorA", name, inputs(CT_OP)[name], `contractWorkspace.${name}`, "manager");
       warn.mockClear();
     }

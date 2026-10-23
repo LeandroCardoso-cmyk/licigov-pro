@@ -6,6 +6,8 @@ export const ORIGIN_LABELS: Record<string, string> = {
   processo_licitatorio: "Processo Licitatório",
   contratacao_direta: "Contratação Direta",
   externo: "Contrato Externo",
+  avulso: "Avulso",
+  legado: "Vigente (processo anterior)",
 };
 
 export const STATUS_LABELS: Record<string, string> = {

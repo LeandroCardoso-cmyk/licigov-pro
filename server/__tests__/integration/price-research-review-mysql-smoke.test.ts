@@ -60,11 +60,13 @@ async function newProcess(org: number): Promise<string> {
 async function goldenSession(org: number, processId: string) {
   const db = (await getDb())!;
   const key = `imports/${org}/${Date.now()}-${++seq}-mapa.pdf`;
-  mem.set(key, GOLDEN);
-  const checksum = createHash("sha256").update(`${GOLDEN.length}-${seq}-${org}`).update(GOLDEN).digest("hex");
+  // Conteúdo distinto por sessão (comentário PDF após %%EOF) e checksum = sha256 REAL do conteúdo, como no upload.
+  const bytes = Buffer.concat([GOLDEN, Buffer.from(`\n%grp-${seq}-${org}\n`)]);
+  mem.set(key, bytes);
+  const checksum = createHash("sha256").update(bytes).digest("hex");
   const [s] = await db.insert(importSessions).values({
     organizationId: org, uploadedBy: users.operator ?? 1, sourceFileId: key, sourceFileName: "mapa.pdf", sourceMimeType: "application/pdf",
-    sourceSize: GOLDEN.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",
+    sourceSize: bytes.length, checksum, procurementProcessId: processId, importType: "price_research", parserType: "auto",
     status: "uploaded", stage: "file_stored", correlationId: `grp-${seq}`,
   }).$returningId();
   expect(enqueueImport(s.id, org, key, { correlationId: `grp-${s.id}` })).not.toBeNull();

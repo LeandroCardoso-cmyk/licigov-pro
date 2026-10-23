@@ -12,6 +12,8 @@ import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
+import { AuthoringContractError } from "../domain/authoring/authoringSchema";
+import { authoringFailureGuidance } from "../domain/authoring/authoringGuidance";
 import { resolveEditalSources } from "./authoring/editalContext";
 import { resolveDocumentAuthoringContext, storedSourcesDigest, type CanonicalItemsState } from "./authoring/authoringContext";
 import { compareSources, SOURCE_LABELS, type SourceKey } from "../domain/sourceDigests";
@@ -620,6 +622,15 @@ export interface DFDAIDraftExplanation {
   contextDigest: string;
   inputDigest: string;
   unverifiedNumbers: string[];
+  /** M8-AI-DFD-001: lacunas factuais e avisos ao revisor — FORA do texto documental. */
+  gaps?: string[];
+  warnings?: string[];
+  /** Interpretação da saída da IA (contrato estruturado ou validação de texto fora do contrato) e trechos descartados. */
+  outputContract?: "structured" | "text-fallback";
+  contractVersion?: string;
+  discardedSegments?: number;
+  /** Frases retiradas do texto por dependerem de lacuna (homologação visual M8). */
+  movedToGaps?: number;
   actorUserId: number;
   correlationId: string;
   generatedAt: string;
@@ -694,7 +705,19 @@ export async function generateDFDJustificationDraft(params: {
         idempotencyKey: params.idempotencyKey, invoke: params.invoke,
       });
       if (!draft.text.trim()) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "A IA não produziu uma sugestão utilizável — nada foi alterado." });
+        // Fallback seguro (M8-AI-DFD-001): saída sem nenhum parágrafo documental válido NÃO vira sugestão.
+        log.warn("dfd_ai_suggestion_rejected_by_contract", {
+          organizationId: params.organizationId, processId: params.processId, correlationId: params.correlationId,
+          executionId: draft.executionId, outputContract: draft.outputContract, discardedReasons: draft.discardedReasons,
+        });
+        // Sem texto mas com lacunas: a informação que falta é o que o servidor precisa saber (nunca suposta pela IA).
+        const missing = draft.gaps.slice(0, 3).join("; ");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: missing
+            ? `A IA não tinha fatos suficientes para redigir a justificativa — nada foi alterado. Informações necessárias: ${missing}. Complete-as no DFD (ou redija o texto manualmente) e gere novamente.`
+            : "A IA não produziu um texto documental válido para a justificativa — nada foi alterado. Gere novamente ou redija o texto manualmente.",
+        });
       }
       // Cognição real ⇒ proveniência obrigatória (fail-closed: sem rastro da execução não há sugestão aceitável).
       if (params.invoke === undefined && (await listProvenanceByCorrelation(params.organizationId, params.correlationId)).length === 0) {
@@ -709,6 +732,8 @@ export async function generateDFDJustificationDraft(params: {
           field: "justificativa", executionId, provider: draft.provider, model: draft.model,
           promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
           inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers,
+          gaps: draft.gaps, warnings: draft.warnings, outputContract: draft.outputContract,
+          contractVersion: draft.contractVersion, discardedSegments: draft.discardedReasons.length, movedToGaps: draft.movedToGaps,
           actorUserId: params.actorUserId, correlationId: params.correlationId, generatedAt: new Date().toISOString(),
         },
         current,
@@ -726,6 +751,7 @@ export async function generateDFDJustificationDraft(params: {
             actorUserId: params.actorUserId, field: "justificativa", executionId, provider: draft.provider, model: draft.model,
             promptVersion: draft.promptVersion, contextVersion: ctx.version, contextDigest: ctx.digest.slice(0, 16),
             inputDigest: draft.inputDigest.slice(0, 16), unverifiedNumbers: draft.unverifiedNumbers.length,
+            outputContract: draft.outputContract, discardedReasons: draft.discardedReasons, gaps: draft.gaps.length,
             currentOrigin: current.origin, engineReplayed: draft.replayed, persisted: false,
           });
           return out;
@@ -991,6 +1017,13 @@ export async function generateDocument(params: {
         actorUserId: params.actorUserId,
         invoke: params.invoke,
         sourceContext,
+      }).catch((err: unknown) => {
+        // Homologação visual M8: a recusa fail-closed continua — só o motivo vira orientação operacional
+        // (o que faltou, onde complementar, próxima ação; rascunho ≠ emissão oficial). Nada é gravado.
+        if (err instanceof AuthoringContractError) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: authoringFailureGuidance(params.kind, err.issues).message, cause: err });
+        }
+        throw err;
       });
       const content = params.kind === "tr" && params.structuredParams
         ? `${authoring.content.replace(/\s+$/, "")}\n\n${params.structuredParams.block}\n`

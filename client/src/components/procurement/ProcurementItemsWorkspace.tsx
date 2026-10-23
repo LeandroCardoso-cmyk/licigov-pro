@@ -42,6 +42,10 @@ export default function ProcurementItemsWorkspace({ processId = "" }: Procuremen
     utils.procurementItems.candidates.invalidate();
     utils.procurementProcess.dfdAssistState.invalidate({ processId });
     utils.procurementProcess.canonicalContext.invalidate({ processId });
+    // Homologação visual M8 (P2): regime de participação e preparação/preflight do Edital derivam dos mesmos itens.
+    utils.procurementProcess.itemsParticipation.invalidate();
+    utils.procurementProcess.editalTemplatePreparation.invalidate();
+    utils.procurementProcess.editalTemplatePreflight.invalidate();
   };
   const onError = (e: { message: string; data?: { code?: string } | null }) => {
     setError(e.message);

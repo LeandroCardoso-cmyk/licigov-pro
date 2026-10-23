@@ -25,6 +25,13 @@ export interface AddendumData {
   readonly newValue: number; readonly newTerm: string; readonly status: string;
 }
 
+/** Aditivo anterior do MESMO contrato, para a cláusula de histórico do termo (nada é inventado; declarado vem rotulado). */
+export interface PriorAddendumLine {
+  readonly sequence: number; readonly addendumType: string; readonly newTerm: string; readonly newValue: number;
+  /** `documento_externo` = formalizado fora do sistema e DECLARADO pelo usuário (não verificado). */
+  readonly requestOrigin: string;
+}
+
 export interface ApostilleData {
   readonly id: string; readonly sequence: number; readonly kind: string; readonly description: string;
   readonly newValue: number; readonly newManager: string; readonly newInspector: string;
@@ -57,7 +64,24 @@ function suggestionsSection(suggestions: readonly string[]): string[] {
   ];
 }
 
-export function buildAddendumTermContent(c: ContractHeader, a: AddendumData, suggestions: readonly string[] = [], legalBasis: readonly string[] = []): string {
+function priorAmendmentsSection(prior: readonly PriorAddendumLine[]): string[] {
+  if (prior.length === 0) return [];
+  return [
+    "## Cláusula quinta — Das alterações anteriores",
+    "Registro das alterações contratuais anteriores a este termo (conferir com os instrumentos originais):",
+    ...prior.map((p) => {
+      const what = [
+        `${ADDENDUM_TYPE_LABEL[p.addendumType] ?? p.addendumType}`,
+        p.newTerm.trim() ? `prazo/vigência: ${p.newTerm.trim()}` : "",
+        p.newValue > 0 ? `valor: ${reais(p.newValue)}` : "",
+      ].filter(Boolean).join("; ");
+      return `- Termo Aditivo nº ${p.sequence} — ${what}${p.requestOrigin === "documento_externo" ? " [DECLARADO pelo usuário — formalizado fora do sistema, não verificado]" : ""}`;
+    }),
+    "",
+  ];
+}
+
+export function buildAddendumTermContent(c: ContractHeader, a: AddendumData, suggestions: readonly string[] = [], legalBasis: readonly string[] = [], prior: readonly PriorAddendumLine[] = []): string {
   return [
     ...header(`Termo Aditivo nº ${a.sequence}`, c),
     "## Cláusula primeira — Do objeto do aditivo",
@@ -73,6 +97,7 @@ export function buildAddendumTermContent(c: ContractHeader, a: AddendumData, sug
     "## Cláusula quarta — Da ratificação",
     "Permanecem inalteradas as demais cláusulas do contrato original.",
     "",
+    ...priorAmendmentsSection(prior),
     ...(a.status === "aguardando_parecer" ? ["> [REVISAR: aditivo aguardando parecer jurídico — não assinar antes do parecer.]", ""] : []),
     // R8 / PR-20 scaffolding (SEM-084): limites do art. 125 não são afirmados pelo sistema sem parecer.
     ...(a.addendumType === "valor" || a.addendumType === "quantitativo" || a.addendumType === "prazo"

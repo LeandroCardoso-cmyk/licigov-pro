@@ -156,8 +156,9 @@ describe.skipIf(!DB)("U2A-OCR — Pesquisa de Preços com PDF digitalizado (MySQ
 
     // Legado: sessão forçada a "approved" sem itens ⇒ promoção PROIBIDA e transação revertida (ledger vazio).
     await updateSessionStatus(s.id, ORG, "approved", { stage: "approved" });
+    // M8 — o OCR devolveu 0 de N páginas (OCR_PAGES_INCOMPLETE): sem evidência de análise, a recusa chega antes (fail-closed).
     await expect(promoteApprovedSessionToDomain({ sessionId: s.id, organizationId: ORG, procurementProcessId: pid, actorUserId: U, idempotencyKey: `z2-${s.id}`, correlationId: "z" }))
-      .rejects.toThrow(/NO_VALID_ITEMS_TO_PROMOTE/);
+      .rejects.toThrow(/NO_VALID_ITEMS_TO_PROMOTE|PROVENANCE_SCAN_REQUIRED/);
     expect(await count("SELECT COUNT(*) n FROM import_promotions WHERE organizationId = ? AND importSessionId = ?", [ORG, s.id])).toBe(0);
     expect(await listIntelligentItems(pid, ORG)).toHaveLength(0);
   });

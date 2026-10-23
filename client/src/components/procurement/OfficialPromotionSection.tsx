@@ -273,6 +273,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         origin={processId}
         title="Documentos oficiais (versões emitidas)"
         requireStatusForExport="emitido"
+        documentType={kind}
       />
     </div>
   );

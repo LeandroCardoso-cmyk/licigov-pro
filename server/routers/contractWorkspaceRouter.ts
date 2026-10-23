@@ -23,8 +23,11 @@ import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
   createManualContract, ManualContractConflictError, ContractStatusConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
-  requestContractLegalOpinion, getContractLegalOpinion,
+  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract,
 } from "../services/contractService";
+import { validLocalDate } from "../domain/operationRecordSchedule";
+import { MAX_PRIOR_AMENDMENTS, PRIOR_AMENDMENT_TYPES } from "../domain/legacyContractContinuity";
+import { getCurrentExpirationDate } from "../db/departmentOperation";
 import {
   getContractWorkspace, listContractWorkspaces, listImportedContractWorkspaces,
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
@@ -172,6 +175,53 @@ export const contractWorkspaceRouter = router({
       }
     }),
 
+  /**
+   * Contrato VIGENTE de processo anterior (legado): registro por DECLARAÇÃO do usuário autenticado, sem recriar etapas
+   * anteriores. Pede só o necessário para acompanhar e emitir instrumentos (número, contratado, objeto, vigência). Piso
+   * `manager` (o registro nasce vigente). Não altera contratos existentes; não é ativação de minuta.
+   */
+  registerInForceContract: orgRoleProcedure("manager")
+    .input(z.object({
+      idempotencyKey: z.string().min(1),
+      contractNumber: z.string().trim().min(1),
+      contractor: z.string().trim().min(1),
+      // Objeto opcional SOMENTE quando o contrato parte de um registro de processo anterior (o objeto vem do registro).
+      object: z.string().trim().min(1).optional(),
+      term: z.string().trim().min(1),
+      value: z.number().nonnegative().optional(),
+      manager: z.string().optional(),
+      inspector: z.string().optional(),
+      endDate: z.string().refine(validLocalDate, "Término da vigência inválido.").optional(),
+      sourceReference: z.string().max(200).optional(),
+      /** Registro operacional (processo/contratação legados ou contrato externo) de que o contrato parte — reaproveita os dados. */
+      legacyRecordId: z.string().min(1).max(20).optional(),
+      /** Aditivos já formalizados fora do sistema (histórico DECLARADO; continua a numeração). */
+      priorAmendments: z.array(z.object({
+        type: z.enum(PRIOR_AMENDMENT_TYPES), description: z.string().max(500).optional(), newTerm: z.string().max(200).optional(),
+        newValue: z.number().nonnegative().optional(), signedOn: z.string().refine(validLocalDate, "Data de assinatura inválida.").optional(),
+        reference: z.string().max(200).optional(),
+      })).max(MAX_PRIOR_AMENDMENTS).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      const userId = ctx.user.id;
+      const { idempotencyKey, ...fields } = input;
+      const payloadHash = createHash("sha256").update(JSON.stringify(fields)).digest("hex");
+      const idem = await checkIdempotency(idempotencyKey, userId, orgId, "contractWorkspace.registerInForceContract", payloadHash);
+      if (idem.status === "completed") {
+        if (idem.payloadMismatch) throw new TRPCError({ code: "CONFLICT", message: "Esta idempotencyKey já foi usada com dados diferentes." });
+        return idem.response as Awaited<ReturnType<typeof registerInForceLegacyContract>>;
+      }
+      try {
+        const result = await registerInForceLegacyContract({ organizationId: orgId, ...fields, createdBy: userId, correlationId: ctx.correlationId });
+        await saveIdempotencyResult(idempotencyKey, userId, orgId, result);
+        return result;
+      } catch (error) {
+        await failIdempotencyKey(idempotencyKey, userId, orgId);
+        throw error;
+      }
+    }),
+
   importExternalContract: orgRoleProcedure("operator")
     .input(z.object({ source: z.enum(["pdf", "docx"]), rawText: z.string().min(1), contractNumber: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
@@ -185,15 +235,16 @@ export const contractWorkspaceRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const workspace = await getContractWorkspace(input.contractId, orgId);
-      if (!workspace) return { workspace: null, documents: [], addenda: [], apostilles: [], occurrences: [], timeline: [] };
-      const [documents, addenda, apostilles, occurrences, timeline] = await Promise.all([
+      if (!workspace) return { workspace: null, documents: [], addenda: [], apostilles: [], occurrences: [], timeline: [], expiration: null };
+      const [documents, addenda, apostilles, occurrences, timeline, expirationDate] = await Promise.all([
         listContractWsDocuments(input.contractId, orgId),
         listContractAddenda(input.contractId, orgId),
         listContractApostilles(input.contractId, orgId),
         listContractOccurrences(input.contractId, orgId),
         listProcessTimeline(input.contractId, orgId),
+        getCurrentExpirationDate(orgId, "contrato", input.contractId), // vigência acompanhada (derivada dos eventos do Centro de Operações)
       ]);
-      return { workspace, documents, addenda, apostilles, occurrences, timeline };
+      return { workspace, documents, addenda, apostilles, occurrences, timeline, expiration: expirationDate ? { endDate: expirationDate, source: "centro_operacoes" as const } : null };
     }),
 
   listContracts: tenantProcedure
@@ -258,11 +309,16 @@ export const contractWorkspaceRouter = router({
 
   createAddendum: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
     // SEM084-B — chave de idempotência OBRIGATÓRIA (uma por tentativa lógica): repetir o comando converge para o MESMO aditivo.
-    .input(z.object({ contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(), requestOrigin: z.enum(ADDENDUM_ORIGINS).optional(), idempotencyKey: z.string().trim().min(8).max(128) }))
+    .input(z.object({
+      contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(),
+      /** Novo término da vigência (AAAA-MM-DD) — só aditivo de prazo; reagenda o vencimento e os alertas no Centro de Operações. */
+      newEndDate: z.string().refine(validLocalDate, "Término da vigência inválido.").optional(),
+      requestOrigin: z.enum(ADDENDUM_ORIGINS).optional(), idempotencyKey: z.string().trim().min(8).max(128),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey })
+      return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, newEndDate: input.newEndDate, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey })
         .catch(mapInstrumentStatusError);
     }),
 

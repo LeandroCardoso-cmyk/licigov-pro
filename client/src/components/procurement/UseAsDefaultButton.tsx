@@ -4,7 +4,7 @@ import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { defaultConsentText, withDefault, type DefaultViewModel } from "@/lib/contextReuse";
 import { formatDisplay } from "@/lib/editalPreparation";
-import { emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
+import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 
 export interface UseAsDefaultButtonProps {
   /** Variável do catálogo (elegível pela Authority Matrix; o servidor recusa as demais). */
@@ -41,7 +41,7 @@ export default function UseAsDefaultButton({ name, description, type, value, pro
     await record.mutateAsync({
       confirm: true, idempotencyKey: key, expectedRevision: state.revision, catalogVersion: state.catalogVersion,
       defaults: withDefault(state.defaults as DefaultViewModel[], name, value),
-      decision: { decidedByName: decision.decidedByName.trim(), decidedByRole: decision.decidedByRole.trim(), decidedAt: decision.decidedAt, basisReference: decision.basisReference.trim(), reason: decision.reason.trim() },
+      ...decisionPayload(decision),
     } as never).then(async () => {
       setOpen(false); setKey(crypto.randomUUID()); setDecision((d) => ({ ...d, confirmed: false }));
       await utils.procurementProcess.licitacoesProfile.invalidate();

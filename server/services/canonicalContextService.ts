@@ -13,6 +13,7 @@ import { TRPCError } from "@trpc/server";
 import { serviceLogger } from "./observabilityService";
 import { getProcess, listIntelligentItems, type ProcurementExecutor } from "../db/procurement";
 import { getOrganizationById } from "../db/organizations";
+import { demonstrativePricesAllowed } from "./priceGovernanceService";
 import { appendContextFacts, listContextFacts, type NewFactAssertion } from "../db/procurementContext";
 import { listProcurementItems, listProcurementLots, listItemSourceLinks } from "../db/procurementItems";
 import {
@@ -29,13 +30,14 @@ export async function resolveProcurementContext(p: {
   if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
 
   // O usuário que criou/opera o Processo NÃO é o "Responsável pela demanda" (não é lido aqui).
-  const [org, items, assertions, pItems, lots, links] = await Promise.all([
+  const [org, items, assertions, pItems, lots, links, demonstrativeAllowed] = await Promise.all([
     getOrganizationById(p.organizationId).catch(() => null),
     listIntelligentItems(p.processId, p.organizationId),
     listContextFacts(p.organizationId, p.processId, p.executor),
     listProcurementItems(p.organizationId, p.processId, p.executor),
     listProcurementLots(p.organizationId, p.processId, p.executor),
     listItemSourceLinks(p.organizationId, p.processId, p.executor),
+    demonstrativePricesAllowed(p.organizationId),
   ]);
 
   const ctx = resolveCanonicalContext({
@@ -50,7 +52,9 @@ export async function resolveProcurementContext(p: {
     intelligentItems: (items ?? []).map((i) => ({
       id: i.id, description: i.description, unit: i.unit, quantity: i.quantity, status: i.status,
       averagePriceCents: i.averagePriceCents, quoteCount: i.quoteCount, sourceState: i.sourceState ?? "current",
+      fictitiousQuoteCount: i.fictitiousQuoteCount ?? 0,
     })),
+    demonstrativePricesAllowed: demonstrativeAllowed,
     procurementItems: (pItems ?? []).map((i) => ({
       id: i.id, description: i.description, unit: i.unit, lotId: i.lotId, ordinal: i.ordinal,
       status: i.status, revision: i.revision, fingerprint: i.fingerprint,

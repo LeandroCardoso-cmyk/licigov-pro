@@ -125,7 +125,8 @@ describe("PR C — CATMAT/CATSER supervisionado (proveniência + sem correspond�
   it("anexa proveniência (source) às sugestões — nunca em branco", () => {
     const matches = rank();
     expect(matches.every((m) => !!m.source)).toBe(true);
-    expect(matches[0].source).toBe("catalogo-interno");
+    // Sem fonte declarada ⇒ "sem-proveniencia" (nunca rotula como catálogo um candidato sem evidência).
+    expect(matches[0].source).toBe("sem-proveniencia");
     expect(rank({ defaultSource: "api-comprasgov" })[0].source).toBe("api-comprasgov");
     expect(manualMatch({ itemId: "i", organizationId: ORG, catmatCode: "999", catmatDescription: "x", correlationId: CORR }).source).toBe("manual");
   });

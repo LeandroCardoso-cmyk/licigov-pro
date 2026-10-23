@@ -78,9 +78,12 @@ describe("a) Substituir rascunho mostra o conteúdo ATUAL", () => {
 });
 
 describe("b) CATMAT 'Confirmar' gateado pela decisão vigente do ledger", () => {
-  const base = { candidateCode: "123456", currentLoaded: true, thresholdConfigured: true as boolean | undefined, pending: false };
+  const base = { candidateCode: "123456", currentLoaded: true, thresholdConfigured: true as boolean | undefined, pending: false, state: "busca_atual" as const };
   it("sem limiar ou carregando ⇒ desabilitado com motivo; pendente ⇒ desabilitado", () => {
     expect(confirmGate({ ...base, current: null, thresholdConfigured: false })).toMatchObject({ enabled: false, reason: expect.stringContaining("Limiar institucional não configurado") });
+    // CATMAT/CATSER oficial: sem verificação no catálogo oficial ⇒ nunca confirmável (mesmo com limiar configurado).
+    expect(confirmGate({ ...base, current: null, thresholdConfigured: true, verified: false })).toMatchObject({ enabled: false, reason: expect.stringContaining("Sem verificação no catálogo oficial") });
+    expect(confirmGate({ ...base, current: null, thresholdConfigured: true, verified: true })).toMatchObject({ enabled: true });
     expect(confirmGate({ ...base, current: null, thresholdConfigured: undefined })).toMatchObject({ enabled: false });
     expect(confirmGate({ ...base, current: null, currentLoaded: false })).toMatchObject({ enabled: false });
     expect(confirmGate({ ...base, current: null, pending: true }).enabled).toBe(false);
@@ -93,6 +96,12 @@ describe("b) CATMAT 'Confirmar' gateado pela decisão vigente do ledger", () => 
     expect(other).toMatchObject({ enabled: true, label: "Confirmar (substitui a decisão vigente)" });
     expect(other.note).toContain("999999");
     expect(confirmGate({ ...base, current: { decision: "rejeitado", catmatCode: null } }).enabled).toBe(true);
+  });
+  it("M8 hardening — verificada mas fora da busca mais recente (histórica/origem não registrada/sem estado) ⇒ nunca habilitado; código verificado manualmente ⇒ habilitado", () => {
+    for (const state of ["historico", "origem_nao_identificada", undefined] as const) {
+      expect(confirmGate({ ...base, current: null, verified: true, state }), String(state)).toMatchObject({ enabled: false, reason: expect.stringContaining("Não pertence à busca oficial mais recente") });
+    }
+    expect(confirmGate({ ...base, current: null, verified: true, state: "codigo_verificado" })).toMatchObject({ enabled: true });
   });
   it("a decisão vigente (ledger) é exibida; o rótulo de heurística do candidato deixou de aparecer como 'decisão'", () => {
     expect(currentDecisionText(null, true)).toMatch(/nenhuma decisão registrada no ledger/);
