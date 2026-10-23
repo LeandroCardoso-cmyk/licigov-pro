@@ -24,9 +24,12 @@ vi.mock("../../storage", () => ({
   storageGetBytes: async (key: string) => { const b = mem.get(key); if (!b) throw new Error(`storage vazio: ${key}`); return b; },
   storagePut: async (key: string, data: string | Buffer) => { mem.set(key, Buffer.from(data)); return { key, url: "" }; },
 }));
+// PR-04 (SEM-005): com FF_CANONICAL_INGESTION ligada o router recusa a gravação direta legada. Os cenários que
+// exercitam o caminho legado (órgão com a ingestão canônica DESLIGADA) desligam só essa flag.
+const flagState = vi.hoisted(() => ({ canonicalIngestionOff: false }));
 vi.mock("../../services/featureFlagService", async (orig) => {
   const actual = await orig<typeof import("../../services/featureFlagService")>();
-  return { ...actual, isFeatureEnabled: vi.fn(async () => true) };
+  return { ...actual, isFeatureEnabled: vi.fn(async (name: string) => !(name === "FF_CANONICAL_INGESTION" && flagState.canonicalIngestionOff)) };
 });
 
 import { runMigrations } from "../../bootstrap";
@@ -146,8 +149,11 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
     // Estado LEGADO (leitor anterior ao M8-PRICE-IMPORT-001: uma linha solta virava Item Inteligente sem revisão).
     // O leitor atual RECUSA esse texto (ambíguo), então o histórico é semeado pela mesma materialização que ele usava.
     const op = await asUser(users.operator);
-    await expect(op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" }))
-      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    flagState.canonicalIngestionOff = true; // caminho legado (órgão sem ingestão canônica)
+    try {
+      await expect(op.procurementProcess.importPriceResearch({ processId: pid, source: "pdf", text: "Fornecedor Exemplo Ltda" }))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("ambígua") });
+    } finally { flagState.canonicalIngestionOff = false; }
     expect(await listIntelligentItems(pid, ORG)).toHaveLength(0); // recusa sem gravação
     const research = createPriceResearchWorkspace({ processId: pid, organizationId: ORG, source: "pdf", correlationId: "elig-legacy" });
     const legacyRow = createPriceResearchItem({ researchId: research.id, processId: pid, organizationId: ORG, description: "Fornecedor Exemplo Ltda", source: "colar", index: 0 });
@@ -213,7 +219,15 @@ describe.skipIf(!DB)("Hotfix — candidatos da Pesquisa exigem lineage governado
   it("5) importação manual APROVADA por humano (decisão do Item Inteligente) ⇒ elegível; não aprovada ⇒ não", async () => {
     const p3 = await newProcess(ORG);
     const op = await asUser(users.operator);
-    await op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
+    // Com a ingestão canônica LIGADA a gravação direta é recusada sem efeito (PR-04 / SEM-005)…
+    await expect(op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^LEGACY_PRICE_IMPORT_DISABLED:/) });
+    expect(await listIntelligentItems(p3, ORG)).toHaveLength(0);
+    // …e o caminho legado segue disponível para órgão com a flag DESLIGADA.
+    flagState.canonicalIngestionOff = true;
+    try {
+      await op.procurementProcess.importPriceResearch({ processId: p3, source: "colar", text: "Detergente neutro;10;UN;12,50;Fornecedor A" });
+    } finally { flagState.canonicalIngestionOff = false; }
     expect((await candidatesOf(p3)).candidates).toHaveLength(0);
     const [it] = await listIntelligentItems(p3, ORG);
     await op.procurementProcess.approveItem({ itemId: it.id });

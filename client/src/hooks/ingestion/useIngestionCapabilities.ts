@@ -19,5 +19,7 @@ export function useIngestionCapabilities() {
     enabled: capabilities?.enabled ?? false,
     isLoading: query.isLoading,
     error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch: query.refetch,
   };
 }

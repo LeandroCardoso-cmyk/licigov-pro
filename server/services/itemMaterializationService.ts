@@ -46,7 +46,10 @@ import {
   insertItemRisk, recordProcessEvent, insertResearch, insertResearchItem,
   type ProcurementExecutor,
 } from "../db/procurement";
-import { createPriceResearchWorkspace, extractItemsFromText, type PriceResearchSource, type PriceResearchWorkspace } from "../domain/priceResearch";
+import {
+  createPriceResearchWorkspace, extractItemsFromText, findQuoteReplacements, PriceQuoteReplacementRequiresConfirmationError,
+  type PriceResearchSource, type PriceResearchWorkspace,
+} from "../domain/priceResearch";
 import { parsePriceResearchText, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { LOW_QUOTE_COUNT_RISK_TEXT } from "../domain/quoteProvenance";
 import { suggestSpecifications } from "./itemIntelligenceService";
@@ -667,12 +670,15 @@ export async function persistResearchAndMaterialize(params: {
  */
 export async function importManualPriceResearch(p: {
   organizationId: number; processId: string; source: PriceResearchSource; text: string; actorUserId: number; correlationId: string;
+  /** PR-04 (SEM-005): substituir cotações já registradas exige confirmação explícita (correção por reimportação). */
+  confirmReplace?: boolean;
 }): Promise<{ research: PriceResearchWorkspace; quoteCount: number; synthetic: boolean; result: MaterializationResult }> {
   // M8-PRICE-IMPORT-001: leitura estruturada; ambiguidade ⇒ recusa ANTES de qualquer escrita (o servidor revisa a prévia).
   const parsed = parsePriceResearchText(p.text);
   if (parsed.blocking.length > 0) throw new PriceResearchAmbiguousError(parsed.blocking);
   const research = createPriceResearchWorkspace({ processId: p.processId, organizationId: p.organizationId, source: p.source, correlationId: p.correlationId });
   const rawItems = extractItemsFromText(p.text, { researchId: research.id, processId: p.processId, organizationId: p.organizationId }, parsed);
+  let replacedCount = 0;
   const result = await persistResearchAndMaterialize({
     organizationId: p.organizationId, processId: p.processId, researchId: research.id, correlationId: p.correlationId,
     quotes: rawItems.map((it) => ({
@@ -681,6 +687,25 @@ export async function importManualPriceResearch(p: {
       valueCents: it.value > 0 ? reaisToCents(it.value) : null, provenanceKind: it.provenanceKind,
     })),
     writeResearch: async (tx) => {
+      // PR-04 (SEM-005): a colagem legada identifica a cotação por (pesquisa da fonte, linha, descrição) — uma 2ª colagem
+      // com o mesmo item na mesma linha SUBSTITUIRIA fornecedor/valor da anterior. Conteúdo diferente ⇒ recusa (rollback,
+      // nada gravado) salvo confirmação explícita; reimportação idêntica segue convergindo. Leitura travada na MESMA
+      // transação da escrita (sem janela entre conferir e gravar).
+      if (rawItems.length > 0) {
+        const existing = await tx.select().from(priceResearchItemsTable).where(and(
+          eq(priceResearchItemsTable.organizationId, p.organizationId),
+          inArray(priceResearchItemsTable.id, rawItems.map((it) => it.id)),
+        )).for("update");
+        const replacements = findQuoteReplacements(existing, rawItems);
+        if (replacements.length > 0 && !p.confirmReplace) throw new PriceQuoteReplacementRequiresConfirmationError(replacements);
+        replacedCount = replacements.length;
+        if (replacements.length > 0) {
+          log.info("price_research_quotes_replaced_confirmed", {
+            organizationId: p.organizationId, processId: p.processId, researchId: research.id,
+            replaced: replacements.length, actorUserId: p.actorUserId, correlationId: p.correlationId,
+          });
+        }
+      }
       await insertResearch({ ...research, itemCount: rawItems.length }, tx);
       for (const it of rawItems) await insertResearchItem(it, tx);
     },
@@ -688,7 +713,7 @@ export async function importManualPriceResearch(p: {
   await recordMaterializationSignals({ organizationId: p.organizationId, processId: p.processId, result, actorUserId: p.actorUserId, correlationId: p.correlationId });
   await recordProcessEvent({
     organizationId: p.organizationId, processId: p.processId, eventType: "change", actor: String(p.actorUserId),
-    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s) [${parsed.version}; ${parsed.lines.length - parsed.quoteCount} linha(s) não-cotação ignorada(s)]${parsed.synthetic ? " — DADOS SINTÉTICOS/FICTÍCIOS: não constituem pesquisa de preços válida" : ""}.`,
+    summary: `Pesquisa importada (${p.source}): ${rawItems.length} cotação(ões) → ${result.items.length} Item(ns) Inteligente(s) [${parsed.version}; ${parsed.lines.length - parsed.quoteCount} linha(s) não-cotação ignorada(s)]${replacedCount > 0 ? ` — ${replacedCount} cotação(ões) anterior(es) substituída(s) por confirmação do usuário` : ""}${parsed.synthetic ? " — DADOS SINTÉTICOS/FICTÍCIOS: não constituem pesquisa de preços válida" : ""}.`,
     refId: research.id, correlationId: p.correlationId,
   }).catch(() => {});
   return { research: { ...research, itemCount: rawItems.length }, quoteCount: rawItems.length, synthetic: parsed.synthetic, result };

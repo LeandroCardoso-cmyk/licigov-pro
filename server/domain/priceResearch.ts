@@ -161,3 +161,82 @@ export function averageValue(items: readonly PriceResearchItem[]): number {
   if (cents.length === 0) return 0;
   return centsToReais(averageCents(cents));
 }
+
+/**
+ * PR-04 (SEM-005) — cotação JÁ REGISTRADA que uma nova importação pelo caminho legado (colar/manual) substituiria.
+ * A identidade da cotação legada é (pesquisa por fonte, linha, descrição): uma 2ª colagem com o mesmo item na mesma
+ * linha ATUALIZA a cotação anterior (correção por reimportação). Substituir conteúdo só com confirmação explícita;
+ * reimportação idêntica continua convergindo sem pedir nada.
+ */
+export interface QuoteReplacement {
+  readonly id: string;
+  readonly description: string;
+  readonly before: { readonly supplier: string; readonly valueCents: number };
+  readonly after: { readonly supplier: string; readonly valueCents: number };
+}
+
+/** Linha persistida de `price_research_items` (decimais chegam como string do MySQL). */
+export interface StoredResearchQuote {
+  readonly id: string;
+  readonly description: string | null;
+  readonly quantity: string | number;
+  readonly unit: string;
+  readonly supplier: string;
+  readonly brand: string;
+  readonly model: string;
+  readonly value: string | number;
+  readonly observations: string | null;
+}
+
+const toCents = (v: string | number): number => Math.round(Number(v) * 100);
+const toMilli = (v: string | number): number => Math.round(Number(v) * 1000);
+const norm = (s: string | null | undefined): string => (s ?? "").trim();
+
+/** Cotações existentes (mesmo id) cujo conteúdo a importação mudaria. Puro e determinístico. */
+export function findQuoteReplacements(
+  existing: readonly StoredResearchQuote[],
+  incoming: readonly PriceResearchItem[],
+): QuoteReplacement[] {
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  const out: QuoteReplacement[] = [];
+  for (const it of incoming) {
+    const e = byId.get(it.id);
+    if (!e) continue;
+    const changed =
+      toCents(e.value) !== toCents(it.value) ||
+      toMilli(e.quantity) !== toMilli(it.quantity) ||
+      norm(e.unit) !== norm(it.unit) ||
+      norm(e.supplier) !== norm(it.supplier) ||
+      norm(e.brand) !== norm(it.brand) ||
+      norm(e.model) !== norm(it.model) ||
+      norm(e.observations) !== norm(it.observations);
+    if (changed) {
+      out.push({
+        id: it.id,
+        description: it.description,
+        before: { supplier: norm(e.supplier), valueCents: toCents(e.value) },
+        after: { supplier: norm(it.supplier), valueCents: toCents(it.value) },
+      });
+    }
+  }
+  return out;
+}
+
+export class PriceQuoteReplacementRequiresConfirmationError extends Error {
+  readonly code = "QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED";
+  constructor(readonly replacements: readonly QuoteReplacement[]) {
+    const brl = (c: number) => (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const who = (q: QuoteReplacement["before"]) => `${q.supplier || "sem fornecedor"} ${brl(q.valueCents)}`;
+    const sample = replacements.slice(0, 3)
+      .map((r) => who(r.before) === who(r.after)
+        ? `${r.description}: ${who(r.before)} — quantidade, unidade, marca, modelo ou observações alteradas`
+        : `${r.description}: ${who(r.before)} → ${who(r.after)}`)
+      .join("; ");
+    super(
+      `QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED: esta importação substituiria ${replacements.length} cotação(ões) já registrada(s) ` +
+      `(${sample}${replacements.length > 3 ? "; …" : ""}). Nada foi gravado. Para ACRESCENTAR cotações, cole a pesquisa completa — ` +
+      `as cotações anteriores e, abaixo delas, as novas — numa única importação. Para CORRIGIR as cotações, confirme a substituição.`,
+    );
+    this.name = "PriceQuoteReplacementRequiresConfirmationError";
+  }
+}

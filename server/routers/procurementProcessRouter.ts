@@ -47,6 +47,9 @@ import { listContextFacts } from "../db/procurementContext";
 import { getOrganizationById } from "../db/organizations";
 import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
+import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
+import { isFeatureEnabled } from "../services/featureFlagService";
+import { CANONICAL_INGESTION_FLAG } from "../services/ingestionUploadService";
 import {
   createProcessWithInitialEvent, getProcess, listProcesses, updateProcessStage,
   listIntelligentItems,
@@ -492,19 +495,38 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1),
       source: z.enum(["pdf", "docx", "xlsx", "csv", "colar", "manual"]),
       text: z.string().min(1),
+      /** PR-04 (SEM-005): confirma a substituição de cotações já registradas (correção por reimportação). */
+      confirmReplace: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
+      // PR-04 (SEM-005, CUTOVER): com a ingestão canônica ligada para o órgão, a pesquisa entra SÓ pela ingestão
+      // supervisionada (uma pesquisa por sessão — importações se somam). A gravação direta legada é recusada no
+      // servidor, antes de qualquer escrita, inclusive para chamadas diretas à API.
+      if (await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId)) {
+        log.warn("legacy_price_import_refused_canonical_enabled", {
+          organizationId: orgId, userId: ctx.user!.id, processId: input.processId, correlationId: ctx.correlationId,
+        });
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "LEGACY_PRICE_IMPORT_DISABLED: nesta organização a pesquisa de preços é importada pela ingestão supervisionada " +
+            "(Enviar arquivo ou Colar texto, com revisão antes da promoção). Nenhuma cotação foi gravada.",
+        });
+      }
       // DATA-039 + hardening P0: pesquisa + cotações + BASE dos Itens Inteligentes numa ÚNICA transação
       // (nunca Pesquisa=200 com Item=100) — ver itemMaterializationService.importManualPriceResearch.
       let imported;
       try {
         imported = await importManualPriceResearch({
           organizationId: orgId, processId: input.processId, source: input.source, text: input.text,
-          actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+          actorUserId: ctx.user!.id, correlationId: ctx.correlationId, confirmReplace: input.confirmReplace === true,
         });
       } catch (err) {
+        if (err instanceof PriceQuoteReplacementRequiresConfirmationError) {
+          // Substituiria cotações já registradas ⇒ nada gravado; o cliente pede a confirmação explícita.
+          throw new TRPCError({ code: "CONFLICT", message: err.message, cause: err });
+        }
         if (err instanceof PriceResearchAmbiguousError) {
           // Ambígua ⇒ nada gravado; o cliente mostra a prévia com as pendências.
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message, cause: err });
