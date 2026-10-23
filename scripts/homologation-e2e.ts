@@ -15,6 +15,7 @@
 import { createTRPCClient, httpLink, TRPCClientError } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "../server/routers";
+import { createHash } from "node:crypto";
 import { COOKIE_NAME } from "../shared/const";
 
 export const SYNTHETIC_TENANT_SLUG = "homologacao-sintetica";
@@ -187,3 +188,88 @@ export const M8_PRICE_RESEARCH_TEXT = [
 
 /** Saída da IA contaminada com metadados de geração (o defeito M8-AI-DFD-001) — nunca pode chegar ao documento. */
 export const AI_META_RESIDUE = /pontua[çc][ãa]o de confian[çc]a|fatos utilizados|\[REVISAR:\s*0[.,]\d+\]/i;
+
+// ─── PR-04 (SEM-005) — Pesquisa de Preços pela INGESTÃO CANÔNICA ───────────────────────────────────────────────────
+// Com `FF_CANONICAL_INGESTION` ligada no tenant, o servidor recusa a colagem legada (`LEGACY_PRICE_IMPORT_DISABLED`); o
+// executor passa a usar as MESMAS rotas da tela: createSession → upload HTTP (multipart) → enqueueProcessing → revisão por
+// item lógico → approveSession → promoteSession (manager). Nada de mecanismo paralelo; o servidor decide RBAC/tenant/flag.
+
+export type PriceImportMode = "canonical" | "legacy";
+type HomologApi = ReturnType<typeof homologSession>["api"];
+
+/** Modo pela capability OFICIAL do tenant. Ingestão ligada sem CSV suportado ⇒ erro explícito (nunca cai no legado). */
+export function priceImportMode(caps: { enabled: boolean; supportedFormats: ReadonlyArray<{ key: string; supported: boolean }> }): PriceImportMode {
+  if (!caps.enabled) return "legacy";
+  if (!caps.supportedFormats.some((f) => f.key === "csv" && f.supported)) {
+    throw new Error("Ingestão canônica ligada, mas o formato CSV não está suportado — o executor não pode prosseguir.");
+  }
+  return "canonical";
+}
+
+/** CSV delimitado por `;` no cabeçalho reconhecido pelo parser (uma linha por cotação). */
+export function priceResearchCsv(rows: ReadonlyArray<{ description: string; planned: number; unit: string; price: string; supplier: string }>): string {
+  return ["Descrição;Quantidade;Unidade;Valor unitário;Fornecedor",
+    ...rows.map((r) => [r.description, r.planned, r.unit, r.price, r.supplier].join(";"))].join("\n");
+}
+
+export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+
+/** Upload HTTP real da ingestão canônica (rota Express fora do tRPC), com o MESMO cookie e `x-organization-id` da sessão. */
+export async function uploadIngestionFile(baseUrl: string, state: ReturnType<typeof homologSession>["state"], uploadPath: string,
+  file: { bytes: Uint8Array; name: string; mime: string }): Promise<{ ok: true; sessionId: number; size: number; checksum: string }> {
+  const form = new FormData();
+  form.append("file", new Blob([file.bytes], { type: file.mime }), file.name);
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}${uploadPath}`, {
+    method: "POST",
+    headers: { ...(state.cookie ? { cookie: state.cookie } : {}), ...(state.orgId ? { "x-organization-id": String(state.orgId) } : {}) },
+    body: form,
+  });
+  const body = await res.json().catch(() => ({})) as { error?: string };
+  if (!res.ok) throw new Error(`Upload recusado (HTTP ${res.status}): ${body.error ?? "sem detalhe"}`);
+  return body as { ok: true; sessionId: number; size: number; checksum: string };
+}
+
+/**
+ * Uma importação canônica completa da Pesquisa de Preços. `author` envia, revisa e aprova a sessão (operator+); `manager`
+ * promove ao domínio (manager+, outro usuário). Cada chamada é uma SESSÃO própria ⇒ uma pesquisa própria (acumula cotações).
+ */
+export async function runCanonicalPriceResearch(p: {
+  baseUrl: string;
+  author: ReturnType<typeof homologSession>;
+  manager: HomologApi;
+  processId: string;
+  csv: string;
+  fileName: string;
+  key: (purpose: string) => string;
+  timeoutMs?: number;
+}): Promise<{ sessionId: number; groups: number; quotes: number; promotion: unknown }> {
+  const op = p.author.api;
+  const bytes = new TextEncoder().encode(p.csv);
+  const created = await op.ingestion.createSession.mutate({
+    importType: "price_research", sourceFileName: p.fileName, sourceMimeType: "text/csv", sourceSize: bytes.length,
+    checksum: sha256Hex(bytes), idempotencyKey: p.key("ingest").slice(0, 64), procurementProcessId: p.processId, importPurpose: "price_research",
+  });
+  if (created.duplicate) throw new Error(`Arquivo idêntico já tem sessão ativa (${created.sessionId}) — use conteúdo novo por execução.`);
+  await uploadIngestionFile(p.baseUrl, p.author.state, created.uploadPath, { bytes, name: p.fileName, mime: "text/csv" });
+  await op.ingestion.enqueueProcessing.mutate({ sessionId: created.sessionId, procurementProcessId: p.processId });
+
+  const deadline = Date.now() + (p.timeoutMs ?? 120_000);
+  for (;;) {
+    const st = await op.ingestion.getSessionStatus.query({ sessionId: created.sessionId, procurementProcessId: p.processId });
+    if (st.session.status === "awaiting_review") break;
+    if (st.session.status === "failed") throw new Error(`Extração falhou na sessão ${created.sessionId}.`);
+    if (Date.now() > deadline) throw new Error(`Extração não concluiu a tempo (sessão ${created.sessionId}, estado ${st.session.status}).`);
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+
+  const review = await op.ingestion.getPriceResearchReview.query({ sessionId: created.sessionId, procurementProcessId: p.processId });
+  const groups = review.groups.map((g) => ({ groupKey: g.groupKey, expectedRevision: g.revision }));
+  if (groups.length === 0) throw new Error(`Nenhum item extraído na sessão ${created.sessionId}.`);
+  await op.ingestion.reviewPriceResearchGroups.mutate({ sessionId: created.sessionId, procurementProcessId: p.processId, action: "approved", groups });
+  await op.ingestion.approveSession.mutate({ sessionId: created.sessionId, procurementProcessId: p.processId });
+  const promotion = await p.manager.ingestion.promoteSession.mutate({
+    sessionId: created.sessionId, procurementProcessId: p.processId, idempotencyKey: p.key("promote").slice(0, 64),
+  });
+  const quotes = review.groups.reduce((n, g) => n + g.quotes.length, 0);
+  return { sessionId: created.sessionId, groups: groups.length, quotes, promotion };
+}
