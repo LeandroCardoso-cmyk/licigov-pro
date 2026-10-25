@@ -14,7 +14,7 @@
 | Workspace Railway | `leandrocardoso-cmyk's Projects` (`9f7f14a4-…`) | — |
 | Projeto Railway | `licigov-pro` (`893a1317-51ad-4b18-9d9a-f6e579e09351`) | production `3efa7f99-…`, staging `e7cc21d0-…` |
 | Serviço app | `licigov-pro` (`2d497607-…`), domínios `licigovpro.com.br`, `licigov-pro-production.up.railway.app`, `licigov-pro-staging.up.railway.app` | prod: branch `main`; staging: branch `staging` |
-| Banco | Serviço `MySQL` (`e6b7a98f-…`), imagem `mysql:9`, volume `mysql-volume`, rede privada `mysql` | **proxy TCP público ATIVO** em prod (`autorack.proxy.rlwy.net`) e staging (`shortline.proxy.rlwy.net`) |
+| Banco | Serviço `MySQL` (`e6b7a98f-…`), imagem `mysql:9` (versão exata em execução não verificada), volume `mysql-volume`, rede privada `mysql` | **proxy TCP público ATIVO** em prod (`autorack.proxy.rlwy.net`) e staging (`shortline.proxy.rlwy.net`) |
 | Storage | AWS S3 (bucket por variável `AWS_S3_BUCKET`, região `AWS_S3_REGION`) | prod e staging |
 | E-mail | Brevo (`EMAIL_PROVIDER`, `EMAIL_ENABLED`) — dispatcher ativo em prod | prod e staging |
 | IA | Gemini via `@google/generative-ai` 0.24.1, modelo vivo `gemini-3.8-flash` (log de boot 23/10) | prod; staging define `AI_MODEL` |
@@ -29,7 +29,8 @@ incidente); staging `aa05e88` (deploy `700de144-…`, 24/10 14:09Z).
 | Variável | Tipo | Finalidade / consumidor | Prod | Staging | Estado da rotação |
 |---|---|---|:-:|:-:|---|
 | `JWT_SECRET` | chave de assinatura (HS256) | sessão (`server/_core/sdk.ts`) | ✓ | ✓ | Rotacionada em 21/09 (pré-incidente; antiga vazou no histórico público — GitGuardian 24/03). **Pós-incidente: não comprovada** |
-| `DATABASE_URL` | credencial de banco | app + pre-deploy de migrations | ✓ | ✓ | **Não comprovada** (indício contrário: backup via mesma origem segue OK) |
+| `DATABASE_URL` | credencial de banco | app + pre-deploy (migrations e reference data) | ✓ | ✓ | **Não comprovada** |
+| `MIGRATION_DATABASE_URL` (nova, opcional) | credencial de banco (DDL) | só `db:migrate:release` no pre-deploy | — | — | A criar (conta `licigov_migrator`) |
 | `GEMINI_API_KEY` | chave de API (IA/cloud — padrão buscado pelo atacante) | `server/config/ai.ts` | ✓ | ✓ | **Não comprovada** |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | chave de API cloud | `server/storage.ts` | ✓ | ✓ | **Não comprovada** |
 | `BREVO_API_KEY` | chave de API | `server/services/email/*` | ✓ | ✓ | **Não comprovada** |
@@ -55,7 +56,8 @@ Não-segredos (não rotacionar): `APP_BASE_URL`, `APP_ENV`, `AWS_S3_BUCKET`, `AW
 | Secret | Consumidor | Observação |
 |---|---|---|
 | `BACKUP_DATABASE_URL` | `db-backup.yml` (diário 06:00 UTC) | Cópia da credencial de produção, via proxy público. Runs OK 21–25/10 |
-| `BACKUP_ENCRYPTION_KEY` | `db-backup.yml` | Material de criptografia; não estava no Railway |
+| `BACKUP_ENCRYPTION_KEY` | `db-backup.yml` | Material de criptografia; não estava no Railway. Configurada (backup de 25/10 publicou `.enc`); agora obrigatória |
+| `BACKUP_DB_SSL_CA` (novo, opcional) | `db-backup.yml` | PEM da CA do servidor MySQL ⇒ TLS `VERIFY_CA`; não é segredo, mas fica como secret por conveniência |
 | `AUDIT_DATABASE_URL` | `schema-audit.yml` (manual) | Credencial de banco |
 | `GEMINI_API_KEY` | `ai-models.yml` (manual) | Documentado como "a mesma chave de produção" → separar |
 | `RESTORE_TARGET_URL` | `db-backup.yml` (drill manual) | Banco descartável |
@@ -73,6 +75,5 @@ Não-segredos (não rotacionar): `APP_BASE_URL`, `APP_ENV`, `AWS_S3_BUCKET`, `AW
 
 ## Outros projetos do workspace
 
-- `vol-screener` (criado em 21/10 01:44Z, dentro da janela do ataque): criado pela conta do Owner a partir do
-  repo `LeandroCardoso-cmyk/vol-screener` ("Screener de volatilidade - versão inicial"). Provável legítimo —
-  **confirmar com o Owner**.
+- `vol-screener` (criado em 21/10 01:44Z): **confirmado legítimo pelo Owner** em 25/10 — suspeita pela data
+  encerrada, projeto mantido. Não substitui a revisão de consumo/logs do workspace (sem acesso).

@@ -10595,8 +10595,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1792961638.324509,
-    "ast_hash": "af933090035782664a3829930d25e85c",
+    "mtime": 1792962841.7695067,
+    "ast_hash": "f58891f452909c07dd7b821f4daf7a50",
     "semantic_hash": ""
   },
   ".github/workflows/db-restore-test.yml": {
@@ -11995,8 +11995,8 @@
     "semantic_hash": ""
   },
   "docs/security/PR_A_SECRET_ROTATION_RUNBOOK.md": {
-    "mtime": 1792953089.5671954,
-    "ast_hash": "d52902f54ffb44ab82db60baf3cee987",
+    "mtime": 1792963011.140663,
+    "ast_hash": "e62c1ac366d5a62b9b6910f37251ac1a",
     "semantic_hash": ""
   },
   "docs/security/PR_A_SECURITY_REMEDIATION_REPORT.md": {
@@ -15270,18 +15270,18 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CREDENTIAL_INVENTORY.md": {
-    "mtime": 1792954105.5982947,
-    "ast_hash": "c4cef651ed7c533234dcccdc2c8ba88b",
+    "mtime": 1792962947.454948,
+    "ast_hash": "74c4e400ddd265936f1442c1b757d723",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROTATION_RUNBOOK.md": {
-    "mtime": 1792954050.1982915,
-    "ast_hash": "07b6350e573ac1d1d25c0d9719217197",
+    "mtime": 1792962810.5959377,
+    "ast_hash": "add71a9230a338beff5ef2ee5e6a66de",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
-    "mtime": 1792955580.6720352,
-    "ast_hash": "f6d3fb122300f7a7ab614da2cb75caea",
+    "mtime": 1792962993.5599487,
+    "ast_hash": "1b6d66fac7bb72bf99be0156fb04c129",
     "semantic_hash": ""
   },
   "server/__tests__/unit/correlation-id-client-header.test.ts": {
@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792955590.3292942,
-    "ast_hash": "25490d5161a40af68b27af750410c4b7",
+    "mtime": 1792962935.5082922,
+    "ast_hash": "899a724042f9db03dc5179b2c9193939",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
@@ -15317,6 +15317,11 @@
   "server/__tests__/unit/db-backup-script.test.ts": {
     "mtime": 1792961638.3257077,
     "ast_hash": "777311157aa2508e8501c474df8cb26c",
+    "semantic_hash": ""
+  },
+  "docs/security/incident-2026-10/CONTAINMENT_CHECKLIST.md": {
+    "mtime": 1792962877.7479417,
+    "ast_hash": "7fdeece58136ecb8b4f200e2ed4c1e28",
     "semantic_hash": ""
   }
 }

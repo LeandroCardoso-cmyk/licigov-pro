@@ -1,50 +1,60 @@
-# Roadmap de remediação — incidente Railway (out/2026)
+# Roadmap de remediação — pontuação reconciliada
 
-> **Versão dos critérios: v1-reconstruída (25/10/2026).** O `ROADMAP.md` mencionado no pedido da auditoria
-> não está no repositório nem foi anexado; os critérios abaixo foram reconstruídos de forma explícita, com os
-> pesos de fase pedidos e **dois critérios de igual peso por fase**. Se o ROADMAP original aparecer, comparar
-> e versionar (v2) antes de repontuar.
+> **Versão v2 (25/10/2026, noite).** Referência: o `ROADMAP.md` **original** do Owner ("Roadmap de
+> regularização — LiciGov Pro", 25/10/2026), recebido nesta execução. A v1 desta pasta usava critérios
+> **reconstruídos** (o original não estava disponível); pesos iguais, critérios diferentes — os totais da v1
+> **não** são equivalentes aos do original. A v1 fica abaixo só para rastreio.
+>
+> Regras do original: pontuação da fase = peso × critérios comprovadamente atendidos / 2; critério pendente,
+> bloqueado ou sem evidência não pontua; não aplicabilidade exige justificativa verificável; 100% ≠ risco zero;
+> não encerrar com crítico/alto relevante aberto ou ação operacional obrigatória sem validação.
+>
+> Três leituras por critério: **Auditado** (avaliação concluída com evidência) · **Implementado** (correção
+> pronta em código/documento/console) · **Validado** (comprovado por documentos/testes/CI; quando o critério
+> exige ambiente aprovado ou provedor, só conta com evidência de lá). **Nenhuma leitura representa produção
+> regularizada.**
 
-## Regras de pontuação
+## Critérios do original × evidência (head desta revisão)
 
-- Só pontua critério **comprovado** por evidência citada; nada de percentual inicial inventado.
-- Três leituras por critério: **Auditado** (avaliação feita com evidência), **Implementado** (correção pronta
-  no código/documento/console) e **Validado em ambiente** (comprovado no ambiente real — staging/produção ou,
-  para testes, CI/banco isolado declarado).
-- Critério sem acesso fica **pendente**. "Não aplicável" só com evidência.
-- Com P0/P1 relevante aberto ou ação operacional obrigatória pendente, o total **não** chega a 100%.
-
-## Critérios e estado (25/10/2026)
-
-| Fase (peso) | Critério (peso) | Auditado | Implementado | Validado | Evidência / pendência |
+| Fase (peso) | Critério | Aud. | Impl. | Valid. | Evidência / pendência |
 |---|---|:-:|:-:|:-:|---|
-| 1. Auditoria e inventário (10) | 1.1 Inventário sanitizado de ativos/credenciais por ambiente, com consumidores (5) | ✅ | ✅ | ✅ | `CREDENTIAL_INVENTORY.md` (Railway MCP, workflows, código) |
-| | 1.2 Triagem dos alertas (Railway, GitGuardian, Gemini, OAuth, deps, logs) com matriz P0–P3 (5) | ✅ | ✅ | ✅ | `AUDIT_REPORT.md` §2–§4 |
-| 2. Credenciais (30) | 2.1 Credenciais potencialmente expostas rotacionadas e validadas (prod e staging) (15) | ✅ | ❌ | ❌ | Rotação pós-incidente não comprovada para DB, Gemini, AWS, Brevo, JWT → `ROTATION_RUNBOOK.md` |
-| | 2.2 Anteriores revogadas no emissor, consumidores secundários atualizados, segredos sem consumidor removidos (15) | ✅ | ❌ | ❌ | Código permite remover `ADMIN_PASSWORD`; remoção no Railway e revogações dependem do Owner |
-| 3. Identidade e permissões (15) | 3.1 2FA confirmado em todas as contas com acesso (Railway, GitHub, Google, AWS, Brevo; 2 usuários do Workspace `sincrosaude.com.br`) (7,5) | ❌ | ❌ | ❌ | Sem acesso aos consoles de identidade |
-| | 3.2 Menor privilégio: usuário de banco dedicado (app/backup), workflows com `contents: read`, tokens Railway revisados, senha do admin de plataforma trocada (7,5) | ✅ | ⚠️ parcial | ❌ | Workflows corrigidos (commit `469b735`); DB/tokens/admin pendentes |
-| 4. Segurança da aplicação (20) | 4.1 Isolamento multi-tenant, RBAC e sessão sem regressão (smokes de segurança executados) (10) | ✅ | ✅ | ✅ (banco isolado) | `pnpm test:smoke:security` em MySQL local sintético; CI na PR |
-| | 4.2 Nenhuma high/critical aplicável aberta em deps de produção; gate fail-closed (10) | ✅ | ⚠️ parcial | ❌ | Gate fail-closed + remoção de deps mortas; restam `xlsx` (aplicável), `drizzle-orm`, `fast-xml-parser`, etc. |
-| 5. IA/OAuth (10) | 5.1 Parâmetros Gemini compatíveis (sem `thinking_budget`/sampling em 3.x), com teste (5) | ✅ | ✅ | ❌ | Unit tests; validação em staging após deploy |
-| | 5.2 OAuth/MCP: proprietário e clientes identificados; aplicabilidade ao LiciGov comprovada (5) | ✅ | ✅ | ✅ | Aviso lista só `sincrosaude-creative-agent`; LiciGov sem OAuth Google — não aplicável com evidência |
-| 6. Confirmações operacionais (5) | 6.1 Faturamento regularizado com evidência (2,5) | ✅ | ✅ | ✅ | Recibo Railway #2157-7829 (25/10) |
-| | 6.2 Recursos do workspace reconhecidos e consumo/logs dos provedores revisados (2,5) | ⚠️ | ❌ | ❌ | `vol-screener` a confirmar; consumo Gemini/AWS/Brevo sem acesso |
-| 7. Validação e encerramento (10) | 7.1 check, lint, test, build, audit:gate e smokes verdes no branch e na CI (5) | ✅ | ✅ | ❌ | Local verde (relatório §8); CI da PR pendente |
-| | 7.2 Correções implantadas staging → produção e atestação operacional registrada (5) | ❌ | ❌ | ❌ | Depende de merge/deploy e do Owner |
+| 1. Auditoria e inventário (10) | A — repositório, commit implantado, ambientes, serviços, integrações | ✅ | ✅ | ✅ | `AUDIT_REPORT.md` §1, `CREDENTIAL_INVENTORY.md` (Railway MCP, deploys, workflows) |
+| | B — achados priorizados, limites de acesso, responsáveis, dependências | ✅ | ✅ | ✅ | Matriz §4, lacunas §5, dependências SincroSaúde no inventário |
+| 2. Credenciais (30) | A — inventário coberto e rotação concluída/validada no provedor e em todos os consumidores | ✅ | ❌ | ❌ | Sem comprovação suficiente de rotação pós-incidente; procedimento pronto (`CONTAINMENT_CHECKLIST.md`) |
+| | B — antigas revogadas, serviços validados, logs de acesso/consumo revisados no período | ✅ | ❌ | ❌ | Sem acesso a Google/AWS/Brevo; CloudTrail data events provavelmente inexistentes (§5) |
+| 3. Identidade e permissões (15) | A — 2 contas sem 2FA no Workspace, administradores e recuperação | ❌ | ❌ | ❌ | Sem acesso ao Admin Console |
+| | B — acessos Railway/GitHub/Google, apps OAuth, contas de serviço, escopos | ❌ | ❌ | ❌ | Railway/GitHub lidos; Google não. Código pronto para contas MySQL mínimas e workflows `contents: read` — não aplicado em ambiente |
+| 4. Segurança do LiciGov (20) | A — GitGuardian + auditoria de dependências com correção ou descarte fundamentado | ✅ | ❌ | ❌ | GitGuardian: real, rotacionado em 21/09. Deps 38→14; **`xlsx` aplicável ainda aberto** (PR separada em andamento) |
+| | B — autorização, isolamento, proteção de dados e replay nos caminhos afetados | ✅ | ✅ | ⏳ | Correlation id, backup sem cifra (proteção de dados), contas por função; smokes de isolamento e de menor privilégio. Valida com a CI do novo head |
+| 5. IA e OAuth (10) | A — Gemini por SDK/modelo, só caminhos afetados, com testes | ✅ | ✅ | ✅ | `bf7180d` + testes; CI verde no head `4d99bee`. Não validado em staging |
+| | B — aplicabilidade OAuth/MCP concluída ou não aplicabilidade fundamentada | ✅ | ✅ | ✅ | Aviso cita só `sincrosaude-creative-agent`; LiciGov sem OAuth Google/MCP Workspace |
+| 6. Confirmações operacionais (5) | A — Google Cloud do LiciGov e Workspace ativos e faturamento regular | ❌ | ❌ | ❌ | **Reaberto**: recibo Railway não comprova Google; e-mails de 01/10 e 08/10 sem regularização posterior; sem console |
+| | B — encerramento/transferência formal da frente SincroSaúde, sem bloqueio compartilhado | ❌ | ❌ | ❌ | Dependências mapeadas (Brevo, conta Google); sem evidência de encerramento |
+| 7. Validação e encerramento (10) | A — build, tipos, lint, testes e verificação controlada do ambiente aprovado; sem regressão | ✅ | ✅ | ❌ | Local + CI; falta verificação em staging |
+| | B — evidências sanitizadas, observabilidade validada, registro de mudanças, plano de recuperação; nenhum crítico/alto aberto | ❌ | ❌ | ❌ | P0 de credenciais aberto |
 
-## Pontuação comprovada
+⏳ = depende da CI do novo head (ver `AUDIT_REPORT.md` §8). Só conta depois de verde.
 
-Contagem: critério cheio = peso; "parcial" **não** pontua (regra conservadora).
+## Pontuação (original)
 
-| Leitura | Pontos | Critérios que contam |
+| Leitura | Pontos | Critérios |
 |---|---:|---|
-| **Auditado** | **85 / 100** | 1.1, 1.2, 2.1, 2.2, 3.2, 4.1, 4.2, 5.1, 5.2, 6.1, 7.1 (5+5+15+15+7,5+10+10+5+5+2,5+5) |
-| **Implementado** | **37,5 / 100** | 1.1, 1.2, 4.1, 5.1, 5.2, 6.1, 7.1 (5+5+10+5+5+2,5+5) |
-| **Validado em ambiente** | **27,5 / 100** | 1.1, 1.2, 4.1 (banco isolado), 5.2, 6.1 (5+5+10+5+2,5) |
+| Auditado | **75 / 100** | 1A, 1B, 2A, 2B, 4A, 4B, 5A, 5B, 7A |
+| Implementado | **35 / 100** | 1A, 1B, 4B, 5A, 5B, 7A |
+| Validado (docs/testes/CI) | **30 / 100** se a CI do novo head ficar verde (senão 20) | 1A, 1B, 4B, 5A, 5B |
+| Validado em ambiente aprovado / provedor | **0 / 100** em credenciais (0/30), identidade (0/15) e confirmações (0/5) | — |
 
-Créditos de correções anteriores verificadas: isolamento/RBAC/sessão (PR 0, PR A, NEW-005/006, LEG-028 —
-comprovados pelos smokes executados nesta sessão) e rotação do `JWT_SECRET` de 21/09 (atestação G5), que **não**
-pontua em 2.1 por ser anterior ao incidente.
+Credenciais seguem **0/30** até atestação válida no console. `vol-screener` confirmado legítimo pelo Owner
+(encerra só a suspeita pela data; não a revisão de consumo/logs).
 
-O maior bloco pendente é **Credenciais (30 pontos)**, inteiramente dependente de ação do Owner nos consoles.
+## Rastreio da matriz reconstruída v1 (não equivalente ao original)
+
+| Leitura | v1 publicada | Ajuste da revisão | v1 corrigida |
+|---|---:|---|---:|
+| Auditado | 85 | −2,5 (6.1 faturamento creditado pelo recibo Railway — indevido para Google) | 82,5 |
+| Implementado | 37,5 | −2,5 (idem) | 35 |
+| Validado | 27,5 | −2,5 (idem) +5 (7.1: CI verde no head `4d99bee`) | 30 |
+
+Diferença para o original: a v1 contava como auditados critérios de identidade (3.2) e dependências (4.2) com
+outra redação; o original exige revisão Google (3B) e correção ou descarte de todos os achados de dependência
+(4A), ainda não atendidos.

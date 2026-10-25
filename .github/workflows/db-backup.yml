@@ -32,6 +32,8 @@ jobs:
   backup:
     name: Dump completo (mysqldump) cifrado + checksum
     runs-on: ubuntu-latest
+    # O dump via proxy público leva ~20 min hoje (345 tabelas, latência alta); teto para não pendurar o runner.
+    timeout-minutes: 60
     steps:
       - name: Checkout (script de backup versionado)
         uses: actions/checkout@v4

@@ -1,146 +1,172 @@
 # Runbook de rotação e recuperação — pós-incidente Railway (out/2026)
 
-> **Nenhum valor de credencial aparece neste documento** (nem novo, nem antigo). Gerar valores
-> diretamente no console do provedor ou no terminal do operador; colar apenas no destino (Railway,
-> GitHub Secrets). Nunca em chat, PR, issue, log ou documento.
+> **Revisão 2 (25/10/2026)** — substitui a revisão 1 do mesmo dia. Mudanças: nenhum rollback reutiliza
+> credencial potencialmente exposta; senha do `root` trocada pelo **Regenerate** da Railway (via suportada);
+> contas MySQL separadas por função, ensaiadas em MySQL 9.7.4; acesso SQL real mapeado (sem presumir aba SQL);
+> nenhuma conta/token é excluído sem identificar dono e função; CloudTrail com cobertura real.
 >
-> Complementa (não substitui) [`../PR_A_SECRET_ROTATION_RUNBOOK.md`](../PR_A_SECRET_ROTATION_RUNBOOK.md)
-> e [`../G5_SECRET_READINESS_AUDIT.md`](../G5_SECRET_READINESS_AUDIT.md). Inventário em
-> [`CREDENTIAL_INVENTORY.md`](./CREDENTIAL_INVENTORY.md).
+> **Nenhum valor de credencial aparece aqui.** Valores novos são gerados no próprio provedor/banco e colados
+> só no destino (Railway, GitHub Secrets). Nunca em chat, PR, issue, log ou documento.
+>
+> Checklist operacional curto: [`CONTAINMENT_CHECKLIST.md`](./CONTAINMENT_CHECKLIST.md). Inventário:
+> [`CREDENTIAL_INVENTORY.md`](./CREDENTIAL_INVENTORY.md). Este runbook prevalece sobre as seções de rollback de
+> [`../PR_A_SECRET_ROTATION_RUNBOOK.md`](../PR_A_SECRET_ROTATION_RUNBOOK.md) para segredos do incidente.
 
 ## 0. Princípios
 
-- **Não rotacionar tudo indiscriminadamente.** Só segredos (ver inventário). `APP_ENV`, `AWS_S3_BUCKET`,
-  `BREVO_SENDER_*`, `AI_MODEL`, `MYSQLHOST` etc. não são segredos.
-- **Não repetir rotação concluída e funcional** sem motivo. Motivo aqui: o workspace foi notificado pela
-  Railway (23/10) como compatível com o padrão de busca do atacante; a janela do ataque foi
-  20/10 13:58Z → 22/10 03:32Z. Toda credencial presente no Railway **nessa janela** e não trocada depois é
-  tratada como potencialmente exposta. Rotações feitas **antes** de 20/10 (ex.: `JWT_SECRET` em 21/09) não
-  cobrem o incidente.
-- **Revogação preventiva da Railway (24/10):** provedores (OpenAI/Anthropic confirmados) revogaram chaves
-  por hash, inclusive substitutas. O LiciGov usa **Gemini (Google)** — se uma chave nova parar de funcionar,
-  criar outra; não é indício de novo comprometimento.
-- **Ordem por consumidor**, uma credencial por vez, com validação antes de revogar a anterior.
-- **Staging e produção nunca compartilham credencial.** Cada ambiente recebe valor próprio.
-- Toda ação em produção abaixo é **mutação operacional** → executar só com aprovação do Owner.
+- **Prioridade:** não há comprovação suficiente de rotação pós-incidente. Isso **não** prova comprometimento
+  nem ausência de rotação; justifica a contenção imediata. Uma rotação feita depois de 20/10 13:58Z e
+  comprovada no console é creditada e **não** é repetida sem motivo.
+- **Nunca restaurar segredo potencialmente exposto** para recuperar disponibilidade. Recuperação = credencial
+  **nova**, permissões corretas e configuração/código compatíveis. Em abuso ativo, revogar primeiro e avaliar o
+  impacto depois.
+- **Uma credencial por vez**, na ordem dos consumidores; validar antes de revogar a anterior quando o provedor
+  suporta sobreposição (chaves de API, contas de banco novas). Staging antes de produção; valores diferentes
+  por ambiente.
+- **Não excluir conta, token ou chave só porque não foi reconhecido** numa leitura: identificar dono, função
+  e dependências; preservar contas internas; exclusão é decisão operacional específica do Owner.
+- Toda ação abaixo em produção/staging é **mutação operacional** → executar só com aprovação explícita.
 
-Tipos de material e efeito da troca:
-
-| Tipo | Variáveis | Efeito da troca |
+| Tipo | Itens | Particularidade |
 |---|---|---|
-| Senha/credencial de serviço | `DATABASE_URL` (senha embutida), `MYSQL_*PASSWORD`, `BACKUP_DATABASE_URL`, `AUDIT_DATABASE_URL` | Precisa coordenar todos os consumidores; janela curta |
-| Token/chave de API | `GEMINI_API_KEY`, `BREVO_API_KEY`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `A2_HOMOLOG_TOKEN` | Criar nova → trocar → validar → revogar antiga |
-| Chave de assinatura | `JWT_SECRET` | Invalida **todas** as sessões (relogin). Sem versionamento de chave no código: troca é imediata |
-| Material de criptografia | `BACKUP_ENCRYPTION_KEY` (só GitHub) | Trocar **não** recifra backups antigos; guardar a anterior em cofre até expirar a retenção (14 dias) |
-| Senha de usuário | conta admin de plataforma; `LICIGOV_STAGING_SMOKE_PASSWORD` | Trocar pela própria aplicação (reset ⇒ `tokenVersion` revoga sessões) |
+| Credencial de banco | `root`, contas novas `licigov_*`, `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `BACKUP_DATABASE_URL`, `AUDIT_DATABASE_URL` | Contas novas convivem com a antiga ⇒ troca sem janela; o `root` muda por último |
+| Chave de API | `GEMINI_API_KEY`, `AWS_*`, `BREVO_API_KEY` | Criar nova → trocar → validar → revogar antiga |
+| Chave de assinatura | `JWT_SECRET` | Sem versionamento de chave no código: a troca invalida **todas** as sessões. A chave suspeita **nunca** volta a ser aceita, nem como "anterior" |
+| Material de criptografia | `BACKUP_ENCRYPTION_KEY` (só GitHub; não estava na Railway) | Não exige troca pelo incidente. Se trocar: manter a antiga no cofre até expirar a retenção (14 dias) para restaurar backups antigos |
+| Senha de usuário | admin de plataforma, `LICIGOV_STAGING_SMOKE_PASSWORD` | Trocar pela aplicação (reset ⇒ `tokenVersion` revoga sessões) |
 
-## 1. Pré-checagem (somente leitura, 10 min)
+## 1. Acesso real disponível (sem presumir console SQL)
 
-1. Railway → projeto `licigov-pro` → **production** → serviço `licigov-pro` → Variables: anotar quais
-   variáveis são **referências** (`${{MySQL.…}}`) e quais são valores literais. Repetir em **staging**.
-2. Railway → Account → Tokens: listar tokens de API ativos; revogar os não reconhecidos.
-3. GitHub → Settings → Security log (conta) e repo → Settings → Secrets: confirmar a lista
-   `BACKUP_DATABASE_URL`, `BACKUP_ENCRYPTION_KEY`, `AUDIT_DATABASE_URL`, `GEMINI_API_KEY`, `RESTORE_TARGET_URL`.
-4. GitHub → Settings → Applications: a Railway revogou instalações do GitHub App por precaução. Os deploys
-   de 23–24/10 indicam reconexão; confirmar que o app instalado é o oficial e o escopo está restrito aos repos usados.
+Docs oficiais da Railway (consultadas em 25/10): o painel do banco oferece **Table View / Entries View** e, em
+**Config → Connection**, o **Regenerate** da senha do usuário do template — não há console SQL documentado.
+Editar só a variável de senha **não** muda a senha no banco; só `ALTER USER` **não** muda a variável: as duas
+coisas dessincronizam e derrubam as conexões. Para SQL arbitrário (CREATE USER/GRANT), as vias são:
 
-## 2. MySQL de produção (maior prioridade)
+1. **`railway ssh`** no serviço `MySQL` do ambiente e o cliente `mysql` **dentro do container**, autenticando
+   com a variável já presente lá (`MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot` — o texto digitado não
+   contém a senha). Preferida: nada atravessa a máquina do operador além do terminal.
+2. **`railway connect MySQL --environment <env>`** numa máquina confiável do Owner com cliente `mysql`
+   (via proxy público ou túnel `--ssh`).
 
-**Consumidores conhecidos:** app produção (`DATABASE_URL`); GitHub Actions `db-backup.yml`
-(`BACKUP_DATABASE_URL`, via proxy TCP público) e `schema-audit.yml` (`AUDIT_DATABASE_URL`); pre-deploy
-(`pnpm db:release:predeploy`, mesmo `DATABASE_URL`); eventuais `.env` locais do Owner.
+Em ambos: criar contas com `CREATE USER … IDENTIFIED BY RANDOM PASSWORD` (MySQL ≥ 8.0.18; ensaiado em 9.7.4,
+`SET SESSION generated_random_password_length = 32` antes): o servidor gera a senha e a mostra **uma vez** no
+resultado — nada é digitado nem colado no terminal, e o `--histignore` padrão do cliente não grava
+`IDENTIFIED`/`PASSWORD` no histórico. Copiar o valor direto para a variável de destino e limpar a tela.
 
-**Evidência atual:** backup diário via proxy público teve sucesso em 21, 22, 23, 24 e **25/10** e o app não
-teve redeploy em produção após 23/10 12:54Z ⇒ é provável que a credencial **não** tenha sido trocada após o
-incidente. Confirmar no console.
+## 2. MySQL — contas separadas por função
 
-Sequência (janela sugerida: madrugada BRT; produção hoje tem tráfego quase nulo):
+### 2.1 Mecanismo real (verificado no código)
 
-1. Conectar ao MySQL de produção pelo console da Railway (aba Data/Query) — **não** pelo proxy público de
-   uma máquina não confiável.
-2. Criar usuários dedicados de menor privilégio (em vez de `root` para tudo):
-   - `licigov_app` — `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES, CREATE ROUTINE,
-     ALTER ROUTINE, EXECUTE, TRIGGER, LOCK TABLES` no banco da aplicação (o release de migrations precisa de DDL;
-     revisar se algum passo exige mais e ajustar no staging primeiro);
-   - `licigov_backup` — `SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES` (suficiente para
-     `mysqldump --single-transaction --routines --triggers --events --no-tablespaces`).
-   Senhas geradas no terminal do operador (ex.: `openssl rand -base64 36`), coladas direto no destino.
-3. **Ensaiar em staging** os passos 2–5 (staging tem MySQL próprio, mesmo template).
-4. Produção: trocar `DATABASE_URL` do serviço `licigov-pro` para `licigov_app` no host **privado**
-   (`mysql.railway.internal`). Deploy. Validar `/readyz` 200, log de boot `Schema validado`, login.
-5. GitHub: trocar `BACKUP_DATABASE_URL` para `licigov_backup`; rodar "Backup do Banco" manualmente
-   (agora com `--ssl-mode=REQUIRED`); confirmar artifact cifrado. Trocar `AUDIT_DATABASE_URL` idem
-   (usuário somente leitura).
-6. Trocar a senha de `root` (`ALTER USER 'root'@'%' IDENTIFIED BY …`) e atualizar `MYSQL_ROOT_PASSWORD`,
-   `MYSQLPASSWORD`, `MYSQL_URL`, `MYSQL_PUBLIC_URL` do serviço MySQL para refletir o valor novo (a Railway
-   **não** troca a senha do banco ao editar a variável; o `ALTER USER` é o que vale).
-7. Remover qualquer outro usuário antigo/desconhecido (`SELECT user, host FROM mysql.user;`).
-8. Rollback: se o app não subir, voltar `DATABASE_URL` à credencial anterior **por no máximo a janela de
-   diagnóstico**, corrigir grants e repetir. Nunca reverter a senha de `root`.
-9. Follow-up (P1): eliminar o proxy TCP público movendo o backup para dentro da Railway (serviço cron na
-   rede privada) ou restringir o uso a um usuário de backup somente leitura; avaliar o mesmo para staging.
+- O **boot não migra**: só valida o schema (INFORMATION_SCHEMA + `__drizzle_migrations`). DDL só ocorre no
+  pre-deploy `pnpm db:release:predeploy` = (1) `db:migrate:release` (DDL) + (2) reference data (DML).
+- A Railway roda o pre-deploy num container separado **com as variáveis do serviço** — hoje a mesma
+  `DATABASE_URL` do runtime.
+- Com esta PR: `db:migrate:release` usa `MIGRATION_DATABASE_URL` se definida (senão `DATABASE_URL`). O reference
+  data continua na `DATABASE_URL`. Limitação: a variável de migrations fica no mesmo serviço (um RCE no
+  processo do app ainda a leria); o ganho é que uma injeção SQL/ORM no runtime não executa DDL. Isolamento
+  total exigiria um serviço separado só para migrations (backlog).
 
-**Evidência esperada:** print/nota do `/readyz`, ID do deploy, ID do run de backup com sucesso após a troca,
-lista de usuários do MySQL (só nomes/hosts), data/hora. Sem senhas.
+### 2.2 Privilégios (fonte única: `scripts/ops/db-roles.ts`; plano sem senhas: `pnpm db:roles:plan <banco>`)
 
-## 3. `JWT_SECRET` (chave de assinatura — produção e staging separados)
+| Conta | Banco | Global | TLS | Consumidor | Por quê |
+|---|---|---|---|---|---|
+| `licigov_app` | SELECT, INSERT, UPDATE, DELETE | — | rede privada | `DATABASE_URL` (runtime + reference data) | DML; `FOR UPDATE` exige UPDATE |
+| `licigov_migrator` | SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE ROUTINE, ALTER ROUTINE | — | rede privada | `MIGRATION_DATABASE_URL` (pre-deploy) | 320 migrations: tabelas, índices, FKs, procedures temporárias (`DROP PROCEDURE IF EXISTS` exige ALTER ROUTINE); sem EXECUTE (o criador recebe automaticamente) |
+| `licigov_backup` | SELECT, SHOW VIEW, TRIGGER, EVENT | SHOW_ROUTINE | `REQUIRE SSL` | `BACKUP_DATABASE_URL` | **Sem SHOW_ROUTINE o mysqldump omite procedures em silêncio** (ensaiado) |
+| `licigov_audit` | REFERENCES | — | `REQUIRE SSL` | `AUDIT_DATABASE_URL` | Só metadados; SELECT nos dados é negado (ensaiado) |
 
-1. Gerar ≥ 48 bytes aleatórios no terminal do operador (`openssl rand -base64 48`).
-2. Railway produção → `JWT_SECRET` → salvar → deploy. Todas as sessões caem (TTL padrão 24 h).
-3. Validar: sessão antiga recebe 401/“sessão inválida”; login novo funciona.
-4. Repetir em staging com **outro** valor.
-5. Não há compatibilidade a manter (sem `kid`/rotação dupla no código). Backlog P3: suportar duas chaves
-   (atual + anterior) para rotação sem logout geral.
+### 2.3 Ensaio já realizado (local, sintético, 25/10)
 
-## 4. `GEMINI_API_KEY` (Google AI Studio / Cloud)
+MySQL **9.7.4** (imagem oficial que `mysql:9` resolve hoje) e 8.0.46: as 320 migrations do zero + replay com
+`licigov_migrator`; boot da aplicação, `/readyz`, login, criação de órgão e de processo com `licigov_app`;
+`db:audit` com `licigov_audit`; backup cifrado com `licigov_backup` (cliente mysqldump 8.0.46, TLS 1.3,
+`VERIFY_CA` com a CA do servidor) e restore em banco isolado com `CHECKSUM TABLE` idêntico em 345/345 tabelas.
+Smoke equivalente na CI: `sec-db-least-privilege-mysql-smoke.test.ts`.
 
-1. AI Studio → API keys: identificar o projeto GCP de cada chave. Criar **uma chave por ambiente**
-   (produção, staging, GitHub Actions `ai-models.yml`), restrita à *Generative Language API*.
-2. Railway produção/staging e GitHub Secret `GEMINI_API_KEY`: atualizar. Deploy.
-3. Validar em staging: gerar um DFD de teste no tenant sintético `homologacao-sintetica`; em produção, apenas
-   o log de boot `AI=✓` (sem gerar documento em órgão real).
-4. Revogar a chave antiga no console.
-5. **Consumo:** Cloud Console → APIs & Services → Generative Language API → Metrics, de 20/10 até hoje, por
-   chave/credencial. Os logs da Railway mostram produção quase ociosa desde 22/10 — consumo relevante nesse
-   período é sinal de abuso.
-6. Verificar se a mesma chave/projeto é usada pelo SincroSaúde (mesmo e-mail do AI Studio). Se for, a rotação
-   precisa ser coordenada com aquela frente — **não alterar o SincroSaúde a partir daqui**.
+**Lacuna:** a versão exata do MySQL em execução na Railway não está nos logs retidos (deploy de 19/09; tag
+`mysql:9` fixada por SHA no deploy, auto-update "vuln"). O novo backup registra `VERSION()` a cada execução;
+conferir no primeiro run e repetir o ensaio se for < 8.0.20 (sem `SHOW_ROUTINE`) — improvável em `mysql:9`.
+
+### 2.4 Sequência (staging primeiro; produção só após staging verde)
+
+Ver [`CONTAINMENT_CHECKLIST.md`](./CONTAINMENT_CHECKLIST.md) §1. Resumo:
+
+1. Pré-checagem somente leitura (variáveis, contas existentes, backup recuperável).
+2. Criar as quatro contas (RANDOM PASSWORD) e aplicar os GRANTs do plano.
+3. **Se esta PR ainda não estiver implantada** no ambiente: `DATABASE_URL` → `licigov_migrator` (credencial
+   nova; migrations e runtime funcionam). **Se já estiver:** `DATABASE_URL` → `licigov_app` e
+   `MIGRATION_DATABASE_URL` → `licigov_migrator`. A contenção não espera a PR.
+4. Deploy; validar boot, `/readyz`, login, uma escrita no tenant sintético (staging) e o log do pre-deploy.
+5. GitHub: `BACKUP_DATABASE_URL` → `licigov_backup`; `AUDIT_DATABASE_URL` → `licigov_audit`; rodar backup e
+   auditoria manualmente.
+6. Só então **Regenerate** da senha do `root` (Config → Connection). Nada mais depende dela; o Regenerate
+   mantém as variáveis do serviço MySQL coerentes.
+7. Contas que sobrarem em `mysql.user` (além de `root` e das internas `mysql.sys`, `mysql.session`,
+   `mysql.infoschema`): listar dono/função/dependência e decidir caso a caso. Não excluir na rotina.
+
+### 2.5 Recuperação (sem credencial antiga)
+
+| Falha | Recuperação |
+|---|---|
+| App não sobe com `licigov_app` (privilégio faltando) | Apontar `DATABASE_URL` temporariamente para `licigov_migrator` (nova, mais privilégio) e registrar o privilégio faltante; ajustar `db-roles.ts` + smoke antes de voltar |
+| Pre-deploy falha com `licigov_migrator` | Corrigir o GRANT justificado (ver mensagem do MySQL) e redeploy; não usar `root` |
+| Backup falha após a troca | Corrigir a conta/TLS; **nunca** voltar a texto puro nem ao `root`; o backup anterior continua retido por 14 dias |
+| Regenerate do `root` quebrou algo | Sinal de dependência não mapeada do `root`: criar conta própria para esse consumidor; não reverter a senha |
+
+## 3. `JWT_SECRET` (chave de assinatura)
+
+- Gerar ≥ 48 bytes aleatórios (`openssl rand -base64 48`) direto no campo da variável; valores distintos em
+  staging e produção. Deploy. **Efeito:** todas as sessões caem (TTL 24 h) — avisar os usuários do órgão.
+- Validar: cookie antigo ⇒ não autenticado; login novo ok.
+- Não há janela de sobreposição: o código só aceita uma chave. Rotação planejada futura com duas chaves é
+  backlog e **nunca** pode aceitar uma chave suspeita como "anterior".
+- Dependências: nenhum outro serviço valida estes JWTs. Convites/reset usam tokens opacos no banco (não dependem
+  da chave).
+
+## 4. `GEMINI_API_KEY`
+
+- Criar **uma chave por consumidor** (produção, staging, workflow `ai-models.yml`), restrita à Generative
+  Language API, num projeto GCP **ativo**. Atenção: em 08/10 o Google avisou que a conta de faturamento do
+  projeto "LiciGov Pro - Staging" estava vencida e o projeto em risco de suspensão — não há evidência posterior
+  de regularização; se estiver suspenso, a chave nova de staging precisa de outro projeto/conta ativa.
+- Trocar, deploy, validar (staging: gerar um DFD no tenant sintético; produção: só o boot `AI=✓`), revogar a
+  antiga.
+- Consumo 20/10 → hoje: Cloud Console → APIs & Services → Generative Language API → Metrics por credencial.
+- Mesma conta Google do SincroSaúde: se a chave/projeto for compartilhado, coordenar com aquela frente.
 
 ## 5. AWS S3 (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`)
 
-1. IAM → usuário da aplicação → *Create access key* (manter a antiga ativa por enquanto).
-2. Confirmar política mínima: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` apenas no
-   bucket da aplicação; bucket com *Block Public Access* ligado.
-3. Railway produção (e staging, chave própria): atualizar; deploy; validar upload/download de anexo no tenant
-   sintético em staging e um download em produção.
-4. Desativar a chave antiga; após 48 h sem erro, excluir.
-5. CloudTrail: eventos da chave antiga desde 20/10 (IPs fora da Railway, `ListBuckets`, `GetObject` em massa).
+- IAM: criar a nova chave (até 2 ativas por usuário), trocar, deploy, validar upload/download no tenant
+  sintético (staging) e um download em produção, **desativar** a antiga; excluir após 48 h sem erro.
+- Política mínima: Get/Put/DeleteObject e ListBucket só no bucket da aplicação; Block Public Access ligado.
+- **Cobertura de logs (real):** `iam get-access-key-last-used` (data, serviço e região do último uso) está
+  sempre disponível. CloudTrail **Event history** cobre só eventos de **gerenciamento** dos últimos 90 dias;
+  `GetObject`/`PutObject` são **eventos de dados** do S3 e só existem se havia uma trail com data events
+  habilitada **antes** de 20/10 (ou S3 server access logging no bucket). Habilitar agora não recupera o período —
+  registrar como lacuna se não havia.
 
 ## 6. `BREVO_API_KEY`
 
-1. Brevo → SMTP & API → API keys: criar nova; habilitar restrição de IP se o plano permitir.
-2. Railway produção/staging: atualizar; deploy; validar envio de recuperação de senha para o e-mail do Owner.
-3. Excluir a chave antiga. Revisar *Transactional → Logs* desde 20/10 (envios não reconhecidos).
-4. O SincroSaúde também tem `BREVO_API_KEY`: se for a mesma conta/chave, coordenar.
+- Criar nova chave (SMTP & API), restringir por IP se o plano permitir, trocar, deploy, validar um e-mail de
+  recuperação para o Owner, excluir a antiga. Revisar *Transactional → Logs* desde 20/10 conforme a retenção do
+  plano. O SincroSaúde também usa `BREVO_API_KEY`: se for a mesma conta/chave, coordenar.
 
 ## 7. Conta admin de plataforma e `ADMIN_PASSWORD`
 
-- O histórico **público** do repositório contém (a) uma senha padrão de admin hardcoded (abr/2026) e
-  (b) o código antigo de bootstrap que criava o admin com `ADMIN_PASSWORD`. Se a senha da conta admin nunca
-  foi trocada desde a criação, ela é igual a um desses valores.
-- Ação: trocar a senha do admin de plataforma pelo fluxo "Esqueci minha senha" (revoga sessões via
-  `tokenVersion`), usando senha nova e única.
-- Após o deploy da correção desta auditoria (`ADMIN_PASSWORD` deixa de ser exigida), **excluir**
-  `ADMIN_PASSWORD` de produção e staging — não há consumidor.
+- Trocar a senha do admin pelo fluxo "Esqueci minha senha" (revoga sessões via `tokenVersion`). Motivo: o
+  histórico público contém uma senha padrão antiga e o bootstrap antigo usava `ADMIN_PASSWORD`; não foi testado
+  se a conta ainda usa alguma delas (teste de credencial não autorizado).
+- Após o deploy desta PR, excluir `ADMIN_PASSWORD` de produção e staging (sem consumidor no código) — decisão
+  do Owner registrada na atestação.
 
 ## 8. Staging
 
-`LICIGOV_STAGING_SMOKE_PASSWORD` (trocar pela aplicação), `A2_HOMOLOG_TOKEN` (sem consumidor no código
-atual → excluir), `JWT_SECRET`, `GEMINI_API_KEY`, `BREVO_API_KEY`, `AWS_*`, `DATABASE_URL` — valores próprios,
-nunca iguais aos de produção.
+Mesma sequência, com valores próprios: `JWT_SECRET`, `GEMINI_API_KEY`, `BREVO_API_KEY`, `AWS_*`, contas MySQL do
+MySQL de staging, `LICIGOV_STAGING_SMOKE_PASSWORD` (pela aplicação). `A2_HOMOLOG_TOKEN` não tem consumidor no
+código atual: confirmar com o Owner antes de remover (pode haver uso operacional fora do repositório).
 
-## 9. Encerramento
+## 9. Depois da rotação
 
-Registrar no [`AUDIT_REPORT.md`](./AUDIT_REPORT.md) (seção "Atestação operacional"), por credencial:
-responsável, data/hora UTC, ID do deploy, método de validação, revogação da anterior confirmada (sim/não).
-Somente então os critérios correspondentes do [`ROADMAP.md`](./ROADMAP.md) passam a "validado em ambiente".
+- Considerar **selar** (Seal) as variáveis rotacionadas: o valor deixa de ser legível pela UI/API (não pode ser
+  desselado; `railway run`/`railway variables` não o entregam).
+- Registrar a atestação no [`AUDIT_REPORT.md`](./AUDIT_REPORT.md) §10.
