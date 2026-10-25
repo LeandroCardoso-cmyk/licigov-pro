@@ -10,11 +10,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock do SDK legado: captura os args de getGenerativeModel e devolve um generateContent stub.
-const captured: any[] = [];
+type CapturedModelConfig = { generationConfig?: Record<string, unknown> };
+const captured: CapturedModelConfig[] = [];
 vi.mock("@google/generative-ai", () => {
   return {
     GoogleGenerativeAI: class {
-      getGenerativeModel(cfg: any) {
+      getGenerativeModel(cfg: CapturedModelConfig) {
         captured.push(cfg);
         return {
           generateContent: async () => ({
@@ -38,6 +39,8 @@ vi.mock("@google/generative-ai", () => {
 });
 
 import { shouldDisableThinking, THINKING_DISABLE_COMPATIBLE_MODELS, GeminiProvider } from "../../_core/ai/gemini";
+
+type GenerateOptions = Parameters<GeminiProvider["generate"]>[0];
 
 describe("Gemini · thinking budget — apenas em IDs concretos compatíveis", () => {
   it("NÃO desliga thinking para aliases móveis (evita 400 INVALID_ARGUMENT)", () => {
@@ -70,7 +73,7 @@ describe("Gemini · payload de generateContent (thinkingConfig)", () => {
     await provider.generate({
       messages: [{ role: "user", content: "Responda apenas: OK" }],
       maxTokens: 1500,
-    } as any);
+    } as GenerateOptions);
     // o último getGenerativeModel com generationConfig é o da chamada .generate()
     return captured[captured.length - 1];
   }
@@ -120,7 +123,7 @@ describe("Gemini · parâmetros de amostragem depreciados (temperature/topP/topK
   it("GeminiProvider.generate no modelo canônico não envia parâmetros depreciados", async () => {
     captured.length = 0;
     const provider = new GeminiProvider("test-key", CANONICAL_GEMINI_MODEL);
-    await provider.generate({ messages: [{ role: "user", content: "OK" }], maxTokens: 100 } as any);
+    await provider.generate({ messages: [{ role: "user", content: "OK" }], maxTokens: 100 } as GenerateOptions);
     const gc = captured[captured.length - 1].generationConfig ?? {};
     for (const k of ["temperature", "topP", "topK", "thinkingConfig"]) expect(gc).not.toHaveProperty(k);
   });

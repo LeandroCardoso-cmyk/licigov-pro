@@ -5670,8 +5670,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-thinking.test.ts": {
-    "mtime": 1792954635.4903262,
-    "ast_hash": "aa62e6370789f16e69f75cb850a3b5e9",
+    "mtime": 1792955220.408295,
+    "ast_hash": "03aba19ac02e9e033fb37d4cbb60c559",
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
@@ -15285,13 +15285,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/correlation-id-client-header.test.ts": {
-    "mtime": 1792954782.462335,
-    "ast_hash": "056f411231b03d21616ab0617bfc7408",
+    "mtime": 1792955220.4148867,
+    "ast_hash": "4614b69d5f8a9d0c0154537aa36a338e",
     "semantic_hash": ""
   },
   "server/__tests__/unit/admin-password-not-required.test.ts": {
     "mtime": 1792954879.5783408,
     "ast_hash": "2848b0db046c08d8fca6cb9d905628b5",
+    "semantic_hash": ""
+  },
+  "docs/security/incident-2026-10/AUDIT_REPORT.md": {
+    "mtime": 1792955135.6359158,
+    "ast_hash": "e3366fa89cbd1a05fca35e8f32196378",
     "semantic_hash": ""
   }
 }
