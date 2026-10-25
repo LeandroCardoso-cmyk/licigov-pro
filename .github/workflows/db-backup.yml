@@ -5,9 +5,10 @@ name: Backup do Banco (agendado + manual)
 #   - AGENDADO: todo dia às 06:00 UTC (03:00 BRT);
 #   - MANUAL:  aba "Actions" → "Backup do Banco (agendado + manual)" → "Run workflow".
 #
-# Requer o secret BACKUP_DATABASE_URL (string de conexão MySQL PÚBLICA — ex.: o MYSQL_PUBLIC_URL
-# do Railway de produção). O dump comprimido + o checksum SHA-256 ficam como ARTIFACT do run
-# (Actions → run → Artifacts), com retenção de 14 dias. Nunca versiona o dump no Git.
+# Requer os secrets BACKUP_DATABASE_URL (conexão MySQL pelo endpoint público — usar um usuário só de
+# backup, ver docs/security/incident-2026-10/ROTATION_RUNBOOK.md) e BACKUP_ENCRYPTION_KEY (obrigatória:
+# sem ela o job falha). Opcional: BACKUP_DB_SSL_CA (PEM da CA do servidor ⇒ TLS VERIFY_CA). O dump
+# CIFRADO + checksum SHA-256 ficam como ARTIFACT do run, retenção de 14 dias. Nunca versiona o dump no Git.
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC diariamente
@@ -29,79 +30,36 @@ permissions:
 
 jobs:
   backup:
-    name: Dump completo (mysqldump) + checksum
+    name: Dump completo (mysqldump) cifrado + checksum
     runs-on: ubuntu-latest
     steps:
-      - name: Dump do banco + checksum
+      - name: Checkout (script de backup versionado)
+        uses: actions/checkout@v4
+
+      # SEC-AUD-2026-10 — lógica em scripts/ops/db-backup.sh (testada com binários sintéticos em
+      # server/__tests__/unit/db-backup-script.test.ts): falha ANTES de conectar sem BACKUP_DATABASE_URL ou
+      # BACKUP_ENCRYPTION_KEY (não há mais modo sem cifra); TLS obrigatório (VERIFY_CA se
+      # BACKUP_DB_SSL_CA estiver definido); dump nunca em claro no disco; qualquer falha deixa
+      # backup-out/ vazio. Mesmo formato de cifra de antes (compatível com o drill e com a retenção).
+      - name: Dump cifrado + checksum
         env:
-          DB_URL: ${{ secrets.BACKUP_DATABASE_URL }}
-          ENC_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_DB_SSL_CA: ${{ secrets.BACKUP_DB_SSL_CA }}
+          BACKUP_OUT_DIR: backup-out
         run: |
           set -euo pipefail
-          if [ -z "${DB_URL:-}" ]; then
-            echo "❌ Secret BACKUP_DATABASE_URL não definido (use o MYSQL_PUBLIC_URL do Railway)."
-            exit 1
-          fi
-          # Parse de mysql://user:senha@host:porta/banco (senha pode conter caracteres especiais).
-          proto_stripped="${DB_URL#mysql://}"
-          creds="${proto_stripped%%@*}"
-          rest="${proto_stripped#*@}"
-          DB_USER="${creds%%:*}"
-          DB_PASS="${creds#*:}"
-          hostport="${rest%%/*}"
-          DB_NAME="${rest#*/}"; DB_NAME="${DB_NAME%%\?*}"
-          DB_HOST="${hostport%%:*}"
-          DB_PORT="${hostport#*:}"
+          mkdir -p backup-out
+          bash scripts/ops/db-backup.sh
 
-          # Não expõe host/usuário/senha nos logs (apenas o nome do banco, não sensível).
-          echo "Iniciando backup do banco \"$DB_NAME\"…"
-          STAMP="$(date -u +%Y%m%d-%H%M%S)"
-          FILE="backup-${DB_NAME}-${STAMP}.sql.gz"
-
-          # SEC-AUD-2026-10 — o dump trafega pela internet (proxy TCP público do Railway): TLS OBRIGATÓRIO.
-          # O padrão do cliente (PREFERRED) aceitaria rebaixamento para texto puro; REQUIRED falha em vez disso.
-          MYSQL_PWD="$DB_PASS" mysqldump \
-            --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
-            --ssl-mode=REQUIRED \
-            --single-transaction --routines --triggers --events \
-            --set-gtid-purged=OFF --no-tablespaces \
-            "$DB_NAME" | gzip > "$FILE"
-
-          # Falha explícita se o dump saiu vazio/curto (não gera evidência falsa de backup).
-          BYTES=$(stat -c%s "$FILE")
-          if [ "$BYTES" -lt 1024 ]; then
-            echo "❌ Dump suspeito (apenas ${BYTES} bytes) — abortando."
-            exit 1
-          fi
-
-          # Criptografia at-rest do dump (AES-256, PBKDF2). Secure-by-default: se
-          # BACKUP_ENCRYPTION_KEY estiver definido, o artifact é CIFRADO (recomendado). Sem a chave,
-          # o artifact segue apenas restrito ao repositório — avisamos e registramos a ação operacional.
-          ARTIFACT="$FILE"
-          if [ -n "${ENC_KEY:-}" ]; then
-            openssl enc -aes-256-cbc -pbkdf2 -salt -in "$FILE" -out "${FILE}.enc" -pass env:ENC_KEY
-            rm -f "$FILE"
-            ARTIFACT="${FILE}.enc"
-            echo "🔒 Dump cifrado (AES-256-CBC/PBKDF2)."
-          else
-            echo "⚠️ BACKUP_ENCRYPTION_KEY não definido — artifact NÃO cifrado (apenas restrito ao repo)."
-            echo "   Ação operacional: defina o secret BACKUP_ENCRYPTION_KEY para cifrar o dump."
-          fi
-
-          # Checksum SHA-256 do artifact final (cifrado ou não) para verificação na restauração.
-          sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
-
-          echo "✅ Backup concluído: ${ARTIFACT} ($(stat -c%s "$ARTIFACT") bytes)."
-          echo "   Checksum: $(cut -d' ' -f1 "${ARTIFACT}.sha256")"
-          echo "BACKUP_ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
-
-      - name: Publicar artifact (dump + checksum, retenção 14 dias)
+      # Só roda se o passo anterior teve sucesso (condição padrão do Actions); publica apenas o .enc e o checksum.
+      - name: Publicar artifact cifrado (dump + checksum, retenção 14 dias)
         uses: actions/upload-artifact@v4
         with:
           name: db-backup
           path: |
-            ${{ env.BACKUP_ARTIFACT }}
-            ${{ env.BACKUP_ARTIFACT }}.sha256
+            backup-out/*.sql.gz.enc
+            backup-out/*.sql.gz.enc.sha256
           retention-days: 14
           if-no-files-found: error
 

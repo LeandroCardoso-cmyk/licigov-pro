@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792954435.1823144,
-    "ast_hash": "59a511a248d24cf70a54d471582b4fe1",
+    "mtime": 1792962468.6921608,
+    "ast_hash": "08bc2bc3996a6fe5e8e9f55e3a164642",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5200,8 +5200,8 @@
     "semantic_hash": ""
   },
   "scripts/migrate-release.ts": {
-    "mtime": 1792953089.6667182,
-    "ast_hash": "d063e199dbcdae80648ec11b349392df",
+    "mtime": 1792961900.6003182,
+    "ast_hash": "6126f7328fd153af64b224080288059e",
     "semantic_hash": ""
   },
   "scripts/operation-record-schedule-backfill.ts": {
@@ -5980,8 +5980,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr-b-runtime-release-safety.test.ts": {
-    "mtime": 1792953089.6822343,
-    "ast_hash": "1f65cf39ac532d5da9d3ac8ba5fdaa88",
+    "mtime": 1792961900.6003182,
+    "ast_hash": "f54a748df0d192ffaeaba7e91d4ec6f8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr0-bootstrap-admin-atomicity.test.ts": {
@@ -10590,13 +10590,13 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792953871.640486,
-    "ast_hash": "06445967f0c56755ea3ec1f14415737c",
+    "mtime": 1792962468.691807,
+    "ast_hash": "b030d30b5b57112103e7c21d60005904",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1792953966.511603,
-    "ast_hash": "f2f4e39f7169161eaacbf9f159d90b50",
+    "mtime": 1792961638.324509,
+    "ast_hash": "af933090035782664a3829930d25e85c",
     "semantic_hash": ""
   },
   ".github/workflows/db-restore-test.yml": {
@@ -15297,6 +15297,26 @@
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
     "mtime": 1792955590.3292942,
     "ast_hash": "25490d5161a40af68b27af750410c4b7",
+    "semantic_hash": ""
+  },
+  "scripts/ops/db-backup.sh": {
+    "mtime": 1792961546.1598625,
+    "ast_hash": "6efd551af562c28ed9aff36ba8aa3042",
+    "semantic_hash": ""
+  },
+  "scripts/ops/db-roles.ts": {
+    "mtime": 1792962503.5842128,
+    "ast_hash": "a704b03e6d7875bc6b32cc5b780bcbc4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/sec-db-least-privilege-mysql-smoke.test.ts": {
+    "mtime": 1792962325.3981707,
+    "ast_hash": "680437f27057aa5f35358681fcd92ba2",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/db-backup-script.test.ts": {
+    "mtime": 1792961638.3257077,
+    "ast_hash": "777311157aa2508e8501c474df8cb26c",
     "semantic_hash": ""
   }
 }
