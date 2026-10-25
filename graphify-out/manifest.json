@@ -6845,8 +6845,8 @@
     "semantic_hash": ""
   },
   "server/config/auth.ts": {
-    "mtime": 1792953089.715968,
-    "ast_hash": "adabf5dfbac5dcfc9822ac8a716f3bf7",
+    "mtime": 1792954861.4143398,
+    "ast_hash": "de8519279b5973114d69935469807ef7",
     "semantic_hash": ""
   },
   "server/config/aws.ts": {
@@ -10635,8 +10635,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1792953089.1368334,
-    "ast_hash": "58aadcec22ceb3f4f44f6efe24bada07",
+    "mtime": 1792954872.7440135,
+    "ast_hash": "d8c5e21d90110deba9515a2c0a7b0fe6",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -15287,6 +15287,11 @@
   "server/__tests__/unit/correlation-id-client-header.test.ts": {
     "mtime": 1792954782.462335,
     "ast_hash": "056f411231b03d21616ab0617bfc7408",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/admin-password-not-required.test.ts": {
+    "mtime": 1792954879.5783408,
+    "ast_hash": "2848b0db046c08d8fca6cb9d905628b5",
     "semantic_hash": ""
   }
 }
