@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792953089.6582344,
-    "ast_hash": "d3884b96d87a671f89613611c464bfb7",
+    "mtime": 1792954435.1823144,
+    "ast_hash": "59a511a248d24cf70a54d471582b4fe1",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5250,8 +5250,8 @@
     "semantic_hash": ""
   },
   "security/audit-baseline.json": {
-    "mtime": 1792953089.6667182,
-    "ast_hash": "76a821874a701d79d2ff47d7e5a78df0",
+    "mtime": 1792954460.9641151,
+    "ast_hash": "0fd132c608a9b402969c9e200721622c",
     "semantic_hash": ""
   },
   "seed-complete.mjs": {
@@ -15277,6 +15277,11 @@
   "docs/security/incident-2026-10/ROTATION_RUNBOOK.md": {
     "mtime": 1792954050.1982915,
     "ast_hash": "07b6350e573ac1d1d25c0d9719217197",
+    "semantic_hash": ""
+  },
+  "docs/security/incident-2026-10/ROADMAP.md": {
+    "mtime": 1792954392.5463119,
+    "ast_hash": "3c7e14601084ffd255df3bce34063427",
     "semantic_hash": ""
   }
 }
