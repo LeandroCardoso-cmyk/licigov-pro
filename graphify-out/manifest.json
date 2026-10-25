@@ -11925,8 +11925,8 @@
     "semantic_hash": ""
   },
   "docs/ops/DEPENDENCY_AUDIT_TRIAGE.md": {
-    "mtime": 1792953089.5658228,
-    "ast_hash": "2e85ec3339015c7bc3c7a292aaed7275",
+    "mtime": 1792955590.348156,
+    "ast_hash": "d8d63e14d021f6202d97c9f30ca0fd22",
     "semantic_hash": ""
   },
   "docs/ops/EMAIL_BREVO_RUNBOOK.md": {
@@ -12005,8 +12005,8 @@
     "semantic_hash": ""
   },
   "docs/security/README.md": {
-    "mtime": 1792953089.5671954,
-    "ast_hash": "b9f00d118d9771b558b43a7940df3875",
+    "mtime": 1792955590.3478186,
+    "ast_hash": "27de14a608a1dffd5f946749e6ebfdfd",
     "semantic_hash": ""
   },
   "docs/technical/README.md": {
@@ -15280,8 +15280,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
-    "mtime": 1792954392.5463119,
-    "ast_hash": "3c7e14601084ffd255df3bce34063427",
+    "mtime": 1792955580.6720352,
+    "ast_hash": "f6d3fb122300f7a7ab614da2cb75caea",
     "semantic_hash": ""
   },
   "server/__tests__/unit/correlation-id-client-header.test.ts": {
@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792955135.6359158,
-    "ast_hash": "e3366fa89cbd1a05fca35e8f32196378",
+    "mtime": 1792955590.3292942,
+    "ast_hash": "25490d5161a40af68b27af750410c4b7",
     "semantic_hash": ""
   }
 }
