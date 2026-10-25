@@ -6,6 +6,10 @@ name: Auditoria de Schema (manual)
 on:
   workflow_dispatch:
 
+# Token do GitHub só com leitura do repositório (o job não escreve nada no GitHub).
+permissions:
+  contents: read
+
 jobs:
   audit:
     name: Auditoria de Schema (Drizzle × banco)
@@ -19,11 +23,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Instalar pnpm
-        run: npm install -g pnpm
+      # SEC-AUD-2026-10 — job recebe segredo de produção: pnpm pela versão fixada (corepack/packageManager)
+      # e instalação reprodutível pelo lockfile (sem resolver versões novas com o segredo no ambiente).
+      - name: Ativar pnpm (corepack — versão do packageManager)
+        run: corepack enable
 
-      - name: Instalar dependências
-        run: pnpm install
+      - name: Instalar dependências (lockfile)
+        run: pnpm install --frozen-lockfile
 
       - name: Rodar auditoria (o relatório aparece neste log)
         run: pnpm db:audit || true

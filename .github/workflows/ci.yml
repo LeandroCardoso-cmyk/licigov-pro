@@ -19,6 +19,10 @@ env:
   # Node compatível com produção (Railway roda 20+ LTS; fixamos 22 aqui e em .nvmrc/engines).
   NODE_VERSION: "22"
 
+# SEC-AUD-2026-10 — menor privilégio: o GITHUB_TOKEN só lê o repositório (nenhum job escreve no GitHub).
+permissions:
+  contents: read
+
 jobs:
   # ── GATE OBRIGATÓRIO 1: o projeto compila (typecheck real) + lint de não-regressão ──
   quality:

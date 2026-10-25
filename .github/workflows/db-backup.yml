@@ -23,6 +23,10 @@ concurrency:
   group: db-backup
   cancel-in-progress: false
 
+# SEC-AUD-2026-10 — menor privilégio: o GITHUB_TOKEN só lê o repositório (nenhum job escreve no GitHub).
+permissions:
+  contents: read
+
 jobs:
   backup:
     name: Dump completo (mysqldump) + checksum
@@ -54,8 +58,11 @@ jobs:
           STAMP="$(date -u +%Y%m%d-%H%M%S)"
           FILE="backup-${DB_NAME}-${STAMP}.sql.gz"
 
+          # SEC-AUD-2026-10 — o dump trafega pela internet (proxy TCP público do Railway): TLS OBRIGATÓRIO.
+          # O padrão do cliente (PREFERRED) aceitaria rebaixamento para texto puro; REQUIRED falha em vez disso.
           MYSQL_PWD="$DB_PASS" mysqldump \
             --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
+            --ssl-mode=REQUIRED \
             --single-transaction --routines --triggers --events \
             --set-gtid-purged=OFF --no-tablespaces \
             "$DB_NAME" | gzip > "$FILE"
