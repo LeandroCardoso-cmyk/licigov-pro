@@ -248209,21 +248209,21 @@
       "norm_label": "7. alteracoes desta execucao"
     },
     {
-      "label": "8. Checks executados (25/10/2026, ambiente local da sess\u00e3o)",
+      "label": "8. Checks executados",
       "file_type": "document",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L194",
+      "source_location": "L196",
       "_origin": "ast",
-      "id": "docs_security_incident_2026_10_audit_report_8_checks_executados_25_10_2026_ambiente_local_da_sess\u00e3o",
+      "id": "docs_security_incident_2026_10_audit_report_8_checks_executados",
       "community": 225,
       "community_name": "Auditoria de seguran\u00e7a p\u00f3s-incidente Railway \u2014 LiciGov Pro",
-      "norm_label": "8. checks executados (25/10/2026, ambiente local da sessao)"
+      "norm_label": "8. checks executados"
     },
     {
       "label": "9. Backlog priorizado (c\u00f3digo)",
       "file_type": "document",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L214",
+      "source_location": "L220",
       "_origin": "ast",
       "id": "docs_security_incident_2026_10_audit_report_9_backlog_priorizado_c\u00f3digo",
       "community": 225,
@@ -248234,7 +248234,7 @@
       "label": "10. Atesta\u00e7\u00e3o operacional (preencher pelo Owner)",
       "file_type": "document",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L227",
+      "source_location": "L233",
       "_origin": "ast",
       "id": "docs_security_incident_2026_10_audit_report_10_atesta\u00e7\u00e3o_operacional_preencher_pelo_owner",
       "community": 225,
@@ -898038,7 +898038,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L227",
+      "source_location": "L233",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_security_incident_2026_10_audit_report_auditoria_de_seguran\u00e7a_p\u00f3s_incidente_railway_licigov_pro",
@@ -898126,18 +898126,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L194",
+      "source_location": "L196",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_security_incident_2026_10_audit_report_auditoria_de_seguran\u00e7a_p\u00f3s_incidente_railway_licigov_pro",
-      "target": "docs_security_incident_2026_10_audit_report_8_checks_executados_25_10_2026_ambiente_local_da_sess\u00e3o",
+      "target": "docs_security_incident_2026_10_audit_report_8_checks_executados",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/security/incident-2026-10/AUDIT_REPORT.md",
-      "source_location": "L214",
+      "source_location": "L220",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_security_incident_2026_10_audit_report_auditoria_de_seguran\u00e7a_p\u00f3s_incidente_railway_licigov_pro",
@@ -909729,5 +909729,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "343349fca6e67cf14eb2a50ed3d65bd9be20692b"
+  "built_at_commit": "d5b21e13b97b98ff9cc198ad45f1bfc7f8f8df6b"
 }

@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792962935.5082922,
-    "ast_hash": "899a724042f9db03dc5179b2c9193939",
+    "mtime": 1792964410.5997694,
+    "ast_hash": "a1bc7af43a632529211e09f29894ad26",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
