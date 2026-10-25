@@ -3,18 +3,8 @@
  * Gera planilhas de itens CATMAT/CATSER formatadas por plataforma
  */
 
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import * as db from "../db";
-
-interface ProcessItem {
-  id: number;
-  itemType: "material" | "service";
-  code: string | null;
-  description: string;
-  unit: string;
-  quantity: number;
-  estimatedUnitPrice: number | null;
-}
 
 /**
  * Gerar planilha de itens CATMAT/CATSER
@@ -36,7 +26,7 @@ export async function generateItemsSpreadsheet(
   const items = await db.getProcessItems(processId);
 
   // Montar dados da planilha
-  const worksheetData: any[] = [];
+  const worksheetData: unknown[][] = [];
 
   // Cabeçalho adaptado por plataforma
   if (platform?.slug === "compras-gov-br") {
@@ -134,9 +124,17 @@ export async function generateItemsSpreadsheet(
   worksheetData.push([]);
   worksheetData.push(["", "", "", "", "", "VALOR TOTAL:", totalValue.toFixed(2)]);
 
-  // Criar workbook
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+  return buildItemsWorkbook(worksheetData);
+}
+
+/**
+ * SEC-AUD-2026-10 — gera o XLSX com `exceljs` (antes SheetJS 0.18.5). Mesmo conteúdo: aba "Itens", mesmas
+ * células e larguras de coluna. Texto do usuário (ex.: descrição iniciada por "=") é gravado como STRING —
+ * nunca como fórmula —, igual ao comportamento anterior.
+ */
+export async function buildItemsWorkbook(worksheetData: unknown[][]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Itens");
 
   // Ajustar largura das colunas
   const columnWidths = [
@@ -149,15 +147,15 @@ export async function generateItemsSpreadsheet(
     { wch: 18 }, // Valor Total
     { wch: 20 }, // Tipo (se houver)
   ];
-  worksheet["!cols"] = columnWidths;
+  worksheet.columns = columnWidths.map((c) => ({ width: c.wch }));
 
-  // Adicionar worksheet ao workbook
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Itens");
+  for (const row of worksheetData) {
+    const values = (row ?? []).map((v) =>
+      v === null || v === undefined ? null : typeof v === "number" || typeof v === "boolean" || v instanceof Date ? v : String(v));
+    worksheet.addRow(values);
+  }
 
-  // Gerar buffer
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-
-  return buffer;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 /**

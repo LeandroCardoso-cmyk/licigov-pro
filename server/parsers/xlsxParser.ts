@@ -1,7 +1,15 @@
 /**
  * Sprint 2.8 — XLSX/XLS Parser (P0 piloto: mapeamento de colunas CONSOLIDADO em tabularExtraction).
- * Usa a biblioteca 'xlsx' (SheetJS). Suporta seleção de planilha, inferência de cabeçalho, linhas
- * esparsas, campos de cotação (fornecedor/marca/modelo/obs./fonte) e mapa comparativo.
+ * Suporta seleção de planilha, inferência de cabeçalho, linhas esparsas, campos de cotação
+ * (fornecedor/marca/modelo/obs./fonte) e mapa comparativo.
+ *
+ * SEC-AUD-2026-10 — leitor escolhido pelo CONTEÚDO (não pela extensão):
+ *   - XLSX (ZIP) → `exceljs` (excelWorkbookMatrix.ts), com limites de descompressão e de células;
+ *   - XLS legado (OLE/CFB) → SheetJS 0.18.5, o único leitor de BIFF disponível no npm. As advisories
+ *     GHSA-4r6h-8v6p-xvw6 / GHSA-5pgg-2g8v-p4x9 continuam aplicáveis SÓ a esse caminho, com limite de linhas,
+ *     até a decisão de produto registrada em docs/security/incident-2026-10/XLSX_REMEDIATION.md;
+ *   - qualquer outro conteúdo → UNSUPPORTED_FORMAT explícito (nada é removido em silêncio).
+ * Fórmulas nunca são executadas: os dois leitores usam o valor em cache.
  */
 import { BaseParser } from "./baseParser";
 import { tableToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
@@ -9,10 +17,35 @@ import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domai
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
 import type { ImportWarning } from "../domain/importTypes";
 import { numberToDecimalString } from "../domain/money";
+import { readXlsxMatrices, type MatrixCell } from "./excelWorkbookMatrix";
+import { detectSpreadsheetContainer, SpreadsheetLimitError } from "./spreadsheetLimits";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_ITEMS = 5000;
-const PARSER_VERSION = "1.2.0"; // 1.2.0: valor nativo de células numéricas preservado (rawTypedValues)
+// 1.2.0: valor nativo de células numéricas preservado (rawTypedValues)
+// 1.3.0: XLSX lido com exceljs + limites (mesma matriz — teste diferencial); XLS legado com limite de linhas
+const PARSER_VERSION = "1.3.0";
+/** XLS legado: teto de linhas lidas por aba (o SheetJS não tem limite de descompressão aplicável ao BIFF). */
+const LEGACY_XLS_MAX_ROWS = 100_000;
+
+type Matrices = { sheetNames: string[]; matrices: Map<string, MatrixCell[][]>; engine: "exceljs" | "sheetjs-legacy-xls" };
+
+async function readLegacyXls(buffer: Buffer): Promise<Matrices> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: LEGACY_XLS_MAX_ROWS });
+  const matrices = new Map<string, MatrixCell[][]>();
+  for (const name of workbook.SheetNames) {
+    matrices.set(name, XLSX.utils.sheet_to_json<MatrixCell[]>(workbook.Sheets[name], { header: 1, defval: "" }) as MatrixCell[][]);
+  }
+  return { sheetNames: workbook.SheetNames, matrices, engine: "sheetjs-legacy-xls" };
+}
+
+async function readWorkbook(buffer: Buffer): Promise<Matrices> {
+  const kind = detectSpreadsheetContainer(buffer);
+  if (kind === "zip") return { ...(await readXlsxMatrices(buffer)), engine: "exceljs" };
+  if (kind === "cfb") return readLegacyXls(buffer);
+  throw new SpreadsheetLimitError("ZIP_INVALID", "Conteúdo não é uma planilha XLSX nem XLS.");
+}
 
 /**
  * Hardening P0 — célula NUMÉRICA: exibição pt-BR SEM milhar ("1,234", "1234,5") só para o revisor; o valor
@@ -54,20 +87,32 @@ export class XlsxParser extends BaseParser {
     const startMs  = Date.now();
     const warnings: ImportWarning[] = [];
 
-    let XLSX: typeof import("xlsx");
-    try {
-      XLSX = await import("xlsx");
-    } catch {
+    if (buffer.length > MAX_SIZE) {
       return {
         items: [], warnings: [],
-        errors: [{ code: "UNSUPPORTED_FORMAT", message: "Biblioteca xlsx não disponível.", fatal: true }],
+        errors: [{ code: "SIZE_EXCEEDED", message: `Planilha excede ${MAX_SIZE / 1024 / 1024}MB.`, fatal: true }],
         summary: this.emptySummary(Date.now() - startMs),
         rawMetadata: {},
       };
     }
 
-    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    const sheetNames = workbook.SheetNames;
+    let book: Matrices;
+    try {
+      book = await readWorkbook(buffer);
+    } catch (err) {
+      const limit = err instanceof SpreadsheetLimitError;
+      return {
+        items: [], warnings: [],
+        errors: [{
+          code: limit && err.code !== "ZIP_INVALID" ? "SIZE_EXCEEDED" : "CORRUPT_FILE",
+          message: limit ? err.message : "Não foi possível ler a planilha (arquivo corrompido ou formato não suportado).",
+          fatal: true,
+        }],
+        summary: this.emptySummary(Date.now() - startMs),
+        rawMetadata: { parserVersion: PARSER_VERSION, ...(limit ? { limit: err.code } : {}) },
+      };
+    }
+    const sheetNames = book.sheetNames;
 
     if (sheetNames.length === 0) {
       return {
@@ -89,8 +134,7 @@ export class XlsxParser extends BaseParser {
       warnings.push({ code: "MULTIPLE_SHEETS", message: `Planilha com ${sheetNames.length} abas; processada apenas "${targetSheet}".`, severity: "info" });
     }
 
-    const sheet   = workbook.Sheets[targetSheet];
-    const rawData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    const rawData = book.matrices.get(targetSheet) ?? [];
     const rows    = (rawData as unknown[][]).map((r) => r.map(cellToString));
     // Valores NATIVOS numéricos (sheet_to_json raw=true preserva `number`), paralelos a `rows`.
     const typed   = (rawData as unknown[][]).map((r) => r.map((v) => (typeof v === "number" ? numberToDecimalString(v) : null)));
@@ -119,12 +163,12 @@ export class XlsxParser extends BaseParser {
 
     // M8 — declaração do documento nas DEMAIS abas (capa, "Leia-me"): só texto não-cotação; um aviso por tipo.
     const otherSheets = sheetNames.filter((n) => n !== targetSheet).flatMap((n) =>
-      (XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[n], { header: 1, defval: "" }) as unknown[][])
+      ((book.matrices.get(n) ?? []) as unknown[][])
         .map((r, i) => ({ text: r.map(cellToString).filter((c) => c !== "").join(" "), location: `sheet:${n}, row:${i + 1}` })));
     const allWarnings = dedupeDocumentDeclarations([...warnings, ...out.warnings, ...documentDeclarationWarnings(otherSheets)]);
     const processingMs = Date.now() - startMs;
     const summary = this.buildSummary(out.rowsRead, out.items, out.skipped, allWarnings, [], processingMs, { sheetsProcessed: 1 });
-    return { items: out.items, warnings: allWarnings, errors: [], summary, declarationScan: DECLARATION_SCAN_PERFORMED, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION } };
+    return { items: out.items, warnings: allWarnings, errors: [], summary, declarationScan: DECLARATION_SCAN_PERFORMED, rawMetadata: { sheetNames, processedSheet: targetSheet, parserVersion: PARSER_VERSION, engine: book.engine } };
   }
 }
 
