@@ -14395,8 +14395,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalBridgeService.ts": {
-    "mtime": 1792956480.7505696,
-    "ast_hash": "d51c2b3ea1cd90030130f981a3f2e8ce",
+    "mtime": 1792956669.0011256,
+    "ast_hash": "dc238bb6131c525582371c6522881b4b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreflightCard.tsx": {

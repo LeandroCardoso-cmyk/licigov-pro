@@ -17,7 +17,6 @@ import { listEmittedByOrigin } from "../../db/officialDocuments";
 import type { BindingScope } from "../../domain/institutionalTemplates/binding";
 import { adaptEditalParamsToBindingScope, bindingScopeToEditalParams, type EditalBoundaryParams, type EditalScopeParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import { getManifest, listBindings } from "../../db/institutionalTemplates";
-import type { GenerationManifest } from "../../domain/institutionalTemplates/manifest";
 import { readScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
 import { serviceLogger } from "../observabilityService";
