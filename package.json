@@ -32,6 +32,7 @@
     "templates:compile-master": "tsx scripts/templates-compile-master.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "db:roles:plan": "tsx scripts/ops/db-roles.ts",
     "catalog:smoke": "tsx scripts/catalog-official-smoke.ts",
     "catalog:sync": "tsx scripts/catalog-official-sync.ts",
     "catalog:preflight": "tsx scripts/catalog-index-preflight.ts",
