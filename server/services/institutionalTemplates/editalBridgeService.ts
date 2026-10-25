@@ -16,7 +16,7 @@ import { TRPCError } from "@trpc/server";
 import { listEmittedByOrigin } from "../../db/officialDocuments";
 import type { BindingScope } from "../../domain/institutionalTemplates/binding";
 import { adaptEditalParamsToBindingScope, bindingScopeToEditalParams, type EditalBoundaryParams, type EditalScopeParams } from "../../domain/institutionalTemplates/editalBridgeScope";
-import { listBindings, listManifestsForGeneratedDocument } from "../../db/institutionalTemplates";
+import { getManifest, listBindings } from "../../db/institutionalTemplates";
 import type { GenerationManifest } from "../../domain/institutionalTemplates/manifest";
 import { readScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
@@ -172,27 +172,38 @@ export interface ComposedEditalContext {
 
 /**
  * Recupera, SOMENTE LEITURA, com que escopo e qual TR oficial a minuta institucional foi composta. O rascunho institucional
- * não grava os parâmetros legados (modalidade/forma/plataforma); o manifest M1 grava a REVISÃO fixada e os pins oficiais.
- * O escopo é derivado dos bindings (de qualquer estado) que fixam essa revisão: exatamente um escopo distinto ⇒
- * RECOVERED; mais de um ⇒ AMBIGUOUS (nada é presumido); nenhum ⇒ NOT_FOUND. Tenant-scoped; nada é gravado.
+ * não grava os parâmetros legados (modalidade/forma/plataforma); o manifest M1 — apontado pelo PRÓPRIO rascunho
+ * (`sources: tpl-m1:<id>`) — grava a REVISÃO fixada e os pins oficiais.
+ *  - Escopo: derivado dos bindings (de qualquer estado) que fixam essa revisão. RECOVERED só quando TODOS mapeiam, sem
+ *    dimensões extras (regime/critério), para exatamente UM escopo; qualquer binding não mapeável/extra ou mais de um
+ *    escopo ⇒ AMBIGUOUS; nenhum ⇒ NOT_FOUND. Nada é presumido.
+ *  - TR: o pin cujo documento é um TR OFICIAL emitido deste processo (independe do rótulo do papel no modelo).
+ * Tenant-scoped; nada é gravado.
  */
-export async function recoverComposedEditalContext(organizationId: OrgId, draft: { id: string; sources?: readonly string[] | null }): Promise<ComposedEditalContext | null> {
-  if (!(draft.sources ?? []).includes("origem:template")) return null;
-  const stored = await listManifestsForGeneratedDocument(organizationId, draft.id);
-  const m1s = stored.map((s) => s.manifest).filter((m): m is GenerationManifest => m.stage === "GENERATION");
-  const m1 = m1s.length ? m1s[m1s.length - 1] : null;
-  if (!m1) return null;
+export async function recoverComposedEditalContext(
+  organizationId: OrgId, draft: { id: string; processId: string; sources?: readonly string[] | null },
+): Promise<ComposedEditalContext | null> {
+  const sources = draft.sources ?? [];
+  if (!sources.includes("origem:template")) return null;
+  const m1Id = sources.find((x) => x.startsWith("tpl-m1:"))?.slice("tpl-m1:".length);
+  if (!m1Id) return null;
+  const stored = await getManifest(organizationId, m1Id);
+  const m1 = stored?.manifest;
+  if (!m1 || m1.stage !== "GENERATION" || m1.generatedDocumentId !== draft.id) return null;
   const bindings = (await listBindings(organizationId, { documentKind: "edital" })).filter((b) => b.pinnedRevisionId === m1.templateRevisionId);
   const scopes = new Map<string, EditalScopeParams>();
+  let unmappable = 0;
   for (const b of bindings) {
-    const p = bindingScopeToEditalParams(b.scope);
-    if (p) scopes.set(`${p.modality}|${p.form}|${p.platform ?? ""}`, p);
+    const p = b.scope.regime || b.scope.criterion ? null : bindingScopeToEditalParams(b.scope);
+    if (p) scopes.set(`${p.modality}|${p.form}|${p.platform ?? ""}`, p); else unmappable++;
   }
-  const tr = m1.officialDocRefs.find((r) => r.role.toLowerCase() === "tr") ?? null;
+  const recovered = scopes.size === 1 && unmappable === 0;
+  const trIds = new Set((await listEmittedByOrigin(organizationId, DOMAIN, draft.processId, "tr")).map((d) => d.id));
+  const tr = m1.officialDocRefs.find((r) => trIds.has(r.documentId)) ?? null;
   return {
     templateRevisionId: m1.templateRevisionId,
-    scope: scopes.size === 1 ? [...scopes.values()][0] : null,
-    scopeStatus: scopes.size === 1 ? "RECOVERED" : scopes.size > 1 ? "AMBIGUOUS" : "NOT_FOUND",
+    scope: recovered ? [...scopes.values()][0] : null,
+    scopeStatus: recovered ? "RECOVERED" : bindings.length === 0 ? "NOT_FOUND" : "AMBIGUOUS",
     trPin: tr ? { documentId: tr.documentId, version: tr.version, contentHash: tr.contentHash } : null,
   };
 }

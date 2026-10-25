@@ -72,6 +72,14 @@ describe("DocumentMarkdownView — visualização formatada e segura", () => {
     expect(html).toContain('href="https://www.gov.br/compras"');
   });
 
+  it("blocos de código (inclusive ```mermaid) ficam como texto: sem SVG/HTML injetado", () => {
+    const html = render(["```mermaid", "graph TD; A-->B", "```", "", "```html", "<b>x</b>", "```"].join("\n"));
+    expect(html).not.toMatch(/<svg/i);
+    expect(html).not.toMatch(/<b>x<\/b>/);
+    expect(html).toContain("graph TD; A--&gt;B");
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+
   it("vazio ⇒ 'Sem conteúdo.'", () => {
     expect(render("   ")).toContain("Sem conteúdo.");
   });

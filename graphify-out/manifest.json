@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792955717.7417457,
-    "ast_hash": "129b7852ef32c425b12083a44feb894b",
+    "mtime": 1792956480.7547154,
+    "ast_hash": "93a5e08a908c5e26080411549918f2e6",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -14395,8 +14395,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalBridgeService.ts": {
-    "mtime": 1792953989.1691043,
-    "ast_hash": "9dcaca5922f74b7e1896842187dde071",
+    "mtime": 1792956480.7505696,
+    "ast_hash": "d51c2b3ea1cd90030130f981a3f2e8ce",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreflightCard.tsx": {
@@ -15265,13 +15265,13 @@
     "semantic_hash": ""
   },
   "client/src/components/documents/DocumentMarkdownView.render.test.ts": {
-    "mtime": 1792953880.0951884,
-    "ast_hash": "86b0d7f69a687224516833cf136aba8e",
+    "mtime": 1792956480.7576022,
+    "ast_hash": "07d74c1ddad3725349edd07ba7c584c3",
     "semantic_hash": ""
   },
   "client/src/components/documents/DocumentMarkdownView.tsx": {
-    "mtime": 1792955972.9769394,
-    "ast_hash": "515258e4e2d9ccd93206a67e07cf1516",
+    "mtime": 1792956480.7568724,
+    "ast_hash": "6da846b04986945b87da58f5e8266079",
     "semantic_hash": ""
   },
   "client/src/components/procurement/IngestionSessionHistory.tsx": {
@@ -15300,8 +15300,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-visual-homologation.test.ts": {
-    "mtime": 1792954563.9529126,
-    "ast_hash": "5ffd0d4277d9b646c1258e505dd72ef3",
+    "mtime": 1792956480.7585964,
+    "ast_hash": "2332cc766566b6bb1eaba3f417fefe89",
     "semantic_hash": ""
   },
   "shared/documentMarkers.ts": {

@@ -955,7 +955,10 @@ export const procurementProcessRouter = router({
           parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
           // M8 — aditivo, somente leitura: escopo e TR oficial com que a minuta INSTITUCIONAL foi composta (manifest M1 +
           // bindings que fixam a revisão). A UI reabre com esse contexto sem gravar nada; ambíguo/ausente ⇒ explícito.
-          composedContext: input.kind === "edital" ? await recoverComposedEditalContext(orgId, doc) : null,
+          // Falha na recuperação NUNCA derruba a leitura do rascunho: degrada para null (a tela pede a escolha explícita).
+          composedContext: input.kind === "edital"
+            ? await recoverComposedEditalContext(orgId, { id: doc.id, processId: input.processId, sources: doc.sources }).catch(() => null)
+            : null,
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,
         },

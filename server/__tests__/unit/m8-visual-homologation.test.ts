@@ -12,11 +12,12 @@ import {
   EDITAL_FORM_TO_SLUG, EDITAL_MODALITY_TO_SLUG, EDITAL_PLATFORM_TO_SLUG,
 } from "../../domain/institutionalTemplates/editalBridgeScope";
 
-const st = vi.hoisted(() => ({ manifests: [] as unknown[], bindings: [] as unknown[] }));
+const st = vi.hoisted(() => ({ manifest: null as unknown, bindings: [] as unknown[], emittedTr: [] as { id: string }[] }));
 vi.mock("../../db/institutionalTemplates", () => ({
-  listManifestsForGeneratedDocument: vi.fn(async () => st.manifests),
+  getManifest: vi.fn(async () => st.manifest),
   listBindings: vi.fn(async () => st.bindings),
 }));
+vi.mock("../../db/officialDocuments", () => ({ listEmittedByOrigin: vi.fn(async () => st.emittedTr) }));
 import { recoverComposedEditalContext } from "../../services/institutionalTemplates/editalBridgeService";
 import * as tplDb from "../../db/institutionalTemplates";
 
@@ -73,45 +74,57 @@ describe("escopo da composição — inverso exato do mapeamento de fronteira", 
 
 const m1 = (over: Record<string, unknown> = {}) => ({
   manifest: {
-    stage: "GENERATION", templateRevisionId: "REV2",
-    officialDocRefs: [{ role: "tr", order: 1, documentId: "TR-DOC", lineageId: "L", version: 2, contentHash: "c".repeat(64), title: "TR" }],
+    stage: "GENERATION", generatedDocumentId: "D1", templateRevisionId: "REV2",
+    // V2: o papel é o rótulo do MODELO (não "tr") — o TR é identificado pelo documento emitido do processo.
+    officialDocRefs: [
+      { role: "anexo-etp", order: 1, documentId: "ETP-DOC", lineageId: "L0", version: 1, contentHash: "e".repeat(64), title: "ETP" },
+      { role: "termo-referencia", order: 2, documentId: "TR-DOC", lineageId: "L", version: 2, contentHash: "c".repeat(64), title: "TR" },
+    ],
     ...over,
   },
 });
 const binding = (scope: Record<string, string>, rev = "REV2", active = true) => ({ scope, pinnedRevisionId: rev, active, documentKind: "edital" });
+const draft = { id: "D1", processId: "P1", sources: ["origem:template", "tpl-m1:M1"] };
 
 describe("recoverComposedEditalContext — somente leitura", () => {
-  beforeEach(() => { st.manifests = []; st.bindings = []; vi.clearAllMocks(); });
+  beforeEach(() => { st.manifest = null; st.bindings = []; st.emittedTr = [{ id: "TR-DOC" }]; vi.clearAllMocks(); });
 
-  it("rascunho NÃO institucional ⇒ null, sem consultar manifests", async () => {
-    expect(await recoverComposedEditalContext(2, { id: "D1", sources: ["srcdigest:x"] })).toBeNull();
-    expect(tplDb.listManifestsForGeneratedDocument).not.toHaveBeenCalled();
+  it("rascunho NÃO institucional ou sem ponteiro tpl-m1 ⇒ null, sem consultar manifests", async () => {
+    expect(await recoverComposedEditalContext(2, { id: "D1", processId: "P1", sources: ["srcdigest:x"] })).toBeNull();
+    expect(await recoverComposedEditalContext(2, { id: "D1", processId: "P1", sources: ["origem:template"] })).toBeNull();
+    expect(tplDb.getManifest).not.toHaveBeenCalled();
   });
 
-  it("um único escopo para a revisão fixada ⇒ RECOVERED + pin exato do TR (tenant do chamador)", async () => {
-    st.manifests = [m1()];
+  it("usa o M1 apontado pelo PRÓPRIO rascunho; M1 de outro rascunho ⇒ null", async () => {
+    st.manifest = m1({ generatedDocumentId: "OUTRO" });
+    expect(await recoverComposedEditalContext(2, draft)).toBeNull();
+    expect(tplDb.getManifest).toHaveBeenCalledWith(2, "M1");
+  });
+
+  it("um único escopo mapeável para a revisão fixada ⇒ RECOVERED + pin do TR emitido (papel do modelo V2)", async () => {
+    st.manifest = m1();
     st.bindings = [binding({ modality: "pregao", form: "eletronica", platform: "bll" }), binding({ modality: "pregao", form: "eletronica", platform: "bll" }, "REV2", false), binding({ modality: "concorrencia", form: "presencial" }, "OUTRA")];
-    const ctx = await recoverComposedEditalContext(2, { id: "D1", sources: ["origem:template", "tpl-m1:x"] });
-    expect(ctx).toEqual({
+    expect(await recoverComposedEditalContext(2, draft)).toEqual({
       templateRevisionId: "REV2", scopeStatus: "RECOVERED",
       scope: { modality: "pregao", form: "eletronico", platform: "bll" },
       trPin: { documentId: "TR-DOC", version: 2, contentHash: "c".repeat(64) },
     });
-    expect(tplDb.listManifestsForGeneratedDocument).toHaveBeenCalledWith(2, "D1");
     expect(tplDb.listBindings).toHaveBeenCalledWith(2, { documentKind: "edital" });
   });
 
-  it("mais de um escopo para a mesma revisão ⇒ AMBIGUOUS (nenhum presumido)", async () => {
-    st.manifests = [m1()];
+  it("mais de um escopo, binding não mapeável (sem plataforma) ou com regime/critério ⇒ AMBIGUOUS (nada presumido)", async () => {
+    st.manifest = m1();
     st.bindings = [binding({ modality: "pregao", form: "eletronica", platform: "bll" }), binding({ modality: "pregao", form: "eletronica", platform: "licitanet" })];
-    const ctx = await recoverComposedEditalContext(2, { id: "D1", sources: ["origem:template"] });
-    expect(ctx).toMatchObject({ scope: null, scopeStatus: "AMBIGUOUS" });
+    expect(await recoverComposedEditalContext(2, draft)).toMatchObject({ scope: null, scopeStatus: "AMBIGUOUS" });
+    st.bindings = [binding({ modality: "pregao", form: "eletronica" }), binding({ modality: "pregao", form: "eletronica", platform: "bll" })];
+    expect(await recoverComposedEditalContext(2, draft)).toMatchObject({ scope: null, scopeStatus: "AMBIGUOUS" });
+    st.bindings = [binding({ modality: "pregao", form: "eletronica", platform: "bll", regime: "empreitada" })];
+    expect(await recoverComposedEditalContext(2, draft)).toMatchObject({ scope: null, scopeStatus: "AMBIGUOUS" });
   });
 
-  it("sem binding para a revisão ⇒ NOT_FOUND; sem manifest ⇒ null", async () => {
-    st.manifests = [m1({ officialDocRefs: [] })];
-    expect(await recoverComposedEditalContext(2, { id: "D1", sources: ["origem:template"] })).toMatchObject({ scope: null, scopeStatus: "NOT_FOUND", trPin: null });
-    st.manifests = [];
-    expect(await recoverComposedEditalContext(2, { id: "D1", sources: ["origem:template"] })).toBeNull();
+  it("sem binding ⇒ NOT_FOUND; pin que não é TR emitido do processo ⇒ trPin null", async () => {
+    st.manifest = m1();
+    st.emittedTr = [{ id: "OUTRO-TR" }];
+    expect(await recoverComposedEditalContext(2, draft)).toMatchObject({ scope: null, scopeStatus: "NOT_FOUND", trPin: null });
   });
 });

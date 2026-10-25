@@ -1,3 +1,4 @@
+import type React from "react";
 import { Streamdown, defaultRemarkPlugins } from "streamdown";
 import { stripInternalMarkers } from "@shared/documentMarkers";
 
@@ -12,6 +13,10 @@ import { stripInternalMarkers } from "@shared/documentMarkers";
  *  - sem imagens nem mídia embutida; links passam pelo filtro padrão de URL do react-markdown (bloqueia `javascript:`);
  *  - sem controles de copiar/baixar e sem matemática/mermaid (não fazem parte dos documentos).
  */
+// Blocos de código como TEXTO puro: substitui o renderizador do Streamdown (que realça via HTML e desenha ```mermaid).
+const PlainCode = ({ children, className }: { children?: React.ReactNode; className?: string }) => <code className={className}>{children}</code>;
+const COMPONENTS = { code: PlainCode };
+
 const DISALLOWED = ["img", "iframe", "script", "style", "object", "embed", "video", "audio", "source", "form", "input"];
 
 export interface DocumentMarkdownViewProps {
@@ -37,6 +42,7 @@ export default function DocumentMarkdownView({ content, className = "", ariaLabe
         skipHtml
         disallowedElements={DISALLOWED}
         unwrapDisallowed
+        components={COMPONENTS}
         controls={false}
         parseIncompleteMarkdown={false}
       >
