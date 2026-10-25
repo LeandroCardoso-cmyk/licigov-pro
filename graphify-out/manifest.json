@@ -5670,8 +5670,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/gemini-thinking.test.ts": {
-    "mtime": 1792953089.6742344,
-    "ast_hash": "19fa3e552907f83540f9f383f94ea803",
+    "mtime": 1792954635.4903262,
+    "ast_hash": "aa62e6370789f16e69f75cb850a3b5e9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/grounding-and-municipal-resolution.test.ts": {
@@ -6710,8 +6710,8 @@
     "semantic_hash": ""
   },
   "server/_core/ai/gemini.ts": {
-    "mtime": 1792953089.7148354,
-    "ast_hash": "ff9ddcfc2656c2663ff86a914d404ff4",
+    "mtime": 1792954612.3343248,
+    "ast_hash": "f5081c8eef46cc07eb2ce1ecb29a8e80",
     "semantic_hash": ""
   },
   "server/_core/ai/geminiSchema.ts": {
@@ -9755,8 +9755,8 @@
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
-    "mtime": 1792953089.759203,
-    "ast_hash": "712ec79cae2e73d0fa14608177afea6a",
+    "mtime": 1792954619.9863253,
+    "ast_hash": "3a1220a45ba9734450b0011eade33157",
     "semantic_hash": ""
   },
   "server/services/governedLawCorpusMaterializer.ts": {
