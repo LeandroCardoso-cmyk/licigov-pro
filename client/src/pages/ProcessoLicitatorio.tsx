@@ -160,7 +160,7 @@ export default function ProcessoLicitatorio() {
   return (
     <div className="min-h-full bg-background">
       {/* Barra de contexto: breadcrumb + voltar */}
-      <div className="border-b border-border bg-card px-6 py-3">
+      <div className="border-b border-border bg-card px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <Breadcrumb
             trail={[
@@ -175,10 +175,11 @@ export default function ProcessoLicitatorio() {
           <button
             type="button"
             onClick={backToList}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Voltar aos processos"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar aos processos
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Voltar aos processos</span>
           </button>
         </div>
       </div>
@@ -321,27 +322,29 @@ type Crumb = { label: string; onClick?: () => void };
 
 function Breadcrumb({ trail }: { trail: Crumb[] }) {
   return (
-    <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-sm">
+    <nav aria-label="Trilha de navegação" className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
       {trail.map((crumb, i) => {
         const isLast = i === trail.length - 1;
+        // Em telas estreitas o primeiro nível ("Processo Licitatório") sai da trilha: o número do processo e a etapa
+        // continuam visíveis e o botão "Voltar" cobre a navegação de retorno (evita sobreposição a 390 px).
         return (
-          <span key={i} className="flex items-center gap-1">
+          <span key={i} className={`flex min-w-0 items-center gap-1 ${i === 0 && trail.length > 2 ? "hidden sm:flex" : ""}`}>
             {crumb.onClick && !isLast ? (
               <button
                 type="button"
                 onClick={crumb.onClick}
-                className="rounded font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="truncate whitespace-nowrap rounded font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {crumb.label}
               </button>
             ) : (
               <span
-                className={isLast ? "font-semibold text-foreground" : "text-muted-foreground"}
+                className={`truncate whitespace-nowrap ${isLast ? "font-semibold text-foreground" : "text-muted-foreground"}`}
               >
                 {crumb.label}
               </span>
             )}
-            {!isLast && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />}
+            {!isLast && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />}
           </span>
         );
       })}

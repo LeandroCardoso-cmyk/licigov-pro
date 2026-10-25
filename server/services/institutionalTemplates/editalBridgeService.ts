@@ -15,7 +15,9 @@
 import { TRPCError } from "@trpc/server";
 import { listEmittedByOrigin } from "../../db/officialDocuments";
 import type { BindingScope } from "../../domain/institutionalTemplates/binding";
-import { adaptEditalParamsToBindingScope, type EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
+import { adaptEditalParamsToBindingScope, bindingScopeToEditalParams, type EditalBoundaryParams, type EditalScopeParams } from "../../domain/institutionalTemplates/editalBridgeScope";
+import { listBindings, listManifestsForGeneratedDocument } from "../../db/institutionalTemplates";
+import type { GenerationManifest } from "../../domain/institutionalTemplates/manifest";
 import { readScope, type ScopeView } from "../../domain/institutionalTemplates/governance/scopeDimensions";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
 import { serviceLogger } from "../observabilityService";
@@ -153,4 +155,44 @@ export async function generateEditalRouted<L>(deps: BridgeDeps, p: RoutedGenerat
       return { mode: "INSTITUTIONAL_TEMPLATE", result, template: resolution.template };
     }
   }
+}
+
+// ─── M8 (homologação visual) — contexto PERSISTIDO de uma minuta institucional já composta ───────────────────────────
+
+export type ComposedScopeStatus = "RECOVERED" | "AMBIGUOUS" | "NOT_FOUND";
+
+export interface ComposedEditalContext {
+  readonly templateRevisionId: string;
+  /** Escopo (modalidade/forma/plataforma) da composição, quando DETERMINÁVEL sem ambiguidade. */
+  readonly scope: EditalScopeParams | null;
+  readonly scopeStatus: ComposedScopeStatus;
+  /** Pin exato do TR oficial usado na composição (gravado no manifest M1). */
+  readonly trPin: { readonly documentId: string; readonly version: number; readonly contentHash: string } | null;
+}
+
+/**
+ * Recupera, SOMENTE LEITURA, com que escopo e qual TR oficial a minuta institucional foi composta. O rascunho institucional
+ * não grava os parâmetros legados (modalidade/forma/plataforma); o manifest M1 grava a REVISÃO fixada e os pins oficiais.
+ * O escopo é derivado dos bindings (de qualquer estado) que fixam essa revisão: exatamente um escopo distinto ⇒
+ * RECOVERED; mais de um ⇒ AMBIGUOUS (nada é presumido); nenhum ⇒ NOT_FOUND. Tenant-scoped; nada é gravado.
+ */
+export async function recoverComposedEditalContext(organizationId: OrgId, draft: { id: string; sources?: readonly string[] | null }): Promise<ComposedEditalContext | null> {
+  if (!(draft.sources ?? []).includes("origem:template")) return null;
+  const stored = await listManifestsForGeneratedDocument(organizationId, draft.id);
+  const m1s = stored.map((s) => s.manifest).filter((m): m is GenerationManifest => m.stage === "GENERATION");
+  const m1 = m1s.length ? m1s[m1s.length - 1] : null;
+  if (!m1) return null;
+  const bindings = (await listBindings(organizationId, { documentKind: "edital" })).filter((b) => b.pinnedRevisionId === m1.templateRevisionId);
+  const scopes = new Map<string, EditalScopeParams>();
+  for (const b of bindings) {
+    const p = bindingScopeToEditalParams(b.scope);
+    if (p) scopes.set(`${p.modality}|${p.form}|${p.platform ?? ""}`, p);
+  }
+  const tr = m1.officialDocRefs.find((r) => r.role.toLowerCase() === "tr") ?? null;
+  return {
+    templateRevisionId: m1.templateRevisionId,
+    scope: scopes.size === 1 ? [...scopes.values()][0] : null,
+    scopeStatus: scopes.size === 1 ? "RECOVERED" : scopes.size > 1 ? "AMBIGUOUS" : "NOT_FOUND",
+    trPin: tr ? { documentId: tr.documentId, version: tr.version, contentHash: tr.contentHash } : null,
+  };
 }

@@ -335,6 +335,11 @@ jobs:
       - name: Smoke — executor de homologação pela ingestão canônica
         run: pnpm exec vitest run server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts
 
+      # M8 (homologação visual): histórico SOMENTE LEITURA das sessões de ingestão por processo (registrado, paginado,
+      # isolado por processo/tenant), versões oficiais em lote e nomes de autoria só de membros da organização.
+      - name: Smoke — histórico de ingestão e versões oficiais (homologação visual M8)
+        run: pnpm exec vitest run server/__tests__/integration/m8-visual-homologation-mysql-smoke.test.ts
+
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
       # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem

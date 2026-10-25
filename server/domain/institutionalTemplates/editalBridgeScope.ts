@@ -48,3 +48,25 @@ export function adaptEditalParamsToBindingScope(params: EditalBoundaryParams): E
   if (!has(EDITAL_PLATFORM_TO_SLUG, platform)) return { ok: false, reason: "UNMAPPED_PLATFORM", detail: `plataforma sem slug institucional: ${platform}` };
   return { ok: true, scope: { ...base, platform: EDITAL_PLATFORM_TO_SLUG[platform as keyof typeof EDITAL_PLATFORM_TO_SLUG] } };
 }
+
+/**
+ * M8 (homologação visual) — inverso EXATO do mapeamento acima (slugs institucionais → vocabulário do Edital), usado só para
+ * EXIBIR o escopo com que uma minuta institucional foi composta. Mapeamento fechado: slug desconhecido ⇒ null (nunca
+ * aproximado). Bijetivo por construção (as tabelas acima são injetivas).
+ */
+export interface EditalScopeParams { readonly modality: string; readonly form: string; readonly platform: string | null }
+
+const invert = <T extends Record<string, string>>(t: T): Readonly<Record<string, keyof T & string>> =>
+  Object.freeze(Object.fromEntries(Object.entries(t).map(([k, v]) => [v, k]))) as Readonly<Record<string, keyof T & string>>;
+const SLUG_TO_MODALITY = invert(EDITAL_MODALITY_TO_SLUG);
+const SLUG_TO_FORM = invert(EDITAL_FORM_TO_SLUG);
+const SLUG_TO_PLATFORM = invert(EDITAL_PLATFORM_TO_SLUG);
+
+export function bindingScopeToEditalParams(scope: BindingScope): EditalScopeParams | null {
+  const modality = scope.modality ? SLUG_TO_MODALITY[scope.modality] : undefined;
+  const form = scope.form ? SLUG_TO_FORM[scope.form] : undefined;
+  if (!modality || !form) return null;
+  if (form === "presencial") return scope.platform ? null : { modality, form, platform: null };
+  const platform = scope.platform ? SLUG_TO_PLATFORM[scope.platform] : undefined;
+  return platform ? { modality, form, platform } : null;
+}

@@ -22,6 +22,8 @@ const mutation = vi.hoisted(() => () => ({ mutate: () => {}, isPending: false, i
 vi.mock("@/components/procurement/BudgetDisclosureCard", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    // M8 — histórico somente leitura das importações (painel do item e Pesquisa de Preços).
+    ingestion: { listSessionHistory: { useQuery: () => ({ data: { sessions: [], hasMore: false }, isLoading: false, error: null }) } },
     useUtils: () => ({ procurementProcess: { listItems: { invalidate: () => {} } } }),
     procurementProcess: {
       listProcesses: { useQuery: () => state.processes },

@@ -39,6 +39,7 @@ vi.mock("../../services/fileIngestionService", () => ({
   findResumableSessionForProcess: vi.fn().mockResolvedValue(null),
   updateSessionStatus: vi.fn().mockResolvedValue(undefined),
   attachStoredFile: vi.fn().mockResolvedValue(undefined),
+  listProcessImportSessionHistory: vi.fn().mockResolvedValue({ sessions: [], hasMore: false }),
 }));
 
 vi.mock("../../services/importStagingService", () => ({
@@ -452,5 +453,30 @@ describe("U2B — formatos reais expostos (sem .doc)", () => {
     const exts = caps.formats.flatMap((f) => f.extensions);
     expect(exts).not.toContain(".doc");
     expect(caps.formats.flatMap((f) => f.mimeTypes)).not.toContain("application/msword");
+  });
+});
+
+// ── M8 (homologação visual) — histórico somente leitura das sessões ──
+describe("listSessionHistory — histórico somente leitura", () => {
+  it("consulta pelo tenant do CONTEXTO (nunca do cliente) e repassa a paginação", async () => {
+    await caller().listSessionHistory({ procurementProcessId: "P-1", limit: 5, offset: 10 });
+    expect(ingestion.listProcessImportSessionHistory).toHaveBeenCalledWith(1, "P-1", { limit: 5, offset: 10 });
+  });
+
+  it("evidência já registrada continua consultável com a ingestão DESLIGADA (não exige a flag)", async () => {
+    vi.mocked(flags.isFeatureEnabled).mockResolvedValue(false);
+    await expect(caller().listSessionHistory({ procurementProcessId: "P-1" })).resolves.toEqual({ sessions: [], hasMore: false });
+    expect(ingestion.listProcessImportSessionHistory).toHaveBeenCalledWith(1, "P-1", { limit: 20, offset: 0 });
+  });
+
+  it("limites de paginação validados (máx. 50 por página; offset não negativo)", async () => {
+    await expect(caller().listSessionHistory({ procurementProcessId: "P-1", limit: 51 })).rejects.toBeInstanceOf(TRPCError);
+    await expect(caller().listSessionHistory({ procurementProcessId: "P-1", offset: -1 })).rejects.toBeInstanceOf(TRPCError);
+    await expect(caller().listSessionHistory({ procurementProcessId: "" })).rejects.toBeInstanceOf(TRPCError);
+  });
+
+  it("processo de outro tenant/inexistente ⇒ NOT_FOUND do serviço é propagado", async () => {
+    vi.mocked(ingestion.listProcessImportSessionHistory).mockRejectedValueOnce(new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." }));
+    await expect(caller().listSessionHistory({ procurementProcessId: "ALHEIO" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
