@@ -42,6 +42,14 @@ export function xlsxReaderEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
+/**
+ * Estouro do heap do V8 no filho: o processo aborta (SIGABRT / código 134 no Linux) e o stderr traz "heap limit" /
+ * "heap out of memory" / "Last few GCs". Qualquer um basta; ausência de todos ⇒ falha de infraestrutura.
+ */
+export function childRanOutOfMemory(code: number | null, signal: NodeJS.Signals | null, stderr: string): boolean {
+  return signal === "SIGABRT" || code === 134 || /heap limit|out of memory|allocation failed|last few gcs/i.test(stderr);
+}
+
 let running = false;
 const waiting: Array<() => void> = [];
 
@@ -75,14 +83,23 @@ function runChild(buffer: Buffer, limits: SpreadsheetLimits): Promise<WorkbookMa
       reject(new XlsxReaderUnavailableError("Falha ao iniciar o leitor de planilhas."));
       return;
     }
+    // Início e fim do stderr: o V8 escreve "FATAL ERROR … heap out of memory" ANTES do rastro nativo, que pode ser
+    // longo — guardar só o fim perderia a linha (falha observada na CI).
+    let stderrHead = "";
     let stderrTail = "";
-    child.stderr?.on("data", (d: Buffer) => { stderrTail = (stderrTail + d.toString("utf8")).slice(-4096); });
+    child.stderr?.on("data", (d: Buffer) => {
+      const t = d.toString("utf8");
+      if (stderrHead.length < 4096) stderrHead = (stderrHead + t).slice(0, 4096);
+      stderrTail = (stderrTail + t).slice(-4096);
+    });
 
     let settled = false;
+    let errorTimer: NodeJS.Timeout | undefined;
     const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(errorTimer);
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       fn();
     };
@@ -95,14 +112,19 @@ function runChild(buffer: Buffer, limits: SpreadsheetLimits): Promise<WorkbookMa
       else if (res.kind === "limit") reject(new SpreadsheetLimitError(res.code as SpreadsheetLimitError["code"], res.message));
       else reject(new Error("CORRUPT"));
     }));
-    child.once("error", () => finish(() => reject(new XlsxReaderUnavailableError("Falha no leitor de planilhas."))));
+    // `on` (não `once`): um segundo "error" sem ouvinte derrubaria o processo da APLICAÇÃO. O desfecho é decidido
+    // no "close" (que traz código/sinal); se ele não vier, o erro encerra após uma folga curta.
+    child.on("error", () => {
+      if (!errorTimer) errorTimer = setTimeout(() => finish(() => reject(new XlsxReaderUnavailableError("Falha no leitor de planilhas."))), 2000);
+    });
     // "close" (não "exit"): só dispara depois de o canal IPC e o stderr fecharem — a resposta já foi entregue.
     child.once("close", (code, signal) => finish(() => reject(
-      /heap limit|out of memory|allocation failed/i.test(stderrTail)
+      childRanOutOfMemory(code, signal, stderrHead + stderrTail)
         ? new SpreadsheetLimitError("READ_MEMORY", "A planilha excede o limite de memória para importação.")
         : new XlsxReaderUnavailableError(`Leitor de planilhas encerrou sem resposta (${signal ?? code}).`),
     )));
 
-    child.send({ buffer: new Uint8Array(buffer), limits } satisfies XlsxWorkerRequest);
+    // Callback ⇒ falha de envio (filho já morto: ERR_IPC_CHANNEL_CLOSED/EPIPE) não vira evento "error" solto.
+    child.send({ buffer: new Uint8Array(buffer), limits } satisfies XlsxWorkerRequest, () => undefined);
   });
 }

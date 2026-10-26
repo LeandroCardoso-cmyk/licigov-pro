@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     },
     "memoria-esgotada-encerra-so-o-filho": {
       prepare: async () => [await big()],
-      run: async ([buf]) => ({ outcome: await outcome(readXlsxIsolated(buf, limits({ workerMaxOldGenerationMb: 8 }))) }),
+      run: async ([buf]) => ({ outcome: await outcome(readXlsxIsolated(buf, limits({ workerMaxOldGenerationMb: 24 }))) }),
     },
     // Tenant A envia arquivo que estoura o tempo; tenant B envia planilha normal ao mesmo tempo.
     "concorrencia-entre-tenants": {

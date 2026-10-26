@@ -15355,8 +15355,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/xlsxAdversarialRunner.ts": {
-    "mtime": 1792976125.8334548,
-    "ast_hash": "116cebc7cc039d3b499f4b2ae87bee5f",
+    "mtime": 1792981084.0134294,
+    "ast_hash": "15f715d84fe6c48f664b48745bb54dce",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/xlsxCorpus.ts": {
@@ -15375,8 +15375,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/xlsx-adversarial-isolated.test.ts": {
-    "mtime": 1792976381.1913245,
-    "ast_hash": "37b4afd30a63b091479bafa28242d82f",
+    "mtime": 1792981110.711218,
+    "ast_hash": "6b80df63364bcb6c1189a0f7bf230c8e",
     "semantic_hash": ""
   },
   "server/__tests__/unit/xlsx-reader-goldens.test.ts": {
@@ -15395,8 +15395,8 @@
     "semantic_hash": ""
   },
   "server/parsers/xlsxReadIsolated.ts": {
-    "mtime": 1792976125.835924,
-    "ast_hash": "be093da8da4cbfb3ee234e19e9d29733",
+    "mtime": 1792981063.8248363,
+    "ast_hash": "66c9bf6d7ef18d66d25bd551019f1bb1",
     "semantic_hash": ""
   },
   "server/parsers/xlsxReadWorker.ts": {
@@ -15410,8 +15410,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/XLSX_REMEDIATION.md": {
-    "mtime": 1792976381.1953244,
-    "ast_hash": "5c4f10ec44fd2a55c93130f4592bbf1f",
+    "mtime": 1792981211.663951,
+    "ast_hash": "79dc787e7607d6bad82c4ae459ef6a71",
     "semantic_hash": ""
   },
   "server/__tests__/fixtures/spreadsheets/README.md": {

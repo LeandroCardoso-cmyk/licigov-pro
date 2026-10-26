@@ -65,11 +65,17 @@ Ensaio adversarial (`xlsx-adversarial-isolated.test.ts`, executado em processo f
 | 5 abas de 1 M células de intervalo | `TOO_MANY_CELLS` (orçamento agregado) |
 | Células reais acima do limite | `TOO_MANY_CELLS` antes do leitor |
 | Leitura acima do tempo | `READ_TIMEOUT` em ~300 ms, filho morto |
-| Heap do filho esgotado | `READ_MEMORY`; o processo chamador segue vivo |
+| Heap do filho esgotado durante a leitura (teto de 24 MB no teste) | `READ_MEMORY`; o processo chamador segue vivo |
 | Tenant A hostil + tenant B legítimo simultâneos | A ⇒ `READ_TIMEOUT`; B lido corretamente (espera o filho de A, FIFO) |
 | Planilha legítima de 200 mil células | lida (~1,5 s) |
 
-Em todos os casos o maior atraso do event loop do processo chamador ficou abaixo de 15 ms. Custo: ~0,3–0,4 s por
+Em todos os casos o maior atraso do event loop do processo chamador ficou abaixo de 15 ms.
+
+Correção após a CI (run 810): o estouro de heap era reconhecido só pelo texto do stderr, e a janela guardava o
+fim — o V8 escreve "heap out of memory" antes do rastro nativo, que na CI era longo, e o caso virou "leitor
+indisponível". Agora conta o término (`SIGABRT`/134) e o início + fim do stderr. Junto: o filho usava
+`once("error")`; um segundo evento (ex.: `ERR_IPC_CHANNEL_CLOSED` quando o filho morre no envio) ficaria sem
+ouvinte e derrubaria o processo da aplicação — passou a `on("error")` + callback no `send`. Custo: ~0,3–0,4 s por
 leitura para subir o filho em dev/teste (tsx); em produção o filho é JS empacotado.
 
 ## Compatibilidade (goldens no lugar do diferencial)

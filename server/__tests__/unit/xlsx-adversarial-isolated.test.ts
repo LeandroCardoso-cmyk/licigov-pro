@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { assertZipWithinLimits, scanZipRealContent, SPREADSHEET_LIMITS } from "../../parsers/spreadsheetLimits";
-import { xlsxReaderEnv } from "../../parsers/xlsxReadIsolated";
+import { childRanOutOfMemory, xlsxReaderEnv } from "../../parsers/xlsxReadIsolated";
 import { rawZip, workbookBuffer } from "../helpers/xlsxFixture";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -60,6 +60,21 @@ describe("leitor XLSX × entradas adversariais (processo isolado)", () => {
   });
   it("o event loop do processo que dispara a leitura fica livre em todos os casos", () => {
     for (const r of Object.values(results)) if ("maxLoopLagMs" in r) expect(r.maxLoopLagMs, r.name).toBeLessThan(250);
+  });
+});
+
+describe("classificação do término do filho", () => {
+  const GC_TRACE = "<--- Last few GCs --->\n[123:0x1] 478 ms: Mark-Compact 8.3 (11.1) -> 6.8 (11.6) MB";
+  it("estouro de heap ⇒ memória: SIGABRT, código 134 ou texto do V8 (mesmo sem a linha FATAL, cortada)", () => {
+    expect(childRanOutOfMemory(null, "SIGABRT", "")).toBe(true);
+    expect(childRanOutOfMemory(134, null, "")).toBe(true);
+    expect(childRanOutOfMemory(1, null, GC_TRACE)).toBe(true);
+    expect(childRanOutOfMemory(1, null, "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory")).toBe(true);
+  });
+  it("outros términos ⇒ infraestrutura (retry), não memória", () => {
+    expect(childRanOutOfMemory(1, null, "Error: Cannot find module 'exceljs'")).toBe(false);
+    expect(childRanOutOfMemory(null, "SIGKILL", "")).toBe(false);
+    expect(childRanOutOfMemory(0, null, "")).toBe(false);
   });
 });
 
