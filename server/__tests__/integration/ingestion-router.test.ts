@@ -150,6 +150,15 @@ describe("createSession", () => {
       .rejects.toThrowError(/não suportado/i);
   });
 
+  it("SEC-AUD-07 — .xls (extensão ou MIME) é recusado na criação, com a orientação de conversão, sem criar sessão", async () => {
+    for (const extra of [{ sourceFileName: "precos.xls" }, { sourceMimeType: "application/vnd.ms-excel" }]) {
+      await expect(caller().createSession({ ...validCreateInput, ...extra })).rejects.toThrowError(
+        "O formato .xls está temporariamente indisponível. Abra o arquivo no Excel ou LibreOffice, salve como .xlsx e envie novamente.",
+      );
+    }
+    expect(vi.mocked(ingestion.createImportSession)).not.toHaveBeenCalled();
+  });
+
   it("processId de outro tenant → NOT_FOUND (validado no serviço createImportSession)", async () => {
     vi.mocked(ingestion.createImportSession).mockRejectedValue(
       new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." }),

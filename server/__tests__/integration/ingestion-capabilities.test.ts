@@ -2,7 +2,7 @@
  * PR B.2.2 — ingestion.getCapabilities (gating da UI + matriz de capacidades REAL).
  *
  * Verifica: fail-closed (flag desligada ⇒ enabled=false, sem lançar), e que `supported` é DERIVADO
- * do parserRegistry — CSV/XLSX/XLS reais (supported=true) e PDF/DOCX stub (supported=false). Assim a
+ * do parserRegistry — CSV/XLSX reais (supported=true), XLS suspenso (SEC-AUD-07) e PDF/DOCX stub (supported=false). Assim a
  * UI nunca apresenta como funcional um formato cujo parser é stub. Serviços de tenant/flag mockados.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -21,6 +21,7 @@ vi.mock("../../services/featureFlagService", () => ({
 import { ingestionRouter } from "../../routers/ingestionRouter";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import * as flags from "../../services/featureFlagService";
+import { XLS_SUSPENDED_MESSAGE } from "@shared/spreadsheetFormats";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const caller = () => ingestionRouter.createCaller(makeContext(mockUser) as any);
@@ -46,11 +47,11 @@ describe("ingestion.getCapabilities — capacidade real e fail-closed", () => {
     expect(caps.enabled).toBe(false);
   });
 
-  it("CSV/XLSX/XLS são suportados (parser real)", async () => {
+  it("CSV/XLSX são suportados (parser real); XLS suspenso com a orientação de conversão", async () => {
     const caps = await caller().getCapabilities();
     expect(bykey(caps.formats, "csv")?.supported).toBe(true);
     expect(bykey(caps.formats, "xlsx")?.supported).toBe(true);
-    expect(bykey(caps.formats, "xls")?.supported).toBe(true);
+    expect(bykey(caps.formats, "xls")).toMatchObject({ supported: false, capabilityStatus: "disabled", unavailableMessage: XLS_SUSPENDED_MESSAGE });
   });
 
   it("PDF/DOCX passam a ser suportados na B.2.3 (extração real) com limitações declaradas", async () => {
@@ -58,7 +59,7 @@ describe("ingestion.getCapabilities — capacidade real e fail-closed", () => {
     expect(bykey(caps.formats, "pdf")?.supported).toBe(true);
     expect(bykey(caps.formats, "docx")?.supported).toBe(true);
     // supportedFormats agora inclui pdf/docx; nenhum stub é apresentado como funcional.
-    expect(caps.supportedFormats.map(f => f.key).sort()).toEqual(["csv", "docx", "pdf", "xls", "xlsx"]);
+    expect(caps.supportedFormats.map(f => f.key).sort()).toEqual(["csv", "docx", "pdf", "xlsx"]);
     // Limitações reais (ex.: OCR não suportado no PDF) são expostas para o operador.
     expect((bykey(caps.formats, "pdf")?.limitations ?? []).some(l => /OCR/i.test(l))).toBe(true);
   });

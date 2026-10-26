@@ -11,6 +11,7 @@ import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, Table, TableRow, TableCell } from "docx";
 import { CsvParser } from "../../parsers/csvParser";
 import { XlsxParser } from "../../parsers/xlsxParser";
+import { xlsxBuffer } from "../helpers/xlsxFixture";
 import { DocxParser } from "../../parsers/docxParser";
 import { PdfParser } from "../../parsers/pdfParser";
 import { isPriceToken } from "../../parsers/tabularExtraction";
@@ -47,14 +48,12 @@ describe("declaração GLOBAL com número é reconhecida", () => {
     expect((await csv(["PESQUISA DE PREÇOS — DADOS FICTÍCIOS PARA HOMOLOGAÇÃO", "", HEAD, ...QUOTES])).decl).toBe("global");
   });
   it("XLSX — ano em célula numérica separada", async () => {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    const buf = await xlsxBuffer([["Cotações", [
       ["Descrição", "Quantidade", "Unidade", "Valor unitário", "Fornecedor"],
       ["Caneta azul", 10, "UN", 1.5, "Empresa Alfa"], ["Caneta azul", 10, "UN", 1.7, "Empresa Beta"],
       ["DADOS FICTÍCIOS PARA HOMOLOGAÇÃO", 2026],
-    ]), "Cotações");
-    const r = await new XlsxParser().safeParse(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer, opts(XLSX_MIME));
+    ]]]);
+    const r = await new XlsxParser().safeParse(buf, opts(XLSX_MIME));
     expect(documentFictitiousDeclaration(r.warnings)).toBe("global");
     expect(r.items.length).toBe(2);
   });
@@ -132,12 +131,12 @@ describe("auditoria — cotação com preço inteiro/moeda separada/número nati
     expect(documentFictitiousDeclaration(r.warnings)).not.toBe("global");
   });
   it("texto com 'R$ 2' separado por espaço e nota coletiva ⇒ não global", async () => {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Descrição", "Quantidade", "Unidade", "Valor unitário", "Fornecedor"], ["Caneta azul", 10, "UN", 1.5, "Empresa Alfa"]]), "Cotações");
-    // Outra aba (varrida como texto): cotação com moeda separada e número nativo + nota coletiva de UMA cotação.
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Caneta azul", 10, "UN", "R$ 2", "R$ 20", "Empresa Alfa — valores fictícios"], ["Lápis", 20, "UN", 1.5, 30, "preços demonstrativos"]]), "Rascunho");
-    const r = await new XlsxParser().safeParse(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer, opts(XLSX_MIME));
+    const buf = await xlsxBuffer([
+      ["Cotações", [["Descrição", "Quantidade", "Unidade", "Valor unitário", "Fornecedor"], ["Caneta azul", 10, "UN", 1.5, "Empresa Alfa"]]],
+      // Outra aba (varrida como texto): cotação com moeda separada e número nativo + nota coletiva de UMA cotação.
+      ["Rascunho", [["Caneta azul", 10, "UN", "R$ 2", "R$ 20", "Empresa Alfa — valores fictícios"], ["Lápis", 20, "UN", 1.5, 30, "preços demonstrativos"]]],
+    ]);
+    const r = await new XlsxParser().safeParse(buf, opts(XLSX_MIME));
     expect(documentFictitiousDeclaration(r.warnings)).not.toBe("global");
   });
   it("tabela SEM coluna de preço reconhecida: cotação com preço inteiro e nota coletiva ⇒ não global e item preservado", async () => {

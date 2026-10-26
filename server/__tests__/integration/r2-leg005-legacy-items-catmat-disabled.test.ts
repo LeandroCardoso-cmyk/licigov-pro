@@ -26,11 +26,8 @@ vi.mock("../../db");
 vi.mock("../../services/catmatMatcher");
 vi.mock("../../services/aiUsageTracker");
 vi.mock("../../_core/llm");
-vi.mock("xlsx", () => ({
-  read: vi.fn(),
-  utils: { sheet_to_json: vi.fn() },
-  default: { read: vi.fn(), utils: { sheet_to_json: vi.fn() } },
-}));
+// SEC-AUD-07 — o SheetJS saiu das dependências; o leitor de planilhas do produto é o worker isolado do exceljs.
+vi.mock("../../parsers/xlsxReadIsolated", () => ({ readXlsxIsolated: vi.fn(), XlsxReaderUnavailableError: class extends Error {} }));
 
 const tenantState = vi.hoisted(() => ({ organizationId: 1, role: "owner" as string }));
 
@@ -53,7 +50,7 @@ import * as db from "../../db";
 import * as catmatMatcher from "../../services/catmatMatcher";
 import * as aiUsageTracker from "../../services/aiUsageTracker";
 import * as llm from "../../_core/llm";
-import * as XLSX from "xlsx";
+import { readXlsxIsolated } from "../../parsers/xlsxReadIsolated";
 import { LEGACY_ENDPOINT_DISABLED } from "../../services/legacyEndpointGuard";
 import { makeContext, mockUser } from "../helpers/fixtures";
 
@@ -174,7 +171,7 @@ describe("R2 / LEG-005 — itens do TR / CATMAT legados desativados (governado)"
         expect(calledFns(catmatMatcher as any), "catmatMatcher chamado").toEqual([]);
         expect(calledFns(aiUsageTracker as any), "aiUsageTracker chamado").toEqual([]);
         expect(calledFns(llm as any), "invokeLLM/llm chamado").toEqual([]);
-        expect(vi.mocked(XLSX.read)).not.toHaveBeenCalled();
+        expect(vi.mocked(readXlsxIsolated)).not.toHaveBeenCalled();
       });
 
       it("erro idêntico para owner/operator/viewer e para ids próprios, cross-tenant e inexistentes", async () => {

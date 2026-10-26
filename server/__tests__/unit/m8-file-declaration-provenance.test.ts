@@ -14,7 +14,7 @@ import { CsvParser } from "../../parsers/csvParser";
 import { parsePriceResearchText } from "../../domain/priceResearchParser";
 import { extractItemsFromText } from "../../domain/priceResearch";
 import { XlsxParser } from "../../parsers/xlsxParser";
-import * as XLSX from "xlsx";
+import { xlsxBuffer } from "../helpers/xlsxFixture";
 
 const ctx: TabularContext = {
   importSessionId: 1, parserType: "csv", parserVersion: "t", sourceFileId: "f", sourceFileName: "p.csv", sourceMimeType: "text/csv", sourceChecksum: "c", maxItems: 100,
@@ -150,10 +150,10 @@ describe("M8 emenda — auditoria: Contratação Direta e XLSX com várias abas"
   });
 
   it("[auditoria P2-3] declaração numa aba de capa ('Leia-me') de XLSX é lida", async () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Descrição", "Quantidade", "Valor unitário", "Fornecedor"], ["Caneta azul", 10, 1.5, "Empresa Alfa"]]), "Cotações");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Leia-me"], ["Todos os valores desta planilha são fictícios."]]), "Leia-me");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const buf = await xlsxBuffer([
+      ["Cotações", [["Descrição", "Quantidade", "Valor unitário", "Fornecedor"], ["Caneta azul", 10, 1.5, "Empresa Alfa"]]],
+      ["Leia-me", [["Leia-me"], ["Todos os valores desta planilha são fictícios."]]],
+    ]);
     const r = await new XlsxParser().parse(buf, {
       importSessionId: 1, organizationId: 7, sourceFileId: "f", sourceFileName: "p.xlsx",
       sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceChecksum: "c",

@@ -4,8 +4,9 @@
  * A capacidade real vem do backend (ingestion.getCapabilities), que deriva `supported` do
  * parserRegistry. Aqui só transformamos essa capacidade em regras de UI: `accept` do seletor,
  * validação de arquivo (tamanho/formato) e checagem de disponibilidade — NUNCA apresentando
- * como funcional um formato cujo parser não declara `supported` (hoje CSV/XLS/XLSX/PDF/DOCX são reais;
- * PDF digitalizado é lido por OCR local na Pesquisa de Preços — U2A-OCR; .doc não é oferecido).
+ * como funcional um formato cujo parser não declara `supported` (hoje CSV/XLSX/PDF/DOCX são reais;
+ * PDF digitalizado é lido por OCR local na Pesquisa de Preços — U2A-OCR; .doc não é oferecido; .xls está
+ * suspenso e o servidor manda a orientação de conversão em `unavailableMessage`).
  */
 
 export interface IngestionFormat {
@@ -14,6 +15,8 @@ export interface IngestionFormat {
   extensions: string[];   // ex.: [".csv", ".txt"]
   mimeTypes: string[];
   supported: boolean;     // derivado do parserRegistry no backend (stub ⇒ false)
+  /** Formato conhecido mas indisponível (ex.: .xls suspenso): mensagem exata do servidor, mostrada ao usuário. */
+  unavailableMessage?: string;
 }
 
 export interface IngestionCapabilities {
@@ -30,9 +33,14 @@ export function acceptAttr(caps: Pick<IngestionCapabilities, "supportedFormats">
   return Array.from(new Set([...exts, ...mimes])).join(",");
 }
 
-/** Rótulo humano dos formatos suportados (ex.: "CSV, Excel (XLSX), Excel (XLS)"). */
+/** Rótulo humano dos formatos suportados (ex.: "CSV, Excel (XLSX)"). */
 export function supportedFormatsLabel(caps: Pick<IngestionCapabilities, "supportedFormats">): string {
   return caps.supportedFormats.map(f => f.label).join(", ");
+}
+
+/** Avisos de formatos conhecidos e indisponíveis (ex.: orientação de conversão do .xls), sem repetição. */
+export function unavailableNotices(caps: Pick<IngestionCapabilities, "formats">): string[] {
+  return Array.from(new Set(caps.formats.flatMap((f) => (!f.supported && f.unavailableMessage ? [f.unavailableMessage] : []))));
 }
 
 export function formatBytes(bytes: number): string {
@@ -67,7 +75,10 @@ export function validateFile(file: FileLike, caps: IngestionCapabilities): FileV
   if (!format) {
     const known = caps.formats.find(f => f.extensions.includes(ext) || (file.type && f.mimeTypes.includes(file.type)));
     if (known && !known.supported) {
-      return { ok: false, code: "STUB_FORMAT", message: `${known.label} não está disponível para processamento no momento.` };
+      return {
+        ok: false, code: "STUB_FORMAT",
+        message: known.unavailableMessage ?? `${known.label} não está disponível para processamento no momento.`,
+      };
     }
     return { ok: false, code: "UNSUPPORTED", message: "Formato não suportado. Use um dos formatos permitidos." };
   }

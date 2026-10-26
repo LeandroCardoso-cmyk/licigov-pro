@@ -273,7 +273,7 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           procurementProcessId={processId}
           importPurpose="price_research"
           title="Pesquisa de preços — ingestão supervisionada"
-          description="Envie a planilha (XLSX, XLS ou CSV), o PDF — com texto ou digitalizado — ou o DOCX com a tabela de cotações. PDF digitalizado é lido por reconhecimento de texto (OCR): confira cada valor. Todas as cotações passam por revisão antes da promoção à pesquisa."
+          description="Envie a planilha (XLSX ou CSV), o PDF — com texto ou digitalizado — ou o DOCX com a tabela de cotações. PDF digitalizado é lido por reconhecimento de texto (OCR): confira cada valor. Todas as cotações passam por revisão antes da promoção à pesquisa."
           allowPaste
           onReviewItems={onReviewItems}
         />

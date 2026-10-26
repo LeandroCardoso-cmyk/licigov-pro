@@ -122,7 +122,7 @@ priorizar só o que roda com segredo (workflows já endurecidos, ver §4).
 | SEC-AUD-04 | P1 | `BREVO_API_KEY` sem rotação comprovada | Brevo | Envio de e-mail em nome do órgão (phishing) | Média | Owner | Runbook §6 | Chave antiga excluída; logs revisados | Pendente |
 | SEC-AUD-05 | P1 | Conta admin de plataforma pode usar senha igual ao default público do histórico ou a `ADMIN_PASSWORD` | Conta admin | Acesso cross-tenant | Baixa-média (não testado — teste de credencial não autorizado) | Owner | Trocar senha via reset | Reset concluído; sessões antigas revogadas | Pendente |
 | SEC-AUD-06 | P1 | 2FA não confirmado (Railway, GitHub, Google, AWS, Brevo); 2 usuários sem 2SV em `sincrosaude.com.br` | Identidades | Tomada de conta | — | Owner | Ativar/confirmar 2FA; identificar os 2 usuários no Admin Console | Relatório de 2SV 100% | Pendência de acesso |
-| SEC-AUD-07 | P1 | `xlsx` 0.18.5 (prototype pollution/ReDoS) parseia planilhas de usuários no servidor; sem correção no npm | app | DoS/integridade de objeto | Média | Dev | XLSX → `exceljs` + limites (PR #319, draft); XLS legado aguarda decisão de produto (`XLSX_REMEDIATION.md` na #319) | Gate sem `xlsx` ou risco do XLS aceito formalmente | Em andamento |
+| SEC-AUD-07 | P1 | `xlsx` 0.18.5 (prototype pollution/ReDoS) parseia planilhas de usuários no servidor; sem correção no npm | app | DoS/integridade de objeto | Média | Dev | PR #319 (draft): `xlsx` removido; XLSX com `exceljs` em processo filho isolado + limites de bytes reais; `.xls` suspenso por decisão do Owner (`XLSX_REMEDIATION.md`) | Gate sem `xlsx` (baseline 14 → 12) e CI verde no head da #319 | Corrigido na #319 (não implantado) |
 | SEC-AUD-08 | P1 | Gate de dependências vermelho na `main` e fail-open quanto ao formato | CI | Regressões passariam despercebidas | Alta | Dev | Commits `342da15`, `e3dabbb` | Gate verde e fail-closed | **Corrigido (local)** |
 | SEC-AUD-09 | P1 | Gemini recebia `temperature/topP/topK` depreciados (quebra prevista em modelos novos) | IA prod | Indisponibilidade da geração documental | Alta | Dev | Commit `bf7180d` | Payload sem parâmetros em 3.x (teste) e geração OK em staging | **Corrigido (local)**; validar em staging |
 | SEC-AUD-10 | **P1** | Backup: sem `BACKUP_ENCRYPTION_KEY` publicava dump **sem cifra**; dump em claro no disco antes de cifrar; sem limpeza em erro; TLS só `PREFERRED` e sem verificação de identidade; mesmo usuário privilegiado | CI/DB | Dump de todos os órgãos exposto/interceptável | Alta | Dev/Owner | Commits `469b735` (TLS REQUIRED) e `d57d732` (script fail-closed, stream cifrado, VERIFY_CA opcional, harness); conta `licigov_backup` (`343349f`); usuário `licigov_backup`; avaliar backup dentro da Railway e fechar o proxy | Próximo backup OK com TLS obrigatório | Parcial |
@@ -234,8 +234,9 @@ qualquer verificação em staging/produção. Testes pulados não contam como ex
 
 ## 9. Backlog priorizado (código)
 
-1. **P1 SEC-AUD-07** — PR #319 (draft): XLSX lido/exportado com `exceljs` e limites; XLS legado mantido até a
-   decisão de produto (SheetJS 0.20.3 oficial, descontinuar `.xls` ou aceitar o risco).
+1. **P1 SEC-AUD-07** — PR #319 (draft, empilhada sobre a #317): `xlsx` fora das dependências, `.xls` suspenso com
+   orientação de conversão, leitura XLSX em processo filho com limites reais. Falta: staging com planilhas reais
+   anonimizadas; decisão futura do Owner sobre reabrir o `.xls`.
 2. **P2 SEC-AUD-10** — backup dentro da Railway (rede privada) para permitir fechar o proxy TCP público.
 3. **P2 SEC-AUD-15** — migrar `@google/generative-ai` → `@google/genai` atrás do Provider Adapter, com
    `thinking_level` explícito por modelo e replay/proveniência preservados.

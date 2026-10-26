@@ -4,7 +4,7 @@
  * cobertura documental explícita e contagem de cotações válidas.
  */
 import { describe, it, expect } from "vitest";
-import * as XLSX from "xlsx";
+import { xlsxBuffer } from "../helpers/xlsxFixture";
 import { numericToCents, parseBRLDetailed, canonicalDecimalToCents, multiplyQuantityCents, numberToDecimalString } from "../../domain/money";
 import { XlsxParser } from "../../parsers/xlsxParser";
 import { resolveEffectiveMoney, resolveEffectiveQuantity } from "../../domain/importCorrectionFields";
@@ -40,15 +40,13 @@ describe("B1 — número nativo × texto localizado (centavos, half-up UMA vez)"
     expect(multiplyQuantityCents(0.3333, 300)).toBe(100); // 99,99 → 100 (half-up no resultado, sem truncar qtd)
   });
   it("XLSX REAL: célula numérica 1.234 é preservada como número (1,23), texto '1.234,56' pelo parser pt-BR", async () => {
-    const ws = XLSX.utils.aoa_to_sheet([
+    const buf = await xlsxBuffer([["Cotações", [
       ["Descrição", "Qtd", "Unid", "Valor unitário", "Fornecedor"],
       ["Clipes", 10, "cx", 1.234, "Papelaria A"],
       ["Grampos", 5, "cx", 1.005, "Papelaria A"],
       ["Papel A4", 2, "resma", "1.234,56", "Papelaria B"],
       ["Caneta", 100, "un", 100, "Papelaria C"],
-    ]);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Cotações");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    ]]]);
     const r = await new XlsxParser().parse(buf, {
       importSessionId: 1, organizationId: 1, sourceFileId: "k", sourceFileName: "cot.xlsx",
       sourceMimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sourceChecksum: "c".repeat(64),

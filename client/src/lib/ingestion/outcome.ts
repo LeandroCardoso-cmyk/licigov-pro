@@ -78,6 +78,13 @@ export function describeOutcome(s: OutcomeSessionLike | null | undefined): Outco
         message: "Esta importação já tem itens revisados; eles não serão sobrescritos.",
       };
     }
+    if (s.stage === "parser_failed" && code === "UNSUPPORTED_FORMAT") {
+      return {
+        kind: "parser_failed", tone: "warning", canRetry: false, suggestNewFile: true,
+        title: "Formato de arquivo não aceito",
+        message: serverMessage ?? "Envie o arquivo em um dos formatos permitidos.",
+      };
+    }
     if (s.stage === "parser_failed") {
       return {
         kind: "parser_failed", tone: "danger", canRetry: code === "PARSE_ERROR", suggestNewFile: true,

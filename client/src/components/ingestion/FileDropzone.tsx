@@ -12,6 +12,7 @@ import { InlineError } from "@/components/ui/InlineError";
 import {
   acceptAttr,
   supportedFormatsLabel,
+  unavailableNotices,
   formatBytes,
   validateFile,
   type IngestionCapabilities,
@@ -76,6 +77,9 @@ export function FileDropzone({ capabilities, onFileAccepted, disabled }: FileDro
         <p id={`${inputId}-hint`} className="text-xs text-muted-foreground">
           Formatos aceitos: {supportedFormatsLabel(capabilities) || "nenhum disponível"} · tamanho máximo {formatBytes(capabilities.maxFileSizeBytes)}
         </p>
+        {unavailableNotices(capabilities).map((notice) => (
+          <p key={notice} className="text-xs text-muted-foreground">{notice}</p>
+        ))}
         <input
           ref={inputRef}
           id={inputId}
