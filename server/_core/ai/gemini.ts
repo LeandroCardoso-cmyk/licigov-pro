@@ -51,6 +51,19 @@ export function shouldDisableThinking(modelId: string): boolean {
   return THINKING_DISABLE_COMPATIBLE_MODELS.has(modelId.trim());
 }
 
+/**
+ * SEC-AUD-2026-10 — `temperature`/`topP`/`topK` só para gerações Gemini 1.x/2.x (IDs concretos).
+ * Aviso do Google AI Studio (07/10/2026): desde o Gemini 3.6 Flash esses parâmetros são ignorados e os
+ * próximos modelos vão RECUSAR a requisição (400) quando vierem preenchidos — assim como `thinking_budget`.
+ * No modelo canônico (gemini-3.8-flash) omiti-los não muda a saída; em aliases/modelos futuros evita o erro.
+ */
+const LEGACY_SAMPLING_MODEL_ID = /^gemini-[12]\.\d+-[a-z0-9.-]+$/;
+
+export function supportsCustomSampling(modelId: string): boolean {
+  const id = modelId.trim();
+  return LEGACY_SAMPLING_MODEL_ID.test(id) && !id.endsWith("-latest");
+}
+
 export class GeminiProvider implements AIProvider {
   readonly name = "gemini";
 

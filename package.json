@@ -32,6 +32,7 @@
     "templates:compile-master": "tsx scripts/templates-compile-master.ts",
     "audit:gate": "node scripts/audit-gate.mjs",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "db:roles:plan": "tsx scripts/ops/db-roles.ts",
     "catalog:smoke": "tsx scripts/catalog-official-smoke.ts",
     "catalog:sync": "tsx scripts/catalog-official-sync.ts",
     "catalog:preflight": "tsx scripts/catalog-index-preflight.ts",
@@ -173,7 +174,8 @@
       "brace-expansion@2": "2.1.7",
       "brace-expansion@5": "5.0.9",
       "@xmldom/xmldom@>=0.7.0 <0.8.15": "0.8.15",
-      "dompurify": "3.4.17"
+      "dompurify": "3.4.17",
+      "body-parser@<1.20.9": "1.20.9"
     }
   }
 }

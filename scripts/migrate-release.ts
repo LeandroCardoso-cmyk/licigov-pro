@@ -3,7 +3,8 @@
  *
  * Uso:  pnpm db:migrate:release
  *
- * Aplica APENAS migrations versionadas (drizzle/*.sql) contra `DATABASE_URL`, sob advisory
+ * Aplica APENAS migrations versionadas (drizzle/*.sql) contra `MIGRATION_DATABASE_URL` (conta com DDL)
+ * ou, se ausente, `DATABASE_URL`, sob advisory
  * lock (replay/concorrência-safe via server/db/releaseMigrate.ts). É o passo de RELEASE do
  * ciclo de deploy — projetado para rodar ANTES do start da aplicação (futuramente no Railway
  * Pre-Deploy Command; ver docs/ops/MIGRATION_RELEASE_RUNBOOK.md).
@@ -23,15 +24,32 @@ function log(msg: string): void {
   console.info(`[RELEASE][migrate] ${msg}`);
 }
 
+/**
+ * SEC-AUD-2026-10 — conta de banco SEPARADA para migrations. Só este passo precisa de DDL
+ * (CREATE/ALTER/DROP/INDEX/REFERENCES/CREATE ROUTINE); o runtime e o reference data (DML) usam
+ * `DATABASE_URL`. Se `MIGRATION_DATABASE_URL` estiver definida, as migrations usam ela; senão,
+ * mantêm o comportamento anterior (`DATABASE_URL`). Retorna só o NOME da variável escolhida.
+ */
+export function resolveMigrationDatabaseUrl(
+  env: Record<string, string | undefined>,
+): { url: string; source: "MIGRATION_DATABASE_URL" | "DATABASE_URL" } | null {
+  const dedicated = env.MIGRATION_DATABASE_URL?.trim();
+  if (dedicated) return { url: dedicated, source: "MIGRATION_DATABASE_URL" };
+  const shared = env.DATABASE_URL?.trim();
+  if (shared) return { url: shared, source: "DATABASE_URL" };
+  return null;
+}
+
 export async function main(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
+  const resolved = resolveMigrationDatabaseUrl(process.env);
+  if (!resolved) {
     // Nunca imprime o valor — apenas a ausência.
     throw new Error("DATABASE_URL não definida — impossível aplicar migrations de release.");
   }
+  const databaseUrl = resolved.url;
 
   const startedAt = Date.now();
-  log("Iniciando release de migrations…");
+  log(`Iniciando release de migrations (conexão: ${resolved.source})…`);
   const connection = await mysql.createConnection(databaseUrl);
   try {
     await migrateWithAdvisoryLock(connection, log);

@@ -19,6 +19,10 @@ env:
   # Node compatível com produção (Railway roda 20+ LTS; fixamos 22 aqui e em .nvmrc/engines).
   NODE_VERSION: "22"
 
+# SEC-AUD-2026-10 — menor privilégio: o GITHUB_TOKEN só lê o repositório (nenhum job escreve no GitHub).
+permissions:
+  contents: read
+
 jobs:
   # ── GATE OBRIGATÓRIO 1: o projeto compila (typecheck real) + lint de não-regressão ──
   quality:
@@ -129,6 +133,11 @@ jobs:
       # bancos dedicados (CREATE/DROP DATABASE) → roda cedo, sem depender de nem sujar os demais smokes.
       - name: Smoke — migration safety (clean install / upgrade / replay / rename preconditions)
         run: pnpm exec vitest run server/__tests__/integration/reconciliation-mysql-smoke.test.ts
+      # SEC-AUD-2026-10 — contas de banco com menor privilégio (scripts/ops/db-roles.ts): migrator aplica a cadeia
+      # completa + replay; runtime só DML (DDL recusado); audit só metadados; backup só leitura + mysqldump completo.
+      # Banco e contas dedicados e descartáveis. Migration que exigir privilégio novo quebra aqui, não no pre-deploy.
+      - name: Smoke — contas MySQL com menor privilégio (runtime/migrator/backup/audit)
+        run: pnpm exec vitest run server/__tests__/integration/sec-db-least-privilege-mysql-smoke.test.ts
       # P0 piloto (hardening) — governança FAIL-CLOSED da identidade institucional: migration 0302
       # aborta em ambiguidade (órfão/multi-org/conflito/nome/cnpj) ANTES de mutar, sem discard silencioso;
       # tenant-scope, unicidade por org e remoção da duplicidade nome/cnpj.
@@ -329,6 +338,11 @@ jobs:
       # fixado (HOMOLOG_ORGANIZATION_ID) ⇒ resolve; organização sem associação ⇒ FORBIDDEN.
       - name: Smoke — homologação com usuário de múltiplas organizações
         run: pnpm exec vitest run server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts
+
+      # Executor de homologação × ingestão canônica (PR-04 / SEM-005): cliente HTTP real do executor contra Express + upload
+      # multipart + tRPC; flag real por tenant; 2 sessões somam cotações; cutover recusa a colagem legada; isolamento do upload.
+      - name: Smoke — executor de homologação pela ingestão canônica
+        run: pnpm exec vitest run server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts
 
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
