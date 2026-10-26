@@ -16,6 +16,8 @@ export interface TrParamViewModel {
   defaultEligible: boolean;
   /** M8 — suprido pela fonte autoritativa (servidor): não é pendência. */
   suppliedBy?: { source: "tr_oficial"; value: string; version: number } | { source: "processo"; value: string };
+  /** Motivo conhecido de o campo continuar pendente (servidor). */
+  pendingReason?: { code: "LEGACY_TR_WITHOUT_OBJECT"; trVersion: number };
 }
 export type TrStructuredView =
   | { status: "UNAVAILABLE"; reason: string }
@@ -51,6 +53,20 @@ export function suppliedByText(s: NonNullable<TrParamViewModel["suppliedBy"]>): 
     ? `Obtido do TR oficial emitido (v${s.version}), que registra o objeto do processo; o Edital usa este valor. Não é preciso digitar de novo.`
     : "Obtido do objeto do processo: a emissão do TR registra este objeto e o Edital o reaproveita. Não é preciso digitar de novo.";
 }
+/** Explicação do motivo de pendência informado pelo servidor (null = sem motivo especial). */
+export function pendingReasonText(r: TrParamViewModel["pendingReason"]): string | null {
+  if (!r) return null;
+  return `O TR oficial vigente (v${r.trVersion}) foi emitido antes de o sistema registrar o objeto completo, por isso o Edital não `
+    + "consegue obtê-lo de lá. Informe-o aqui uma vez (normalmente, o mesmo objeto do processo): o TR emitido não é alterado e o Edital "
+    + "passa a usar este valor.";
+}
+
+/** Texto curto do estado "parâmetros estruturados indisponíveis" (null = não exibir: recurso não se aplica a esta organização). */
+export function trStructuredUnavailableText(reason: string): string | null {
+  if (/não integrado nesta instalação|não habilitados para esta organização/.test(reason)) return null;
+  return `Parâmetros estruturados da contratação indisponíveis no momento: ${reason}.`;
+}
+
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */
 export const trOptionalFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
   fields.filter((f) => f.active && !f.required && !f.conditional && f.status === "UNSET");

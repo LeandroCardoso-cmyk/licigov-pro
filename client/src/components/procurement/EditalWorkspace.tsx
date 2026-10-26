@@ -19,7 +19,7 @@ import { generateReady, reviewReadiness, type PreflightView, type ReviewStateVie
 import type { StageTarget } from "@/lib/editalPreparation";
 import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
-  editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
+  editalParamsComplete, editalParamsDiffer, editalScopeToRecord, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
   resolveEditalTextValues, editalTextProposal, editalTextOverwrites, editalTextPendingReview, type EditalTextParams,
 } from "./regenerationGuard";
@@ -135,8 +135,23 @@ export default function EditalWorkspace({
   const composedParams = !persisted && composed?.scope
     ? { modality: composed.scope.modality as Modality, form: composed.scope.form as Form, platform: (composed.scope.platform ?? null) as Platform | null }
     : null;
-  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams);
+  // C2 — escopo escolhido antes da 1ª geração (registrado no servidor): reabre a tela com ele. Ordem: persistido > minuta composta
+  // > escolha registrada. Registrar é só guardar a escolha (não gera, não aprova, não publica).
+  const scopeQuery = trpc.procurementProcess.editalScopeSelection.useQuery({ processId }, { enabled: !!processId });
+  const recordedScope = (scopeQuery.data?.scope ?? null) as { modality: Modality; form: Form; platform: Platform | null } | null;
+  const recordScope = trpc.procurementProcess.recordEditalScope.useMutation();
+  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams ?? recordedScope);
   const { modality, form, platform } = effective;
+  const scopeToRecord = editalScopeToRecord<Modality, Form, Platform>({ effective, proposed, persisted, composed: composedParams, recorded: recordedScope });
+  const scopeKey = scopeToRecord ? JSON.stringify(scopeToRecord) : null;
+  useEffect(() => {
+    // Sem nova tentativa automática em CONFLICT (outra pessoa alterou): a próxima escolha explícita registra sobre o valor recarregado.
+    if (!scopeToRecord || !scopeQuery.isSuccess) return;
+    recordScope.mutate(
+      { processId, ...scopeToRecord, expectedValueHash: scopeQuery.data?.valueHash ?? null },
+      { onSettled: () => { void utils.procurementProcess.editalScopeSelection.invalidate({ processId }); } },
+    );
+  }, [scopeKey, scopeQuery.isSuccess]);
   const textValues = resolveEditalTextValues(proposedText, persisted);
   const textProposal = editalTextProposal(proposedText, persisted);
   const textPending = editalTextPendingReview(persisted);
@@ -438,6 +453,11 @@ export default function EditalWorkspace({
             {composed.scopeStatus === "AMBIGUOUS"
               ? "A revisão do modelo usada nesta minuta está vinculada a mais de um escopo: selecione modalidade, forma e plataforma — nenhuma é presumida."
               : "Não foi possível identificar o escopo usado nesta minuta: selecione modalidade, forma e plataforma — nenhuma é presumida."}
+          </p>
+        )}
+        {!persisted && !composedParams && recordedScope && proposed.modality === null && proposed.form === null && proposed.platform === null && (
+          <p className="text-xs text-muted-foreground" data-testid="edital-recorded-scope">
+            Modalidade, forma e plataforma escolhidas anteriormente para este processo (o Edital ainda não foi gerado).
           </p>
         )}
         {!persisted && !composedParams && !paramsComplete && (

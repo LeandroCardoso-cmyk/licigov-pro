@@ -4,7 +4,7 @@
  * TR vigente emitido sem objeto registrado (emissões antigas) ⇒ continua pendente (o Edital exige o parâmetro do TR).
  */
 import { describe, it, expect } from "vitest";
-import { processObjectSupply, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT } from "../../domain/trStructuredParams";
+import { processObjectPendingReason, processObjectSupply, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT } from "../../domain/trStructuredParams";
 
 describe("processObjectSupply", () => {
   it("só o objeto completo é suprido dessa forma", () => {
@@ -23,5 +23,16 @@ describe("processObjectSupply", () => {
     expect(processObjectSupply(" Aquisição ", null)).toEqual({ source: "processo", value: "Aquisição" });
     expect(processObjectSupply("", null)).toBeNull();
     expect(processObjectSupply(null, null)).toBeNull();
+  });
+});
+
+describe("processObjectPendingReason (C1)", () => {
+  it("TR vigente emitido sem objeto registrado ⇒ motivo LEGACY_TR_WITHOUT_OBJECT com a versão", () => {
+    expect(processObjectPendingReason("Objeto do processo", { version: 3, metadata: {} })).toEqual({ code: "LEGACY_TR_WITHOUT_OBJECT", trVersion: 3 });
+  });
+  it("TR com objeto, ou nenhum TR emitido ⇒ sem motivo", () => {
+    expect(processObjectPendingReason("Objeto", { version: 2, metadata: { object: "Objeto" } })).toBeNull();
+    expect(processObjectPendingReason("Objeto", null)).toBeNull();
+    expect(processObjectPendingReason(null, null)).toBeNull();
   });
 });

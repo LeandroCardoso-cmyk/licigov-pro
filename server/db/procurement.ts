@@ -176,6 +176,17 @@ export async function listProcesses(orgId: number, limit = 50): Promise<Array<{ 
   return rows.map(r => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "", modality: r.modality, currentStage: r.currentStage, status: r.status, updatedAt: fromDb(r.updatedAt) }));
 }
 
+/** Processos ATIVOS da organização entre os ids informados (tenant-scoped; ids de outra organização não retornam). */
+export async function listActiveProcessRefsByIds(orgId: number, ids: readonly string[]): Promise<Array<{ id: string; processNumber: string; object: string }>> {
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ id: procurementProcessesTable.id, processNumber: procurementProcessesTable.processNumber, object: procurementProcessesTable.object })
+    .from(procurementProcessesTable)
+    .where(and(eq(procurementProcessesTable.organizationId, orgId), eq(procurementProcessesTable.lifecycleState, "active"), inArray(procurementProcessesTable.id, [...ids])));
+  return rows.map((r) => ({ id: r.id, processNumber: r.processNumber, object: r.object ?? "" }));
+}
+
 export async function updateProcessStage(id: string, orgId: number, stage: string, status: string, updatedAt: string): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;

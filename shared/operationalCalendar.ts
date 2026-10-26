@@ -21,6 +21,25 @@ export interface OperationalCalendarItem {
   readonly eventTime: string;
   readonly referenceType: string;
   readonly referenceId: string | null;
+  /** Evento DERIVADO de uma fonte do processo (ex.: data da sessão declarada na Configuração do certame). */
+  readonly declaredIn?: string;
+}
+
+/** Origem de um evento derivado (null = evento cadastrado no calendário). */
+export function calendarItemOriginText(item: Pick<OperationalCalendarItem, "declaredIn">): string | null {
+  return item.declaredIn === "certame_config" ? "Declarado na Configuração do certame do processo" : null;
+}
+
+/** Endereço que abre a referência do evento fora do Centro de Operações (null = tratada no próprio Centro ou sem destino). */
+export function calendarReferenceHref(referenceType: string, referenceId: string | null | undefined): string | null {
+  if (!referenceId) return null;
+  return referenceType === "procurement_process" ? `/processos?processId=${encodeURIComponent(referenceId)}` : null;
+}
+
+/** Processo a abrir a partir do endereço (`?processId=`), ou null. */
+export function processIdFromSearch(search: string): string | null {
+  const id = new URLSearchParams(search).get("processId")?.trim();
+  return id ? id : null;
 }
 
 /** Diferenciação visual mínima exigida pela v1. */
