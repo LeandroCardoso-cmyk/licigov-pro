@@ -15,3 +15,13 @@ export function stripInternalMarkers(content: string): string {
 export function hasInternalMarkers(content: string): boolean {
   return /<!--\s*licigov:/.test(content);
 }
+
+/**
+ * Há trecho que a visualização formatada NÃO mostra (HTML bruto, comentário comum ou imagem)? Os marcadores internos
+ * `licigov:` não contam — são do sistema. Quando houver, a tela oferece o texto integral: quem revisa/emite precisa poder
+ * ver tudo o que será persistido, inclusive o que a apresentação segura descarta.
+ */
+export function hasHiddenContent(content: string): boolean {
+  const text = stripInternalMarkers(content);
+  return /<!--|<\/?[A-Za-z][^>]*>/.test(text) || /!\[[^\]]*\]\(/.test(text);
+}

@@ -957,7 +957,13 @@ export const procurementProcessRouter = router({
           // bindings que fixam a revisão). A UI reabre com esse contexto sem gravar nada; ambíguo/ausente ⇒ explícito.
           // Falha na recuperação NUNCA derruba a leitura do rascunho: degrada para null (a tela pede a escolha explícita).
           composedContext: input.kind === "edital"
-            ? await recoverComposedEditalContext(orgId, { id: doc.id, processId: input.processId, sources: doc.sources }).catch(() => null)
+            ? await recoverComposedEditalContext(orgId, { id: doc.id, processId: input.processId, sources: doc.sources }).catch((err: unknown) => {
+                log.warn("edital_composed_context_recovery_failed", {
+                  organizationId: orgId, processId: input.processId, documentId: doc.id, correlationId: ctx.correlationId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                return null;
+              })
             : null,
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,

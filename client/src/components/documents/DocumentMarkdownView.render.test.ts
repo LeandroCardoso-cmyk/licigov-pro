@@ -8,7 +8,7 @@ import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 (globalThis as { React?: typeof React }).React = React;
 import DocumentMarkdownView from "@/components/documents/DocumentMarkdownView";
-import { stripInternalMarkers, hasInternalMarkers } from "@shared/documentMarkers";
+import { stripInternalMarkers, hasInternalMarkers, hasHiddenContent } from "@shared/documentMarkers";
 
 const render = (content: string) => renderToStaticMarkup(createElement(DocumentMarkdownView, { content }));
 
@@ -67,9 +67,33 @@ describe("DocumentMarkdownView — visualização formatada e segura", () => {
     ].join("\n"));
     expect(html).not.toMatch(/<script/i);
     expect(html).not.toMatch(/<img/i);
-    expect(html).not.toMatch(/onerror|onclick/i);
+    // Nenhum atributo de evento em elemento real (o texto integral técnico mostra o original só como texto escapado).
+    expect(html).not.toMatch(/<[^>]+\son(error|click)=/i);
     expect(html).not.toMatch(/href="javascript:/i);
     expect(html).toContain('href="https://www.gov.br/compras"');
+  });
+
+  it("trecho descartado pela visualização (HTML/comentário/imagem) ⇒ aviso + texto integral escapado, nunca DOM ativo", () => {
+    const raw = ["Texto visível", "", "<div>", "trecho em bloco HTML", "</div>", "", "<!-- nota comum -->"].join("\n");
+    const html = render(raw);
+    expect(html).toContain('data-testid="document-raw-text"');
+    expect(html).toContain("Ver texto integral (técnico)");
+    expect(html).toContain("&lt;div&gt;\ntrecho em bloco HTML\n&lt;/div&gt;");
+    expect(html).toContain("&lt;!-- nota comum --&gt;");
+    expect(html).not.toMatch(/<div>\ntrecho/);
+    // Documento do motor (só marcadores internos licigov) não mostra o aviso.
+    expect(render(DOC)).not.toContain("document-raw-text");
+    expect(hasHiddenContent(DOC)).toBe(false);
+    expect(hasHiddenContent("![x](https://a/b.png)")).toBe(true);
+    expect(hasHiddenContent("valor a < b e c > d")).toBe(false);
+  });
+
+  it("bloco de código preserva quebras de linha; lista de tarefas mostra o estado sem controle de formulário", () => {
+    const html = render(["```", "linha 1", "linha 2", "```", "", "- [x] feito", "- [ ] pendente"].join("\n"));
+    expect(html).toMatch(/<pre class="whitespace-pre-wrap"><code[^>]*>linha 1\nlinha 2/);
+    expect(html).not.toMatch(/<input/i);
+    expect(html).toContain("☑ ");
+    expect(html).toContain("☐ ");
   });
 
   it("blocos de código (inclusive ```mermaid) ficam como texto: sem SVG/HTML injetado", () => {

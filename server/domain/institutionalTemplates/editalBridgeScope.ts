@@ -62,11 +62,15 @@ const SLUG_TO_MODALITY = invert(EDITAL_MODALITY_TO_SLUG);
 const SLUG_TO_FORM = invert(EDITAL_FORM_TO_SLUG);
 const SLUG_TO_PLATFORM = invert(EDITAL_PLATFORM_TO_SLUG);
 
+// Só chaves PRÓPRIAS do mapa: um slug como "toString"/"constructor" não pode casar com membros do protótipo.
+const lookup = <V,>(table: Readonly<Record<string, V>>, key: string | null | undefined): V | undefined =>
+  key && has(table, key) ? table[key] : undefined;
+
 export function bindingScopeToEditalParams(scope: BindingScope): EditalScopeParams | null {
-  const modality = scope.modality ? SLUG_TO_MODALITY[scope.modality] : undefined;
-  const form = scope.form ? SLUG_TO_FORM[scope.form] : undefined;
+  const modality = lookup(SLUG_TO_MODALITY, scope.modality);
+  const form = lookup(SLUG_TO_FORM, scope.form);
   if (!modality || !form) return null;
   if (form === "presencial") return scope.platform ? null : { modality, form, platform: null };
-  const platform = scope.platform ? SLUG_TO_PLATFORM[scope.platform] : undefined;
+  const platform = lookup(SLUG_TO_PLATFORM, scope.platform);
   return platform ? { modality, form, platform } : null;
 }

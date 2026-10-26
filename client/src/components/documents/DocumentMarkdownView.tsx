@@ -1,6 +1,6 @@
 import type React from "react";
 import { Streamdown, defaultRemarkPlugins } from "streamdown";
-import { stripInternalMarkers } from "@shared/documentMarkers";
+import { hasHiddenContent, stripInternalMarkers } from "@shared/documentMarkers";
 
 /**
  * M8 (homologação visual) — visualização FORMATADA e SOMENTE LEITURA do conteúdo documental (Markdown do motor
@@ -11,13 +11,20 @@ import { stripInternalMarkers } from "@shared/documentMarkers";
  *  - HTML bruto desligado: sem `rehype-raw` e com `skipHtml` — tags/comentários não viram DOM;
  *  - marcadores internos `<!-- licigov:… -->` removidos antes de renderizar;
  *  - sem imagens nem mídia embutida; links passam pelo filtro padrão de URL do react-markdown (bloqueia `javascript:`);
- *  - sem controles de copiar/baixar e sem matemática/mermaid (não fazem parte dos documentos).
+ *  - sem controles de copiar/baixar e sem matemática/mermaid (não fazem parte dos documentos);
+ *  - o que a apresentação segura descarta (HTML bruto, comentário comum, imagem) é sinalizado e o texto integral fica
+ *    disponível em "Texto integral (técnico)" — quem revisa ou emite vê tudo o que está persistido.
  */
 // Blocos de código como TEXTO puro: substitui o renderizador do Streamdown (que realça via HTML e desenha ```mermaid).
 const PlainCode = ({ children, className }: { children?: React.ReactNode; className?: string }) => <code className={className}>{children}</code>;
-const COMPONENTS = { code: PlainCode };
+// O `pre` padrão do Streamdown só repassa os filhos: sem ele o bloco perde as quebras de linha.
+const PlainPre = ({ children }: { children?: React.ReactNode }) => <pre className="whitespace-pre-wrap">{children}</pre>;
+// Item de lista de tarefas (GFM): estado como texto, sem controle de formulário.
+const TaskMark = ({ checked }: { checked?: boolean }) => <span aria-label={checked ? "concluído" : "pendente"}>{checked ? "☑ " : "☐ "}</span>;
+const COMPONENTS = { code: PlainCode, pre: PlainPre, input: TaskMark };
 
-const DISALLOWED = ["img", "iframe", "script", "style", "object", "embed", "video", "audio", "source", "form", "input"];
+// `input` não está aqui: só o GFM o produz (caixa de tarefa) — `skipHtml` descarta `<input>` bruto — e ele vira TaskMark.
+const DISALLOWED = ["img", "iframe", "script", "style", "object", "embed", "video", "audio", "source", "form"];
 
 export interface DocumentMarkdownViewProps {
   content: string;
@@ -29,7 +36,8 @@ export interface DocumentMarkdownViewProps {
 export default function DocumentMarkdownView({ content, className = "", ariaLabel }: DocumentMarkdownViewProps) {
   const text = stripInternalMarkers(content ?? "");
   if (!text.trim()) return <p className="text-xs text-muted-foreground">Sem conteúdo.</p>;
-  return (
+  const hidden = hasHiddenContent(content ?? "");
+  const view = (
     <div
       role="document"
       aria-label={ariaLabel}
@@ -48,6 +56,18 @@ export default function DocumentMarkdownView({ content, className = "", ariaLabe
       >
         {text}
       </Streamdown>
+    </div>
+  );
+  if (!hidden) return view;
+  return (
+    <div>
+      {view}
+      <details className="mt-3 text-xs" data-testid="document-raw-text">
+        <summary className="cursor-pointer text-amber-700 dark:text-amber-400">
+          Há trecho que a visualização formatada não mostra (HTML, comentário ou imagem). Ver texto integral (técnico)
+        </summary>
+        <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded border border-border bg-muted/40 p-2 font-mono text-[11px] text-foreground">{content}</pre>
+      </details>
     </div>
   );
 }

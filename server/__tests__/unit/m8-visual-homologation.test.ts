@@ -70,6 +70,14 @@ describe("escopo da composição — inverso exato do mapeamento de fronteira", 
     expect(bindingScopeToEditalParams({ modality: "inexistente", form: "presencial" })).toBeNull();
     expect(bindingScopeToEditalParams({ modality: "pregao", form: "presencial", platform: "bll" })).toBeNull();
   });
+
+  it("slug com nome de membro do protótipo (toString/constructor/__proto__) ⇒ null, nunca uma função", () => {
+    for (const k of ["toString", "constructor", "__proto__", "hasOwnProperty"]) {
+      expect(bindingScopeToEditalParams({ modality: k, form: "presencial" })).toBeNull();
+      expect(bindingScopeToEditalParams({ modality: "pregao", form: k })).toBeNull();
+      expect(bindingScopeToEditalParams({ modality: "pregao", form: "eletronica", platform: k })).toBeNull();
+    }
+  });
 });
 
 const m1 = (over: Record<string, unknown> = {}) => ({
