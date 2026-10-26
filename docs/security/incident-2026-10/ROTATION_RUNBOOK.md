@@ -48,10 +48,11 @@ coisas dessincronizam e derrubam as conexões. Para SQL arbitrário (CREATE USER
 2. **`railway connect MySQL --environment <env>`** numa máquina confiável do Owner com cliente `mysql`
    (via proxy público ou túnel `--ssh`).
 
-Em ambos: criar contas com `CREATE USER … IDENTIFIED BY RANDOM PASSWORD` (MySQL ≥ 8.0.18; ensaiado em 9.7.4,
-`SET SESSION generated_random_password_length = 32` antes): o servidor gera a senha e a mostra **uma vez** no
-resultado — nada é digitado nem colado no terminal, e o `--histignore` padrão do cliente não grava
-`IDENTIFIED`/`PASSWORD` no histórico. Copiar o valor direto para a variável de destino e limpar a tela.
+Em ambos: criar contas com `CREATE USER … IDENTIFIED BY '<senha>'`, a senha gerada no **cofre do operador** (40
+caracteres alfanuméricos) e colada — rev. 4: `IDENTIFIED BY RANDOM PASSWORD` (ensaiado em 9.7.4) pode gerar
+pontuação, e as senhas vão dentro de URLs `mysql://…` (o `mysql2` decodifica percent-encoding; o `db-backup.sh` usa a
+senha literal). O `--histignore` padrão do cliente não grava `IDENTIFIED`/`PASSWORD` no histórico. Canal completo
+no checklist §1.
 
 ## 2. MySQL — contas separadas por função
 
@@ -85,7 +86,7 @@ MySQL **9.7.4** (imagem oficial que `mysql:9` resolve hoje) e 8.0.46: as 320 mig
 `VERIFY_CA` com a CA do servidor) e restore em banco isolado com `CHECKSUM TABLE` idêntico em 345/345 tabelas.
 Revisão 3 (26/10): backup de "staging" → drill numa segunda instância pelo seletor de ambiente
 (`scripts/ops/select-db-target.sh`), 345 tabelas e 320 migrations; `db:audit` com CA fixada (CA de outra
-instância ⇒ recusado). `VERIFY_CA` = CA fixada, **sem** conferência de hostname (ver checklist §4).
+instância ⇒ recusado). `VERIFY_CA` = CA fixada, **sem** conferência de hostname (ver checklist §1/§3 e `AUDIT_REPORT.md` §7).
 Smoke equivalente na CI: `sec-db-least-privilege-mysql-smoke.test.ts`.
 
 **Lacuna:** a versão exata do MySQL em execução na Railway não está nos logs retidos (deploy de 19/09; tag
@@ -94,20 +95,19 @@ conferir no primeiro run e repetir o ensaio se for < 8.0.20 (sem `SHOW_ROUTINE`)
 
 ### 2.4 Sequência (staging primeiro; produção só após staging verde)
 
-Ver [`CONTAINMENT_CHECKLIST.md`](./CONTAINMENT_CHECKLIST.md) §1. Resumo:
+Passo a passo com IDs, confirmação do alvo e autorização coordenada: [`CONTAINMENT_CHECKLIST.md`](./CONTAINMENT_CHECKLIST.md)
+(rev. 4). Resumo, em staging:
 
-1. Pré-checagem somente leitura (variáveis, contas existentes, backup recuperável).
-2. Definir o canal confidencial da senha gerada (checklist §0); criar as quatro contas (RANDOM PASSWORD) e
-   aplicar os GRANTs do plano.
-3. **Se esta PR ainda não estiver implantada** no ambiente: `DATABASE_URL` → `licigov_migrator` (credencial
-   nova; migrations e runtime funcionam). **Se já estiver:** `DATABASE_URL` → `licigov_app` e
-   `MIGRATION_DATABASE_URL` → `licigov_migrator`. A contenção não espera a PR.
-4. Deploy; validar boot, `/readyz`, login, uma escrita no tenant sintético (staging) e o log do pre-deploy.
-5. GitHub: em **staging**, criar os secrets `STAGING_*` (nunca reapontar os de produção); em **produção**,
-   `BACKUP_DATABASE_URL` → `licigov_backup`, `AUDIT_DATABASE_URL` → `licigov_audit`, mais as CAs; rodar backup e
-   auditoria manualmente com `target` explícito.
-6. Só então **Regenerate** da senha do `root` (Config → Connection), depois de confirmar na UI que o botão
-   existe no serviço real. Nada mais depende dela; o Regenerate mantém as variáveis do serviço MySQL coerentes.
+1. Leituras sem segredo (versão, contas/grants, forma da `DATABASE_URL`, Regenerate disponível) — checklist §2.
+2. Integrar a PR no ambiente (workflows com `target` e `MIGRATION_DATABASE_URL` vêm dela) — §5.
+3. Criar as quatro contas com senhas alfanuméricas geradas no cofre do operador (canal do §1; não
+   `RANDOM PASSWORD`, que pode gerar pontuação incompatível com as URLs) e aplicar os GRANTs do plano — §6.
+4. Secrets `STAGING_*` (nunca reapontar os de produção); backup e auditoria pelo ref `staging` com
+   `target = staging`; **drill com os dados reais de staging** numa instância descartável separada — §7. Só
+   depois disso a recuperação está comprovada.
+5. `DATABASE_URL` → `licigov_app`, `MIGRATION_DATABASE_URL` → `licigov_migrator`; deploy e validação; então
+   **Regenerate** do root — §8.
+6. Produção: mesma sequência, com autorização própria e após a promoção staging → main.
 7. Contas que sobrarem em `mysql.user` (além de `root` e das internas `mysql.sys`, `mysql.session`,
    `mysql.infoschema`): listar dono/função/dependência e decidir caso a caso. Não excluir na rotina.
 

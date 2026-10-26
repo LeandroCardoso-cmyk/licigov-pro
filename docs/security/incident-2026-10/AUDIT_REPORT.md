@@ -187,6 +187,8 @@ Ordem sugerida, cada uma com evidência esperada (sem valores):
 | `343349f` feat(db): contas MySQL por função | `scripts/ops/db-roles.ts`, `scripts/migrate-release.ts`, smoke MySQL, `ci.yml`, `package.json` | Baixo: `MIGRATION_DATABASE_URL` é opcional (fallback = comportamento anterior) |
 | rev. 3 — fix(ops): ambiente explícito nos workflows de banco | `scripts/ops/select-db-target.sh` (novo), `scripts/ops/db-restore-drill.sh` (drill saiu do YAML), `scripts/ops/db-backup.sh`, `scripts/schema-audit*.ts`, `db-backup.yml`, `schema-audit.yml`, testes | Médio-baixo: agendado = produção sem mudança de secret; dispatch manual passa a exigir `target`; auditoria exige `AUDIT_DB_SSL_CA`; artifact renomeado para `db-backup-<ambiente>` |
 | rev. 3 — docs(security) | checklist rev. 3, runbook, inventário, relatório §11 | Nenhum |
+| rev. 4 — fix(ci): lint de não-regressão fail-closed | `scripts/ci/lint-changed.sh` (novo), `ci.yml` (passo de lint + input `lint_base` obrigatório no dispatch), teste | Baixo: PRs agora lintam de fato os arquivos alterados; disparo manual exige a base |
+| rev. 4 — docs(security) | checklist rev. 4 (IDs, canal das senhas, ordem com drill antes da troca, ref do workflow) | Nenhum |
 
 Todos os commits atualizam `graphify-out/` pelo hook do repositório (`.githooks/pre-commit`, convenção do
 projeto). O diff de `graph.json`/`GRAPH_REPORT.md`/`.graphify_labels.json` é grande porque qualquer mudança de
@@ -204,7 +206,7 @@ chroot). Lint conforme a CI (`.ts/.tsx` alterados vs `origin/main`, `--max-warni
 | Check | Baseline `7ec253f` | Head `4d99bee` (rev. 1) | Head `d5b21e1` (rev. 2) |
 |---|---|---|---|
 | `pnpm check` | ✅ | ✅ | ✅ |
-| Lint de não-regressão | — | ✅ | ✅ (14 arquivos) |
+| Lint de não-regressão (local, arquivos alterados) | — | ✅ | ✅ (14 arquivos) |
 | `pnpm test` | ✅ 437 arq. / 8231 | ✅ 440 / 8251 | ✅ 441 / 8264 (126 arquivos MySQL pulados sem banco) |
 | `pnpm build` | — | ✅ | ✅ |
 | `pnpm audit:gate` | ❌ 2 high novas | ✅ 14/14 | ✅ 14/14 |
@@ -214,9 +216,18 @@ chroot). Lint conforme a CI (`.ts/.tsx` alterados vs `origin/main`, `--max-warni
 | Menor privilégio + migration safety | — | — | ✅ 2 / 8 (e o de menor privilégio também em 9.7.4) |
 | Harness do backup | — | — | ✅ 11 / 11 (rev. 3: 13 / 13) |
 | Seletor de ambiente (rev. 3) | — | — | ✅ 24 / 24 (`db-target-select.test.ts`) |
+| Seletor do lint da CI (rev. 4) | — | — | ✅ 14 / 14 (`ci-lint-changed.test.ts`, eslint real) |
 | Ensaio local rev. 3 (9.7.4: backup "staging" via seletor + drill em 2ª instância + `db:audit` com CA fixada) | — | — | ✅ 345 tabelas / 320 migrations; destino não vazio recusado; CA de outra instância recusada |
 | Ensaio real de backup/restore (9.7.4, conta restrita, TLS, VERIFY_CA) | — | — | ✅ 345/345 tabelas com CHECKSUM idêntico |
 | CI GitHub | — | ✅ 5/5 (run do head `4d99bee`) | ver PR #317 (run do head atual) |
+
+**Correção (rev. 4) — o passo de lint da CI não provava nada.** Até o head `3e6d131`, o passo fazia
+`git fetch --depth=1 origin <base>` num clone completo: a ponta nova da base ficava marcada como shallow e, quando
+ela não era ancestral do head (ex.: `main` com o hotfix #321), o `git diff` falhava com "no merge base"; o
+`2>/dev/null` + `|| true` transformava isso em "nenhum arquivo alterado" e o eslint **não rodava** (run 805 da
+#317: `TARGET="main"`, nenhum eslint no log). Os ✅ de lint acima são do lint **local**. A partir da rev. 4 a
+seleção é `scripts/ci/lint-changed.sh` (base real da PR, `lint_base` obrigatório no disparo manual, falha de
+fetch/ref/merge-base/diff reprova; diff vazio só aprova quando calculado).
 
 Não executado aqui: a cadeia completa de ~70 smokes MySQL do job `mysql-smoke` (roda na CI), E2E visual e
 qualquer verificação em staging/produção. Testes pulados não contam como executados.
