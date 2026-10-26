@@ -29,6 +29,8 @@ const mutation = vi.hoisted(() => () => ({ mutate: () => {}, isPending: false, i
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    // M8 — histórico somente leitura das importações (painel do item e Pesquisa de Preços).
+    ingestion: { listSessionHistory: { useQuery: () => ({ data: { sessions: [], hasMore: false }, isLoading: false, error: null }) } },
     useUtils: () => ({
       procurementProcess: { listItems: { invalidate: () => {} } },
       itemIntelligence: { getItem: { invalidate: () => {} } },

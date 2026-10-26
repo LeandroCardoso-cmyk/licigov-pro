@@ -30,7 +30,7 @@ import { getLicitacoesProfileState } from "../services/institutionalTemplates/li
 import { getBudgetDisclosureState, getCertameConfigState, getItemsParticipationState } from "../services/institutionalTemplates/certameConfigService";
 import { getTrStructuredState, recordTrStructuredParams, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
-import { generateEditalRouted, listEditalTrCandidates, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
+import { generateEditalRouted, listEditalTrCandidates, recoverComposedEditalContext, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
   importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
@@ -44,8 +44,8 @@ import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
 } from "../domain/processCreateContract";
 import { listContextFacts } from "../db/procurementContext";
-import { getOrganizationById } from "../db/organizations";
-import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
+import { getLatestOfficialPromotion, listLatestOfficialVersions } from "../db/officialDocumentPromotions";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
 import { isFeatureEnabled } from "../services/featureFlagService";
@@ -233,20 +233,29 @@ export const procurementProcessRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await getProcess(input.processId, orgId);
-      if (!process) return { process: null, items: [], timeline: [], documents: [] };
-      const [items, timeline, documents] = await Promise.all([
+      if (!process) return { process: null, items: [], timeline: [], documents: [], officialVersions: {} };
+      const [items, timeline, documents, official] = await Promise.all([
         listIntelligentItems(input.processId, orgId),
         listProcessTimeline(input.processId, orgId),
         listGeneratedDocuments(input.processId, orgId),
+        listLatestOfficialVersions(orgId, [input.processId]),
       ]);
-      return { process, items, timeline, documents };
+      // Autoria registrada nos eventos é o id do usuário (texto): resolve o nome só entre membros DESTA organização.
+      // Formatos registrados: "5" e "user:5" (serviços diferentes); "sistema"/outros ficam sem nome.
+      const actorId = (a: string): number | null => { const m = /^(?:user:)?(\d+)$/.exec(a); return m ? Number(m[1]) : null; };
+      const names = await getOrganizationMemberNames(orgId, timeline.map((e) => actorId(e.actor)).filter((n): n is number => n !== null));
+      const timelineNamed = timeline.map((e) => { const id = actorId(e.actor); return { ...e, actorName: id !== null ? names.get(id) ?? null : null }; });
+      // Rascunho ≠ versão oficial: a última versão EMITIDA por tipo vem do ledger de promoções (leitura pura).
+      return { process, items, timeline: timelineNamed, documents, officialVersions: official.get(input.processId) ?? {} };
     }),
 
   listProcesses: tenantProcedure
     .input(z.object({ limit: z.number().min(1).max(100).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const processes = await listProcesses(orgId, input.limit ?? 50);
+      const rows = await listProcesses(orgId, input.limit ?? 50);
+      const official = await listLatestOfficialVersions(orgId, rows.map((p) => p.id));
+      const processes = rows.map((p) => ({ ...p, officialVersions: official.get(p.id) ?? {} }));
       return { processes, total: processes.length };
     }),
 
@@ -944,6 +953,18 @@ export const procurementProcessRouter = router({
           // PR-09 — aditivo: proveniência humana do conteúdo vigente + parâmetros persistidos do Edital.
           humanEdit,
           parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
+          // M8 — aditivo, somente leitura: escopo e TR oficial com que a minuta INSTITUCIONAL foi composta (manifest M1 +
+          // bindings que fixam a revisão). A UI reabre com esse contexto sem gravar nada; ambíguo/ausente ⇒ explícito.
+          // Falha na recuperação NUNCA derruba a leitura do rascunho: degrada para null (a tela pede a escolha explícita).
+          composedContext: input.kind === "edital"
+            ? await recoverComposedEditalContext(orgId, { id: doc.id, processId: input.processId, sources: doc.sources }).catch((err: unknown) => {
+                log.warn("edital_composed_context_recovery_failed", {
+                  organizationId: orgId, processId: input.processId, documentId: doc.id, correlationId: ctx.correlationId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                return null;
+              })
+            : null,
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,
         },

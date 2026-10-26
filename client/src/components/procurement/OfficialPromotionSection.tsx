@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
+import DocumentMarkdownView from "../documents/DocumentMarkdownView";
+import { actorLabel, formatDateTimeBR } from "../../lib/processDocumentStatus";
 import { confirmationInvalidated, pinReviewSnapshot, type ReviewSnapshotIdentity } from "./reviewSnapshotPin";
 
 /**
@@ -146,14 +148,22 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
             <h2 className="font-semibold text-foreground">Documento oficial ({KIND_LABEL[kind]})</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Emitir cria uma <strong>versão oficial imutável</strong> a partir do conteúdo revisado abaixo.
-              Regenerar o rascunho depois <strong>não</strong> altera a versão emitida — uma nova emissão cria
-              uma nova versão.
+              Depois de emitida, a versão oficial <strong>não</strong> muda — alterações no rascunho só se tornam
+              oficiais por uma nova emissão, que cria uma nova versão.
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${latest ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-muted text-muted-foreground"}`}>
             {latest ? `Emitida v${latest.version}` : "Nenhuma emitida"}
           </span>
         </div>
+        {/* Versão oficial vigente (preservada) × nova emissão: a autoria e a data vêm do ledger de emissões. */}
+        {latest && (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="official-emission-attribution">
+            Versão oficial vigente: <strong className="text-foreground">v{latest.version}</strong>, emitida em{" "}
+            {formatDateTimeBR(latest.emittedAt)}
+            {latest.emittedBy ? <> por {actorLabel(latest.emittedBy.name, latest.emittedBy.userId)}</> : null} — preservada e imutável.
+          </p>
+        )}
 
         {/* Divergência: rascunho difere da última versão emitida (pelo hash existente). */}
         {latest && diverged && (
@@ -206,7 +216,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         )}
         {blockers.length > 0 && (
           <div role="alert" className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            <strong>Emissão bloqueada:</strong>
+            <strong>{latest ? `Nova emissão bloqueada (a versão oficial v${latest.version} continua válida):` : "Emissão bloqueada:"}</strong>
             <ul className="mt-1 list-disc pl-5">
               {blockers.map((b) => <li key={b.code}>{b.message}</li>)}
             </ul>
@@ -218,11 +228,12 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">Conteúdo a emitir — {reviewSnapshot!.title}</span>
-              <span className="text-[11px] text-muted-foreground">atualizado em {reviewSnapshot!.updatedAt}</span>
+              <span className="text-[11px] text-muted-foreground">atualizado em {formatDateTimeBR(reviewSnapshot!.updatedAt)}</span>
             </div>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs text-foreground">
-              {reviewSnapshot!.content}
-            </pre>
+            {/* Visualização formatada (somente leitura) do MESMO texto que será emitido — o hash não muda. */}
+            <div className="max-h-96 overflow-auto rounded-lg border border-border bg-muted/40 p-3">
+              <DocumentMarkdownView content={reviewSnapshot!.content} ariaLabel={`Conteúdo a emitir — ${reviewSnapshot!.title}`} />
+            </div>
           </div>
         ) : (
           <p className="mt-4 text-xs text-amber-600 dark:text-amber-400">

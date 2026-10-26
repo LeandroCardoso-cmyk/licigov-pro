@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { latestOfficialSummary, stageLabel } from "../../lib/processDocumentStatus";
 
 /**
  * ProcessoLicitatorioHome — REAL (wired to tRPC).
@@ -12,19 +13,6 @@ import { trpc } from "../../lib/trpc";
  * text-muted-foreground, border-border, bg-primary). Cores funcionais de status
  * (blue/amber/green) preservadas.
  */
-
-const STAGE_LABELS: Record<string, string> = {
-  NEW_PROCESS: "Novo Processo",
-  DFD: "DFD",
-  ETP: "ETP",
-  PRICE_RESEARCH: "Pesquisa de Preços",
-  ITEM_WORKSPACE: "Workspace de Itens",
-  TR: "Termo de Referência",
-  NOTICE: "Edital",
-  REVIEW: "Revisão",
-  ISSUED: "Emitido",
-  ARCHIVED: "Arquivado",
-};
 
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
   rascunho: "bg-muted text-muted-foreground",
@@ -147,10 +135,17 @@ export default function ProcessoLicitatorioHome({
                 <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
                   {p.object}
                 </p>
-                <div className="flex items-center justify-between">
-                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    {STAGE_LABELS[p.currentStage] ?? p.currentStage}
-                  </span>
+                <div className="flex items-center justify-between gap-2">
+                  {/* Documento oficial mais avançado (ledger de emissões); sem emissão, a etapa registrada. */}
+                  {latestOfficialSummary(p.officialVersions) ? (
+                    <span className="rounded-md bg-green-100 dark:bg-green-900 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300">
+                      {latestOfficialSummary(p.officialVersions)}
+                    </span>
+                  ) : (
+                    <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary" title="Etapa registrada no processo">
+                      {stageLabel(p.currentStage)}
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     {new Date(p.updatedAt).toLocaleDateString("pt-BR")}
                   </span>

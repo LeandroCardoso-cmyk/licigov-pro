@@ -1,6 +1,7 @@
 import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
+import DocumentMarkdownView from "./DocumentMarkdownView";
 
 /**
  * RC-3 / PR B.1 — OfficialDocumentPanel (experiência documental ÚNICA).
@@ -106,10 +107,14 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
                 <p className="text-xs text-muted-foreground">Carregando prévia…</p>
               ) : (
                 <>
-                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs text-muted-foreground">{preview.data?.document?.content ?? "Sem conteúdo."}</pre>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
+                  {/* Visualização formatada e somente leitura do conteúdo IMUTÁVEL da versão (nada é regravado). */}
+                  <div className="max-h-[32rem] overflow-auto rounded border border-border bg-background p-3">
+                    <DocumentMarkdownView content={preview.data?.document?.content ?? ""} ariaLabel={`Visualização de ${d.title}`} />
+                  </div>
+                  <details className="mt-2 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer">Detalhes técnicos</summary>
                     replayHash: {preview.data?.document?.replayHash?.slice(0, 12)}… · template: {preview.data?.document?.template} · autor: {preview.data?.document?.author}
-                  </p>
+                  </details>
                 </>
               )}
             </div>

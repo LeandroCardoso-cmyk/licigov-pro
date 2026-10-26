@@ -24,6 +24,7 @@ import {
   getImportSession,
   findActiveSessionByChecksum,
   findResumableSessionForProcess,
+  listProcessImportSessionHistory,
   updateSessionStatus,
 } from "../services/fileIngestionService";
 import {
@@ -519,6 +520,26 @@ export const ingestionRouter = router({
       if (!session) return { session: null, staging: null };
       const summary = await getStagingSummary(session.id, orgId);
       return { session: toSessionStatus(session), staging: summary };
+    }),
+
+  /**
+   * M8 (homologação visual) — HISTÓRICO somente leitura das sessões de ingestão de um processo canônico (todas, não só a
+   * retomável), paginado. Mostra apenas o que está registrado: envio (sessão), aprovação (trilha de auditoria) e promoção
+   * (sessão → Pesquisa de Preços gerada). Qualquer membro ativo do órgão pode consultar (mesmo nível das demais leituras).
+   *
+   * NÃO exige `FF_CANONICAL_INGESTION`: a flag controla o uso da ingestão (enviar/revisar/promover); a evidência já
+   * registrada continua consultável depois que a funcionalidade é desligada (precedente: `getCapabilities`). Isolamento:
+   * organização do contexto + processo do próprio tenant (NOT_FOUND caso contrário).
+   */
+  listSessionHistory: tenantProcedure
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      limit: z.number().int().min(1).max(50).default(20),
+      offset: z.number().int().min(0).max(10_000).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      return listProcessImportSessionHistory(orgId, input.procurementProcessId, { limit: input.limit, offset: input.offset });
     }),
 
   /**

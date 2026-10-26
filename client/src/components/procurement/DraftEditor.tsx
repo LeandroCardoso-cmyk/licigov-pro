@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { shouldRotateSaveKeyOnError } from "./saveKeyPolicy";
+import DocumentMarkdownView from "../documents/DocumentMarkdownView";
+import { hasInternalMarkers } from "@shared/documentMarkers";
 
 /**
  * C.4B.3B — Edição HUMANA governada do rascunho canônico (ETP/TR/Edital).
@@ -30,6 +32,8 @@ export default function DraftEditor({ processId, kind, content, contentHash, onD
   const { key: saveKey, rotate: rotateSaveKey } = useIdempotencyKey();
   const [text, setText] = useState(content);
   const [conflict, setConflict] = useState(false);
+  // M8 — visualização formatada (leitura) separada do texto técnico (edição); começa na visualização.
+  const [mode, setMode] = useState<"view" | "edit">("view");
   // Sincroniza o editor com o snapshot persistido quando o HASH muda (recarga/refetch), sem sobrescrever
   // uma edição em curso sobre o mesmo snapshot.
   const loadedHash = useRef<string | null>(null);
@@ -70,15 +74,43 @@ export default function DraftEditor({ processId, kind, content, contentHash, onD
           O rascunho mudou desde o carregamento. Revise novamente antes de salvar.
         </div>
       )}
-      <label className="flex flex-col text-sm">
-        <span className="mb-1 font-medium text-foreground">Conteúdo</span>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={18}
-          className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </label>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-foreground">Conteúdo</span>
+        <div role="tablist" aria-label="Modo do conteúdo" className="inline-flex rounded-lg border border-border p-0.5 text-xs">
+          {([["view", "Visualizar"], ["edit", "Editar texto"]] as const).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={`rounded-md px-3 py-1 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {mode === "view" ? (
+        <div className="max-h-[36rem] overflow-auto rounded-lg border border-border bg-background p-4">
+          <DocumentMarkdownView content={text} ariaLabel="Visualização do rascunho" />
+        </div>
+      ) : (
+        <label className="flex flex-col text-sm">
+          <span className="sr-only">Texto do rascunho (formato técnico)</span>
+          {hasInternalMarkers(text) && (
+            <span className="mb-1 text-xs text-muted-foreground">
+              Trechos entre marcadores <code>licigov:</code> são gerados pelo sistema (quadro de itens) — não os altere.
+            </span>
+          )}
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={18}
+            className="rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
+      )}
       <div className="mt-3 flex items-center gap-3">
         <button
           type="button"
