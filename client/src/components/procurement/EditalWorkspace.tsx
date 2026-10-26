@@ -17,7 +17,7 @@ import { PublicationPendingNotice } from "./PublicationPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
-import { bridgeAllowsGeneration, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
+import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
   editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
@@ -128,7 +128,14 @@ export default function EditalWorkspace({
   );
   const draft = reviewable.data?.draft ?? null;
   const persisted = draft?.parameters ?? null;
-  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted);
+  // M8 — minuta INSTITUCIONAL já composta: o rascunho não grava modalidade/forma/plataforma (parâmetros legados), mas o
+  // servidor recupera, somente leitura, o escopo e o TR oficial da composição (manifest + bindings). Só HIDRATA a tela —
+  // nada é gravado; escopo ambíguo/ausente fica vazio e explicado (nenhum valor é presumido).
+  const composed = draft?.composedContext ?? null;
+  const composedParams = !persisted && composed?.scope
+    ? { modality: composed.scope.modality as Modality, form: composed.scope.form as Form, platform: (composed.scope.platform ?? null) as Platform | null }
+    : null;
+  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams);
   const { modality, form, platform } = effective;
   const textValues = resolveEditalTextValues(proposedText, persisted);
   const textProposal = editalTextProposal(proposedText, persisted);
@@ -180,8 +187,12 @@ export default function EditalWorkspace({
   const trQuery = trpc.procurementProcess.editalTrCandidates.useQuery({ processId }, { enabled: !!processId && bound });
   const trCandidates = (bound ? trQuery.data ?? [] : []) as TrCandidateView[];
   const [selectedTrId, setSelectedTrId] = useState<string | null>(null);
-  const trPin = trPinOf(trCandidates.find((c) => c.documentId === selectedTrId));
-  const bridgeGate = bridgeAllowsGeneration(resolution, trPin);
+  // M8 — sem escolha explícita, reabre com o TR oficial EXATO usado na composição, só se ele ainda for o vigente
+  // (mesmo documento, versão e hash). Versão superada ⇒ nada é escolhido automaticamente (aviso abaixo).
+  const composedTrId = composedTrCandidateId(trCandidates, composed?.trPin ?? null);
+  const effectiveTrId = selectedTrId ?? composedTrId;
+  const trPin = trPinOf(trCandidates.find((c) => c.documentId === effectiveTrId));
+  const bridgeGate = bridgeAllowsGeneration(resolution, trPin, trCandidates.some((c) => c.current));
   const boundParams = { modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined };
   // Preflight SOMENTE LEITURA (mesma revisão/fontes/composer da geração): o botão só é operacional com READY (o backend segue fail-closed).
   const preflightQuery = trpc.procurementProcess.editalTemplatePreflight.useQuery(
@@ -417,7 +428,19 @@ export default function EditalWorkspace({
             </button>
           </div>
         )}
-        {!persisted && !paramsComplete && (
+        {composedParams && proposed.modality === null && proposed.form === null && proposed.platform === null && (
+          <p className="text-xs text-muted-foreground" data-testid="edital-composed-context">
+            Modalidade, forma e plataforma recuperadas da minuta já composta pelo modelo institucional.
+          </p>
+        )}
+        {!persisted && composed && !composed.scope && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            {composed.scopeStatus === "AMBIGUOUS"
+              ? "A revisão do modelo usada nesta minuta está vinculada a mais de um escopo: selecione modalidade, forma e plataforma — nenhuma é presumida."
+              : "Não foi possível identificar o escopo usado nesta minuta: selecione modalidade, forma e plataforma — nenhuma é presumida."}
+          </p>
+        )}
+        {!persisted && !composedParams && !paramsComplete && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Defina modalidade, forma{form === "eletronico" ? " e plataforma" : ""} para gerar — nenhum padrão é assumido.
           </p>
@@ -425,11 +448,16 @@ export default function EditalWorkspace({
 
         {coreComplete && (
           <EditalTemplateBridgeCard
-            resolution={resolution} candidates={trCandidates} selectedTrId={selectedTrId} onSelectTr={setSelectedTrId}
+            resolution={resolution} candidates={trCandidates} selectedTrId={effectiveTrId} onSelectTr={setSelectedTrId}
             candidatesLoading={bound && trQuery.isLoading}
           />
         )}
         {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {bound && !selectedTrId && composed?.trPin && !composedTrId && trCandidates.length > 0 && (
+          <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
+            Esta minuta foi composta sobre o TR oficial v{composed.trPin.version}, que não é mais a versão vigente. Selecione o TR oficial exato para a nova composição — nenhuma versão é escolhida automaticamente.
+          </p>
+        )}
         {bound && selectedTrId && trCandidates.some((c) => c.documentId === selectedTrId && !c.current) && (
           <p role="alert" className="text-xs text-destructive">O TR oficial selecionado foi substituído por uma versão mais recente. Selecione o TR oficial exato novamente — nenhuma versão é escolhida automaticamente.</p>
         )}
@@ -467,13 +495,15 @@ export default function EditalWorkspace({
             {sourceState.data && sourceState.data.usedSources.length > 0 && (
               <span> Fontes reaproveitadas: {sourceState.data.usedSources.map(labelSource).join(", ")}.</span>
             )}
-            {sourceState.data && sourceState.data.missing.length > 0 && (
+            {/* Minuta institucional: critério/regime vêm da Configuração do certame (outra autoridade) — a lista legada não se aplica. */}
+            {sourceState.data && sourceState.data.state !== "template_governed" && sourceState.data.missing.length > 0 && (
               <span className="block text-xs opacity-90">
                 Pendências para revisar: {sourceState.data.missing.map(labelSource).join(", ")}.
               </span>
             )}
             <span className="block text-xs opacity-80">
-              Gerada em {new Date(draft.updatedAt).toLocaleString("pt-BR")} · situação: {draft.status}.
+              Gerada em {new Date(draft.updatedAt).toLocaleString("pt-BR")} · situação: {draft.status}
+              {composed ? " · composta pelo modelo institucional" : ""}.
             </span>
           </div>
 

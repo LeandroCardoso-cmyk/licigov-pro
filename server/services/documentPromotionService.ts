@@ -32,6 +32,7 @@ import { draftContentHash } from "../domain/generatedDocument";
 import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 import type { OrgRole } from "../../drizzle/schema";
 import { getLatestEmittedByOrigin } from "../db/officialDocuments";
+import { getOrganizationMemberNames } from "../db/organizations";
 import { getAuthoringSourceState, getEditalSourceState } from "./procurementProcessService";
 import { emissionBlockers, lineDiffStats, type EmissionBlocker } from "../domain/emissionPreconditions";
 import type { PromotionTemplateIssuanceHook } from "./institutionalTemplates/templateCompositionService";
@@ -336,7 +337,11 @@ export async function promoteOfficialDocument(params: {
 
 export interface OfficialPromotionSummary {
   draft: { exists: boolean; status: string | null; contentHash: string | null };
-  latestOfficial: { officialDocumentId: string; version: number; contentHash: string; emittedAt: string } | null;
+  latestOfficial: {
+    officialDocumentId: string; version: number; contentHash: string; emittedAt: string;
+    /** Quem emitiu (registrado no ledger); nome só quando o usuário é membro desta organização. */
+    emittedBy: { userId: number; name: string | null };
+  } | null;
   /** true quando existe rascunho E já houve emissão E o conteúdo do rascunho difere da última emitida. */
   diverged: boolean;
   /** true quando existe rascunho promovível mas nenhuma versão oficial foi emitida ainda. */
@@ -361,10 +366,14 @@ export async function getOfficialPromotionSummary(params: {
   const pre = exists && draftHash
     ? await resolveEmissionPreconditions({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, content: draft!.content, contentHash: draftHash })
     : null;
+  const emitterName = latest ? (await getOrganizationMemberNames(params.organizationId, [latest.actorUserId])).get(latest.actorUserId) ?? null : null;
   return {
     draft: { exists, status: draft?.status ?? null, contentHash: draftHash },
     latestOfficial: latest
-      ? { officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt }
+      ? {
+        officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt,
+        emittedBy: { userId: latest.actorUserId, name: emitterName },
+      }
       : null,
     diverged: !!(exists && latest && draftHash !== latest.contentHash),
     neverEmitted: exists && !latest,

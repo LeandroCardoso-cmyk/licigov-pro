@@ -125,6 +125,8 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      // Tablet (< 1024 px): começa recolhido em ícones para não consumir ~1/3 da largura; o usuário pode expandir.
+      defaultOpen={typeof window === "undefined" || window.innerWidth >= 1024}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -148,7 +150,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const { canManageUsers } = useOrgRole();
+  const { canManageUsers, organizationName } = useOrgRole();
   const templatesCaps = trpc.institutionalTemplates.getCapabilities.useQuery(undefined, { retry: false, staleTime: 5 * 60_000 });
   const institutionalTemplatesEnabled = templatesCaps.data?.enabled === true;
   const { theme, setTheme } = useTheme();
@@ -292,6 +294,13 @@ function DashboardLayoutContent({
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
                       {user?.email || "-"}
                     </p>
+                    {organizationName && (
+                      <p className="text-xs text-muted-foreground truncate mt-1" title={organizationName}>
+                        <span className="sr-only">Órgão ativo: </span>
+                        <Building2 className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />
+                        {organizationName}
+                      </p>
+                    )}
                   </div>
                 </button>
               </DropdownMenuTrigger>

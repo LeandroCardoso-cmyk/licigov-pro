@@ -52,7 +52,14 @@ export function emissionBlockers(input: EmissionPreconditionInput): EmissionBloc
   }
   if (input.sourceState === "source_changed") {
     const what = input.changedSourceLabels.length ? `: ${input.changedSourceLabels.join(", ")}` : "";
-    out.push({ code: "EMISSION_SOURCES_CHANGED", message: `As fontes do processo mudaram depois da geração deste documento${what} — revise/regenere antes de emitir.` });
+    // Com versão oficial já emitida, a regeneração direta é recusada (`OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE`) e a
+    // edição do rascunho não atualiza as fontes registradas: orientar a "regenerar" seria um beco sem saída.
+    out.push(input.lastEmittedVersion !== null
+      ? {
+        code: "EMISSION_SOURCES_CHANGED",
+        message: `As fontes do processo mudaram depois da emissão da versão oficial v${input.lastEmittedVersion}${what}. A versão emitida continua válida e preservada. Emitir uma nova versão exige o ciclo de nova versão governada, ainda não disponível — a regeneração direta não é permitida para documento já emitido.`,
+      }
+      : { code: "EMISSION_SOURCES_CHANGED", message: `As fontes do processo mudaram depois da geração deste documento${what} — gere novamente o rascunho (e revise) antes de emitir.` });
   }
   if (input.kind === "edital" && !input.trEmitted) {
     out.push({ code: "EMISSION_TR_NOT_EMITTED", message: "O Edital só pode ser emitido depois do Termo de Referência emitido (ordem DFD → ETP → TR → Edital)." });
