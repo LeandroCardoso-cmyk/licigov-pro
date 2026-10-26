@@ -290,10 +290,12 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     // ── TR estruturado (Processo A) ────────────────────────────────────────────────────────────────────────────────────────
     const trBefore = await trState(a);
     expect(trBefore.status).toBe("READY");
-    expect(trBefore.summary.pending).toBeGreaterThan(20);
+    // M8 (pós-homologação) — o objeto completo é SUPRIDO pela fonte autoritativa (objeto do processo/TR oficial): não conta como pendência.
+    expect(trBefore.summary.pending).toBeGreaterThanOrEqual(20);
+    expect((trBefore.fields as any[]).find((f) => f.name === "processo.objetoCompleto")?.suppliedBy).toBeDefined();
     const trFill = await fillTrStamped(a);   // o TR oficial emitido traz o objeto estruturado
     const trAfter = await trState(a);
-    expect(trAfter.summary.pending).toBe(1);   // só o objeto completo (vem do TR oficial exato)
+    expect(trAfter.summary.pending).toBe(0);   // antes: 1 (o objeto completo era cobrado de novo, embora o TR oficial o traga)
     const prepNoTr = await getState(a);
     expect(prepNoTr.metrics.TR_PENDING).toBe(0);
     expect(prepNoTr.metrics.UPSTREAM_TR_REUSED).toBeGreaterThan(20);

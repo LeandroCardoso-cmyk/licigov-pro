@@ -16,7 +16,7 @@ import {
   estimateRowView, quoteRowView, sourceChangedNoticeText, ESTIMATE_NO_QUANTITY_TEXT, ESTIMATE_UNAVAILABLE_TEXT, type SourcesPriceSummary,
 } from "./authoringSourcesView";
 import { draftSituationLabel, draftStatusLabel, processStatusLabel } from "@/lib/processDocumentStatus";
-import { trPendingFields, trSuppliedByProcessFields, type TrParamViewModel } from "@/lib/contextReuse";
+import { suppliedByText, trPendingFields, trSuppliedFields, type TrParamViewModel } from "@/lib/contextReuse";
 
 const read = (rel: string) => readFileSync(path.resolve(rel), "utf8");
 
@@ -91,9 +91,12 @@ describe("TR emitido: 'fontes mudaram' não contradiz o bloqueio de regeneraçã
     expect(t).toContain("ETP está aprovado");
     expect(t).not.toMatch(/decida se deve gerar/);
   });
+  it("bloqueio ainda carregando: só o fato, sem orientar a regenerar (nada pisca errado)", () => {
+    expect(sourceChangedNoticeText("tr", "loading")).toBe("As fontes do processo mudaram desde a última geração deste TR.");
+  });
   it("a tela usa o bloqueio canônico do servidor (reviewableDraft) nos dois workspaces", () => {
     for (const f of ["TRWorkspace", "ETPWorkspace"]) {
-      expect(read(`client/src/components/procurement/${f}.tsx`)).toMatch(/<AuthoringSourcesSummary [^>]*regenerationBlock=\{regenerationBlock\}/);
+      expect(read(`client/src/components/procurement/${f}.tsx`)).toMatch(/<AuthoringSourcesSummary [^>]*regenerationBlock=\{reviewable\.isLoading \? "loading" : regenerationBlock\}/);
     }
     expect(read("client/src/components/procurement/AuthoringSourcesSummary.tsx")).not.toContain("decida se deve gerar");
   });
@@ -121,7 +124,7 @@ describe("valor estimado: ausência nunca vira R$ 0,00; fictícia não é base",
     const v = estimateRowView(s({ pricedItems: 1, unpricedItems: 1, estimatedGlobalTotalCents: 2000, priceSuspendedItems: 1, fictitiousPriceItems: 1, fictitiousQuoteCount: 1, quoteCount: 3 }));
     expect(v.label).toMatch(/^Valor estimado global PARCIAL \(1 de 2/);
     expect(v.label).toMatch(/R\$\s?20,00$/);
-    expect(quoteRowView(s({ fictitiousQuoteCount: 1, quoteCount: 3 }))).toMatchObject({ ok: true });
+    expect(quoteRowView(s({ fictitiousQuoteCount: 1, quoteCount: 3, pricedItems: 1, unpricedItems: 1 }))).toMatchObject({ ok: true });
   });
   it("tudo com preço: rótulo e valor de sempre; sem fictícia, texto de cotações inalterado", () => {
     const v = estimateRowView(s({ pricedItems: 2, unpricedItems: 0, estimatedGlobalTotalCents: 376000, priceSuspendedItems: 0, fictitiousPriceItems: 0, fictitiousQuoteCount: 0 }));
@@ -133,6 +136,23 @@ describe("valor estimado: ausência nunca vira R$ 0,00; fictícia não é base",
     const v = estimateRowView(s({ pricedItems: 2, unpricedItems: 0, estimatedGlobalTotalCents: 0, priceSuspendedItems: 0, fictitiousPriceItems: 0, unknownQuantityItems: 2 }));
     expect(v.label).toBe(ESTIMATE_NO_QUANTITY_TEXT);
     expect(v.detail).toContain("2 item(ns) sem quantidade informada");
+  });
+  it("auditoria: item com fictícia E reais fica todo suspenso ⇒ a linha de cotações não marca sucesso", () => {
+    const q = quoteRowView(s({ quoteCount: 3, fictitiousQuoteCount: 1, pricedItems: 0, unpricedItems: 1, approvedItems: 1 }));
+    expect(q.ok).toBe(false);
+    expect(q.label).toContain("2 importada(s) com preço");
+  });
+  it("auditoria: homologação sintética autorizada ⇒ total com ressalva de valor demonstrativo, sem sucesso", () => {
+    const st = s({ pricedItems: 2, unpricedItems: 0, estimatedGlobalTotalCents: 376000, priceSuspendedItems: 0, fictitiousPriceItems: 0, demonstrativePriceItems: 2 });
+    const v = estimateRowView(st);
+    expect(v.ok).toBe(false);
+    expect(v.detail).toContain("valor demonstrativo de 2 item(ns)");
+    expect(quoteRowView(st).ok).toBe(false);
+  });
+  it("auditoria: item com preço e sem quantidade ⇒ total rotulado PARCIAL, nunca global", () => {
+    const v = estimateRowView(s({ pricedItems: 2, unpricedItems: 0, estimatedGlobalTotalCents: 2000, priceSuspendedItems: 0, fictitiousPriceItems: 0, fictitiousQuoteCount: 0, unknownQuantityItems: 1 }));
+    expect(v.ok).toBe(false);
+    expect(v.label).toMatch(/^Valor estimado global PARCIAL \(1 de 2 item\(ns\) sem quantidade informada/);
   });
   it("resposta antiga (sem os campos novos) continua legível", () => {
     const v = estimateRowView({ approvedItems: 1, quoteCount: 2, pricedItems: 1, unpricedItems: 0, estimatedGlobalTotalCents: 500 });
@@ -157,29 +177,32 @@ describe("status em linguagem natural", () => {
   });
 });
 
-describe("'Objeto completo' é suprido pelo objeto do processo (uma informação, um preenchimento)", () => {
+describe("'Objeto completo' é suprido pela fonte autoritativa (uma informação, um preenchimento)", () => {
   const f = (o: Partial<TrParamViewModel>): TrParamViewModel => ({
     name: "x", path: "x", type: "text", description: "X", required: true, conditional: false, requiredWhenVariables: [],
     active: true, status: "UNSET", defaultEligible: false, ...o,
   });
-  const objeto = f({ name: "processo.objetoCompleto", description: "Objeto completo" });
   const prazo = f({ name: "contratacao.prazoEntrega", description: "Prazo" });
-  it("com objeto no processo: não é pendência; aparece como obtido do processo; nada é confirmado", () => {
-    expect(trPendingFields([objeto, prazo], "Aquisição de material").map((x) => x.name)).toEqual(["contratacao.prazoEntrega"]);
-    expect(trSuppliedByProcessFields([objeto, prazo], "Aquisição de material").map((x) => x.name)).toEqual(["processo.objetoCompleto"]);
+  it("suprido pelo servidor: não é pendência; aparece como obtido; nada é confirmado", () => {
+    const objeto = f({ name: "processo.objetoCompleto", suppliedBy: { source: "tr_oficial", value: "Aquisição", version: 2 } });
+    expect(trPendingFields([objeto, prazo]).map((x) => x.name)).toEqual(["contratacao.prazoEntrega"]);
+    expect(trSuppliedFields([objeto, prazo]).map((x) => x.name)).toEqual(["processo.objetoCompleto"]);
+    expect(suppliedByText({ source: "tr_oficial", value: "Aquisição", version: 2 })).toContain("TR oficial emitido (v2)");
+    expect(suppliedByText({ source: "processo", value: "Aquisição" })).toContain("a emissão do TR registra este objeto");
   });
-  it("sem objeto no processo: volta a ser pendência (nada presumido)", () => {
-    expect(trPendingFields([objeto], "  ").map((x) => x.name)).toEqual(["processo.objetoCompleto"]);
+  it("auditoria: sem `suppliedBy` (ex.: TR emitido antes do registro do objeto) continua pendente e editável no TR", () => {
+    const objeto = f({ name: "processo.objetoCompleto" });
     expect(trPendingFields([objeto]).map((x) => x.name)).toEqual(["processo.objetoCompleto"]);
-    expect(trSuppliedByProcessFields([objeto], null)).toEqual([]);
+    expect(trSuppliedFields([objeto])).toEqual([]);
   });
-  it("valor já confirmado no TR prevalece como confirmado (não vira 'obtido do processo')", () => {
-    expect(trSuppliedByProcessFields([f({ name: "processo.objetoCompleto", status: "SET", value: "Texto detalhado" })], "Aquisição")).toEqual([]);
+  it("valor já confirmado no TR prevalece como confirmado", () => {
+    const set = f({ name: "processo.objetoCompleto", status: "SET", value: "Texto", suppliedBy: { source: "processo", value: "A" } });
+    expect(trSuppliedFields([set])).toEqual([]);
   });
-  it("o TR passa o objeto do processo para a seção; a seção não grava nada para suprir", () => {
-    expect(read("client/src/components/procurement/TRWorkspace.tsx")).toMatch(/<TrStructuredParamsSection [^>]*processObject=\{processObject\}/);
+  it("a seção usa só o que o servidor indica (sem segunda fonte de verdade no cliente) e não grava nada para suprir", () => {
     const section = read("client/src/components/procurement/TrStructuredParamsSection.tsx");
-    expect(section).toContain("trSuppliedByProcessFields(live, processObject)");
-    expect(section).toContain('aria-label="Obtidos do processo"');
+    expect(section).toContain("trSuppliedFields(live)");
+    expect(section).not.toContain("processObject");
+    expect(read("client/src/lib/contextReuse.ts")).not.toContain('"processo.objetoCompleto"');
   });
 });

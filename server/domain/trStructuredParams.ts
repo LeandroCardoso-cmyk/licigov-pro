@@ -83,3 +83,33 @@ export function trParamsDigest(params: ReadonlyMap<string, ResolvedTrParam>): st
 
 /** Hash curto do valor codificado (base da superação consciente `basisValueHash`). */
 export const encodedValueHash = (encoded: string): string => factValueHash(encoded);
+
+/**
+ * M8 (pós-homologação visual, "uma informação, um preenchimento") — parâmetros do TR que o PROCESSO já supre. O Edital usa
+ * `processo.objetoCompleto` do TR oficial EXATO (`metadata.object`, gravado na emissão a partir de `process.object`) antes de
+ * qualquer valor digitado nos Parâmetros estruturados; só o TR VIGENTE é aceito como pin.
+ */
+export const TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT: ReadonlySet<string> = new Set(["processo.objetoCompleto"]);
+
+export type TrParamSupply =
+  | { readonly source: "tr_oficial"; readonly value: string; readonly version: number }
+  | { readonly source: "processo"; readonly value: string };
+
+/**
+ * Quem supre o objeto completo SEM novo preenchimento — ou null (continua pendente no TR):
+ *  - TR vigente emitido COM `metadata.object` ⇒ esse valor (é o que o Edital usa);
+ *  - TR vigente emitido SEM `metadata.object` (emissão anterior a 06/10/2026) ⇒ null: o Edital cai no parâmetro do TR;
+ *  - nenhum TR emitido e processo com objeto ⇒ o objeto do processo (a emissão o registra no TR oficial).
+ * Nunca grava nem confirma nada; é só a leitura de quem já é a fonte.
+ */
+export function processObjectSupply(
+  processObject: string | null | undefined,
+  currentEmittedTr: { readonly version: number; readonly metadata: Readonly<Record<string, unknown>> } | null,
+): TrParamSupply | null {
+  if (currentEmittedTr) {
+    const o = currentEmittedTr.metadata?.["object"];
+    return typeof o === "string" && o.trim() ? { source: "tr_oficial", value: o.trim(), version: currentEmittedTr.version } : null;
+  }
+  const p = processObject?.trim();
+  return p ? { source: "processo", value: p } : null;
+}

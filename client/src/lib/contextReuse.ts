@@ -14,6 +14,8 @@ export interface TrParamViewModel {
   origin?: { sourceType: string; sourceId: string; sourceVersion: string; status: string; actorUserId: number | null; updatedAt: string | null };
   proposal?: { value: unknown; orgProfileRevision: number };
   defaultEligible: boolean;
+  /** M8 — suprido pela fonte autoritativa (servidor): não é pendência. */
+  suppliedBy?: { source: "tr_oficial"; value: string; version: number } | { source: "processo"; value: string };
 }
 export type TrStructuredView =
   | { status: "UNAVAILABLE"; reason: string }
@@ -30,22 +32,25 @@ export function trParamToPrepField(f: TrParamViewModel): PrepField {
 }
 
 /**
- * M8 (Discovery "Objeto completo") — parâmetro que o PROCESSO já supre: o objeto do processo é gravado no TR oficial na emissão
- * (`metadata.object`) e o Edital usa o do TR exato antes de qualquer valor digitado aqui (`processo.objetoCompleto` ⇒ `TR_OBJECT`).
- * Pedi-lo de novo seria um segundo preenchimento que o Edital ignora. Nada é gravado nem confirmado em nome da pessoa: o campo só
- * deixa de ser cobrado como pendência enquanto o processo tem objeto (sem objeto, volta a ser pendente).
+ * M8 (Discovery "Objeto completo") — sem valor no TR, mas SUPRIDO pela fonte autoritativa que o servidor indica (`suppliedBy`:
+ * TR oficial vigente com objeto, ou objeto do processo quando ainda não há TR emitido). Não é pendência e não pede segundo
+ * preenchimento; nada é gravado nem confirmado em nome da pessoa. Sem `suppliedBy` (ex.: TR emitido antes do registro do
+ * objeto), o campo continua pendente — o Edital o exige no TR.
  */
-export const TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT: ReadonlySet<string> = new Set(["processo.objetoCompleto"]);
+export const isSuppliedBySource = (f: TrParamViewModel): boolean => f.status === "UNSET" && !!f.suppliedBy;
 
-export const isSuppliedByProcessObject = (f: TrParamViewModel, processObject?: string | null): boolean =>
-  TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(f.name) && f.status === "UNSET" && !!processObject?.trim();
+/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR — exceto o que a fonte autoritativa já supre. */
+export const trPendingFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
+  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET" && !isSuppliedBySource(f));
+/** Supridos pela fonte autoritativa (sem valor confirmado no TR): exibidos como informação, não como pendência. */
+export const trSuppliedFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] => fields.filter(isSuppliedBySource);
 
-/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR — exceto o que o processo já supre. */
-export const trPendingFields = (fields: readonly TrParamViewModel[], processObject?: string | null): TrParamViewModel[] =>
-  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET" && !isSuppliedByProcessObject(f, processObject));
-/** Obtidos do processo (sem valor confirmado no TR): exibidos como informação, não como pendência. */
-export const trSuppliedByProcessFields = (fields: readonly TrParamViewModel[], processObject?: string | null): TrParamViewModel[] =>
-  fields.filter((f) => isSuppliedByProcessObject(f, processObject));
+/** Texto da origem do valor suprido (o que o Edital de fato usa). */
+export function suppliedByText(s: NonNullable<TrParamViewModel["suppliedBy"]>): string {
+  return s.source === "tr_oficial"
+    ? `Obtido do TR oficial emitido (v${s.version}), que registra o objeto do processo; o Edital usa este valor. Não é preciso digitar de novo.`
+    : "Obtido do objeto do processo: a emissão do TR registra este objeto e o Edital o reaproveita. Não é preciso digitar de novo.";
+}
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */
 export const trOptionalFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
   fields.filter((f) => f.active && !f.required && !f.conditional && f.status === "UNSET");

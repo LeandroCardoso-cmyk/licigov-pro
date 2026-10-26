@@ -1457,6 +1457,8 @@ export async function getAuthoringSourceState(params: {
     fictitiousPriceItems: number;
     /** M8 — itens sem quantidade informada (fora do total; nunca "0"). */
     unknownQuantityItems: number;
+    /** M8 — itens cujo preço no total é DEMONSTRATIVO (cotação fictícia admitida só em homologação sintética autorizada). */
+    demonstrativePriceItems: number;
   };
   /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
   changedSources: Array<{ key: SourceKey; label: string }>;
@@ -1477,6 +1479,7 @@ export async function getAuthoringSourceState(params: {
     priceSuspendedItems: ctx.estimate.rows.filter((r) => !!r.priceBlockedReason).length,
     fictitiousPriceItems: ctx.estimate.rows.filter((r) => r.priceBlockedReason === "FICTITIOUS_SOURCE").length,
     unknownQuantityItems: ctx.estimate.unknownQuantityItemCount,
+    demonstrativePriceItems: ctx.estimate.rows.filter((r) => (r.fictitiousQuoteCount ?? 0) > 0 && !r.priceBlockedReason && r.averagePriceCents > 0).length,
   };
   const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
   if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };

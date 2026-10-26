@@ -526,6 +526,10 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const v2 = await trDoc({ org, w, tr: null as any, model: null }, 2, "Objeto v2 (vigente, estruturado)");
     const p: P = { org, w, tr: v2, model: await publishBll(org) };
     await fillPending(p, { scope: "ALL", skipTr: ["processo.objetoCompleto"] });
+    // M8 (pós-homologação) — "Objeto completo" sem valor no TR é SUPRIDO pelo TR oficial VIGENTE (o que o Edital usa): não é pendência.
+    const trp = await harnessOf(p).proc().trStructuredParams({ processId: w.processId, ...harnessOf(p).ws }) as any;
+    expect(trp.fields.find((f: any) => f.name === "processo.objetoCompleto")).toMatchObject({ status: "UNSET", suppliedBy: { source: "tr_oficial", value: "Objeto v2 (vigente, estruturado)", version: 2 } });
+    expect(trp.summary.pending).toBe(0);
     await gen(p);
     const text = (await draftText(p))!;
     expect(text).toContain("Objeto v2 (vigente, estruturado)");
@@ -600,6 +604,12 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     const s0 = await getState(p);
     const obj0 = s0.sections.flatMap((s) => s.fields).find((f) => f.name === "processo.objetoCompleto")!;
     expect(obj0).toMatchObject({ class: "TR_PROJECTION", status: "PENDING_TR", editable: false });
+    // M8 (pós-homologação) — TR vigente emitido SEM objeto registrado (emissão antiga): o TR NÃO o dá por suprido; segue pendente
+    // e editável nos Parâmetros estruturados (é onde o Edital manda informá-lo).
+    const trp0 = await harnessOf(p).proc().trStructuredParams({ processId: w.processId, ...harnessOf(p).ws }) as any;
+    const oc0 = trp0.fields.find((f: any) => f.name === "processo.objetoCompleto");
+    expect(oc0.status).toBe("UNSET");
+    expect(oc0.suppliedBy).toBeUndefined();
     // a pessoa supre a ausência no fluxo do TR (Parâmetros estruturados) — NÃO na preparação do Edital
     const typed = (await fillPending(p, { scope: "PROCESS" })).typed;
     expect(typed.length).toBeGreaterThan(0);

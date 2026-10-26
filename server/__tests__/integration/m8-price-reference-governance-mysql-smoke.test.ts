@@ -363,6 +363,9 @@ describe.skipIf(!DB)("M8 — governança dos preços de referência (MySQL estri
     const auth = await resolveDocumentAuthoringContext({ organizationId: ORG_H, processId: pid, kind: "tr", object: OBJ });
     expect(auth.authoritativeBlock).not.toContain(FICTITIOUS_PRICE_CELL_TEXT);
     expect(auth.authoritativeBlock).toContain(fictitiousQuotesReviewText(2)); // [37] continua demonstrativo e marcado
+    // M8 (pós-homologação) — o resumo de fontes sinaliza o valor DEMONSTRATIVO no total (a UI não o marca como referência válida).
+    const src = await (await caller(U.ownerH, ORG_H)).procurementProcess.authoringSourceState({ processId: pid, kind: "tr", object: OBJ });
+    expect(src.summary).toMatchObject({ pricedItems: 1, fictitiousPriceItems: 0, priceSuspendedItems: 0, demonstrativePriceItems: 1, fictitiousQuoteCount: 2 });
     const hash = await stripReviewMarkers(U.ownerH, ORG_H, pid, "strip-hom");
     const ok = await (await caller(U.emitterH, ORG_H)).procurementProcess.promoteOfficial({ processId: pid, kind: "etp", idempotencyKey: K("emit-hom"), expectedContentHash: hash });
     expect(ok.promoted).toBe(true); // [38] jornada de homologação continua operacional

@@ -14,7 +14,7 @@ import type { RegenerationBlock } from "./regenerationGuard";
 export type AuthoringSourcesSummaryProps = {
   processId: string; kind: "etp" | "tr"; object: string;
   /** Bloqueio canônico de regeneração (`reviewableDraft.regenerationBlock`): com ele, "fontes mudaram" não sugere regenerar. */
-  regenerationBlock?: RegenerationBlock;
+  regenerationBlock?: RegenerationBlock | "loading";
 };
 
 function Row({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {

@@ -89,7 +89,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
           O sistema estrutura um rascunho a partir do processo (objeto e DFD, se houver). Rascunho editável e
           sujeito a revisão humana — nunca um documento oficial automático.
         </p>
-        {processId && object.trim() && <div className="mb-3"><AuthoringSourcesSummary processId={processId} kind="etp" object={object} regenerationBlock={regenerationBlock} /></div>}
+        {processId && object.trim() && <div className="mb-3"><AuthoringSourcesSummary processId={processId} kind="etp" object={object} regenerationBlock={reviewable.isLoading ? "loading" : regenerationBlock} /></div>}
         <label className="flex flex-col text-sm">
           <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input
