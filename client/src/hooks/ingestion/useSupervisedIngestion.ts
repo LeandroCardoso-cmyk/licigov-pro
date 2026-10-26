@@ -14,6 +14,7 @@ import { sha256HexOfBlob, sha256HexOfText, newIdempotencyKey } from "@/lib/inges
 import {
   PASTED_CONTENT_MIME,
   PASTED_CONTENT_FILENAME,
+  shouldQueryActiveSession,
 } from "@/lib/ingestion/capabilities";
 import {
   derivePhase,
@@ -21,6 +22,7 @@ import {
   type IngestionSessionStatus,
 } from "@/lib/ingestion/status";
 import { canPromoteSession } from "@/lib/ingestion/promotion";
+import { useIngestionCapabilities } from "./useIngestionCapabilities";
 
 export type IngestionImportType =
   | "price_research" | "tr_items" | "catmat" | "generic"
@@ -76,9 +78,13 @@ export function useSupervisedIngestion(opts: UseSupervisedIngestionOptions) {
 
   // Retomada por processo (reload): adota a sessão resumível SOMENTE deste processo canônico E deste
   // workspace (importType) — a sessão da Pesquisa nunca aparece no TR e vice-versa.
+  // M8 — só consulta quando a capability canônica do tenant está habilitada (mesma query/cache de
+  // `useIngestionCapabilities`): sem ela, o backend recusa (403) e não há sessão a retomar. O backend continua
+  // autorizando cada chamada (fail-closed); aqui só não se dispara a consulta que se sabe recusada.
+  const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const activeQuery = trpc.ingestion.getActiveSession.useQuery(
     { procurementProcessId: opts.procurementProcessId, importType: opts.importType },
-    { enabled: !!opts.procurementProcessId && sessionId == null, refetchOnWindowFocus: false },
+    { enabled: shouldQueryActiveSession({ ingestionEnabled, procurementProcessId: opts.procurementProcessId, sessionId }), refetchOnWindowFocus: false },
   );
   // U2A — sessão que o usuário DISPENSOU ("Enviar outro arquivo") não é readotada pela retomada; a sessão
   // persistida continua íntegra (o mesmo arquivo reenviado a reutiliza pelo checksum).

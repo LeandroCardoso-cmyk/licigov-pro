@@ -59,6 +59,30 @@ export function draftStatusLabel(status: string | null | undefined): string {
   return DRAFT_STATUS_LABELS[status] ?? status;
 }
 
+/** Situação do processo (`procurement_processes.status`) — a MESMA tabela da lista de processos e da Visão Geral. */
+export const PROCESS_STATUS_LABELS: Readonly<Record<string, string>> = {
+  rascunho: "Rascunho", em_andamento: "Em andamento", em_revisao: "Em revisão", emitido: "Emitido", arquivado: "Arquivado",
+};
+
+export function processStatusLabel(status: string | null | undefined): string {
+  if (!status) return "—";
+  return PROCESS_STATUS_LABELS[status] ?? status;
+}
+
+const DRAFT_SITUATION_LABELS: Readonly<Record<string, string>> = {
+  rascunho: "Rascunho em elaboração", em_revisao: "Rascunho em revisão", aprovado: "Rascunho aprovado",
+  emitido: "Rascunho emitido", arquivado: "Rascunho arquivado",
+};
+
+/**
+ * M8 — linha do rascunho na lista de documentos, em linguagem natural e sem repetir a palavra ("Rascunho: rascunho").
+ * Valor desconhecido nunca é inventado: aparece como está, rotulado.
+ */
+export function draftSituationLabel(status: string | null | undefined): string {
+  if (!status) return "Rascunho: —";
+  return DRAFT_SITUATION_LABELS[status] ?? `Rascunho: ${status}`;
+}
+
 /** "Emitido v2" quando há versão oficial do tipo; null quando nunca foi emitido. */
 export function officialVersionLabel(versions: OfficialVersions | null | undefined, kind: string): string | null {
   const v = versions?.[kind];

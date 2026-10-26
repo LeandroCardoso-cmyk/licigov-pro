@@ -76,7 +76,9 @@ describe("Visão Geral — TR emitido coexistindo com rascunho", () => {
     expect(html).toContain("TR emitido (v2)");
     expect(html).toContain("Emitido v2");
     expect(html).toContain("Etapa registrada: Pesquisa de Preços");
-    expect(html).toContain("Rascunho: rascunho");
+    // M8 pós-homologação — situação do rascunho em linguagem natural (antes "Rascunho: rascunho").
+    expect(html).toContain("Rascunho em elaboração");
+    expect(html).not.toContain("Rascunho: rascunho");
     expect(html).toContain("Modalidade: Pregão");
     expect(html).not.toContain("Copilotos");
     // Edital sem versão emitida não recebe o selo oficial.

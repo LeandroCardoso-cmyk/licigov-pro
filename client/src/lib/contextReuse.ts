@@ -29,9 +29,23 @@ export function trParamToPrepField(f: TrParamViewModel): PrepField {
   };
 }
 
-/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR. */
-export const trPendingFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
-  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET");
+/**
+ * M8 (Discovery "Objeto completo") — parâmetro que o PROCESSO já supre: o objeto do processo é gravado no TR oficial na emissão
+ * (`metadata.object`) e o Edital usa o do TR exato antes de qualquer valor digitado aqui (`processo.objetoCompleto` ⇒ `TR_OBJECT`).
+ * Pedi-lo de novo seria um segundo preenchimento que o Edital ignora. Nada é gravado nem confirmado em nome da pessoa: o campo só
+ * deixa de ser cobrado como pendência enquanto o processo tem objeto (sem objeto, volta a ser pendente).
+ */
+export const TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT: ReadonlySet<string> = new Set(["processo.objetoCompleto"]);
+
+export const isSuppliedByProcessObject = (f: TrParamViewModel, processObject?: string | null): boolean =>
+  TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(f.name) && f.status === "UNSET" && !!processObject?.trim();
+
+/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR — exceto o que o processo já supre. */
+export const trPendingFields = (fields: readonly TrParamViewModel[], processObject?: string | null): TrParamViewModel[] =>
+  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET" && !isSuppliedByProcessObject(f, processObject));
+/** Obtidos do processo (sem valor confirmado no TR): exibidos como informação, não como pendência. */
+export const trSuppliedByProcessFields = (fields: readonly TrParamViewModel[], processObject?: string | null): TrParamViewModel[] =>
+  fields.filter((f) => isSuppliedByProcessObject(f, processObject));
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */
 export const trOptionalFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
   fields.filter((f) => f.active && !f.required && !f.conditional && f.status === "UNSET");

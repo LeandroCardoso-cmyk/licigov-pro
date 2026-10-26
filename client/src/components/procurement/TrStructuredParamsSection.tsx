@@ -4,13 +4,15 @@ import PrepFieldControl from "./PrepFieldControl";
 import UseAsDefaultButton from "./UseAsDefaultButton";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals,
+  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals, trSuppliedByProcessFields,
   type TrParamViewModel, type TrStructuredView,
 } from "@/lib/contextReuse";
 import { evaluateCond, formatDisplay, parseField, type FormValue } from "@/lib/editalPreparation";
 
 export interface TrStructuredParamsSectionProps {
   processId: string;
+  /** Objeto do processo: supre "Objeto completo" (gravado no TR oficial na emissão), sem segundo preenchimento. */
+  processObject?: string | null;
   /** Chamado após confirmar parâmetros (o TR/Edital revalidam o que consomem). */
   onChanged?: () => void;
 }
@@ -34,7 +36,7 @@ function OriginLine({ f }: { f: TrParamViewModel }) {
  * "Parâmetros estruturados da contratação" — camada estruturada do MESMO fluxo do TR. Orientada por exceção: só pede o que o sistema
  * ainda não sabe; padrões institucionais aparecem como PROPOSTA (nunca aplicados sem confirmação); o Edital consome os mesmos fatos.
  */
-export default function TrStructuredParamsSection({ processId, onChanged }: TrStructuredParamsSectionProps) {
+export default function TrStructuredParamsSection({ processId, processObject = null, onChanged }: TrStructuredParamsSectionProps) {
   const utils = trpc.useUtils();
   const query = trpc.procurementProcess.trStructuredParams.useQuery({ processId }, { enabled: !!processId });
   const record = trpc.procurementProcess.recordTrStructuredParams.useMutation();
@@ -58,7 +60,8 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
   }, [fields, edits]);
 
   if (!view || view.status !== "READY") return null;
-  const pending = trPendingFields(live);
+  const pending = trPendingFields(live, processObject);
+  const supplied = trSuppliedByProcessFields(live, processObject);
   const optional = trOptionalFields(live);
   const confirmed = trConfirmedFields(live);
   const proposals = trProposals(live);
@@ -126,6 +129,18 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
             {pending.filter((f) => !!f.proposal).length > 0 && <p className="text-xs text-muted-foreground">Os parâmetros com padrão institucional acima também podem ser informados manualmente: digite o valor no campo abaixo.</p>}
             {pending.filter((f) => !!f.proposal).map(control)}
           </div>
+        )}
+        {supplied.length > 0 && (
+          <ul className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-sm" aria-label="Obtidos do processo">
+            {supplied.map((f) => (
+              <li key={f.name}>
+                {f.description}: <strong>{processObject}</strong>
+                <span className="block text-xs text-muted-foreground">
+                  Obtido do objeto do processo: o TR oficial registra este objeto na emissão e o Edital o reaproveita. Não é preciso digitar de novo.
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
         {pending.length === 0 && proposals.length === 0 && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">Nenhum parâmetro pendente.</p>}
 
