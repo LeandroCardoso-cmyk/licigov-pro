@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792962468.6921608,
-    "ast_hash": "08bc2bc3996a6fe5e8e9f55e3a164642",
+    "mtime": 1792974571.245572,
+    "ast_hash": "b7af801a264b59abcb7b332879b63cbe",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792962468.691807,
-    "ast_hash": "b030d30b5b57112103e7c21d60005904",
+    "mtime": 1792974548.9672155,
+    "ast_hash": "48d56caa414c36dc64457854fa7f0495",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -14975,18 +14975,18 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1792680839.0125775,
-    "ast_hash": "7eaed7adad0ebb7cf18a1e543e9113a8",
+    "mtime": 1792974549.0432155,
+    "ast_hash": "300b93098e385e88243dc78ab8b18dd6",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1792680839.0152383,
-    "ast_hash": "2e282b6bfa4dc027c394f155e45b1b93",
+    "mtime": 1792974549.0432155,
+    "ast_hash": "4ae0ed7ed4ac5bee9eeaef051092ed75",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
-    "mtime": 1792680839.0640068,
-    "ast_hash": "991a73dd2af9f72909a68aa5596b950d",
+    "mtime": 1792974549.0432155,
+    "ast_hash": "d2033d7a70b21a2dda1a06861a7bba00",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legacy-import-extraction.test.ts": {
@@ -15337,6 +15337,16 @@
   "server/__tests__/unit/db-target-select.test.ts": {
     "mtime": 1792974037.334304,
     "ast_hash": "0aec203e9dba06d8e5bbc4b75b541dee",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts": {
+    "mtime": 1792974549.0432155,
+    "ast_hash": "b3f6d2326b0093f8b53038f7a3108715",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/security-hotfix-body-parser-zod.test.ts": {
+    "mtime": 1792974549.0432155,
+    "ast_hash": "00b073fa937819cec45e9f27b85fa99c",
     "semantic_hash": ""
   }
 }
