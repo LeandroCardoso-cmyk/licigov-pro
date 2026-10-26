@@ -1,0 +1,313 @@
+{
+ "cotacoes": {
+  "sheetNames": [
+   "Mapa comparativo"
+  ],
+  "matrices": {
+   "Mapa comparativo": [
+    [
+     "Item",
+     "Descrição",
+     "Unidade",
+     "Qtd",
+     "Fornecedor",
+     "Preço unitário"
+    ],
+    [
+     1,
+     "Caneta esferográfica azul — ação/ç/ã/é",
+     "UN",
+     50,
+     "Papelaria São José LTDA",
+     1.234
+    ],
+    [
+     2,
+     "Papel A4 75g/m² (resma)",
+     "RS",
+     10,
+     "Distribuidora Ômega",
+     23.9
+    ],
+    [
+     3,
+     "Grampeador 26/6",
+     "UN",
+     2,
+     "Fornecedor & Cia",
+     0.30000000000000004
+    ]
+   ]
+  }
+ },
+ "vazios": {
+  "sheetNames": [
+   "S"
+  ],
+  "matrices": {
+   "S": [
+    [
+     "Descrição",
+     "Valor",
+     ""
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "Item após linha vazia",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     7
+    ]
+   ]
+  }
+ },
+ "formatadas": {
+  "sheetNames": [
+   "S"
+  ],
+  "matrices": {
+   "S": [
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "x"
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     ""
+    ]
+   ]
+  }
+ },
+ "datas": {
+  "sheetNames": [
+   "Datas"
+  ],
+  "matrices": {
+   "Datas": [
+    [
+     {
+      "date": "2026-10-25T00:00:00.000Z"
+     }
+    ],
+    [
+     {
+      "date": "2023-03-15T00:00:00.000Z"
+     }
+    ],
+    [
+     {
+      "date": "2026-01-01T13:30:00.000Z"
+     }
+    ],
+    [
+     0.5
+    ]
+   ]
+  }
+ },
+ "formulas": {
+  "sheetNames": [
+   "F"
+  ],
+  "matrices": {
+   "F": [
+    [
+     2
+    ],
+    [
+     6
+    ],
+    [
+     ""
+    ],
+    [
+     ""
+    ],
+    [
+     ""
+    ],
+    [
+     "=HYPERLINK(\"http://evil.invalid\",\"x\")"
+    ],
+    [
+     "+5"
+    ],
+    [
+     "@SUM(A1)"
+    ],
+    [
+     "-2+3"
+    ]
+   ]
+  }
+ },
+ "mescladas": {
+  "sheetNames": [
+   "M"
+  ],
+  "matrices": {
+   "M": [
+    [
+     "Cabeçalho mesclado",
+     "",
+     ""
+    ],
+    [
+     "Rico texto",
+     "site",
+     true
+    ],
+    [
+     "",
+     "",
+     false
+    ]
+   ]
+  }
+ },
+ "abas": {
+  "sheetNames": [
+   "Capa",
+   "Oculta",
+   "Itens",
+   "Vazia"
+  ],
+  "matrices": {
+   "Capa": [
+    [
+     "DADOS FICTÍCIOS PARA HOMOLOGAÇÃO"
+    ]
+   ],
+   "Oculta": [
+    [
+     "segredo de aba oculta",
+     1
+    ]
+   ],
+   "Itens": [
+    [
+     "Descrição",
+     "Preço"
+    ]
+   ],
+   "Vazia": [
+    [
+     ""
+    ]
+   ]
+  }
+ },
+ "numeros": {
+  "sheetNames": [
+   "N"
+  ],
+  "matrices": {
+   "N": [
+    [
+     123456789012,
+     -0.001,
+     1e-10,
+     "😀 emoji e  nbsp",
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ]
+   ]
+  }
+ },
+ "sheetjs-mixed": {
+  "sheetNames": [
+   "Itens",
+   "Notas"
+  ],
+  "matrices": {
+   "Itens": [
+    [
+     "Descrição",
+     "Qtd",
+     "Preço"
+    ],
+    [
+     "Caneta",
+     10,
+     1.5
+    ],
+    [
+     "",
+     "",
+     ""
+    ],
+    [
+     "Papel",
+     "",
+     23.9
+    ],
+    [
+     "",
+     "",
+     {
+      "date": "2026-10-25T00:00:00.000Z"
+     }
+    ]
+   ],
+   "Notas": [
+    [
+     "Observação"
+    ],
+    [
+     "=1+1"
+    ]
+   ]
+  }
+ },
+ "sheetjs-inline": {
+  "sheetNames": [
+   "S"
+  ],
+  "matrices": {
+   "S": [
+    [
+     "a",
+     "b"
+    ],
+    [
+     "ç",
+     1
+    ]
+   ]
+  }
+ }
+}

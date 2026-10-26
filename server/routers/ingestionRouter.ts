@@ -68,19 +68,21 @@ import { assessProvenanceScan, hasFileCoverageGap, PROVENANCE_SCAN_REQUIRED_MESS
 import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE, REPROCESS_EXPLANATION } from "../domain/importReprocess";
 import { getPriceResearchReview, reviewPriceResearchGroups } from "../services/priceResearchReviewService";
 import type { PriceResearchReviewProjection } from "../domain/priceResearchReviewGroups";
+import { isDeclaredLegacyXls, XLS_MIME_TYPE, XLS_SUSPENDED_MESSAGE } from "@shared/spreadsheetFormats";
 
 /**
  * Formatos expostos ao usuário na superfície de ingestão. `supported` é DERIVADO do
  * parserRegistry (fonte única da verdade): um formato é funcional apenas quando o parser
- * resolvido declara `capabilityStatus: "supported"`. Na B.2.3 CSV/XLS/XLSX/PDF/DOCX são
- * suportados (extração real); OCR de PDF escaneado permanece não suportado (limitação declarada).
+ * resolvido declara `capabilityStatus: "supported"`. CSV/XLSX/PDF/DOCX são suportados (extração real).
+ * SEC-AUD-07: `.xls` SUSPENSO por decisão do Owner — listado como indisponível, com a orientação de conversão
+ * (`unavailableMessage`) que o cliente mostra antes do envio; sessões antigas de `.xls` ficam como estão.
  */
 const USER_FACING_FORMATS: ReadonlyArray<{
-  key: string; label: string; extensions: string[]; mimeTypes: string[];
+  key: string; label: string; extensions: string[]; mimeTypes: string[]; suspendedMessage?: string;
 }> = [
   { key: "csv",  label: "CSV",          extensions: [".csv", ".txt"], mimeTypes: ["text/csv", "application/csv", "text/plain"] },
   { key: "xlsx", label: "Excel (XLSX)", extensions: [".xlsx"],        mimeTypes: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] },
-  { key: "xls",  label: "Excel (XLS)",  extensions: [".xls"],         mimeTypes: ["application/vnd.ms-excel"] },
+  { key: "xls",  label: "Excel (XLS)",  extensions: [".xls"],         mimeTypes: [XLS_MIME_TYPE], suspendedMessage: XLS_SUSPENDED_MESSAGE },
   { key: "pdf",  label: "PDF",          extensions: [".pdf"],         mimeTypes: ["application/pdf"] },
   { key: "docx", label: "Word (DOCX)",  extensions: [".docx"], mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
 ];
@@ -351,13 +353,15 @@ export const ingestionRouter = router({
       const enabled = await isFeatureEnabled(CANONICAL_INGESTION_FLAG, orgId);
       const formats = USER_FACING_FORMATS.map(f => {
         const cap = formatCapability(f.mimeTypes[0], f.extensions[0]);
+        const suspended = f.suspendedMessage !== undefined;
         return {
           key:              f.key,
           label:            f.label,
           extensions:       f.extensions,
           mimeTypes:        f.mimeTypes,
-          supported:        cap.supported,
-          capabilityStatus: cap.capabilityStatus,
+          supported:        cap.supported && !suspended,
+          capabilityStatus: suspended ? ("disabled" as const) : cap.capabilityStatus,
+          ...(suspended ? { unavailableMessage: f.suspendedMessage } : {}),
           supportsStructuredExtraction: cap.supportsStructuredExtraction,
           parserVersion:    cap.parserVersion,
           limitations:      cap.limitations,
@@ -397,6 +401,11 @@ export const ingestionRouter = router({
 
       if (!isAllowedMime(input.sourceMimeType)) {
         throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Formato não suportado." });
+      }
+      // SEC-AUD-07 — .xls suspenso: recusa já na criação da sessão (o parser recusa também pelo CONTEÚDO, para XLS
+      // renomeado para .xlsx). Nenhuma sessão nova nasce para depois falhar.
+      if (isDeclaredLegacyXls(input.sourceFileName, input.sourceMimeType)) {
+        throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: XLS_SUSPENDED_MESSAGE });
       }
       if (isDocumentImportType(input.importType) && !DOCUMENT_MIMES.has(input.sourceMimeType)) {
         throw new TRPCError({ code: "UNSUPPORTED_MEDIA_TYPE", message: "Para importar DFD/ETP/TR envie PDF (com texto) ou DOCX." });

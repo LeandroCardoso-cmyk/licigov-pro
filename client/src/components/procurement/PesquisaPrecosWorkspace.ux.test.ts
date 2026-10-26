@@ -24,7 +24,8 @@ describe("Pesquisa de Preços — UX canônica com a flag ligada", () => {
   it("descrição reflete formatos reais: sem .doc e sem 'OCR indisponível'", () => {
     expect(enabledBranch).not.toMatch(/\.doc\b/);
     expect(enabledBranch).not.toMatch(/indispon[íi]vel/);
-    expect(enabledBranch).toMatch(/XLSX, XLS ou CSV/);
+    expect(enabledBranch).toMatch(/XLSX ou CSV/);
+    expect(enabledBranch).not.toMatch(/\bXLS\b/); // SEC-AUD-07: .xls suspenso
     expect(enabledBranch).toMatch(/digitalizado/);
   });
   it("launcher: arquivo é a aba padrão; 'Colar texto' sem rótulos de formato", () => {

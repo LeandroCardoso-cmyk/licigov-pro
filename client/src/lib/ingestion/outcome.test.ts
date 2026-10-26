@@ -37,3 +37,16 @@ describe("describeOutcome — estados distinguíveis e acionáveis", () => {
     expect(describeOutcome(null).kind).toBe("none");
   });
 });
+
+describe("SEC-AUD-07 — formato não aceito (.xls suspenso)", () => {
+  it("mostra a mensagem do servidor, sem oferecer reprocessamento", () => {
+    const msg = "O formato .xls está temporariamente indisponível. Abra o arquivo no Excel ou LibreOffice, salve como .xlsx e envie novamente.";
+    const v = describeOutcome({ status: "failed", stage: "parser_failed", errors: [{ code: "UNSUPPORTED_FORMAT", message: msg }] });
+    expect(v).toMatchObject({ kind: "parser_failed", title: "Formato de arquivo não aceito", message: msg, canRetry: false, suggestNewFile: true });
+  });
+  it("arquivo corrompido continua com a mensagem própria", () => {
+    const v = describeOutcome({ status: "failed", stage: "parser_failed", errors: [{ code: "CORRUPT_FILE" }] });
+    expect(v.title).toBe("Não foi possível ler o arquivo");
+    expect(v.canRetry).toBe(false);
+  });
+});

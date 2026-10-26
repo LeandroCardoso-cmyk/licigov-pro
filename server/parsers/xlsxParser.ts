@@ -1,51 +1,37 @@
 /**
- * Sprint 2.8 — XLSX/XLS Parser (P0 piloto: mapeamento de colunas CONSOLIDADO em tabularExtraction).
+ * Sprint 2.8 — XLSX Parser (P0 piloto: mapeamento de colunas CONSOLIDADO em tabularExtraction).
  * Suporta seleção de planilha, inferência de cabeçalho, linhas esparsas, campos de cotação
  * (fornecedor/marca/modelo/obs./fonte) e mapa comparativo.
  *
- * SEC-AUD-2026-10 — leitor escolhido pelo CONTEÚDO (não pela extensão):
- *   - XLSX (ZIP) → `exceljs` (excelWorkbookMatrix.ts), com limites de descompressão e de células;
- *   - XLS legado (OLE/CFB) → SheetJS 0.18.5, o único leitor de BIFF disponível no npm. As advisories
- *     GHSA-4r6h-8v6p-xvw6 / GHSA-5pgg-2g8v-p4x9 continuam aplicáveis SÓ a esse caminho, com limite de linhas,
- *     até a decisão de produto registrada em docs/security/incident-2026-10/XLSX_REMEDIATION.md;
- *   - qualquer outro conteúdo → UNSUPPORTED_FORMAT explícito (nada é removido em silêncio).
- * Fórmulas nunca são executadas: os dois leitores usam o valor em cache.
+ * SEC-AUD-07 — o tipo é decidido pelo CONTEÚDO e pela declaração, nunca só pela extensão:
+ *   - XLSX (ZIP) → `exceljs` em worker isolado (xlsxReadIsolated.ts), com limites de bytes reais, células e abas;
+ *   - XLS legado (OLE/CFB/BIFF) — inclusive renomeado para .xlsx — ou arquivo declarado .xls/`application/vnd.ms-excel`
+ *     → UNSUPPORTED_FORMAT com a orientação de conversão (formato SUSPENSO por decisão do Owner; o SheetJS saiu
+ *     do produto e das dependências);
+ *   - outro conteúdo → CORRUPT_FILE.
+ * Os dois códigos são determinísticos (importOutcome.ts): nenhum reprocessamento automático.
+ * Fórmulas nunca são executadas: o leitor usa o valor em cache.
  */
 import { BaseParser } from "./baseParser";
 import { tableToRawItems, documentDeclarationWarnings, type TabularContext } from "./tabularExtraction";
 import { DECLARATION_SCAN_PERFORMED, dedupeDocumentDeclarations } from "../domain/quoteProvenance";
 import type { ParserCapabilities, ParseOptions, ParseResult } from "./baseParser";
-import type { ImportWarning } from "../domain/importTypes";
+import type { ImportError, ImportWarning } from "../domain/importTypes";
 import { numberToDecimalString } from "../domain/money";
-import { readXlsxMatrices, type MatrixCell } from "./excelWorkbookMatrix";
+import type { WorkbookMatrices } from "./excelWorkbookMatrix";
 import { detectSpreadsheetContainer, SpreadsheetLimitError } from "./spreadsheetLimits";
+import { readXlsxIsolated, XlsxReaderUnavailableError } from "./xlsxReadIsolated";
+import { isDeclaredLegacyXls, XLS_SUSPENDED_MESSAGE } from "@shared/spreadsheetFormats";
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_ITEMS = 5000;
 // 1.2.0: valor nativo de células numéricas preservado (rawTypedValues)
 // 1.3.0: XLSX lido com exceljs + limites (mesma matriz — teste diferencial); XLS legado com limite de linhas
-const PARSER_VERSION = "1.3.0";
-/** XLS legado: teto de linhas lidas por aba (o SheetJS não tem limite de descompressão aplicável ao BIFF). */
-const LEGACY_XLS_MAX_ROWS = 100_000;
+// 1.4.0: XLS suspenso (UNSUPPORTED_FORMAT com orientação de conversão); leitura em worker isolado com bytes reais
+const PARSER_VERSION = "1.4.0";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-type Matrices = { sheetNames: string[]; matrices: Map<string, MatrixCell[][]>; engine: "exceljs" | "sheetjs-legacy-xls" };
-
-async function readLegacyXls(buffer: Buffer): Promise<Matrices> {
-  const XLSX = await import("xlsx");
-  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: LEGACY_XLS_MAX_ROWS });
-  const matrices = new Map<string, MatrixCell[][]>();
-  for (const name of workbook.SheetNames) {
-    matrices.set(name, XLSX.utils.sheet_to_json<MatrixCell[]>(workbook.Sheets[name], { header: 1, defval: "" }) as MatrixCell[][]);
-  }
-  return { sheetNames: workbook.SheetNames, matrices, engine: "sheetjs-legacy-xls" };
-}
-
-async function readWorkbook(buffer: Buffer): Promise<Matrices> {
-  const kind = detectSpreadsheetContainer(buffer);
-  if (kind === "zip") return { ...(await readXlsxMatrices(buffer)), engine: "exceljs" };
-  if (kind === "cfb") return readLegacyXls(buffer);
-  throw new SpreadsheetLimitError("ZIP_INVALID", "Conteúdo não é uma planilha XLSX nem XLS.");
-}
+type Book = WorkbookMatrices & { engine: "exceljs" };
 
 /**
  * Hardening P0 — célula NUMÉRICA: exibição pt-BR SEM milhar ("1,234", "1234,5") só para o revisor; o valor
@@ -65,11 +51,8 @@ function cellToString(val: unknown): string {
 export class XlsxParser extends BaseParser {
   readonly parserType = "xlsx";
   readonly capabilities: ParserCapabilities = {
-    supportedMimeTypes:    [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-excel",
-    ],
-    supportedExtensions:   ["xlsx", "xls"],
+    supportedMimeTypes:    [XLSX_MIME],
+    supportedExtensions:   ["xlsx"],
     maxFileSizeBytes:      MAX_SIZE,
     supportsStreaming:     false,
     supportsProgressEvents: false,
@@ -78,9 +61,20 @@ export class XlsxParser extends BaseParser {
     supportsStructuredExtraction: true,
   };
 
+  /**
+   * Continua RECEBENDO `.xls`/`application/vnd.ms-excel` para responder com UNSUPPORTED_FORMAT e a orientação de
+   * conversão (em vez de "sem parser"); a capacidade anunciada (acima e em ingestion.getCapabilities) é só XLSX.
+   */
   canHandle(mimeType: string, extension: string): boolean {
-    return this.capabilities.supportedMimeTypes.includes(mimeType) ||
-           ["xlsx", "xls"].includes(extension.toLowerCase());
+    return [XLSX_MIME, "application/vnd.ms-excel"].includes(mimeType) || ["xlsx", "xls"].includes(extension.toLowerCase());
+  }
+
+  /** MIME `.xls` declarado: a mesma orientação de conversão do parse (não o genérico "Tipo MIME não suportado"). */
+  override validate(buffer: Buffer, mimeType: string): ImportError | null {
+    if (isDeclaredLegacyXls(null, mimeType) && buffer.length > 0) {
+      return { code: "UNSUPPORTED_FORMAT", message: XLS_SUSPENDED_MESSAGE, fatal: true };
+    }
+    return super.validate(buffer, mimeType);
   }
 
   async parse(buffer: Buffer, opts: ParseOptions): Promise<ParseResult> {
@@ -96,21 +90,36 @@ export class XlsxParser extends BaseParser {
       };
     }
 
-    let book: Matrices;
+    const fail = (code: string, message: string, extra: Record<string, unknown> = {}): ParseResult => ({
+      items: [], warnings: [],
+      errors: [{ code, message, fatal: true }],
+      summary: this.emptySummary(Date.now() - startMs),
+      rawMetadata: { parserVersion: PARSER_VERSION, ...extra },
+    });
+
+    // XLS suspenso: pela declaração (extensão/MIME) OU pelo conteúdo OLE/CFB (XLS renomeado para .xlsx).
+    const container = detectSpreadsheetContainer(buffer);
+    if (container === "cfb" || isDeclaredLegacyXls(opts.sourceFileName, opts.sourceMimeType)) {
+      return fail("UNSUPPORTED_FORMAT", XLS_SUSPENDED_MESSAGE, { detectedContainer: container, unsupportedFormat: "xls" });
+    }
+    if (container !== "zip") {
+      return fail("CORRUPT_FILE", "Não foi possível ler a planilha: o conteúdo não é um arquivo .xlsx válido.", { detectedContainer: container });
+    }
+
+    let book: Book;
     try {
-      book = await readWorkbook(buffer);
+      book = { ...(await readXlsxIsolated(buffer)), engine: "exceljs" };
     } catch (err) {
-      const limit = err instanceof SpreadsheetLimitError;
-      return {
-        items: [], warnings: [],
-        errors: [{
-          code: limit && err.code !== "ZIP_INVALID" ? "SIZE_EXCEEDED" : "CORRUPT_FILE",
-          message: limit ? err.message : "Não foi possível ler a planilha (arquivo corrompido ou formato não suportado).",
-          fatal: true,
-        }],
-        summary: this.emptySummary(Date.now() - startMs),
-        rawMetadata: { parserVersion: PARSER_VERSION, ...(limit ? { limit: err.code } : {}) },
-      };
+      if (err instanceof SpreadsheetLimitError) {
+        return err.code === "ZIP_INVALID"
+          ? fail("CORRUPT_FILE", err.message, { limit: err.code })
+          : fail("SIZE_EXCEEDED", err.message, { limit: err.code });
+      }
+      if (err instanceof XlsxReaderUnavailableError) {
+        // Falha de infraestrutura (não do arquivo): código NÃO determinístico ⇒ retry/backoff já existente da fila.
+        return fail("PARSE_ERROR", "Leitor de planilhas indisponível no momento. Tente novamente.");
+      }
+      return fail("CORRUPT_FILE", "Não foi possível ler a planilha (arquivo corrompido).");
     }
     const sheetNames = book.sheetNames;
 

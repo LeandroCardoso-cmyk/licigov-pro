@@ -15,6 +15,7 @@ import PDFDocument from "pdfkit";
 import { Document, Packer, Paragraph, Table, TableRow, TableCell } from "docx";
 import { CsvParser } from "../../parsers/csvParser";
 import { XlsxParser } from "../../parsers/xlsxParser";
+import { xlsxBuffer } from "../helpers/xlsxFixture";
 import { DocxParser } from "../../parsers/docxParser";
 import { PdfParser } from "../../parsers/pdfParser";
 import { parserRegistry } from "../../parsers/parserRegistry";
@@ -55,10 +56,7 @@ describe("P1-C — os parsers registrados declaram que a análise rodou", () => 
   });
 
   it("XLSX", async () => {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Descrição", "Qtd", "Unid", "Valor"], ["Caneta", 10, "UN", 1.5]]), "Cotações");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const buf = await xlsxBuffer([["Cotações", [["Descrição", "Qtd", "Unid", "Valor"], ["Caneta", 10, "UN", 1.5]]]]);
     const r = await new XlsxParser().safeParse(buf, opts("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
     expect(r.items.length).toBe(1);
     expect(r.declarationScan).toEqual(DECLARATION_SCAN_PERFORMED);

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  acceptAttr, supportedFormatsLabel, formatBytes, validateFile,
+  acceptAttr, supportedFormatsLabel, formatBytes, validateFile, unavailableNotices,
   type IngestionCapabilities,
 } from "./capabilities";
 
@@ -70,5 +70,29 @@ describe("validateFile", () => {
     const r = validateFile({ name: "planilha.xlsx", size: 100, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }, CAPS);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.format.key).toBe("xlsx");
+  });
+});
+
+describe("SEC-AUD-07 — .xls suspenso", () => {
+  const MSG = "O formato .xls está temporariamente indisponível. Abra o arquivo no Excel ou LibreOffice, salve como .xlsx e envie novamente.";
+  const XLS = { key: "xls", label: "Excel (XLS)", extensions: [".xls"], mimeTypes: ["application/vnd.ms-excel"], supported: false, unavailableMessage: MSG };
+  const XLSX_F = { key: "xlsx", label: "Excel (XLSX)", extensions: [".xlsx"], mimeTypes: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], supported: true };
+  const caps = { enabled: true, maxFileSizeBytes: 50 * 1024 * 1024, formats: [XLSX_F, XLS], supportedFormats: [XLSX_F] };
+
+  it("o seletor não oferece .xls e o rótulo não cita XLS", () => {
+    expect(acceptAttr(caps)).not.toContain(".xls,");
+    expect(acceptAttr(caps).split(",")).not.toContain(".xls");
+    expect(supportedFormatsLabel(caps)).toBe("Excel (XLSX)");
+  });
+
+  it("arquivo .xls (por extensão ou MIME) recebe exatamente a orientação de conversão antes do envio", () => {
+    for (const f of [{ name: "precos.xls", size: 10, type: "" }, { name: "precos", size: 10, type: "application/vnd.ms-excel" }]) {
+      const r = validateFile(f, caps);
+      expect(r).toEqual({ ok: false, code: "STUB_FORMAT", message: MSG });
+    }
+  });
+
+  it("a orientação aparece como aviso na área de envio", () => {
+    expect(unavailableNotices(caps)).toEqual([MSG]);
   });
 });

@@ -1180,8 +1180,8 @@
     "semantic_hash": ""
   },
   "client/src/components/ingestion/FileDropzone.tsx": {
-    "mtime": 1792680838.1021905,
-    "ast_hash": "647f69f4383e31462e608f5ff0c65c2f",
+    "mtime": 1792975305.5513327,
+    "ast_hash": "920fea815802cc2c246ac6de7ed2904f",
     "semantic_hash": ""
   },
   "client/src/components/ingestion/IngestionAuditSummary.tsx": {
@@ -1830,13 +1830,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1792703087.088632,
-    "ast_hash": "e9ad3a6d20b2c08dda394e50d6f1e3ea",
+    "mtime": 1792975316.9186132,
+    "ast_hash": "1022913e30c4fd002532282a91e707b1",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.ux.test.ts": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "e10e7ac51e36db5287af4eaa81a52bea",
+    "mtime": 1792975316.918905,
+    "ast_hash": "d3334847472892ad2d805ddcc522c17c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
@@ -2860,13 +2860,13 @@
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/capabilities.test.ts": {
-    "mtime": 1792680838.1238084,
-    "ast_hash": "34592dcc9f9760a7c3df7aceaffa053f",
+    "mtime": 1792975779.3664422,
+    "ast_hash": "e9db883f0cdf5711883fbf38b12260d4",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/capabilities.ts": {
-    "mtime": 1792680838.1240122,
-    "ast_hash": "bd4d647bc6747554fdbf8bc9002f791e",
+    "mtime": 1792975305.5517404,
+    "ast_hash": "4c851918e9648dcbd65d3925e6165ebc",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/correction.test.ts": {
@@ -2885,13 +2885,13 @@
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/outcome.test.ts": {
-    "mtime": 1792680838.1240122,
-    "ast_hash": "8da6480e1827a89bab80e2c4aa3d7fa6",
+    "mtime": 1792975779.3664422,
+    "ast_hash": "5ff0a32432ec6ecf5ef00743eab524ce",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/outcome.ts": {
-    "mtime": 1792680838.1240122,
-    "ast_hash": "2dbca6b96a2659c5c4eaae483848c053",
+    "mtime": 1792975289.6592534,
+    "ast_hash": "03e83a7e2cb53ae616f302af4449abc2",
     "semantic_hash": ""
   },
   "client/src/lib/ingestion/priceResearchReview.ts": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1792974571.245572,
-    "ast_hash": "b7af801a264b59abcb7b332879b63cbe",
+    "mtime": 1792975341.4347801,
+    "ast_hash": "625fe1480b2f0b26ca43d117321c75de",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5250,8 +5250,8 @@
     "semantic_hash": ""
   },
   "security/audit-baseline.json": {
-    "mtime": 1792954460.9641151,
-    "ast_hash": "0fd132c608a9b402969c9e200721622c",
+    "mtime": 1792975341.435553,
+    "ast_hash": "9b9d387a4633c8b00b0616bf84503bb4",
     "semantic_hash": ""
   },
   "seed-complete.mjs": {
@@ -5700,8 +5700,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-capabilities.test.ts": {
-    "mtime": 1792680839.0272381,
-    "ast_hash": "9c8437c8815252c69526aa9fed217460",
+    "mtime": 1792975766.0214024,
+    "ast_hash": "5dd058c61629bf51b776061f8581cf7d",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-correction-mysql-smoke.test.ts": {
@@ -5755,8 +5755,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
-    "mtime": 1792680839.0272381,
-    "ast_hash": "30cc241e177be29968c75ad21cd6749c",
+    "mtime": 1792975803.4732535,
+    "ast_hash": "7eaef4b7540a52075067bac0f03fa1da",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-streaming.test.ts": {
@@ -5930,8 +5930,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-hardening-mysql-smoke.test.ts": {
-    "mtime": 1792703087.4001641,
-    "ast_hash": "0bb0a9554449c1a642644d8afee500cf",
+    "mtime": 1792975712.243806,
+    "ast_hash": "a80ae010fe55556fcae752545f2890e7",
     "semantic_hash": ""
   },
   "server/__tests__/integration/p0-pilot-rbac-router.test.ts": {
@@ -6080,8 +6080,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/r2-leg005-legacy-items-catmat-disabled.test.ts": {
-    "mtime": 1792680839.0392382,
-    "ast_hash": "2824964a7a3f95d463f6af26c8884a03",
+    "mtime": 1792975712.2442358,
+    "ast_hash": "ab4e3d6a7b5b6647f5333e22d99ad79f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/r2-leg005-legacy-items-catmat-mysql-smoke.test.ts": {
@@ -6675,8 +6675,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/p0-pilot-hardening.test.ts": {
-    "mtime": 1792680839.0752382,
-    "ast_hash": "58fd512290e394ed616a55f4f68d9a45",
+    "mtime": 1792975712.2431643,
+    "ast_hash": "3a05aa2103ac1fa768e3ca5942a17e9d",
     "semantic_hash": ""
   },
   "server/__tests__/unit/procurement-candidate-eligibility.test.ts": {
@@ -8575,8 +8575,8 @@
     "semantic_hash": ""
   },
   "server/parsers/xlsxParser.ts": {
-    "mtime": 1792680839.1291883,
-    "ast_hash": "e6082cca261b6598b2827f4da7ec91cf",
+    "mtime": 1792975289.642338,
+    "ast_hash": "616ace0125aefdb07b77199374be4f3b",
     "semantic_hash": ""
   },
   "server/providers/claude/claudeAdapter.ts": {
@@ -8815,8 +8815,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1792680839.1352382,
-    "ast_hash": "d609f81fa5d7b3b7fadd6e65c4a1b5ea",
+    "mtime": 1792975276.7106209,
+    "ast_hash": "934d8aa0806123b6a231ab7ee6d1c1ab",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9720,8 +9720,8 @@
     "semantic_hash": ""
   },
   "server/services/excelService.ts": {
-    "mtime": 1792680839.1547055,
-    "ast_hash": "3574d13a5cacc7b4916bf7427bbe77bf",
+    "mtime": 1792964138.89499,
+    "ast_hash": "03026b335a95e741a2587fbcdf7575bf",
     "semantic_hash": ""
   },
   "server/services/executionObservabilityService.ts": {
@@ -15215,8 +15215,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-file-declaration-provenance.test.ts": {
-    "mtime": 1792680839.0752382,
-    "ast_hash": "6fa9019e5621c1d075371db4bf3b426b",
+    "mtime": 1792975712.2428179,
+    "ast_hash": "8996ae2ed4d27ddb125054bec2cc5400",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/provenanceScanFixture.ts": {
@@ -15230,8 +15230,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-provenance-scan-evidence.test.ts": {
-    "mtime": 1792680839.0752382,
-    "ast_hash": "30b9c5171863587fd418da3e58dcfe8d",
+    "mtime": 1792975712.242473,
+    "ast_hash": "28b8021e3c6baa63b69272143c74ed86",
     "semantic_hash": ""
   },
   "server/__tests__/fixtures/pageLimitPdfFixture.ts": {
@@ -15240,8 +15240,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-numeric-declaration.test.ts": {
-    "mtime": 1792680839.0752382,
-    "ast_hash": "a48d5e8c93eea1f38f2a6fae262d63c0",
+    "mtime": 1792975681.6152725,
+    "ast_hash": "1ad1f5faa61be19fcd25bf6f6eec10d5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/pr04-sem005-legacy-price-import-router.test.ts": {
@@ -15280,8 +15280,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
-    "mtime": 1792962993.5599487,
-    "ast_hash": "1b6d66fac7bb72bf99be0156fb04c129",
+    "mtime": 1792976427.2559166,
+    "ast_hash": "54a2313a29917eb776fe7601a47e3428",
     "semantic_hash": ""
   },
   "server/__tests__/unit/correlation-id-client-header.test.ts": {
@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792974416.2517765,
-    "ast_hash": "cc1d352a2c8d9ea5e35cc10172a6c922",
+    "mtime": 1792976427.2555282,
+    "ast_hash": "f1695d770702a59f6f7549dd9f7ab49f",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
@@ -15347,6 +15347,76 @@
   "server/__tests__/integration/security-hotfix-body-parser-zod.test.ts": {
     "mtime": 1792974549.0432155,
     "ast_hash": "00b073fa937819cec45e9f27b85fa99c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/fixtures/spreadsheets/xlsx-goldens.json": {
+    "mtime": 1792975445.428618,
+    "ast_hash": "e2bbca5f18c85ccd85d26e0ade2a2dca",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/xlsxAdversarialRunner.ts": {
+    "mtime": 1792976125.8334548,
+    "ast_hash": "116cebc7cc039d3b499f4b2ae87bee5f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/xlsxCorpus.ts": {
+    "mtime": 1792975492.4462407,
+    "ast_hash": "b1c0463df8b6777128fd6342745bb34f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/xlsxFixture.ts": {
+    "mtime": 1792975464.26327,
+    "ast_hash": "b2e432269117d1e5c7a79025987549d4",
+    "semantic_hash": ""
+  },
+  "server/__tests__/helpers/xlsxTzProbe.ts": {
+    "mtime": 1792975563.1552877,
+    "ast_hash": "65d237d39d9fe5df1b726b9496ad5f80",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/xlsx-adversarial-isolated.test.ts": {
+    "mtime": 1792976381.1913245,
+    "ast_hash": "37b4afd30a63b091479bafa28242d82f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/xlsx-reader-goldens.test.ts": {
+    "mtime": 1792975621.8122125,
+    "ast_hash": "7e78704078a5afcb0c596a00a73717cf",
+    "semantic_hash": ""
+  },
+  "server/parsers/excelWorkbookMatrix.ts": {
+    "mtime": 1792975178.8374157,
+    "ast_hash": "14152dc8e77e490a95402c46302a4995",
+    "semantic_hash": ""
+  },
+  "server/parsers/spreadsheetLimits.ts": {
+    "mtime": 1792976257.9253185,
+    "ast_hash": "7703da3bd191cf87a1ed33107ecf0cc1",
+    "semantic_hash": ""
+  },
+  "server/parsers/xlsxReadIsolated.ts": {
+    "mtime": 1792976125.835924,
+    "ast_hash": "be093da8da4cbfb3ee234e19e9d29733",
+    "semantic_hash": ""
+  },
+  "server/parsers/xlsxReadWorker.ts": {
+    "mtime": 1792976002.7633018,
+    "ast_hash": "d3a6c90741c08618738bc0279bd8b68d",
+    "semantic_hash": ""
+  },
+  "shared/spreadsheetFormats.ts": {
+    "mtime": 1792974995.719242,
+    "ast_hash": "1ba15712d2a0c99fd9e648743ea31e52",
+    "semantic_hash": ""
+  },
+  "docs/security/incident-2026-10/XLSX_REMEDIATION.md": {
+    "mtime": 1792976381.1953244,
+    "ast_hash": "5c4f10ec44fd2a55c93130f4592bbf1f",
+    "semantic_hash": ""
+  },
+  "server/__tests__/fixtures/spreadsheets/README.md": {
+    "mtime": 1792975445.4312687,
+    "ast_hash": "69b1c8f85734e3095bf688ea0292c699",
     "semantic_hash": ""
   }
 }

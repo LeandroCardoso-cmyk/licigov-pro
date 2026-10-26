@@ -1,56 +1,88 @@
 # Remediação do `xlsx` (SheetJS 0.18.5) — SEC-AUD-07
 
-**Data:** 25/10/2026 · **Advisories:** GHSA-4r6h-8v6p-xvw6 (prototype pollution na leitura), GHSA-5pgg-2g8v-p4x9
-(ReDoS) — high. O npm não publica versão corrigida (o SheetJS distribui ≥ 0.19 só pela CDN própria).
+**Revisão 2 — 26/10/2026.** Advisories: GHSA-4r6h-8v6p-xvw6 (prototype pollution na leitura) e
+GHSA-5pgg-2g8v-p4x9 (ReDoS), high; o npm não publica versão corrigida. **Decisão do Owner:** suspender
+temporariamente o `.xls`, com orientação de conversão para `.xlsx`.
 
-## Inventário de consumidores reais
+## Estado
 
-| Consumidor | Uso | Entrada | Exposição |
-|---|---|---|---|
-| `server/parsers/xlsxParser.ts` (registrado em `parserRegistry`) | **Leitura** de XLSX e XLS na ingestão canônica (Pesquisa de Preços, Document Intake) | Arquivo enviado por usuário autenticado (upload ≤ 50 MB) | **Aplicável** |
-| `server/services/excelService.ts` ← `download.itemsSpreadsheet` (tenantProcedure) e `zipService` (pacote de publicação) | **Escrita** de planilha de itens | Dados do processo (texto do usuário/importado) | Advisories são de leitura; a escrita não executa fórmula |
-| Testes (`p0-pilot-*`, `m8-*`, `r2-leg005`) | Geram fixtures XLSX/XLS | — | Só dev |
-
-CSV não usa SheetJS (`server/parsers/csvParser.ts`, sem alteração).
-
-## Decisão técnica desta PR
-
-| Formato | Antes | Depois |
+| Item | Antes | Agora |
 |---|---|---|
-| XLSX (ZIP) — leitura | SheetJS 0.18.5 | **`exceljs` 4.4.0** (já dependência), matriz idêntica por teste diferencial |
-| XLSX — exportação | SheetJS 0.18.5 | **`exceljs`**: mesma aba, células e larguras; texto iniciado por `=` continua texto |
-| XLS legado (BIFF/OLE) — leitura | SheetJS 0.18.5 | **SheetJS 0.18.5 mantido** (o `exceljs` não lê BIFF), com teto de 100 mil linhas por aba |
-| Outro conteúdo com extensão .xls/.xlsx | Erro genérico do SheetJS | `CORRUPT_FILE` explícito (leitor escolhido pela **assinatura do conteúdo**, não pela extensão) |
+| Leitura XLSX | SheetJS 0.18.5 no processo da aplicação | `exceljs` 4.4.0 em **processo filho isolado** (`xlsxReadIsolated.ts`), com limites reais |
+| Leitura XLS (BIFF/OLE) | SheetJS 0.18.5 | **Suspensa**: `UNSUPPORTED_FORMAT` com a orientação abaixo — inclusive XLS renomeado para `.xlsx` (detecção pelo conteúdo) e arquivo declarado `.xls` por extensão ou MIME |
+| Exportação XLSX | SheetJS → `exceljs` (PR anterior) | `exceljs`; texto iniciado por `=` continua texto (sem `<f>`) |
+| Dependência `xlsx` | `package.json` + lockfile | **Removida** (sem import estático/dinâmico, sem fallback; teste de varredura garante) |
+| Baseline do `audit:gate` | 14 (incluía as 2 GHSA do `xlsx`) | **12** (só reduz) |
 
-Limites novos (`server/parsers/spreadsheetLimits.ts`), aplicados antes de abrir o XLSX, lendo só o diretório
-central do ZIP: ≤ 2.000 entradas, ≤ 250 MB descomprimidos declarados, taxa ≤ 200:1 por entrada > 1 MB, sem ZIP64;
-depois de aberto: ≤ 100 abas e ≤ 2 milhões de células por aba. Falha ⇒ `SIZE_EXCEEDED`/`CORRUPT_FILE`
-determinísticos (sem reprocessamento automático). Já existentes: upload ≤ 50 MB, ≤ 5.000 itens, fila de ingestão
-com um job por vez por processo. **Sem timeout por parse** (backlog). Fórmulas nunca são executadas.
+Mensagem única (`shared/spreadsheetFormats.ts`), usada no erro do parser, na recusa de `ingestion.createSession`, na
+capacidade (`unavailableMessage`) e na validação do cliente antes do envio:
 
-`PARSER_VERSION` 1.2.0 → 1.3.0 e `rawMetadata.engine` (`exceljs` | `sheetjs-legacy-xls`) registram na
-proveniência qual leitor produziu cada sessão; sessões antigas mantêm sua versão (replay não reprocessa nada).
+> O formato .xls está temporariamente indisponível. Abra o arquivo no Excel ou LibreOffice, salve como .xlsx e envie novamente.
 
-## Diferenças de comportamento conhecidas
+## Caminhos verificados
 
-- **Datas:** o SheetJS 0.18 convertia datas pelo fuso **local** do processo; o `exceljs` não depende de fuso.
-  Produção roda em UTC (sem `TZ` no Railway) ⇒ saída idêntica. Em fuso com offset positivo, o leitor antigo
-  podia deslocar a data para o dia anterior; o novo não.
-- Aba vazia, células só formatadas, linhas vazias, mescladas, fórmulas com/sem cache, erros, rich text e
-  hyperlinks: paridade comprovada no corpus sintético (`xlsx-exceljs-parity.test.ts`). **Limitação:** não há
-  arquivos reais de Excel/LibreOffice no repositório; recomenda-se rodar o mesmo diferencial com 3–5 planilhas
-  reais anonimizadas de prefeitura em staging antes de promover.
+| Superfície | Tratamento |
+|---|---|
+| `ingestion.getCapabilities` | `.xls` listado como `supported:false`, `capabilityStatus:"disabled"`, com `unavailableMessage` |
+| `FileDropzone` (ingestão canônica — Pesquisa de Preços, Document Intake) | `accept` só com formatos suportados (sem `.xls`); aviso com a orientação; `.xls` arrastado recebe a mensagem antes do upload |
+| `ingestion.createSession` | Recusa `.xls` declarado (`UNSUPPORTED_MEDIA_TYPE` + mensagem); nenhuma sessão nova nasce para falhar |
+| `XlsxParser` (worker da fila) | Conteúdo OLE/CFB ou declaração `.xls` ⇒ `UNSUPPORTED_FORMAT`; outro conteúdo não-ZIP ⇒ `CORRUPT_FILE`; ambos **determinísticos** (sem retry automático). Leitor indisponível (infra) ⇒ `PARSE_ERROR` (retry/backoff existente) |
+| Texto de ajuda da Pesquisa de Preços | "XLSX ou CSV" |
+| Modais legados de itens (`ImportItemsModal`, `TRItemsModal`, `UploadStep`) | **Sem alteração**: inalcançáveis (`ProcessDetails` fora de rota) e o endpoint `processes.parseItemsFile` está desativado (FORBIDDEN, LEG-005) — nenhum arquivo chega a parser por eles |
+| CSV, PDF, DOCX | Sem alteração |
 
-## Decisão de produto pendente (Owner) — XLS legado
+Sessões antigas: nada é reprocessado; o tipo `xls` continua reconhecido em `importTypes`/promoção para sessões já
+gravadas; `PARSER_VERSION` 1.3.0 → **1.4.0** e `rawMetadata.engine = "exceljs"` registram o leitor nas sessões
+novas. Uma reextração manual de sessão `.xls` antiga termina em `UNSUPPORTED_FORMAT` (determinístico). Revisão e
+promoção continuam com aprovação humana.
 
-O caminho XLS continua com as duas advisories. Opções:
+## Limites (o que de fato contém consumo excessivo)
 
-1. **Manter XLS via SheetJS 0.20.3 oficial** (tarball da CDN do SheetJS fixado por integridade no lockfile):
-   corrige as duas advisories e preserva o formato. Exige liberar `cdn.sheetjs.com` no build (Railway/CI) e
-   aceitar dependência fora do npm. Não validado aqui (CDN bloqueada nesta sessão).
-2. **Descontinuar a importação de `.xls`** com mensagem explícita ("salve como .xlsx ou .csv e reenvie") —
-   remove a dependência e as advisories; muda a experiência de quem recebe planilhas antigas de fornecedores.
-3. **Manter como está** (SheetJS 0.18.5 só para XLS, com limites) — risco residual aceito formalmente.
+`readXlsxMatrices` chamava `wb.xlsx.load` (JSZip descomprime **tudo** em memória, sem teto) antes de qualquer
+checagem de célula/aba, e `assertZipWithinLimits` usava só tamanhos **declarados**. Agora, em camadas:
 
-Até a decisão, `xlsx` permanece no `package.json` e as duas GHSA permanecem no baseline do gate (o baseline não
-foi ampliado).
+1. **Diretório declarado** (barato, sem descomprimir): ≤ 2.000 entradas, ≤ 250 MB, taxa ≤ 200:1, sem ZIP64.
+2. **Descompressão real** (`scanZipRealContent`, stream, conteúdo descartado), **antes** do leitor: aborta ao
+   passar de 250 MB reais somando as entradas; conta abas (≤ 100) e células reais `<c>` (≤ 1.000.000 na pasta,
+   ~340 B de heap cada no `exceljs`, medido).
+3. **Matriz**: intervalo por aba ≤ 2 M células e soma entre abas ≤ 4 M, antes de alocar.
+4. **Processo filho** com `--max-old-space-size=768`, tempo máximo de 60 s (SIGKILL), ambiente mínimo (sem
+   `DATABASE_URL`, chaves, sessão ou `NODE_OPTIONS`) e um filho por vez por processo. Um `worker_thread` foi
+   descartado: `--max-old-space-size` global/`NODE_OPTIONS` anula o `resourceLimits` dele (verificado em Node 22).
+   `Promise.race` com timeout não serviria: não cancela parser síncrono nem limita memória.
+
+Falha de limite ⇒ `SIZE_EXCEEDED` (ou `CORRUPT_FILE` para ZIP inválido), determinístico.
+
+Ensaio adversarial (`xlsx-adversarial-isolated.test.ts`, executado em processo filho com `NODE_OPTIONS` pedindo
+4 GB de heap de propósito, nunca no processo da aplicação):
+
+| Entrada | Resultado |
+|---|---|
+| Diretório declara 100 bytes, conteúdo real 300 MB (limites de produção) | checagem declarada passa; descompressão real ⇒ `ZIP_TOO_LARGE` (~1,2 s) |
+| 300 entradas de 1 MB declarando 10 bytes cada | `ZIP_TOO_LARGE` |
+| 150 worksheets | `TOO_MANY_SHEETS` antes do leitor |
+| Intervalo A1:XFD1048576 | `TOO_MANY_CELLS` sem alocar a matriz |
+| 5 abas de 1 M células de intervalo | `TOO_MANY_CELLS` (orçamento agregado) |
+| Células reais acima do limite | `TOO_MANY_CELLS` antes do leitor |
+| Leitura acima do tempo | `READ_TIMEOUT` em ~300 ms, filho morto |
+| Heap do filho esgotado | `READ_MEMORY`; o processo chamador segue vivo |
+| Tenant A hostil + tenant B legítimo simultâneos | A ⇒ `READ_TIMEOUT`; B lido corretamente (espera o filho de A, FIFO) |
+| Planilha legítima de 200 mil células | lida (~1,5 s) |
+
+Em todos os casos o maior atraso do event loop do processo chamador ficou abaixo de 15 ms. Custo: ~0,3–0,4 s por
+leitura para subir o filho em dev/teste (tsx); em produção o filho é JS empacotado.
+
+## Compatibilidade (goldens no lugar do diferencial)
+
+O diferencial dependia do SheetJS. A saída dele foi **congelada** uma vez (`server/__tests__/fixtures/spreadsheets/`,
+dados fictícios) e o leitor atual é comparado contra esses goldens: corpus escrito pelo `exceljs` (cotações, moeda e
+decimais, vazios e intervalo fora de A1, células só formatadas, datas e formatos, fórmulas com/sem cache e erros,
+strings iniciadas por `=`/`+`/`@`/`-`, mescladas, rich text, hyperlink, booleanos, várias abas inclusive oculta e
+vazia, números extremos e unicode) e dois arquivos escritos pelo próprio SheetJS (tipos mistos; strings inline).
+
+**Fuso:** a mesma sonda roda em processo filho com `TZ=UTC` e `TZ=America/Sao_Paulo` (offset 180 conferido) e as
+duas saídas — matrizes e itens extraídos (datas `2026-10-25`, `2026-01-01`; `1,234`/`1.234`, `23,9`) — são
+iguais entre si e ao golden. Nenhum teste é pulado por fuso.
+
+**Limitação:** o corpus é sintético; recomenda-se repetir a comparação com 3–5 planilhas reais anonimizadas em
+staging antes de promover.

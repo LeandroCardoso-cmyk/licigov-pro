@@ -10,10 +10,14 @@
  *   - número → number, texto → string, booleano → boolean, data → Date;
  *   - fórmula → valor em CACHE (nunca executada); sem cache → "";
  *   - erro (#N/A…) → ""; célula mesclada secundária → ""; rich text e hyperlink → texto.
- * Limites aplicados antes (ZIP) e durante (células por aba): ver spreadsheetLimits.ts.
+ * Limites: diretório ZIP declarado e descompressão REAL antes do leitor; intervalo por aba e total da pasta antes de
+ * alocar a matriz (spreadsheetLimits.ts). Em produção esta função roda só dentro do worker isolado
+ * (xlsxReadIsolated.ts), nunca no processo principal.
  */
 import ExcelJS from "exceljs";
-import { assertSheetWithinLimits, assertZipWithinLimits, SPREADSHEET_LIMITS, SpreadsheetLimitError } from "./spreadsheetLimits";
+import {
+  assertSheetWithinLimits, scanZipRealContent, SPREADSHEET_LIMITS, SpreadsheetLimitError, type SpreadsheetLimits,
+} from "./spreadsheetLimits";
 
 export type MatrixCell = string | number | boolean | Date;
 
@@ -50,25 +54,26 @@ export function excelCellValue(value: ExcelJS.CellValue): MatrixCell {
   return String(value);
 }
 
-/** Lê um XLSX (já validado como ZIP) e devolve a matriz de cada aba, na ordem do arquivo. */
-export async function readXlsxMatrices(buffer: Buffer): Promise<WorkbookMatrices> {
-  assertZipWithinLimits(buffer);
+/** Lê um XLSX e devolve a matriz de cada aba, na ordem do arquivo. Lança SpreadsheetLimitError. */
+export async function readXlsxMatrices(buffer: Buffer, limits: SpreadsheetLimits = SPREADSHEET_LIMITS): Promise<WorkbookMatrices> {
+  await scanZipRealContent(buffer, limits); // bytes e células REAIS, antes de o JSZip descomprimir tudo em memória
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
   const sheets = wb.worksheets;
-  if (sheets.length > SPREADSHEET_LIMITS.maxSheets) {
-    throw new SpreadsheetLimitError("TOO_MANY_SHEETS", `Planilha com ${sheets.length} abas (limite ${SPREADSHEET_LIMITS.maxSheets}).`);
+  if (sheets.length > limits.maxSheets) {
+    throw new SpreadsheetLimitError("TOO_MANY_SHEETS", `Planilha com ${sheets.length} abas (limite ${limits.maxSheets}).`);
   }
   const sheetNames: string[] = [];
   const matrices = new Map<string, MatrixCell[][]>();
+  const budget = { remaining: limits.maxMatrixCellsPerWorkbook };
   for (const ws of sheets) {
     sheetNames.push(ws.name);
-    matrices.set(ws.name, worksheetMatrix(ws));
+    matrices.set(ws.name, worksheetMatrix(ws, limits, budget));
   }
   return { sheetNames, matrices };
 }
 
-function worksheetMatrix(ws: ExcelJS.Worksheet): MatrixCell[][] {
+function worksheetMatrix(ws: ExcelJS.Worksheet, limits: SpreadsheetLimits, budget: { remaining: number }): MatrixCell[][] {
   // Intervalo usado: linhas/células EXISTENTES no arquivo (row.model inclui células só formatadas, como a
   // <dimension> que o SheetJS usava). findRow não cria linhas.
   let minR = 0, maxR = 0, minC = 0, maxC = 0;
@@ -87,7 +92,12 @@ function worksheetMatrix(ws: ExcelJS.Worksheet): MatrixCell[][] {
   if (!minR) return [[""]]; // aba sem células: o SheetJS lia a <dimension> "A1" ⇒ uma linha com uma célula vazia
   const rows = maxR - minR + 1;
   const cols = maxC - minC + 1;
-  assertSheetWithinLimits(ws.name, rows, cols);
+  assertSheetWithinLimits(ws.name, rows, cols, limits);
+  // Orçamento AGREGADO entre abas: várias abas esparsas no limite individual não somam uma matriz gigante.
+  budget.remaining -= rows * cols;
+  if (budget.remaining < 0) {
+    throw new SpreadsheetLimitError("TOO_MANY_CELLS", `A pasta excede o limite de ${limits.maxMatrixCellsPerWorkbook} células somando as abas.`);
+  }
 
   const out: MatrixCell[][] = [];
   for (let r = minR; r <= maxR; r++) {

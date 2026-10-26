@@ -24,7 +24,7 @@ import { createHash } from "crypto";
 import { readFileSync } from "node:fs";
 import pathMod from "node:path";
 import mysql from "mysql2/promise";
-import * as XLSX from "xlsx";
+import { xlsxBuffer } from "../helpers/xlsxFixture";
 import { Document, Packer, Paragraph, HeadingLevel, TextRun } from "docx";
 
 const DB = process.env.DATABASE_URL;
@@ -77,10 +77,8 @@ async function newProcess(org: number, object = "Aquisição de material"): Prom
   return p.id;
 }
 
-function xlsxOf(rows: unknown[][]): Buffer {
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Cotações");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+function xlsxOf(rows: unknown[][]): Promise<Buffer> {
+  return xlsxBuffer([["Cotações", rows]]);
 }
 
 async function docxOf(title: string, body: string): Promise<Buffer> {
@@ -176,7 +174,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
 
   it("1–2) XLSX real: célula NUMÉRICA preservada e arredondada UMA vez (1.234→1,23 · 1.005→1,01 · 1.0049→1,00 · 100→100,00)", async () => {
     const pid = await newProcess(ORG);
-    const sid = await ingest(ORG, pid, "price_research", "num.xlsx", XLSX_MIME, xlsxOf([
+    const sid = await ingest(ORG, pid, "price_research", "num.xlsx", XLSX_MIME, await xlsxOf([
       ["Descrição", "Qtd", "Unid", "Valor unitário", "Fornecedor"],
       ["Clipes", 10, "cx", 1.234, "A"], ["Grampos", 10, "cx", 1.005, "A"], ["Elástico", 10, "cx", 1.0049, "A"],
       ["Caneta", 100, "un", 100, "A"], ["Papel A4", 2, "resma", "1.234,56", "A"],
@@ -491,7 +489,7 @@ describe.skipIf(!DB)("P0 PILOTO — hardening (MySQL real)", () => {
       await promoteDocumentToDraft({ organizationId: ORG, processId: pid, stagingId: st.id, mode: "create", actorUserId: U1, idempotencyKey: `ga-${kind}-${st.id}`, correlationId: "ga" });
       expect((await getDocumentReviewHistory({ organizationId: ORG, processId: pid, stagingId: st.id })).map((e) => e.eventType)).toEqual(["extracted", "approved", "promoted"]);
     }
-    const sid = await ingest(ORG, pid, "price_research", "mapa.xlsx", XLSX_MIME, xlsxOf([
+    const sid = await ingest(ORG, pid, "price_research", "mapa.xlsx", XLSX_MIME, await xlsxOf([
       ["Item", "Descrição", "Qtd", "Unid", "Móveis A (R$)", "Móveis B (R$)", "Móveis C (R$)"],
       [1, "Cadeira giratória", 10, "un", 100, 110, 90],
     ]));

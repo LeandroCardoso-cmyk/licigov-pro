@@ -24,7 +24,7 @@
 | | B — antigas revogadas, serviços validados, logs de acesso/consumo revisados no período | ✅ | ❌ | ❌ | Sem acesso a Google/AWS/Brevo; CloudTrail data events provavelmente inexistentes (§5) |
 | 3. Identidade e permissões (15) | A — 2 contas sem 2FA no Workspace, administradores e recuperação | ❌ | ❌ | ❌ | Sem acesso ao Admin Console |
 | | B — acessos Railway/GitHub/Google, apps OAuth, contas de serviço, escopos | ❌ | ❌ | ❌ | Railway/GitHub lidos; Google não. Código pronto para contas MySQL mínimas e workflows `contents: read` — não aplicado em ambiente |
-| 4. Segurança do LiciGov (20) | A — GitGuardian + auditoria de dependências com correção ou descarte fundamentado | ✅ | ❌ | ❌ | GitGuardian: real, rotacionado em 21/09. Deps 38→14; **`xlsx` aplicável ainda aberto** (PR separada em andamento) |
+| 4. Segurança do LiciGov (20) | A — GitGuardian + auditoria de dependências com correção ou descarte fundamentado | ✅ | ❌ | ❌ | GitGuardian: real, rotacionado em 21/09. Deps 38→14; `xlsx` removido na #319 (baseline 14→12, CI do head da #319). Restam 12 advisories no baseline sem correção ou descarte fundamentado um a um ⇒ critério segue não atendido |
 | | B — autorização, isolamento, proteção de dados e replay nos caminhos afetados | ✅ | ✅ | ⏳ | Correlation id, backup sem cifra (proteção de dados), contas por função; smokes de isolamento e de menor privilégio. Valida com a CI do novo head |
 | 5. IA e OAuth (10) | A — Gemini por SDK/modelo, só caminhos afetados, com testes | ✅ | ✅ | ✅ | `bf7180d` + testes; CI verde no head `4d99bee`. Não validado em staging |
 | | B — aplicabilidade OAuth/MCP concluída ou não aplicabilidade fundamentada | ✅ | ✅ | ✅ | Aviso cita só `sincrosaude-creative-agent`; LiciGov sem OAuth Google/MCP Workspace |
