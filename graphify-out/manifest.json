@@ -25,8 +25,8 @@
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useOrgRole.ts": {
-    "mtime": 1792680838.0891504,
-    "ast_hash": "69419cec8bdc3346c7b9021199937906",
+    "mtime": 1792984506.4667861,
+    "ast_hash": "65c99664e9bd1923f8edfeff98e4a078",
     "semantic_hash": ""
   },
   "client/src/app-public-surface.test.ts": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1792680838.089491,
-    "ast_hash": "c67a39dbc28e35ffe93bf4a2d1088dac",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "ef2bd2aff1365780684e50829ec3d524",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -1075,8 +1075,8 @@
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
-    "mtime": 1792680838.1012409,
-    "ast_hash": "13731aa1efbf1f2afae7849053185321",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "08996f8eaf6cb8dc21696046eb5f73e2",
     "semantic_hash": ""
   },
   "client/src/components/executive-operations/DeploymentHealthCard.tsx": {
@@ -1795,8 +1795,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DraftEditor.tsx": {
-    "mtime": 1792680838.1102645,
-    "ast_hash": "6bc5bff0e2a70f516336892e542b6d24",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "7e8d26b1d96ac566787f29daca282dc8",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "117a92c73e88afe7a1b5b0785ec7ef10",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "fc1106e30d7277e330a4f747a3bab93e",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1825,13 +1825,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "8c67c0557b10067bc0aa44a6a90fc2fa",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "eac32f85e01be376a475765109232223",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.tsx": {
-    "mtime": 1792975316.9186132,
-    "ast_hash": "1022913e30c4fd002532282a91e707b1",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "18b572eb3e2a860cb397fab51b01808a",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PesquisaPrecosWorkspace.ux.test.ts": {
@@ -1840,18 +1840,18 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "d4f1d4c40473f38567c86509f11cc664",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "5ff33fb29eed6ac45cdda8da4e5a47fe",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessoLicitatorioHome.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "a6cb112bfe02eb3c217aed22b5f8600b",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "193df4dc6b0eddaf9c7706f6fd98b8af",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemPanel.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "9b420a6829df13478dce4cd0f2f7fa2f",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "1645d2e0eb68fb77eafebd8431258652",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.test.ts": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1792680838.127238,
-    "ast_hash": "2184b3266d361349c45c5658455a8fde",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "4a4a8472f09f795ab071633b101cf5be",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "client/src/procurement-presentation-fallbacks.test.ts": {
-    "mtime": 1792703087.090732,
-    "ast_hash": "a2d919274db8ee98382850725e619bd2",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "16048cfdc2a5339d98dda325c8995a68",
     "semantic_hash": ""
   },
   "client/src/services/download.ts": {
@@ -5695,8 +5695,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-canonical-guard.test.ts": {
-    "mtime": 1792680839.0272381,
-    "ast_hash": "c53555406b36568083d4ad29bb35466e",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "4d5dfce3d14d9114f9bfcbe0dbc8e5b9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-capabilities.test.ts": {
@@ -5755,8 +5755,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
-    "mtime": 1792975803.4732535,
-    "ast_hash": "7eaef4b7540a52075067bac0f03fa1da",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "28a01d42f5e5ff8838151a53833fcd46",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-streaming.test.ts": {
@@ -7025,8 +7025,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocumentPromotions.ts": {
-    "mtime": 1792680839.0857227,
-    "ast_hash": "754cab0c6c2d26ed93d19862c618e006",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "17382edb8f4859424c6ff85c0e3d9757",
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
@@ -7035,8 +7035,8 @@
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
-    "mtime": 1792680839.0857227,
-    "ast_hash": "87432cfa8ebb90d1c0b091ba6897260f",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "ea7e1473daa08fa9f4a4d2b3ec954100",
     "semantic_hash": ""
   },
   "server/db/platforms.ts": {
@@ -8815,8 +8815,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1792975276.7106209,
-    "ast_hash": "934d8aa0806123b6a231ab7ee6d1c1ab",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "44894ba859a58b85271497f448b91140",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1792703087.716164,
-    "ast_hash": "5aa2f1dc25d72dcbe80fe36c58d3218e",
+    "mtime": 1792984506.5547862,
+    "ast_hash": "dc289f51d7e9ec8d19c6d117ad138bf5",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9575,8 +9575,8 @@
     "semantic_hash": ""
   },
   "server/services/documentPromotionService.ts": {
-    "mtime": 1792680839.1512382,
-    "ast_hash": "77af8ae800ca4191d1c2d1c34e920daa",
+    "mtime": 1792984506.5547862,
+    "ast_hash": "96012530e276011493c24747cd7c3e3f",
     "semantic_hash": ""
   },
   "server/services/documentRenderService.ts": {
@@ -9750,8 +9750,8 @@
     "semantic_hash": ""
   },
   "server/services/fileIngestionService.ts": {
-    "mtime": 1792680839.1552382,
-    "ast_hash": "a245de9e0abe1b9e2c06f0ece01d8de6",
+    "mtime": 1792984506.5547862,
+    "ast_hash": "c539ecf2c03e40b067b8102f35156bfd",
     "semantic_hash": ""
   },
   "server/services/gemini.ts": {
@@ -10545,8 +10545,8 @@
     "semantic_hash": ""
   },
   "vitest.config.ts": {
-    "mtime": 1792680839.378345,
-    "ast_hash": "5decceaeef0946520ae0d039567d4478",
+    "mtime": 1792984506.5547862,
+    "ast_hash": "3fa40785f562f20875cd5e8b7c5cc87b",
     "semantic_hash": ""
   },
   ".claude/skills/brainstorming/SKILL.md": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792980130.0586548,
-    "ast_hash": "e65278aa77882f5519b5d53fe311ce3a",
+    "mtime": 1792984506.4667861,
+    "ast_hash": "52fe6d57a47af31f31cb568f17a186dc",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -12995,8 +12995,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemApprovalGate.render.test.ts": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "a7ee2dd56ab04f6634967c306622405b",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "69f73f83474595c7c6e631553615475f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemSourceUpdateConfirm.tsx": {
@@ -13425,8 +13425,8 @@
     "semantic_hash": ""
   },
   "server/domain/emissionPreconditions.ts": {
-    "mtime": 1792680839.0952382,
-    "ast_hash": "f4f067249f2acdea1aa66f63916a96d4",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "5ad9ea13c2114ae534d11bcecd36927a",
     "semantic_hash": ""
   },
   "server/domain/humanEditMarker.ts": {
@@ -14375,8 +14375,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalTemplateBridge.ts": {
-    "mtime": 1792680838.123238,
-    "ast_hash": "389c23a27e6e811db9f95cd6915386e3",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "56b21734644fce1e58f28827a4249a36",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts": {
@@ -14390,13 +14390,13 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalBridgeScope.ts": {
-    "mtime": 1792680839.103238,
-    "ast_hash": "ff215e6110ab26395eb099c18a5cd3f7",
+    "mtime": 1792984506.5507863,
+    "ast_hash": "da7d97da98170d33766bdd4e4f91a626",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalBridgeService.ts": {
-    "mtime": 1792680839.3518057,
-    "ast_hash": "6013147ab1b76873f1c1c39f2afa1f14",
+    "mtime": 1792984506.5547862,
+    "ast_hash": "dc238bb6131c525582371c6522881b4b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreflightCard.tsx": {
@@ -14410,8 +14410,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
-    "mtime": 1792680838.1112382,
-    "ast_hash": "fda5702a1476c82e580c1f4d0c834bcd",
+    "mtime": 1792984506.4707863,
+    "ast_hash": "51b4438c20cfe8a1a6bc6d3855fd8a65",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PrepFieldControl.tsx": {
@@ -14425,8 +14425,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1792680838.123238,
-    "ast_hash": "f0ecf750b5c1e6e838eb6680b8ccf523",
+    "mtime": 1792984506.4747863,
+    "ast_hash": "2bb6b94ab2d7f1c9732c4db8e29da6f0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -15427,6 +15427,51 @@
   "server/__tests__/unit/ci-lint-changed.test.ts": {
     "mtime": 1792980130.1306548,
     "ast_hash": "bf04dcc09317b4b1add386bda941d623",
+    "semantic_hash": ""
+  },
+  "client/src/components/documents/DocumentMarkdownView.render.test.ts": {
+    "mtime": 1792984506.4707863,
+    "ast_hash": "91458fddead04a34a1de8e0fc241aed5",
+    "semantic_hash": ""
+  },
+  "client/src/components/documents/DocumentMarkdownView.tsx": {
+    "mtime": 1792984506.4707863,
+    "ast_hash": "77a673661f8900bc2a36ba341f150fd2",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/IngestionSessionHistory.tsx": {
+    "mtime": 1792984506.4707863,
+    "ast_hash": "9ac0128ad7dc106adb5ecfb11adfa1aa",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/m8VisualHomologation.test.ts": {
+    "mtime": 1792984506.4747863,
+    "ast_hash": "c15f4e0f4e8ddf372e7eb9ecacdc8fad",
+    "semantic_hash": ""
+  },
+  "client/src/lib/ingestionHistoryView.ts": {
+    "mtime": 1792984506.4747863,
+    "ast_hash": "7e89d6a5ff9d9d2a3657b6dd0a79dd64",
+    "semantic_hash": ""
+  },
+  "client/src/lib/processDocumentStatus.ts": {
+    "mtime": 1792984506.4747863,
+    "ast_hash": "8ac6a2440db5dc5c94c5715bd8c98dad",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-visual-homologation-mysql-smoke.test.ts": {
+    "mtime": 1792984506.5507863,
+    "ast_hash": "50ef2b91b78b65c3349d9bccb686b163",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-visual-homologation.test.ts": {
+    "mtime": 1792984506.5507863,
+    "ast_hash": "32e346e4b6a32a03568e378ed629d300",
+    "semantic_hash": ""
+  },
+  "shared/documentMarkers.ts": {
+    "mtime": 1792984506.5547862,
+    "ast_hash": "b1b653c1d8cb24853d7eba8dbf2799cf",
     "semantic_hash": ""
   }
 }
