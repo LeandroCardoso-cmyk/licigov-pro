@@ -491,15 +491,66 @@ export const DEVIATION_LABEL: Record<DeviationView["kind"], string> = {
 export const pendingDeviations = (r: Pick<ReviewStateView, "structuralDeviations"> | undefined): DeviationView[] =>
   (r?.structuralDeviations ?? []).filter((d) => !d.acknowledged);
 
+/**
+ * M8 (homologação visual) — origem legível de uma variável do modelo (`vars.<NAMESPACE>.<campo>`), para orientar ONDE corrigir.
+ * Mapa fechado e curto: variável sem rótulo cai no rótulo do namespace; namespace desconhecido ⇒ "dado do processo".
+ */
+const VARIABLE_LABELS: Readonly<Record<string, string>> = {
+  "BUDGET.valorEstimado": "valor estimado da contratação — corrija na Pesquisa de Preços (cotações válidas e divulgação do orçamento)",
+};
+const NAMESPACE_LABELS: Readonly<Record<string, string>> = {
+  BUDGET: "orçamento — corrija na Pesquisa de Preços",
+  ITEMS: "itens da contratação — corrija em Itens da contratação",
+  PROCESS: "dados do processo",
+  ORG: "perfil institucional do órgão",
+  CERTAME_CONFIG: "configuração do certame — corrija na Preparação do Edital",
+  TR: "Termo de Referência oficial",
+};
+export function variableOriginLabel(path: string): string {
+  const name = path.replace(/^vars\./, "");
+  return VARIABLE_LABELS[name] ?? NAMESPACE_LABELS[name.split(".")[0]] ?? "dado do processo";
+}
+
+/**
+ * Texto OPERACIONAL de uma pendência da revalidação do modelo (o código/caminho técnico é preservado à parte, para
+ * auditoria). Nunca expõe termos internos ("requiredWhen", "fontes canônicas", nomes de variável) como orientação.
+ */
+export function revalidationIssueMessage(i: { code: string; path: string; message: string }): string {
+  switch (i.code) {
+    case "SOURCE_CHANGED":
+      return "Os dados do processo mudaram depois da composição desta minuta: ela precisa ser composta novamente pelo modelo institucional antes da emissão.";
+    case "COMPOSITION_DRIFT":
+      return "O texto não corresponde mais ao que o modelo institucional compõe com os dados atuais — revise a minuta.";
+    case "MISSING_REQUIRED":
+      return `Falta uma informação obrigatória para este modelo: ${variableOriginLabel(i.path)}.`;
+    case "VALUE_TYPE_INVALID":
+      return `Uma informação do processo está em formato inválido para este modelo: ${variableOriginLabel(i.path)}.`;
+    case "REFERENCE_NOT_PINNED":
+      return "A minuta não está vinculada à versão exata do TR oficial: selecione o TR oficial e componha novamente.";
+    case "CROSS_TENANT_REFERENCE":
+      return "A minuta referencia um documento que não pertence a este órgão: componha novamente.";
+    default:
+      return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
+  }
+}
+
 /** Resumo de prontidão para emitir: nada além de informar — a autoridade final é a revalidação do backend na emissão. */
-export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolean; blockers: string[] } {
-  if (!r || !r.composedByTemplate) return { ready: true, blockers: [] };
+export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolean; blockers: string[]; technical: string[] } {
+  if (!r || !r.composedByTemplate) return { ready: true, blockers: [], technical: [] };
   const blockers: string[] = [];
+  const technical: string[] = [];
   if (r.unresolvedMarkers.count > 0) blockers.push(`${r.unresolvedMarkers.count} marcador(es) [REVISAR] pendente(s) no texto.`);
   const pend = pendingDeviations(r).length;
   if (pend > 0) blockers.push(`${pend} desvio(s) estrutural(is) sem reconhecimento humano.`);
-  if (r.revalidation.status === "BLOCKED") for (const i of r.revalidation.issues) if (i.code !== "STRUCTURAL_DEVIATION_UNACKNOWLEDGED") blockers.push(i.message);
-  return { ready: blockers.length === 0, blockers };
+  if (r.revalidation.status === "BLOCKED") {
+    for (const i of r.revalidation.issues) {
+      if (i.code === "STRUCTURAL_DEVIATION_UNACKNOWLEDGED") continue;
+      const text = revalidationIssueMessage(i);
+      if (!blockers.includes(text)) blockers.push(text);
+      technical.push(`${i.code} · ${i.path} — ${i.message}`);
+    }
+  }
+  return { ready: blockers.length === 0, blockers, technical };
 }
 
 export interface AckOutcome { blockId: string; ok: boolean; error?: string }

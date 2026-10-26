@@ -6,7 +6,7 @@
  * Aceita executor (tx externa) para compor o commit atômico da promoção (ver documentPromotionService).
  * Padrão getDb(): degrada graciosamente sem DB.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, max } from "drizzle-orm";
 import { getDb } from "./connection";
 import { toDbDatetime } from "./institutionalConsultations";
 import { officialDocumentPromotionsTable } from "../../drizzle/schema";
@@ -66,4 +66,34 @@ export async function getLatestOfficialPromotion(
     officialDocumentId: r.officialDocumentId, lineageId: r.lineageId, version: r.version,
     contentHash: r.contentHash, actorUserId: r.actorUserId, createdAt: r.createdAt,
   };
+}
+
+/**
+ * M8 (homologação visual) — última versão oficial EMITIDA por (processo, tipo), em lote e tenant-scoped. Leitura pura do
+ * ledger de promoções: a UI distingue "rascunho" de "emitido vN" sem N consultas por processo.
+ */
+export async function listLatestOfficialVersions(
+  organizationId: number, processIds: readonly string[],
+): Promise<Map<string, Partial<Record<string, number>>>> {
+  const out = new Map<string, Partial<Record<string, number>>>();
+  if (processIds.length === 0) return out;
+  const db = await getDb();
+  if (!db) return out;
+  const rows = await db.select({
+    processId: officialDocumentPromotionsTable.processId,
+    documentKind: officialDocumentPromotionsTable.documentKind,
+    version: max(officialDocumentPromotionsTable.version),
+  }).from(officialDocumentPromotionsTable)
+    .where(and(
+      eq(officialDocumentPromotionsTable.organizationId, organizationId),
+      inArray(officialDocumentPromotionsTable.processId, [...processIds]),
+    ))
+    .groupBy(officialDocumentPromotionsTable.processId, officialDocumentPromotionsTable.documentKind);
+  for (const r of rows) {
+    if (r.version === null) continue;
+    const m = out.get(r.processId) ?? {};
+    m[r.documentKind] = Number(r.version);
+    out.set(r.processId, m);
+  }
+  return out;
 }

@@ -5,6 +5,7 @@ import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabili
 import { DocumentIngestionLauncher } from "@/components/ingestion/DocumentIngestionLauncher";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCentsBRL } from "@shared/money";
+import IngestionSessionHistory from "./IngestionSessionHistory";
 
 /**
  * PesquisaPrecosWorkspace.
@@ -284,6 +285,9 @@ export default function PesquisaPrecosWorkspace({ processId = "", onReviewItems 
           <LegacyPriceResearchPanel processId={processId} onReviewItems={onReviewItems} />
         </div>
       )}
+
+      {/* M8 — histórico das importações já registradas: visível com a ingestão ligada ou desligada (somente leitura). */}
+      {processId && <IngestionSessionHistory processId={processId} />}
     </div>
   );
 }

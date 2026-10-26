@@ -19,7 +19,7 @@ export interface ReviewViewProps {
 /** Apresentação do estado de revisão do rascunho composto por modelo (marcadores, desvios, narrativas de IA, prontidão). */
 export function EditalTemplateReviewView({ state, selected, busy = false, outcomes = [], onToggle, onAcknowledge, onAcknowledgeSelected, authority }: ReviewViewProps) {
   if (!state.composedByTemplate) return null;
-  const { ready, blockers } = reviewReadiness(state);
+  const { ready, blockers, technical } = reviewReadiness(state);
   const pending = pendingDeviations(state);
   const sum = summarizeAcks(outcomes);
   return (
@@ -36,6 +36,12 @@ export function EditalTemplateReviewView({ state, selected, busy = false, outcom
             {blockers.map((b) => <li key={b}>{b}</li>)}
           </ul>
         )}
+      {technical.length > 0 && (
+        <details className="text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer">Detalhes técnicos da revalidação ({technical.length})</summary>
+          <ul className="mt-1 list-disc pl-5 font-mono">{technical.map((t) => <li key={t}>{t}</li>)}</ul>
+        </details>
+      )}
 
       {(state.lateBound?.length ?? 0) > 0 && (
         <ul className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground" aria-label="Campos atribuídos pelo sistema na emissão" data-late-bound="1">
