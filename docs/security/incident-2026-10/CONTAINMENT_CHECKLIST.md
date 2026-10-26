@@ -1,165 +1,165 @@
-# Checklist de contenção — MySQL primeiro (staging → produção)
+# Checklist de contenção — MySQL de STAGING (produção depois, com autorização própria)
 
-> **Revisão 3 (26/10/2026).** Executor: Owner (ou operador autorizado). Cada bloco ▶ é uma **mutação** que exige
-> a autorização indicada; nenhum bloco ▶ foi autorizado por este documento. Detalhes e justificativas:
-> [`ROTATION_RUNBOOK.md`](./ROTATION_RUNBOOK.md) §1–§2. Sem valores de segredo em nenhum registro.
-> Tempo estimado: ~45 min por ambiente (o backup de produção sozinho leva ~20 min).
+> **Revisão 4 (26/10/2026).** Executor: Owner (ou operador autorizado). Cada bloco ▶ é uma **mutação**; todos os
+> blocos ▶ de staging estão cobertos por uma única autorização coordenada (§9). Nada aqui vale para produção.
+> Detalhes: [`ROTATION_RUNBOOK.md`](./ROTATION_RUNBOOK.md) §1–§2. Nenhum valor de segredo em registro algum.
 
-## 0. Acessos e condições necessários
+## 0. Alvo exato (staging)
 
-- [ ] Railway: conta do Owner com acesso ao projeto `licigov-pro`; Railway CLI instalado e logado
-      (`railway ssh`), numa **máquina confiável**.
-- [ ] GitHub: admin do repositório (criar Actions Secrets e disparar workflows manuais).
-- [ ] Esta PR (#317) integrada em `staging` e implantada (o seletor de ambiente dos workflows e o
-      `MIGRATION_DATABASE_URL` vêm dela) **ou** usar a variante "sem PR" do passo 3.
-- [ ] **Canal confidencial da senha gerada** (pré-requisito dos passos 2–4, decidir e registrar ANTES de criar
-      contas). `CREATE USER … IDENTIFIED BY RANDOM PASSWORD` devolve a senha **uma vez**, como resultado da
-      consulta, no terminal do `railway ssh`. Caminho exigido entre geração e armazenamento:
-      terminal da máquina confiável → cofre do operador (gerenciador de senhas) **ou** colagem direta no campo do
-      destino (Railway Variables / GitHub Secret) → limpar a área de transferência e encerrar a sessão do terminal.
-      Proibido: chat, e-mail, arquivo local, print/gravação de tela, log de ferramenta, CI ou evidência.
-      O cliente `mysql` já não grava no histórico linhas com `IDENTIFIED`/`PASSWORD` (`--histignore` padrão);
-      **não se sabe** se a Railway retém a saída de sessões `railway ssh` — tratar como desconhecido.
-      Se esse canal **não existir** (máquina não confiável, gravação de tela ativa, sem cofre), registrar a
-      condição no `AUDIT_REPORT.md` §10 e **não** criar as contas até resolvê-la.
-- [ ] **Regenerate disponível no serviço real**: abrir Railway → MySQL (staging) → Database View → Config →
-      Connection e confirmar que o botão **Regenerate** aparece (a doc da Railway o descreve para os bancos do
-      template; não foi possível confirmar no serviço real a partir desta auditoria). Se não aparecer, **parar
-      antes do passo 5** e pedir orientação: trocar a senha por `ALTER USER` e editar a variável separadamente
-      dessincroniza o serviço (a doc trata as duas coisas como uma operação).
+| Item | ID |
+|---|---|
+| Projeto Railway `licigov-pro` | `893a1317-51ad-4b18-9d9a-f6e579e09351` |
+| Ambiente `staging` | `e7cc21d0-22a8-4844-a29b-81ee1221e0d0` |
+| Serviço app `licigov-pro` (branch `staging`, pre-deploy `pnpm db:release:predeploy`) | `2d497607-3208-4996-9295-0f919b6a93bd` |
+| Serviço `MySQL` (imagem `mysql:9`, `--disable-log-bin`; proxy público `shortline.proxy.rlwy.net:25899`) | `e6b7a98f-38c2-4123-8b99-7039a1829cbf` (deploy `ed5a4d7e-ff57-4c52-b2c3-ef5ae24ad45d`, 19/09) |
+| Volume `mysql-volume` (5000 MB, `/var/lib/mysql`) | `e912c006-ad27-4a36-ad88-447d3d2bb699` |
+| Deploy atual do app | `ea6a4b68-fb53-45d2-b022-40e211b56abf` — commit `eef4bf762be66f912535b9cc5c339d72ea29095b` (#320), SUCCESS 25/10 22:25 UTC |
 
-## 1. Pré-checagem (somente leitura, sem autorização adicional)
+**Confirmar o alvo antes de cada mutação** (sem revelar valores):
+1. Railway UI: barra superior `licigov-pro` › ambiente **staging**; a URL contém
+   `893a1317-51ad-4b18-9d9a-f6e579e09351` e `environmentId=e7cc21d0-22a8-4844-a29b-81ee1221e0d0`.
+2. CLI: `railway link --project 893a1317-51ad-4b18-9d9a-f6e579e09351 --environment staging --service e6b7a98f-38c2-4123-8b99-7039a1829cbf`
+   e `railway status` mostrando projeto `licigov-pro`, ambiente `staging`, serviço `MySQL`.
+3. Dentro do `railway ssh`: `printenv RAILWAY_PROJECT_ID RAILWAY_ENVIRONMENT_NAME RAILWAY_SERVICE_NAME` ⇒
+   `893a1317-…`, `staging`, `MySQL`; e `SELECT @@server_uuid` igual ao registrado na leitura §2 (impressão
+   digital da instância; diferente ⇒ **parar**).
 
-Resultado da pré-checagem remota feita nesta auditoria: [`AUDIT_REPORT.md` §11](./AUDIT_REPORT.md). O que
-ficou sem acesso remoto (versão real, contas, grants, se `DATABASE_URL` é referência) é coletado aqui:
+## 1. Canal confidencial das senhas (pré-requisito dos blocos ▶ com conta)
 
-- [ ] Railway → serviço `licigov-pro` → Variables: anotar se `DATABASE_URL` é **referência**
-      (`${{MySQL.MYSQL_URL}}`) ou valor literal — em staging e produção (só a forma, nunca o valor).
-- [ ] `railway ssh` no serviço MySQL do ambiente → `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -e "SELECT
-      VERSION(); SELECT user, host, account_locked, ssl_type FROM mysql.user; SHOW GRANTS FOR CURRENT_USER();"`
-      — registrar **versão em execução** (a tag `mysql:9` não prova a versão) e contas (só nomes/hosts).
-      Contas internas esperadas: `root`, `mysql.sys`, `mysql.session`, `mysql.infoschema`. Qualquer outra:
-      **anotar dono/função; não excluir** nesta rotina. Para grants: `SHOW GRANTS FOR '<conta>'@'<host>'`
-      (não consultar `authentication_string`).
-- [ ] Último run de "Backup do Banco" (produção) OK, com artefato `db-backup-production` (`.sql.gz.enc`).
-      Histórico desta auditoria: backups diários OK; **nenhum drill real bem-sucedido** registrado (runs manuais
-      4–8, 31/07–01/08, falharam na `RESTORE_TARGET_URL`).
-- [ ] `pnpm db:roles:plan railway` (local) — confirmar o nome do banco (`MYSQLDATABASE`) e o plano de GRANT.
+Ninguém além do operador vê as senhas; **nunca** em chat, log de ferramenta, CI, PR, issue ou arquivo. O Claude
+não participa desta etapa e não pede senha.
 
-## 2. ▶ Criar contas (staging) — autorização: "criar contas MySQL em staging"
+- **Gerador:** o cofre de senhas do operador (entrada por conta: `licigov staging licigov_app`, `…_migrator`,
+  `…_backup`, `…_audit`), **40 caracteres alfanuméricos** (sem símbolos). Motivo técnico: as senhas entram em URLs
+  `mysql://…`; o `mysql2` decodifica percent-encoding e o `db-backup.sh` usa a senha literal — símbolos
+  quebrariam um dos dois. Por isso não se usa `IDENTIFIED BY RANDOM PASSWORD` (pode gerar pontuação).
+- **Intervenção do operador, por conta:** gerar no cofre → copiar → colar no `CREATE USER … IDENTIFIED BY '…'`
+  dentro do `mysql` do `railway ssh` (o cliente não grava linhas com `IDENTIFIED`/`PASSWORD` no histórico) →
+  colar a mesma senha, já dentro da URL, no campo do destino (Railway Variables do app / GitHub Secret) →
+  limpar a área de transferência. Máquina confiável, sem gravação de tela.
+- **Desconhecido registrado:** se a Railway retém saída de sessões `railway ssh`. Mitigação: a senha aparece só
+  como entrada colada, não como resultado de consulta.
+- Sem cofre ou sem máquina confiável ⇒ **impedimento** só dos blocos ▶ com senha; as leituras do §2 seguem.
 
-Só com o canal confidencial do passo 0 definido. Dentro de `railway ssh` (serviço MySQL, ambiente staging),
-cliente `mysql` como root:
+## 2. Leituras pendentes (sem segredo, sem `authentication_string`)
+
+Pelo `railway ssh` no MySQL de staging, como root (`MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot …`; a senha
+fica só no ambiente do container):
 
 ```sql
-SET SESSION generated_random_password_length = 32;
-CREATE USER 'licigov_app'@'%'      IDENTIFIED BY RANDOM PASSWORD;   -- senha exibida UMA vez → canal do passo 0
-CREATE USER 'licigov_migrator'@'%' IDENTIFIED BY RANDOM PASSWORD;
-CREATE USER 'licigov_backup'@'%'   IDENTIFIED BY RANDOM PASSWORD;
-CREATE USER 'licigov_audit'@'%'    IDENTIFIED BY RANDOM PASSWORD;
--- colar aqui os GRANT/ALTER USER impressos por `pnpm db:roles:plan <banco>`
+SELECT VERSION(), @@server_uuid, @@require_secure_transport, @@tls_version, DATABASE();
+SELECT user, host, plugin, ssl_type, account_locked, password_expired FROM mysql.user ORDER BY user, host;
+SELECT schema_name FROM information_schema.schemata ORDER BY 1;
+-- para cada conta fora de root/mysql.sys/mysql.session/mysql.infoschema:
+SHOW GRANTS FOR '<conta>'@'<host>';
 ```
 
-- [ ] Cada senha seguiu o canal do passo 0; nenhuma cópia fora dele.
-- [ ] Copiar a CA do servidor (não é segredo): `cat /var/lib/mysql/ca.pem` dentro do mesmo `railway ssh` — usada
-      nos passos 4 (backup/auditoria em `VERIFY_CA`).
+E na UI (sem clicar em revelar):
+- app `licigov-pro` (staging) → Variables → `DATABASE_URL`: **referência** (`${{MySQL.MYSQL_URL}}`, aparece como
+  vínculo) ou **literal** (mascarado). Só registrar a forma.
+- MySQL → Database → Config → Connection: o botão **Regenerate** existe? Registrar; não clicar.
+- Volume `mysql-volume` → Backups: há backups da Railway? Registrar (recuperação adicional; PITR não se aplica com
+  `--disable-log-bin`).
 
-## 3. ▶ Trocar consumidores (staging) — autorização: "trocar credenciais de banco em staging"
+Contas fora das esperadas: anotar dono/função; **não excluir** nesta rotina.
 
-- [ ] **Com a PR implantada:** `DATABASE_URL` → `mysql://licigov_app:<senha>@mysql.railway.internal:3306/<banco>`;
-      `MIGRATION_DATABASE_URL` → mesma forma com `licigov_migrator`.
-- [ ] **Sem a PR implantada:** `DATABASE_URL` → `licigov_migrator` (credencial nova; o split app/migrator vem
-      depois, quando a PR estiver no ambiente). A contenção não espera a PR.
-- [ ] Deploy. Validar: log do pre-deploy (`conexão: MIGRATION_DATABASE_URL` quando aplicável, migrations "em
-      dia"); boot `Schema validado`; `/readyz` 200; login; uma escrita no tenant sintético
-      `homologacao-sintetica`; nenhum `command denied` no log.
+## 3. Consumidores e plano de contas (staging)
 
-**Limite real do `MIGRATION_DATABASE_URL`:** o pre-deploy da Railway roda com as **mesmas variáveis do serviço**,
-então o processo da aplicação também recebe `MIGRATION_DATABASE_URL` no ambiente. A separação garante que o
-**código** da aplicação conecta só com `licigov_app` (DDL acidental, privilégio do pool), **não** isola o segredo:
-quem executar código no container lê as duas credenciais. Isolamento de segredo exigiria um serviço/job de
-migração separado com variáveis próprias (backlog; não faz parte desta contenção).
+| Consumidor | Hoje (nomes) | Depois | Conta | Privilégios |
+|---|---|---|---|---|
+| App `licigov-pro` — runtime | `DATABASE_URL` (forma: §2) | `DATABASE_URL` → `licigov_app` via `mysql.railway.internal:3306` | `licigov_app` | SELECT, INSERT, UPDATE, DELETE |
+| App — pre-deploy (`db:release:predeploy`) | mesma `DATABASE_URL` | `MIGRATION_DATABASE_URL` → `licigov_migrator` (variável nova) | `licigov_migrator` | + CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE/ALTER ROUTINE |
+| GitHub — "Backup do Banco" `target=staging` | — | `STAGING_BACKUP_DATABASE_URL` (proxy público), `STAGING_BACKUP_ENCRYPTION_KEY` (própria), `STAGING_BACKUP_DB_SSL_CA` | `licigov_backup` (REQUIRE SSL) | SELECT, SHOW VIEW, TRIGGER, EVENT + SHOW_ROUTINE |
+| GitHub — "Auditoria de Schema" `target=staging` | — | `STAGING_AUDIT_DATABASE_URL`, `STAGING_AUDIT_DB_SSL_CA` | `licigov_audit` (REQUIRE SSL) | REFERENCES |
+| Serviço MySQL (`MYSQL_URL`, `MYSQL_ROOT_PASSWORD`…) | root | root, senha nova pelo Regenerate | `root` | — |
 
-## 4. ▶ Backup e auditoria (staging) — autorização: "criar secrets de staging no GitHub e rodar backup/auditoria de staging"
+`MIGRATION_DATABASE_URL` no mesmo serviço: o processo da aplicação também recebe a variável; a separação limita o
+que o código usa, **não isola o segredo**. `LICIGOV_STAGING_SMOKE_*` são credenciais de login de teste, não de banco.
 
-Os workflows escolhem o ambiente por **nome de secret** (`scripts/ops/select-db-target.sh`): staging usa só
-`STAGING_*`, sem fallback para produção; o agendamento diário continua **sempre produção**. **Não alterar** os
-secrets de produção (`BACKUP_DATABASE_URL`, `BACKUP_ENCRYPTION_KEY`, `BACKUP_DB_SSL_CA`, `AUDIT_DATABASE_URL`,
-`AUDIT_DB_SSL_CA`, `RESTORE_TARGET_URL`) para testar staging.
+**Produção intocada:** os secrets `BACKUP_DATABASE_URL`, `BACKUP_ENCRYPTION_KEY`, `BACKUP_DB_SSL_CA`,
+`AUDIT_DATABASE_URL`, `AUDIT_DB_SSL_CA`, `RESTORE_TARGET_URL` e as variáveis do ambiente `production` não mudam.
 
-- [ ] Criar (GitHub → Settings → Secrets → Actions) **novos** secrets de staging:
-      `STAGING_BACKUP_DATABASE_URL` (`licigov_backup`, endpoint público do MySQL de staging),
-      `STAGING_BACKUP_ENCRYPTION_KEY` (chave **nova**, própria de staging — o seletor recusa a chave de produção),
-      `STAGING_BACKUP_DB_SSL_CA` (PEM do passo 2; obrigatório em staging),
-      `STAGING_AUDIT_DATABASE_URL` (`licigov_audit`, endpoint público, **sem** parâmetro `ssl` na URL),
-      `STAGING_AUDIT_DB_SSL_CA` (mesmo PEM).
-- [ ] "Backup do Banco" → Run workflow → `target = staging`. Log: `Alvo: staging`, `TLS: VERIFY_CA`,
-      `Servidor: <versão> | TLS TLSv1.x`; artefato `db-backup-staging`. O seletor recusa (antes de conectar)
-      secret ausente, host:porta igual ao de produção ou chave igual à de produção.
-- [ ] "Auditoria de Schema" → `target = staging`: "✅ Alinhado".
+## 4. Qual código de workflow roda (cuidado)
 
-**O que o TLS verifica (sem exagero):** `VERIFY_CA` (backup) e `ssl: { ca, rejectUnauthorized: true }` (auditoria,
-`mysql2`) exigem um certificado assinado pela CA **fixada** — a CA autogerada daquela instância MySQL. O
-**hostname não é conferido**: o certificado autogerado não traz o host do proxy público, então `VERIFY_IDENTITY`
-falharia. É autenticação por CA fixada, não verificação completa de identidade; se a CA da instância mudar
-(volume recriado), o job falha fechado e a CA precisa ser recopiada. `rejectUnauthorized:false` (só cifra, não
-autentica) deixou de ser usado. Ensaio local (MySQL 9.7.4): CA certa com hostname divergente ⇒ conecta; CA de
-outra instância ⇒ `certificate signature failure`.
+- **Agendamento usa o workflow do branch padrão (`main`).** Integrar a #317 em `staging` **não** muda o backup
+  diário de produção: ele continua no workflow antigo da `main` até a promoção staging → main. Não contar a
+  mudança de workflow como implantada antes disso.
+- **Ensaios manuais:** Actions → "Backup do Banco" → **Use workflow from: `staging`** (o ref com a #317) →
+  `target = staging`. Disparar a partir da `main` roda o workflow antigo, que **não tem `target` e faz backup de
+  produção** — não fazer. No run, conferir: `head_sha` = commit integrado em staging; log `🎯 Alvo: staging`;
+  `TLS: VERIFY_CA`; artifact **`db-backup-staging`**. Qualquer divergência ⇒ cancelar o run.
+- "Auditoria de Schema": mesmo cuidado (ref `staging`, `target = staging`).
 
-**Produção, até o passo 7:** o backup agendado segue com os secrets atuais e, sem `BACKUP_DB_SSL_CA`, em
-`REQUIRED` (aviso no log); a auditoria de produção passa a exigir `AUDIT_DB_SSL_CA` e falha sem ela.
+## 5. ▶ Integrar a #317 em `staging`
 
-## 5. ▶ Regenerate do root (staging) — autorização: "regenerar senha root MySQL em staging"
+- [ ] Merge da #317 em `staging` (CI verde no head). A Railway implanta o app de staging (deploy automático do
+      branch, aguardando os checks). Validar: pre-deploy "migrations em dia", `Schema validado`, `/readyz` 200,
+      login. Ainda com a credencial atual (nada de banco mudou).
 
-- [ ] Só depois dos passos 3–4 verdes e com o Regenerate confirmado no passo 0.
-      Railway → MySQL → Config → Connection → **Regenerate**.
-- [ ] Se `DATABASE_URL` ainda for referência ao `MYSQL_URL`, ela **deve** ter sido trocada no passo 3 (senão o
-      app passa a seguir o root novo). Redeploy dos dependentes; repetir as validações do passo 3.
+## 6. ▶ Criar contas (staging)
 
-## 6. ▶ Drill de restauração (opcional, separado) — autorização: "drill de restauração em instância descartável de <ambiente>"
+- [ ] Alvo confirmado (§0). Canal do §1 pronto.
+- [ ] No `mysql` do `railway ssh`: `CREATE USER '<conta>'@'%' IDENTIFIED BY '<colado do cofre>';` para as quatro
+      contas; depois colar os `GRANT`/`ALTER USER … REQUIRE SSL` impressos por `pnpm db:roles:plan <banco>`
+      (banco = `MYSQLDATABASE` lido no §2). `SHOW GRANTS` de cada conta confere com o plano.
+- [ ] `cat /var/lib/mysql/ca.pem` (não é segredo) ⇒ conteúdo dos secrets `STAGING_*_DB_SSL_CA`.
+- O app continua usando a credencial atual: criar contas não altera nenhum consumidor.
 
-Não é leitura: grava uma cópia completa dos dados numa instância nova. Um banco vazio **não prova** que é
-descartável; o drill só roda com todos os itens abaixo:
+## 7. ▶ Secrets de staging, backup, auditoria e **prova de recuperação** — antes de trocar consumidores
 
-- [ ] **Destino identificado:** instância MySQL nova, num projeto Railway próprio (ex.: `licigov-restore-drill`),
-      fora dos projetos de produção/staging, com o banco criado com o nome `licigov_restore_drill` (ou
-      `licigov_restore_drill_<sufixo>`). O seletor recusa outro nome, host:porta igual à origem ou ao banco do
-      outro ambiente, e o drill recusa destino não vazio ou `localhost`.
-- [ ] **Acesso:** só o Owner no projeto do drill; conta do destino só com privilégio no banco do drill; endpoint
-      público só durante o drill.
-- [ ] **Secret do destino:** `RESTORE_TARGET_URL` (drill de produção) ou `STAGING_RESTORE_TARGET_URL` (drill de
-      staging). Recomendado começar por staging.
-- [ ] **Execução:** "Backup do Banco" → `target = <ambiente>`, `run_restore_drill = true`. Evidência
-      `restore-drill-evidence-<ambiente>` (90 dias) só com contagens; o dump é decifrado em stream e os arquivos
-      do runner são removidos também em falha.
-- [ ] **Retenção e limpeza:** apagar o projeto/instância do drill logo após conferir a evidência (os dados
-      restaurados são uma cópia real); apagar o secret do destino; registrar horário e run no §10.
+- [ ] Criar os secrets `STAGING_*` do §3 (o seletor recusa chave igual à de produção e host:porta de produção).
+- [ ] "Backup do Banco" (ref `staging`, `target = staging`) ⇒ checagens do §4 + artifact `db-backup-staging`.
+- [ ] "Auditoria de Schema" (ref `staging`, `target = staging`) ⇒ "✅ Alinhado".
+- [ ] **Drill com os dados reais de staging** (o dump bem-sucedido não prova restauração; o ensaio local foi
+      sintético):
+      - origem: o backup cifrado de staging deste run;
+      - destino: projeto Railway **novo e separado** `licigov-restore-drill` com um MySQL do template e o banco
+        `licigov_restore_drill` criado vazio; proxy público ligado só durante o drill;
+      - acesso: só o Owner no projeto do drill; secret `STAGING_RESTORE_TARGET_URL` com a conta do drill;
+      - execução: "Backup do Banco" (ref `staging`, `target = staging`, `run_restore_drill = true`) ⇒ evidência
+        `restore-drill-evidence-staging` (contagens, isolamento por tenant, migrations);
+      - retenção/limpeza: apagar o projeto `licigov-restore-drill` e o secret `STAGING_RESTORE_TARGET_URL` logo
+        após conferir a evidência. Nunca restaurar sobre staging ou produção.
+- Recuperação disponível depois disto: backup cifrado de staging restaurável (comprovado), backups da Railway do
+  volume (se o §2 confirmar), e a credencial antiga ainda válida até o §8.
 
-Ensaio local desta revisão (MySQL 9.7.4 → instância separada, seletor + script do drill): 345 tabelas, 320
-migrations, isolamento OK; segunda execução recusada por destino não vazio.
+## 8. ▶ Trocar consumidores e Regenerate (staging)
 
-## 7. Recuperação (sem credencial antiga)
+- [ ] App: `DATABASE_URL` → `mysql://licigov_app:<senha>@mysql.railway.internal:3306/<banco>`;
+      `MIGRATION_DATABASE_URL` → mesma forma com `licigov_migrator`. Deploy. Validar: log do pre-deploy
+      `conexão: MIGRATION_DATABASE_URL`, `Schema validado`, `/readyz` 200, login, uma escrita no tenant sintético
+      `homologacao-sintetica`, nenhum `command denied`.
+- [ ] Só com o item anterior verde e o Regenerate confirmado no §2: MySQL → Config → Connection → **Regenerate**.
+      Redeploy do app; repetir as validações. Backup e auditoria de staging rodam de novo (não dependem do root).
 
-- App falha com `licigov_app` → apontar para `licigov_migrator` (nova) e registrar o privilégio faltante.
+## 9. Autorização coordenada (texto para o Owner)
+
+"Autorizo, **somente no ambiente staging** (`e7cc21d0-22a8-4844-a29b-81ee1221e0d0` do projeto
+`893a1317-51ad-4b18-9d9a-f6e579e09351`), os passos §5–§8 deste checklist: merge da #317 em `staging` e o deploy
+automático decorrente; criação das contas `licigov_app`, `licigov_migrator`, `licigov_backup`, `licigov_audit` com
+os GRANTs de `db-roles.ts`; criação dos secrets `STAGING_*`; backup, auditoria e drill de staging (incluindo criar
+e apagar o projeto descartável `licigov-restore-drill`); troca de `DATABASE_URL`/`MIGRATION_DATABASE_URL` do app de
+staging; e o Regenerate do root de staging depois da validação. Produção fica de fora."
+
+## 10. Recuperação (sem credencial antiga)
+
+- App falha com `licigov_app` → apontar para `licigov_migrator` e registrar o privilégio faltante.
 - Pre-deploy falha → GRANT justificado no `licigov_migrator`; nunca `root`.
-- Backup falha → corrigir conta/TLS/CA; nunca texto puro nem root; backups anteriores retidos 14 dias.
+- Backup falha → corrigir conta/TLS/CA; nunca texto puro nem root.
 - Nunca reaplicar a senha antiga do root nem a `DATABASE_URL` antiga.
 
-## 8. ▶ Produção — autorização: "executar passos 2–5 em produção"
+## 11. Produção — fora desta autorização
 
-- [ ] Repetir 2–5 em produção, em janela de baixo uso. No passo 4, **atualizar** os secrets de produção
-      (`BACKUP_DATABASE_URL` → `licigov_backup`, `BACKUP_DB_SSL_CA`, `AUDIT_DATABASE_URL` → `licigov_audit`,
-      `AUDIT_DB_SSL_CA`) e rodar "Backup do Banco" e "Auditoria de Schema" com `target = production`.
-- [ ] Atestação (sem valores) no `AUDIT_REPORT.md` §10: IDs de deploy, horário UTC, run do backup, lista de
-      contas após a troca, confirmação do Regenerate, condição do canal confidencial.
+Repetir §5–§8 em produção exige autorização própria e a promoção staging → main (que também ativa o novo workflow
+de backup agendado). Atestação (sem valores) no `AUDIT_REPORT.md` §10.
 
-## 9. Na sequência (cada um com sua autorização)
+## 12. Na sequência (cada um com sua autorização)
 
 | Ordem | Item | Dependências / efeito | Runbook |
 |---|---|---|---|
-| 1 | `JWT_SECRET` prod e staging | Derruba todas as sessões (TTL 24 h); sem outros consumidores | §3 |
-| 2 | `GEMINI_API_KEY` (prod, staging, Actions) | Projeto GCP ativo (staging com faturamento vencido em 08/10); possível chave compartilhada com SincroSaúde | §4 |
-| 3 | `AWS_*` | Upload/download S3; CloudTrail data events provavelmente ausentes (verificar) | §5 |
+| 1 | `JWT_SECRET` prod e staging | Derruba todas as sessões (TTL 24 h) | §3 |
+| 2 | `GEMINI_API_KEY` (prod, staging, Actions) | Projeto GCP ativo; possível chave compartilhada com SincroSaúde | §4 |
+| 3 | `AWS_*` | Upload/download S3; CloudTrail data events provavelmente ausentes | §5 |
 | 4 | `BREVO_API_KEY` | E-mails de convite/reset; possível conta compartilhada com SincroSaúde | §6 |
 | 5 | Senha do admin de plataforma | Reset revoga as sessões do admin | §7 |
 | 6 | Remover `ADMIN_PASSWORD`; decidir `A2_HOMOLOG_TOKEN` | Após deploy da PR; confirmar uso fora do repo | §7–§8 |

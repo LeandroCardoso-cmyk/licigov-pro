@@ -9,6 +9,11 @@ on:
   # Permite rodar os gates manualmente em qualquer branch (ex.: validar a PR D antes do merge,
   # quando o Actions em PR aguarda aprovação). O job `deploy` continua restrito à `main`.
   workflow_dispatch:
+    inputs:
+      lint_base:
+        description: "Branch base do lint de não-regressão — a base real da integração (ex.: staging; ou o branch da PR de baixo, numa PR empilhada)."
+        type: string
+        required: true
 
 # Cancela runs antigos do mesmo ref quando um novo push chega (economia + feedback mais rápido).
 concurrency:
@@ -53,18 +58,16 @@ jobs:
       # no-unused-vars/no-explicit-any/no-console em scripts e testes). Em vez de mascarar com
       # `|| true` ou exigir uma faxina ampla fora de escopo, exigimos zero problema APENAS nos
       # arquivos .ts/.tsx alterados nesta mudança. O caminho para o gate completo está no runbook.
+      # SEC-AUD-2026-10 — seleção FAIL-CLOSED (scripts/ci/lint-changed.sh, testado): base real da PR, `lint_base`
+      # explícita no disparo manual ou SHA anterior no push; fetch/ref/merge-base/diff com erro REPROVAM (antes um
+      # `fetch --depth=1` + `2>/dev/null` + `|| true` virava "nenhum arquivo" e o eslint não rodava). Entradas só por env.
       - name: Lint (não-regressão — arquivos alterados)
-        run: |
-          set -euo pipefail
-          TARGET="${{ github.base_ref || github.event.repository.default_branch }}"
-          git fetch --no-tags --depth=1 origin "$TARGET" || true
-          CHANGED=$(git diff --diff-filter=ACMR --name-only "origin/$TARGET"...HEAD -- '*.ts' '*.tsx' 2>/dev/null | tr '\n' ' ' || true)
-          if [ -z "${CHANGED// /}" ]; then
-            echo "Nenhum arquivo .ts/.tsx alterado vs origin/$TARGET — lint de não-regressão OK."
-            exit 0
-          fi
-          echo "Lintando (não-regressão): $CHANGED"
-          pnpm exec eslint $CHANGED --max-warnings 0
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.base_ref }}
+          DISPATCH_LINT_BASE: ${{ inputs.lint_base }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: bash scripts/ci/lint-changed.sh
 
   # ── GATE OBRIGATÓRIO 2: suíte de testes automatizados ──
   test:
