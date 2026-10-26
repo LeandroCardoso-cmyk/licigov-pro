@@ -75,6 +75,7 @@ function run(env: Record<string, string | undefined>) {
     FAKE_CALL_LOG: callLog,
     FAKE_CNF_COPY: path.join(dir, "cnf-copy"),
     BACKUP_OUT_DIR: out,
+    DB_TARGET: "production",
     BACKUP_DATABASE_URL: DB_URL,
     BACKUP_ENCRYPTION_KEY: KEY,
   };
@@ -102,6 +103,15 @@ describe("db-backup.sh — falha fechada", () => {
     expect(r.logs).toMatch(/BACKUP_ENCRYPTION_KEY ausente/);
     expect(calls()).toBe("");
     expect(r.files).toEqual([]);
+  });
+
+  it("sem DB_TARGET (fora do seletor de ambiente): falha antes de conectar", () => {
+    for (const target of [undefined, "", "prod", "PRODUCTION"]) {
+      const r = run({ DB_TARGET: target });
+      expect(r.status).not.toBe(0);
+      expect(r.logs).toMatch(/DB_TARGET ausente ou inválido/);
+    }
+    expect(calls()).toBe("");
   });
 
   it("sem BACKUP_DATABASE_URL: falha sem conectar", () => {
@@ -153,7 +163,7 @@ describe("db-backup.sh — caminho feliz", () => {
     const r = run({});
     expect(r.status).toBe(0);
     const enc = r.files.find((f) => f.endsWith(".sql.gz.enc"));
-    expect(enc).toMatch(/^backup-railway-\d{8}-\d{6}\.sql\.gz\.enc$/);
+    expect(enc).toMatch(/^backup-production-railway-\d{8}-\d{6}\.sql\.gz\.enc$/);
     expect(r.files.sort()).toEqual([enc, `${enc}.sha256`].sort());
 
     const encPath = path.join(out, enc!);
@@ -196,6 +206,12 @@ describe("db-backup.yml — publicação", () => {
     expect(backupJob).toContain("scripts/ops/db-backup.sh");
     expect(backupJob).not.toMatch(/NÃO cifrado|sem cifra \(apenas restrito/);
     expect(backupJob).not.toMatch(/mysqldump /);
+  });
+
+  it("o job de backup passa pelo seletor de ambiente (sem secret canônico direto no passo)", () => {
+    expect(backupJob).toContain("bash scripts/ops/select-db-target.sh backup -- bash scripts/ops/db-backup.sh");
+    expect(backupJob).not.toMatch(/^\s+BACKUP_DATABASE_URL:/m);
+    expect(backupJob).not.toMatch(/^\s+BACKUP_ENCRYPTION_KEY:/m);
   });
 
   it("upload só em sucesso e só do artefato cifrado + checksum", () => {

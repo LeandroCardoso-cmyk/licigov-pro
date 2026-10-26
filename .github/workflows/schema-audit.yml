@@ -1,10 +1,21 @@
 name: Auditoria de Schema (manual)
 
-# Rodar manualmente pelo GitHub: aba "Actions" → "Auditoria de Schema (manual)" → "Run workflow".
-# Requer o secret AUDIT_DATABASE_URL (string de conexão MySQL de produção/staging).
+# Rodar manualmente pelo GitHub: aba "Actions" → "Auditoria de Schema (manual)" → "Run workflow" → ambiente.
+# SEC-AUD-2026-10 — secrets por ambiente, sem fallback (scripts/ops/select-db-target.sh):
+#   produção: AUDIT_DATABASE_URL + AUDIT_DB_SSL_CA; staging: STAGING_AUDIT_DATABASE_URL + STAGING_AUDIT_DB_SSL_CA.
+# A CA (PEM do servidor MySQL) é obrigatória: a conexão usa TLS com a CA fixada (sem hostname, ver
+# scripts/schema-audit.ts); sem ela o job falha antes de conectar — não há modo sem verificação.
 # Somente leitura (INFORMATION_SCHEMA); não altera o banco.
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Ambiente do banco (staging usa só os secrets STAGING_*; sem fallback para produção)."
+        type: choice
+        required: true
+        options:
+          - staging
+          - production
 
 # Token do GitHub só com leitura do repositório (o job não escreve nada no GitHub).
 permissions:
@@ -31,7 +42,14 @@ jobs:
       - name: Instalar dependências (lockfile)
         run: pnpm install --frozen-lockfile
 
+      # O seletor falha (e derruba o job) antes de conectar se o ambiente/secrets forem ambíguos; só o
+      # resultado da auditoria em si (divergências ⇒ exit 1) é informativo e não derruba o job.
       - name: Rodar auditoria (o relatório aparece neste log)
-        run: pnpm db:audit || true
+        run: bash scripts/ops/select-db-target.sh audit -- bash -c 'pnpm db:audit || true'
         env:
-          DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          DB_TARGET_INPUT: ${{ inputs.target }}
+          PRODUCTION_AUDIT_DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
+          PRODUCTION_AUDIT_DB_SSL_CA: ${{ secrets.AUDIT_DB_SSL_CA }}
+          STAGING_AUDIT_DATABASE_URL: ${{ secrets.STAGING_AUDIT_DATABASE_URL }}
+          STAGING_AUDIT_DB_SSL_CA: ${{ secrets.STAGING_AUDIT_DB_SSL_CA }}

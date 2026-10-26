@@ -61,7 +61,9 @@ resultado — nada é digitado nem colado no terminal, e o `--histignore` padrã
   pre-deploy `pnpm db:release:predeploy` = (1) `db:migrate:release` (DDL) + (2) reference data (DML).
 - A Railway roda o pre-deploy num container separado **com as variáveis do serviço** — hoje a mesma
   `DATABASE_URL` do runtime.
-- Com esta PR: `db:migrate:release` usa `MIGRATION_DATABASE_URL` se definida (senão `DATABASE_URL`). O reference
+- Com esta PR: `db:migrate:release` usa `MIGRATION_DATABASE_URL` se definida (senão `DATABASE_URL`). Limite:
+  o pre-deploy roda com as mesmas variáveis do serviço, então o processo da aplicação também recebe essa
+  variável — a separação restringe o que o código usa, não isola o segredo (checklist §3). O reference
   data continua na `DATABASE_URL`. Limitação: a variável de migrations fica no mesmo serviço (um RCE no
   processo do app ainda a leria); o ganho é que uma injeção SQL/ORM no runtime não executa DDL. Isolamento
   total exigiria um serviço separado só para migrations (backlog).
@@ -81,6 +83,9 @@ MySQL **9.7.4** (imagem oficial que `mysql:9` resolve hoje) e 8.0.46: as 320 mig
 `licigov_migrator`; boot da aplicação, `/readyz`, login, criação de órgão e de processo com `licigov_app`;
 `db:audit` com `licigov_audit`; backup cifrado com `licigov_backup` (cliente mysqldump 8.0.46, TLS 1.3,
 `VERIFY_CA` com a CA do servidor) e restore em banco isolado com `CHECKSUM TABLE` idêntico em 345/345 tabelas.
+Revisão 3 (26/10): backup de "staging" → drill numa segunda instância pelo seletor de ambiente
+(`scripts/ops/select-db-target.sh`), 345 tabelas e 320 migrations; `db:audit` com CA fixada (CA de outra
+instância ⇒ recusado). `VERIFY_CA` = CA fixada, **sem** conferência de hostname (ver checklist §4).
 Smoke equivalente na CI: `sec-db-least-privilege-mysql-smoke.test.ts`.
 
 **Lacuna:** a versão exata do MySQL em execução na Railway não está nos logs retidos (deploy de 19/09; tag
@@ -92,15 +97,17 @@ conferir no primeiro run e repetir o ensaio se for < 8.0.20 (sem `SHOW_ROUTINE`)
 Ver [`CONTAINMENT_CHECKLIST.md`](./CONTAINMENT_CHECKLIST.md) §1. Resumo:
 
 1. Pré-checagem somente leitura (variáveis, contas existentes, backup recuperável).
-2. Criar as quatro contas (RANDOM PASSWORD) e aplicar os GRANTs do plano.
+2. Definir o canal confidencial da senha gerada (checklist §0); criar as quatro contas (RANDOM PASSWORD) e
+   aplicar os GRANTs do plano.
 3. **Se esta PR ainda não estiver implantada** no ambiente: `DATABASE_URL` → `licigov_migrator` (credencial
    nova; migrations e runtime funcionam). **Se já estiver:** `DATABASE_URL` → `licigov_app` e
    `MIGRATION_DATABASE_URL` → `licigov_migrator`. A contenção não espera a PR.
 4. Deploy; validar boot, `/readyz`, login, uma escrita no tenant sintético (staging) e o log do pre-deploy.
-5. GitHub: `BACKUP_DATABASE_URL` → `licigov_backup`; `AUDIT_DATABASE_URL` → `licigov_audit`; rodar backup e
-   auditoria manualmente.
-6. Só então **Regenerate** da senha do `root` (Config → Connection). Nada mais depende dela; o Regenerate
-   mantém as variáveis do serviço MySQL coerentes.
+5. GitHub: em **staging**, criar os secrets `STAGING_*` (nunca reapontar os de produção); em **produção**,
+   `BACKUP_DATABASE_URL` → `licigov_backup`, `AUDIT_DATABASE_URL` → `licigov_audit`, mais as CAs; rodar backup e
+   auditoria manualmente com `target` explícito.
+6. Só então **Regenerate** da senha do `root` (Config → Connection), depois de confirmar na UI que o botão
+   existe no serviço real. Nada mais depende dela; o Regenerate mantém as variáveis do serviço MySQL coerentes.
 7. Contas que sobrarem em `mysql.user` (além de `root` e das internas `mysql.sys`, `mysql.session`,
    `mysql.infoschema`): listar dono/função/dependência e decidir caso a caso. Não excluir na rotina.
 

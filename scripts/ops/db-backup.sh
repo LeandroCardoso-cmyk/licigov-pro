@@ -8,16 +8,21 @@
 #   2. O dump nunca toca o disco em claro: mysqldump | gzip | openssl enc ⇒ <arquivo>.sql.gz.enc.
 #      Mesmo formato de antes (AES-256-CBC, PBKDF2, salt) ⇒ o drill de restauração e os backups
 #      já retidos continuam compatíveis.
-#   3. TLS obrigatório. Com BACKUP_DB_SSL_CA (PEM da CA do servidor) ⇒ VERIFY_CA (identidade
-#      verificada); sem ela ⇒ REQUIRED (cifra o transporte, mas NÃO autentica o servidor — limitação
-#      registrada no log). A sessão é conferida (Ssl_version) antes do dump.
+#   3. TLS obrigatório. Com BACKUP_DB_SSL_CA (PEM da CA do servidor) ⇒ VERIFY_CA: o certificado
+#      precisa ser assinado por ESSA CA (fixada); o hostname NÃO é conferido (o certificado
+#      autogerado do MySQL não traz o host do proxy, então VERIFY_IDENTITY falharia). Sem a CA ⇒
+#      REQUIRED: cifra o transporte mas NÃO autentica o servidor (aviso no log). A sessão é conferida
+#      (Ssl_version) antes do dump; nunca há fallback de VERIFY_CA para REQUIRED nem para texto puro.
 #   4. Qualquer falha (dump, compressão, cifra, verificação, checksum) remove o que foi gerado: o
 #      diretório de saída fica vazio e o upload (que só roda em sucesso) não tem o que publicar.
 #   5. Nada de senha/chave/host/conteúdo no log: credenciais num arquivo de opções 0600 temporário;
 #      só nome do banco, versões, tamanho e checksum são impressos.
 #
-# Entrada (env): BACKUP_DATABASE_URL, BACKUP_ENCRYPTION_KEY, [BACKUP_DB_SSL_CA], [BACKUP_OUT_DIR=.],
-#                [GITHUB_ENV]. Saída: <out>/backup-<db>-<UTC>.sql.gz.enc + .sha256.
+#   6. Só roda com o ambiente já escolhido por scripts/ops/select-db-target.sh (DB_TARGET = production |
+#      staging); o ambiente entra no nome do artefato, sem ambiguidade entre backups de prod e de staging.
+#
+# Entrada (env): DB_TARGET, BACKUP_DATABASE_URL, BACKUP_ENCRYPTION_KEY, [BACKUP_DB_SSL_CA],
+#                [BACKUP_OUT_DIR=.], [GITHUB_ENV]. Saída: <out>/backup-<alvo>-<db>-<UTC>.sql.gz.enc + .sha256.
 set -Eeuo pipefail
 umask 077
 
@@ -36,6 +41,10 @@ trap cleanup EXIT
 
 fail() { echo "❌ $*" >&2; exit 1; }
 
+case "${DB_TARGET:-}" in
+  production|staging) : ;;
+  *) fail "DB_TARGET ausente ou inválido — execute via scripts/ops/select-db-target.sh." ;;
+esac
 [ -n "${BACKUP_DATABASE_URL:-}" ] || fail "BACKUP_DATABASE_URL ausente."
 [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || fail "BACKUP_ENCRYPTION_KEY ausente — backup sem cifra não é permitido."
 [ -d "$OUT_DIR" ] || fail "Diretório de saída inexistente."
@@ -81,9 +90,10 @@ chmod 600 "$CNF"
 unset BACKUP_DATABASE_URL DB_PASS
 
 if [ -n "${BACKUP_DB_SSL_CA:-}" ]; then
-  echo "🔐 TLS: VERIFY_CA (certificado do servidor verificado contra a CA informada)."
+  echo "🔐 TLS: VERIFY_CA (certificado do servidor conferido contra a CA fixada; hostname não conferido)."
 else
   echo "🔐 TLS: REQUIRED — transporte cifrado; identidade do servidor NÃO verificada (defina BACKUP_DB_SSL_CA para VERIFY_CA)."
+  [ -z "${GITHUB_ACTIONS:-}" ] || echo "::warning::Backup sem BACKUP_DB_SSL_CA: TLS cifra o transporte mas não autentica o servidor."
 fi
 echo "Cliente: $(mysqldump --version 2>/dev/null | head -n1 || echo 'versão indisponível')"
 
@@ -97,8 +107,8 @@ SSL_CIPHER="$(printf '%s\n' "$SESSION" | awk -F'\t' '$1=="Ssl_cipher"{print $2}'
 echo "Servidor: ${SERVER_VERSION:-?} | TLS ${SSL_VERSION} (${SSL_CIPHER:-?})"
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
-ARTIFACT="${OUT_DIR%/}/backup-${DB_NAME}-${STAMP}.sql.gz.enc"
-echo "Iniciando backup do banco \"$DB_NAME\"…"
+ARTIFACT="${OUT_DIR%/}/backup-${DB_TARGET}-${DB_NAME}-${STAMP}.sql.gz.enc"
+echo "Iniciando backup (${DB_TARGET}) do banco \"$DB_NAME\"…"
 
 # Stream: nenhum byte do dump em claro no disco. pipefail ⇒ falha de qualquer estágio derruba o script.
 mysqldump --defaults-extra-file="$CNF" \

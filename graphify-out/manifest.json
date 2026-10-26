@@ -5225,13 +5225,13 @@
     "semantic_hash": ""
   },
   "scripts/schema-audit-util.ts": {
-    "mtime": 1792680839.0125775,
-    "ast_hash": "cd1f266bba50af2fa99c4d0c63a0cd0d",
+    "mtime": 1792973959.5324817,
+    "ast_hash": "9288e9c9e91b2227e360644f1ee0d960",
     "semantic_hash": ""
   },
   "scripts/schema-audit.ts": {
-    "mtime": 1792680839.0125775,
-    "ast_hash": "60aa9aa75a94a1b47300c5ee950240ca",
+    "mtime": 1792973959.531999,
+    "ast_hash": "5a16766c88ff9afe07bff6a2a72c9370",
     "semantic_hash": ""
   },
   "scripts/schema-reconciliation-manifest.ts": {
@@ -10595,8 +10595,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1792962841.7695067,
-    "ast_hash": "f58891f452909c07dd7b821f4daf7a50",
+    "mtime": 1792973901.515337,
+    "ast_hash": "3f6d8e63f9c6a108adb6beea0ea0a98e",
     "semantic_hash": ""
   },
   ".github/workflows/db-restore-test.yml": {
@@ -10605,8 +10605,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/schema-audit.yml": {
-    "mtime": 1792953855.3517532,
-    "ast_hash": "761388ac2133e2f4365444effc101507",
+    "mtime": 1792973914.6471646,
+    "ast_hash": "5e1d4b0b425af74c67763dff603c3ab4",
     "semantic_hash": ""
   },
   "AI_LAYER.md": {
@@ -15270,13 +15270,13 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CREDENTIAL_INVENTORY.md": {
-    "mtime": 1792962947.454948,
-    "ast_hash": "74c4e400ddd265936f1442c1b757d723",
+    "mtime": 1792974334.7383165,
+    "ast_hash": "4c3334016cb6964c1845d849187c287e",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROTATION_RUNBOOK.md": {
-    "mtime": 1792962810.5959377,
-    "ast_hash": "add71a9230a338beff5ef2ee5e6a66de",
+    "mtime": 1792974362.2756681,
+    "ast_hash": "d1f43e2dfabc66b36db188463a123f6b",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
@@ -15295,13 +15295,13 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792964410.5997694,
-    "ast_hash": "a1bc7af43a632529211e09f29894ad26",
+    "mtime": 1792974416.2517765,
+    "ast_hash": "cc1d352a2c8d9ea5e35cc10172a6c922",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
-    "mtime": 1792961546.1598625,
-    "ast_hash": "6efd551af562c28ed9aff36ba8aa3042",
+    "mtime": 1792973844.074319,
+    "ast_hash": "30d3e23e1f6d3ab35e7e226631f74b93",
     "semantic_hash": ""
   },
   "scripts/ops/db-roles.ts": {
@@ -15315,13 +15315,28 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/db-backup-script.test.ts": {
-    "mtime": 1792961638.3257077,
-    "ast_hash": "777311157aa2508e8501c474df8cb26c",
+    "mtime": 1792973975.34056,
+    "ast_hash": "0f0c884993fb40454d26d9c3f953b422",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CONTAINMENT_CHECKLIST.md": {
-    "mtime": 1792962877.7479417,
-    "ast_hash": "7fdeece58136ecb8b4f200e2ed4c1e28",
+    "mtime": 1792974317.4072018,
+    "ast_hash": "d330ec27ecdb55031a0f96c7f3a80d5c",
+    "semantic_hash": ""
+  },
+  "scripts/ops/db-restore-drill.sh": {
+    "mtime": 1792973876.0313635,
+    "ast_hash": "24b00ae49fd9c43cede4f4e0cde486de",
+    "semantic_hash": ""
+  },
+  "scripts/ops/select-db-target.sh": {
+    "mtime": 1792974037.3188856,
+    "ast_hash": "03a0c4c7ba7a7a69507d5d261844a498",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/db-target-select.test.ts": {
+    "mtime": 1792974037.334304,
+    "ast_hash": "0aec203e9dba06d8e5bbc4b75b541dee",
     "semantic_hash": ""
   }
 }

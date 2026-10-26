@@ -185,6 +185,8 @@ Ordem sugerida, cada uma com evidência esperada (sem valores):
 | `525d5fb` docs(security): revisão 2 | relatório, runbook, checklist, inventário, roadmap | Nenhum |
 | `d5b21e1` chore(graphify): manifest sem churn de mtime | `graphify-out/manifest.json` | Nenhum |
 | `343349f` feat(db): contas MySQL por função | `scripts/ops/db-roles.ts`, `scripts/migrate-release.ts`, smoke MySQL, `ci.yml`, `package.json` | Baixo: `MIGRATION_DATABASE_URL` é opcional (fallback = comportamento anterior) |
+| rev. 3 — fix(ops): ambiente explícito nos workflows de banco | `scripts/ops/select-db-target.sh` (novo), `scripts/ops/db-restore-drill.sh` (drill saiu do YAML), `scripts/ops/db-backup.sh`, `scripts/schema-audit*.ts`, `db-backup.yml`, `schema-audit.yml`, testes | Médio-baixo: agendado = produção sem mudança de secret; dispatch manual passa a exigir `target`; auditoria exige `AUDIT_DB_SSL_CA`; artifact renomeado para `db-backup-<ambiente>` |
+| rev. 3 — docs(security) | checklist rev. 3, runbook, inventário, relatório §11 | Nenhum |
 
 Todos os commits atualizam `graphify-out/` pelo hook do repositório (`.githooks/pre-commit`, convenção do
 projeto). O diff de `graph.json`/`GRAPH_REPORT.md`/`.graphify_labels.json` é grande porque qualquer mudança de
@@ -210,7 +212,9 @@ chroot). Lint conforme a CI (`.ts/.tsx` alterados vs `origin/main`, `--max-warni
 | `test:smoke:security` | ✅ 39 / 408 | ✅ 39 / 408 | ✅ 39 / 408 |
 | Smokes de replay/idempotência (`prc-idempotency`, `c4a-replay-safe-generation`) | — | — | ✅ 2 / 12 |
 | Menor privilégio + migration safety | — | — | ✅ 2 / 8 (e o de menor privilégio também em 9.7.4) |
-| Harness do backup | — | — | ✅ 11 / 11 |
+| Harness do backup | — | — | ✅ 11 / 11 (rev. 3: 13 / 13) |
+| Seletor de ambiente (rev. 3) | — | — | ✅ 24 / 24 (`db-target-select.test.ts`) |
+| Ensaio local rev. 3 (9.7.4: backup "staging" via seletor + drill em 2ª instância + `db:audit` com CA fixada) | — | — | ✅ 345 tabelas / 320 migrations; destino não vazio recusado; CA de outra instância recusada |
 | Ensaio real de backup/restore (9.7.4, conta restrita, TLS, VERIFY_CA) | — | — | ✅ 345/345 tabelas com CHECKSUM idêntico |
 | CI GitHub | — | ✅ 5/5 (run do head `4d99bee`) | ver PR #317 (run do head atual) |
 
@@ -240,3 +244,21 @@ qualquer verificação em staging/produção. Testes pulados não contam como ex
 | AWS prod / staging | | | | | |
 | BREVO_API_KEY prod / staging | | | | | |
 | Senha admin de plataforma | | | | | |
+
+## 11. Pré-checagem de staging (somente leitura, 26/10/2026 ~00:30 UTC)
+
+Feita pela Railway MCP (leitura) e pela API do GitHub Actions; nenhum valor de variável lido ou registrado.
+
+| Item | Resultado |
+|---|---|
+| Projeto / ambiente | `licigov-pro` `893a1317-51ad-4b18-9d9a-f6e579e09351` / staging `e7cc21d0-22a8-4844-a29b-81ee1221e0d0` |
+| Serviço MySQL | `e6b7a98f-38c2-4123-8b99-7039a1829cbf`, imagem `mysql:9`, auto-update "vuln", deploy `ed5a4d7e` (19/09); volume `e912c006-ad27-4a36-ad88-447d3d2bb699` (`mysql-volume`, 5000 MB); TCP proxy público ATIVO; rede privada `mysql` |
+| Variáveis do MySQL (só nomes) | `MYSQLDATABASE`, `MYSQLHOST`, `MYSQLPASSWORD`, `MYSQLPORT`, `MYSQLUSER`, `MYSQL_DATABASE`, `MYSQL_PUBLIC_URL`, `MYSQL_ROOT_PASSWORD`, `MYSQL_URL` |
+| Serviço da aplicação | `2d497607-3208-4996-9295-0f919b6a93bd`, branch `staging`, pre-deploy `pnpm db:release:predeploy`, `sleepApplication` ligado |
+| Deploy atual | `ea6a4b68` **SUCCESS** (25/10 22:25 UTC), commit `eef4bf7` (#320: zod 4.6.7 + override body-parser 1.20.9); anterior `700de144` (`aa05e88`) removido |
+| Versão real do MySQL | **Não obtida**: sem log de boot retido, o proxy da sessão não abre TCP cru e `SELECT VERSION()` exige credencial (que não deve entrar nesta sessão). Coletar no passo 1 do checklist |
+| Contas e grants | **Não obtidos** (exigem SQL como root). Passo 1 do checklist |
+| `DATABASE_URL` é referência? | **Não determinável** só pelos nomes. Passo 1 do checklist |
+| Secrets dos workflows | Repositório, **sem** `environment:`; nenhum secret `STAGING_*` existia. A partir desta revisão os workflows exigem o ambiente explícito e secrets por nome (§7) |
+| Evidência de backup/restore | Backups diários de produção OK até 25/10; `db-restore-test` (fixture isolada, semanal) OK em 19/10; drill real: runs manuais 4–8 (31/07–01/08) **falharam** (URL de destino malformada) — nenhum drill real bem-sucedido |
+| Regenerate no serviço real | Não verificável por leitura de API; confirmar na UI antes do passo 5 |

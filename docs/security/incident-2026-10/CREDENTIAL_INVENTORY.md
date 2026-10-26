@@ -57,10 +57,12 @@ Não-segredos (não rotacionar): `APP_BASE_URL`, `APP_ENV`, `AWS_S3_BUCKET`, `AW
 |---|---|---|
 | `BACKUP_DATABASE_URL` | `db-backup.yml` (diário 06:00 UTC) | Cópia da credencial de produção, via proxy público. Runs OK 21–25/10 |
 | `BACKUP_ENCRYPTION_KEY` | `db-backup.yml` | Material de criptografia; não estava no Railway. Configurada (backup de 25/10 publicou `.enc`); agora obrigatória |
-| `BACKUP_DB_SSL_CA` (novo, opcional) | `db-backup.yml` | PEM da CA do servidor MySQL ⇒ TLS `VERIFY_CA`; não é segredo, mas fica como secret por conveniência |
+| `BACKUP_DB_SSL_CA` (novo, opcional em produção) | `db-backup.yml` | PEM da CA do servidor MySQL ⇒ TLS `VERIFY_CA` (CA fixada; hostname não conferido); não é segredo, mas fica como secret por conveniência |
 | `AUDIT_DATABASE_URL` | `schema-audit.yml` (manual) | Credencial de banco |
+| `AUDIT_DB_SSL_CA` (novo, obrigatório) | `schema-audit.yml` | PEM da CA do servidor; sem ele a auditoria falha antes de conectar |
 | `GEMINI_API_KEY` | `ai-models.yml` (manual) | Documentado como "a mesma chave de produção" → separar |
-| `RESTORE_TARGET_URL` | `db-backup.yml` (drill manual) | Banco descartável |
+| `RESTORE_TARGET_URL` | `db-backup.yml` (drill manual de produção) | Instância descartável; banco `licigov_restore_drill*` (exigido pelo seletor) |
+| `STAGING_BACKUP_DATABASE_URL`, `STAGING_BACKUP_ENCRYPTION_KEY`, `STAGING_BACKUP_DB_SSL_CA`, `STAGING_AUDIT_DATABASE_URL`, `STAGING_AUDIT_DB_SSL_CA`, `STAGING_RESTORE_TARGET_URL` (novos, **a criar**) | `db-backup.yml` / `schema-audit.yml` com `target = staging` | Só staging; sem fallback para os de produção (`scripts/ops/select-db-target.sh`). Chave de cifra própria (a de produção é recusada) |
 
 ## Dependências compartilhadas com SincroSaúde (somente mapeamento — não alterar)
 
