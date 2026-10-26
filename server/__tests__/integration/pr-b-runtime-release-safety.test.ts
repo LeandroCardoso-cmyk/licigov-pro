@@ -252,3 +252,20 @@ describe("Fase B — sem regressão do bootstrap da PR 0", () => {
     expect(admin).toContain("bumpTokenVersion");
   });
 });
+
+// SEC-AUD-2026-10 — conta de banco separada para migrations (MIGRATION_DATABASE_URL), sem quebrar o legado.
+describe("release de migrations — conta dedicada opcional", () => {
+  it("prefere MIGRATION_DATABASE_URL; sem ela usa DATABASE_URL; sem nenhuma, null", async () => {
+    const { resolveMigrationDatabaseUrl } = await import("../../../scripts/migrate-release");
+    expect(resolveMigrationDatabaseUrl({ MIGRATION_DATABASE_URL: " mysql://mig@h/db ", DATABASE_URL: "mysql://app@h/db" }))
+      .toEqual({ url: "mysql://mig@h/db", source: "MIGRATION_DATABASE_URL" });
+    expect(resolveMigrationDatabaseUrl({ DATABASE_URL: "mysql://app@h/db", MIGRATION_DATABASE_URL: "  " }))
+      .toEqual({ url: "mysql://app@h/db", source: "DATABASE_URL" });
+    expect(resolveMigrationDatabaseUrl({})).toBeNull();
+  });
+
+  it("o reference data (DML) continua na DATABASE_URL do runtime — não recebe a conta de DDL", () => {
+    const src = read("scripts/install-reference-data.ts");
+    expect(src).not.toContain("MIGRATION_DATABASE_URL");
+  });
+});
