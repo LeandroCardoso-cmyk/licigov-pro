@@ -4,7 +4,7 @@ import PrepFieldControl from "./PrepFieldControl";
 import UseAsDefaultButton from "./UseAsDefaultButton";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals,
+  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals, trSuppliedFields, suppliedByText,
   type TrParamViewModel, type TrStructuredView,
 } from "@/lib/contextReuse";
 import { evaluateCond, formatDisplay, parseField, type FormValue } from "@/lib/editalPreparation";
@@ -59,6 +59,7 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
 
   if (!view || view.status !== "READY") return null;
   const pending = trPendingFields(live);
+  const supplied = trSuppliedFields(live);
   const optional = trOptionalFields(live);
   const confirmed = trConfirmedFields(live);
   const proposals = trProposals(live);
@@ -126,6 +127,16 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
             {pending.filter((f) => !!f.proposal).length > 0 && <p className="text-xs text-muted-foreground">Os parâmetros com padrão institucional acima também podem ser informados manualmente: digite o valor no campo abaixo.</p>}
             {pending.filter((f) => !!f.proposal).map(control)}
           </div>
+        )}
+        {supplied.length > 0 && (
+          <ul className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-sm" aria-label="Obtidos da fonte do processo">
+            {supplied.map((f) => (
+              <li key={f.name}>
+                {f.description}: <strong>{f.suppliedBy!.value}</strong>
+                <span className="block text-xs text-muted-foreground">{suppliedByText(f.suppliedBy!)}</span>
+              </li>
+            ))}
+          </ul>
         )}
         {pending.length === 0 && proposals.length === 0 && <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">Nenhum parâmetro pendente.</p>}
 

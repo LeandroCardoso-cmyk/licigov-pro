@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -39,6 +40,7 @@ export default function AdminOrganizacoes() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState(EMPTY_FORM);
   const [slugTouched, setSlugTouched] = useState(false);
   const [error, setError] = useState("");
@@ -93,6 +95,8 @@ export default function AdminOrganizacoes() {
 
   const handleManageUsers = (organizationId: number) => {
     localStorage.setItem(SELECTED_ORGANIZATION_ID_STORAGE_KEY, String(organizationId));
+    // M8 — trocar a organização ativa invalida tudo o que foi lido no tenant anterior (capabilities, membros, processos).
+    queryClient.removeQueries();
     navigate("/usuarios");
   };
 

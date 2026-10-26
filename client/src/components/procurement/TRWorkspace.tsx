@@ -86,7 +86,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
 
       <div className="mt-5 space-y-4 rounded-xl border border-border bg-card p-5">
         <h2 className="font-medium text-foreground">Gerar TR com base no processo</h2>
-        {processId && object.trim() && <AuthoringSourcesSummary processId={processId} kind="tr" object={object} />}
+        {processId && object.trim() && <AuthoringSourcesSummary processId={processId} kind="tr" object={object} regenerationBlock={reviewable.isLoading ? "loading" : regenerationBlock} />}
         <label className="flex flex-col text-sm">
           <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input

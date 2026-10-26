@@ -16,7 +16,11 @@ import { formatValue2 } from "../../domain/institutionalTemplates/valueTypes2";
 import { authorityEntryOf, isDefaultEligible } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
-import { encodeTrParamValue, resolveTrParams, trParamPath, trParamsDigest } from "../../domain/trStructuredParams";
+import {
+  encodeTrParamValue, processObjectSupply, resolveTrParams, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT, trParamPath, trParamsDigest,
+  type TrParamSupply,
+} from "../../domain/trStructuredParams";
+import { getLatestEmittedByOrigin } from "../../db/officialDocuments";
 import { resolveField } from "../../domain/canonicalProcurementContext";
 import { recordContextAssertions } from "../canonicalContextService";
 import { serviceLogger } from "../observabilityService";
@@ -48,6 +52,8 @@ export interface TrParamView {
   /** Padrão institucional ELEGÍVEL (proposta; só vira fato com confirmação humana). */
   readonly proposal?: { readonly value: unknown; readonly orgProfileRevision: number };
   readonly defaultEligible: boolean;
+  /** M8 — sem valor no TR, mas SUPRIDO pela fonte autoritativa (TR oficial vigente ou objeto do processo): não é pendência. */
+  readonly suppliedBy?: TrParamSupply;
 }
 
 export type TrStructuredState =
@@ -63,6 +69,9 @@ export type TrStructuredState =
 
 const ZERO_COND_FACTS = (values: Map<string, unknown>): Record<string, unknown> => Object.fromEntries(values);
 
+/** Mesmo domínio de negócio das emissões do Processo Licitatório (ver `editalBridgeService`). */
+const PROCUREMENT_DOMAIN = "processo_licitatorio";
+
 async function requireTenantProcess(organizationId: number, processId: string): Promise<void> {
   const p = await getProcess(processId, organizationId);
   if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
@@ -73,10 +82,13 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
   const loaded = await loadEditalCatalog(deps, organizationId, params);
   if (loaded.status !== "OK") return { status: "UNAVAILABLE", reason: loaded.reason };
   const { catalog } = loaded;
-  const [facts, orgRecord] = await Promise.all([
+  const [facts, orgRecord, process, currentTr] = await Promise.all([
     listContextFacts(organizationId, processId),
     readGovernedRecord(organizationId, "ORG", GOVERNED_ORG_SUBJECT, catalog).catch(() => null as GovernedRecord | null),
+    getProcess(processId, organizationId),
+    getLatestEmittedByOrigin(organizationId, PROCUREMENT_DOMAIN, processId, "tr"),
   ]);
+  const objectSupply = processObjectSupply(process?.object, currentTr);
   const defs = trParamDefs(catalog);
   const resolved = resolveTrParams(defs, facts);
   const proposals = trParamProposals(catalog, orgRecord);
@@ -103,6 +115,7 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
       ...(r.field.source ? { origin: { sourceType: r.field.source.type, sourceId: r.field.source.id, sourceVersion: r.field.source.version, status: r.field.status, actorUserId: r.field.actorUserId, updatedAt: r.field.updatedAt } } : {}),
       ...(prop && r.status === "UNSET" ? { proposal: { value: prop.value, orgProfileRevision: prop.revision } } : {}),
       defaultEligible: isDefaultEligible(def.name),
+      ...(r.status === "UNSET" && objectSupply && TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name) ? { suppliedBy: objectSupply } : {}),
     };
   });
   const activeFields = fields.filter((f) => f.active && (f.required || f.conditional));
@@ -110,7 +123,7 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
     status: "READY", catalogVersion: catalog.version, fields, digest: trParamsDigest(resolved), orgProfileRevision: orgRecord?.revision ?? null,
     summary: {
       total: fields.length, active: activeFields.length, set: activeFields.filter((f) => f.status === "SET").length,
-      pending: activeFields.filter((f) => f.status !== "SET").length, proposals: fields.filter((f) => f.proposal).length,
+      pending: activeFields.filter((f) => f.status !== "SET" && !f.suppliedBy).length, proposals: fields.filter((f) => f.proposal).length,
     },
   };
 }

@@ -1449,6 +1449,16 @@ export async function getAuthoringSourceState(params: {
     approvedItems: number; pendingItems: number; quoteCount: number;
     pricedItems: number; unpricedItems: number; confirmedClassifications: number; pendingClassifications: number;
     estimatedGlobalTotalCents: number;
+    /** M8 — das `quoteCount`, quantas são de fonte FICTÍCIA (importadas, mas não constituem pesquisa de preços oficial). */
+    fictitiousQuoteCount: number;
+    /** M8 — itens cujo preço de referência está SUSPENSO (fictícia, fonte alterada ou unidade divergente): não entram no total. */
+    priceSuspendedItems: number;
+    /** M8 — dos suspensos, quantos por cotação fictícia (`FICTITIOUS_SOURCE`). */
+    fictitiousPriceItems: number;
+    /** M8 — itens sem quantidade informada (fora do total; nunca "0"). */
+    unknownQuantityItems: number;
+    /** M8 — itens cujo preço no total é DEMONSTRATIVO (cotação fictícia admitida só em homologação sintética autorizada). */
+    demonstrativePriceItems: number;
   };
   /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
   changedSources: Array<{ key: SourceKey; label: string }>;
@@ -1463,6 +1473,13 @@ export async function getAuthoringSourceState(params: {
     confirmedClassifications: ctx.estimate.confirmedClassificationCount,
     pendingClassifications: ctx.estimate.pendingClassificationCount,
     estimatedGlobalTotalCents: ctx.estimate.globalTotalCents,
+    // M8 — projeção (sem cálculo novo): o MESMO `estimate` que monta o quadro do documento. Distingue "valor indisponível"
+    // (nenhum item com preço de referência) de total zero e de cotação importada que não serve de referência.
+    fictitiousQuoteCount: ctx.estimate.fictitiousQuoteCount,
+    priceSuspendedItems: ctx.estimate.rows.filter((r) => !!r.priceBlockedReason).length,
+    fictitiousPriceItems: ctx.estimate.rows.filter((r) => r.priceBlockedReason === "FICTITIOUS_SOURCE").length,
+    unknownQuantityItems: ctx.estimate.unknownQuantityItemCount,
+    demonstrativePriceItems: ctx.estimate.rows.filter((r) => (r.fictitiousQuoteCount ?? 0) > 0 && !r.priceBlockedReason && r.averagePriceCents > 0).length,
   };
   const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
   if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };

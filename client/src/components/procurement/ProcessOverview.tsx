@@ -2,8 +2,8 @@ import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
 import {
-  actorLabel, DOCUMENT_KIND_LABELS, draftStatusLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel,
-  officialVersionLabel, stageLabel,
+  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel,
+  officialVersionLabel, processStatusLabel, stageLabel,
 } from "../../lib/processDocumentStatus";
 
 /**
@@ -104,7 +104,7 @@ export default function ProcessOverview({
               "bg-muted text-foreground"
             }`}
           >
-            {process.status}
+            {processStatusLabel(process.status)}
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -179,7 +179,7 @@ export default function ProcessOverview({
                         {officialVersionLabel(officialVersions, d.kind)}
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground">Rascunho: {draftStatusLabel(d.status).toLowerCase()}</span>
+                    <span className="text-xs text-muted-foreground">{draftSituationLabel(d.status)}</span>
                     {exportable &&
                       (["docx", "pdf"] as const).map((fmt) => (
                         <button

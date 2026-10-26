@@ -8,10 +8,14 @@
  */
 import { CheckCircle2, CircleDashed, AlertTriangle } from "lucide-react";
 import { trpc } from "../../lib/trpc";
-import { formatCentsBRL } from "@/lib/money";
-import { globalEstimateLabel } from "@shared/estimateLabel";
+import { estimateRowView, quoteRowView, sourceChangedNoticeText } from "./authoringSourcesView";
+import type { RegenerationBlock } from "./regenerationGuard";
 
-export type AuthoringSourcesSummaryProps = { processId: string; kind: "etp" | "tr"; object: string };
+export type AuthoringSourcesSummaryProps = {
+  processId: string; kind: "etp" | "tr"; object: string;
+  /** Bloqueio canônico de regeneração (`reviewableDraft.regenerationBlock`): com ele, "fontes mudaram" não sugere regenerar. */
+  regenerationBlock?: RegenerationBlock | "loading";
+};
 
 function Row({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {
   return (
@@ -23,7 +27,7 @@ function Row({ ok, label, detail }: { ok: boolean; label: string; detail?: strin
   );
 }
 
-export default function AuthoringSourcesSummary({ processId, kind, object }: AuthoringSourcesSummaryProps) {
+export default function AuthoringSourcesSummary({ processId, kind, object, regenerationBlock = null }: AuthoringSourcesSummaryProps) {
   const q = trpc.procurementProcess.authoringSourceState.useQuery(
     { processId, kind, object },
     { enabled: !!processId && object.trim().length > 0, refetchOnWindowFocus: false },
@@ -47,7 +51,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
           label={`${s.approvedItems} Item(ns) Inteligente(s) aprovado(s)`}
           detail={s.pendingItems > 0 ? `${s.pendingItems} ainda pendente(s) de aprovação (não entram)` : undefined}
         />
-        <Row ok={s.quoteCount > 0} label={`Baseado em ${s.quoteCount} cotação(ões) importada(s) com preço`} />
+        <Row {...quoteRowView(s)} />
         {s.approvedItems > 0 && (
           <Row
             ok={s.pendingClassifications === 0}
@@ -56,11 +60,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
           />
         )}
         {kind === "tr" && s.approvedItems > 0 && (
-          <Row
-            ok={s.unpricedItems === 0}
-            label={`${globalEstimateLabel({ unpricedItemCount: s.unpricedItems, itemCount: s.approvedItems })}: ${formatCentsBRL(s.estimatedGlobalTotalCents)}`}
-            detail={s.unpricedItems > 0 ? `${s.unpricedItems} item(ns) sem preço de referência` : undefined}
-          />
+          <Row {...estimateRowView(s)} />
         )}
       </ul>
       {kind === "tr" && (
@@ -72,7 +72,7 @@ export default function AuthoringSourcesSummary({ processId, kind, object }: Aut
         <p className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>
-            As fontes do processo mudaram desde a última geração deste {kind.toUpperCase()}. Revise as alterações e decida se deve gerar uma nova versão.
+            {sourceChangedNoticeText(kind, regenerationBlock)}
             {/* R9 / SEM-047 — lista O QUE mudou (documentos antigos, sem marcador por fonte, mostram só o aviso). */}
             {(q.data.changedSources ?? []).length > 0 && (
               <span className="mt-1 block">Mudou: {q.data.changedSources.map((c) => c.label).join(", ")}.</span>

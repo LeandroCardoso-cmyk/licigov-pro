@@ -1,6 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
-import { latestOfficialSummary, stageLabel } from "../../lib/processDocumentStatus";
+import { latestOfficialSummary, processStatusLabel, stageLabel } from "../../lib/processDocumentStatus";
 
 /**
  * ProcessoLicitatorioHome — REAL (wired to tRPC).
@@ -20,14 +20,6 @@ const PROCESS_STATUS_CLASSES: Record<string, string> = {
   em_revisao: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   emitido: "bg-green-500/15 text-green-600 dark:text-green-400",
   arquivado: "bg-muted text-muted-foreground",
-};
-
-const PROCESS_STATUS_LABELS: Record<string, string> = {
-  rascunho: "Rascunho",
-  em_andamento: "Em andamento",
-  em_revisao: "Em revisão",
-  emitido: "Emitido",
-  arquivado: "Arquivado",
 };
 
 export type ProcessoLicitatorioHomeProps = {
@@ -129,7 +121,7 @@ export default function ProcessoLicitatorioHome({
                       "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {PROCESS_STATUS_LABELS[p.status] ?? p.status}
+                    {processStatusLabel(p.status)}
                   </span>
                 </div>
                 <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
