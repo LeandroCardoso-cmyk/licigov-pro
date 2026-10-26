@@ -339,6 +339,11 @@ jobs:
       - name: Smoke — homologação com usuário de múltiplas organizações
         run: pnpm exec vitest run server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts
 
+      # Executor de homologação × ingestão canônica (PR-04 / SEM-005): cliente HTTP real do executor contra Express + upload
+      # multipart + tRPC; flag real por tenant; 2 sessões somam cotações; cutover recusa a colagem legada; isolamento do upload.
+      - name: Smoke — executor de homologação pela ingestão canônica
+        run: pnpm exec vitest run server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts
+
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
       # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem

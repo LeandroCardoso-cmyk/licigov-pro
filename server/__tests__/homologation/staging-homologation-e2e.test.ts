@@ -21,7 +21,7 @@ import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
   AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
-  parseExercicio, pendingMarkers, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
+  parseExercicio, pendingMarkers, priceImportMode, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue, type PlannedWrite } from "../../../client/src/lib/editalPreparation";
@@ -118,15 +118,50 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     expect(prev.items[0]).toMatchObject({ quantity: 10, unit: "UN", averageCents: 400000, totalCents: 4000000 });
     expect(prev.quoteCount).toBe(3);
     expect(prev.synthetic).toBe(true);
-    let ambiguousCode = "";
-    try { await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" }); } catch (e) { ambiguousCode = trpcCode(e); }
-    expect(ambiguousCode, "importação ambígua recusada").toBe("PRECONDITION_FAILED");
+    // PR-04 (SEM-005): o modo da Pesquisa de Preços vem da capability OFICIAL do tenant (nunca presumido).
+    const mode = priceImportMode(await op.ingestion.getCapabilities.query());
+    REPORT.metrics.PRICE_IMPORT_MODE = mode;
+    let refusal = { code: "", message: "" };
+    try { await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" }); }
+    catch (e) { refusal = { code: trpcCode(e), message: e instanceof Error ? e.message : String(e) }; }
+    expect(refusal.code, "colagem ambígua/legada recusada").toBe("PRECONDITION_FAILED");
+    if (mode === "canonical") {
+      // Ingestão canônica ligada ⇒ a recusa é do CUTOVER (servidor), não do leitor — não confundir as duas.
+      expect(refusal.message, "recusa pelo cutover canônico").toMatch(/^LEGACY_PRICE_IMPORT_DISABLED:/);
+    } else {
+      expect(refusal.message, "recusa por ambiguidade do conteúdo").toMatch(/ambígua/);
+    }
     expect((await op.procurementProcess.listItems.query({ processId: pid })).items, "recusa sem gravação").toHaveLength(0);
     REPORT.metrics.PRICE_RESEARCH_M8 = { items: prev.items.length, quotes: prev.quoteCount, averageCents: prev.items[0].averageCents, totalCents: prev.items[0].totalCents, ignoredLines: prev.ignored.length, ambiguousRefused: true };
 
     // 2) Itens: Pesquisa de preços → itens aprovados → Itens da contratação com quantidade prevista (rotas da tela).
-    await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
-      text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício A`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício B`]).join("\n") });
+    const quoteRows = (supplier: string) => ITEMS.map((r) => ({ description: r.description, planned: r.planned, unit: r.unit, price: r.price, supplier }));
+    if (mode === "canonical") {
+      // Duas SESSÕES independentes (um fornecedor cada) ⇒ duas pesquisas; as cotações se SOMAM (nunca substituição silenciosa).
+      const s1 = await runCanonicalPriceResearch({ baseUrl: BASE!, author, manager: mgr, processId: pid, csv: `${priceResearchCsv(quoteRows("Fornecedor Fictício A"))}\n`, fileName: `homolog-${RUN}-a.csv`, key });
+      const s2 = await runCanonicalPriceResearch({ baseUrl: BASE!, author, manager: mgr, processId: pid, csv: `${priceResearchCsv(quoteRows("Fornecedor Fictício B"))}\n`, fileName: `homolog-${RUN}-b.csv`, key });
+      const after = (await op.procurementProcess.listItems.query({ processId: pid })).items;
+      expect(after, "um item por descrição").toHaveLength(ITEMS.length);
+      for (const it of after) {
+        expect(it.quoteCount, `cotações acumuladas: ${it.description}`).toBe(2);
+        expect(it.fictitiousQuoteCount, `proveniência fictícia declarada: ${it.description}`).toBe(2);
+      }
+      REPORT.metrics.PRICE_RESEARCH_CANONICAL = { sessions: [s1.sessionId, s2.sessionId], quotesPerItem: 2, accumulated: true };
+    } else {
+      await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
+        text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício A`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício B`]).join("\n") });
+      // Guarda SEM-005 do legado: a mesma linha com OUTRO fornecedor exige confirmação — sem ela, CONFLICT e nada gravado.
+      let replace = { code: "", message: "" };
+      try {
+        await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
+          text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício C`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício D`]).join("\n") });
+      } catch (e) { replace = { code: trpcCode(e), message: e instanceof Error ? e.message : String(e) }; }
+      expect(replace.code, "substituição sem confirmação recusada").toBe("CONFLICT");
+      expect(replace.message).toMatch(/^QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED:/);
+      for (const it of (await op.procurementProcess.listItems.query({ processId: pid })).items) {
+        expect(it.suppliers.map((s: any) => s.name).sort(), `cotações originais intactas: ${it.description}`).toEqual(["Fornecedor Fictício A", "Fornecedor Fictício B"]);
+      }
+    }
     for (const it of (await op.procurementProcess.listItems.query({ processId: pid })).items) await op.procurementProcess.approveItem.mutate({ itemId: it.id });
     const cand = await op.procurementItems.candidates.query({ processId: pid, source: "price_research" });
     await op.procurementItems.confirmCandidates.mutate({ processId: pid, source: "price_research", expectedSourceDigest: cand.sourceDigest, idempotencyKey: key("items"),
