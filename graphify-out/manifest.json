@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1792974548.9672155,
-    "ast_hash": "48d56caa414c36dc64457854fa7f0495",
+    "mtime": 1792980130.0586548,
+    "ast_hash": "e65278aa77882f5519b5d53fe311ce3a",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -15275,8 +15275,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROTATION_RUNBOOK.md": {
-    "mtime": 1792974362.2756681,
-    "ast_hash": "d1f43e2dfabc66b36db188463a123f6b",
+    "mtime": 1792980130.0626547,
+    "ast_hash": "93afceb46e0e990d1ae5680ba7e750fd",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1792976427.2555282,
-    "ast_hash": "f1695d770702a59f6f7549dd9f7ab49f",
+    "mtime": 1792980130.0586548,
+    "ast_hash": "24808ec1f583fdd838422022feee56fb",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
@@ -15320,8 +15320,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CONTAINMENT_CHECKLIST.md": {
-    "mtime": 1792974317.4072018,
-    "ast_hash": "d330ec27ecdb55031a0f96c7f3a80d5c",
+    "mtime": 1792980130.0626547,
+    "ast_hash": "d310d170d2c0689545b0bdb7f40256b0",
     "semantic_hash": ""
   },
   "scripts/ops/db-restore-drill.sh": {
@@ -15417,6 +15417,16 @@
   "server/__tests__/fixtures/spreadsheets/README.md": {
     "mtime": 1792975445.4312687,
     "ast_hash": "69b1c8f85734e3095bf688ea0292c699",
+    "semantic_hash": ""
+  },
+  "scripts/ci/lint-changed.sh": {
+    "mtime": 1792980130.1306548,
+    "ast_hash": "0e2e05868f5d9f51f79b0df1a84735e0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/ci-lint-changed.test.ts": {
+    "mtime": 1792980130.1306548,
+    "ast_hash": "bf04dcc09317b4b1add386bda941d623",
     "semantic_hash": ""
   }
 }
