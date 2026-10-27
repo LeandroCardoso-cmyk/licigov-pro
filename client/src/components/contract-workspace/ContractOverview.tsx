@@ -1,6 +1,7 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
 import { originLabel, statusLabel, STATUS_CLASSES, formatCurrency, formatDate } from "./labels";
+import { isContractInForce } from "@shared/contractStatus";
 
 /**
  * ContractOverview — REAL (tRPC).
@@ -13,7 +14,8 @@ export default function ContractOverview({ onOpen }: ContractOverviewProps) {
   const { data, isLoading } = trpc.contractWorkspace.listContracts.useQuery({});
   const contracts = data?.contracts ?? [];
 
-  const vigentes = contracts.filter((c) => c.status === "vigente").length;
+  // Em vigor = vigente, aditado ou apostilado (antes só "vigente": contratos aditados sumiam do indicador).
+  const vigentes = contracts.filter((c) => isContractInForce(c.status)).length;
   const externos = contracts.filter((c) => c.originType === "externo").length;
 
   const kpis = [
@@ -53,7 +55,12 @@ export default function ContractOverview({ onOpen }: ContractOverviewProps) {
               </thead>
               <tbody>
                 {contracts.map((c) => (
-                  <tr key={c.id} onClick={() => onOpen?.(c.id)} className={onOpen ? "cursor-pointer border-b border-border hover:bg-muted last:border-0" : "border-b border-border last:border-0"}>
+                  <tr
+                    key={c.id} onClick={() => onOpen?.(c.id)}
+                    // Acessível por teclado (Enter/Espaço), como as demais listas clicáveis.
+                    {...(onOpen ? { tabIndex: 0, role: "button", "aria-label": `Abrir contrato ${c.contractNumber}`, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(c.id); } } } : {})}
+                    className={onOpen ? "cursor-pointer border-b border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring last:border-0" : "border-b border-border last:border-0"}
+                  >
                     <td className="px-4 py-3"><p className="font-medium text-foreground">{c.contractNumber}</p><p className="line-clamp-1 text-xs text-muted-foreground">{c.contractor || c.object}</p></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{originLabel(c.originType)}</td>
                     <td className="px-4 py-3 text-xs text-foreground">{formatCurrency(c.value)}</td>

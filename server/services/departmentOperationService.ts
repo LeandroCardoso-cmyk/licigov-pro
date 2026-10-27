@@ -266,7 +266,7 @@ export async function generateOperationalReport(params: { organizationId: number
     `- Processos ativos: ${i.activeProcesses}`,
     `- Processos concluídos: ${i.concludedProcesses}`,
     `- Pareceres aguardando: ${i.legalOpinionsAwaiting}`,
-    `- Contratos ativos: ${i.activeContracts}`,
+    `- Contratos em andamento (inclui minutas): ${i.activeContracts}`,
     `- Contratos vencendo: ${i.contractsExpiring}`,
     `- Solicitações pendentes: ${i.pendingRequests}`,
     "",

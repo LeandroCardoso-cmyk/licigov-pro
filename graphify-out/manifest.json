@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractOverview.tsx": {
-    "mtime": 1792983547.077792,
-    "ast_hash": "b12a86f40c1d61605494572cdc985b18",
+    "mtime": 1793110089.2376208,
+    "ast_hash": "b17c91807513465b622896dbf38f2a32",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractWorkspace.tsx": {
@@ -875,8 +875,8 @@
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationalIndicators.tsx": {
-    "mtime": 1792983547.0793102,
-    "ast_hash": "0495b0054016fa81d58a19a058dded6b",
+    "mtime": 1793110043.0478318,
+    "ast_hash": "a84b163fc39858483ae2c3c5a39ff7f2",
     "semantic_hash": ""
   },
   "client/src/components/department-operation/OperationalMonitoringPanel.tsx": {
@@ -9460,8 +9460,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1793108337.6369274,
-    "ast_hash": "196f1913878b3c0d671c44ed04bcea1d",
+    "mtime": 1793110043.0483155,
+    "ast_hash": "78eb6077fefdece4375388ea969b7243",
     "semantic_hash": ""
   },
   "server/services/deploymentValidationService.ts": {
@@ -15542,6 +15542,16 @@
   "server/services/legalOpinionReference.ts": {
     "mtime": 1793109831.013016,
     "ast_hash": "b92181b6fd41d3080f43c676dab264c3",
+    "semantic_hash": ""
+  },
+  "client/src/components/contract-workspace/contractInForce.test.ts": {
+    "mtime": 1793110089.238016,
+    "ast_hash": "8bbabf36dec5bae1aa2ecceed7b0a95b",
+    "semantic_hash": ""
+  },
+  "shared/contractStatus.ts": {
+    "mtime": 1793110043.0290287,
+    "ast_hash": "ba006480efdf58dec1fbeafdd6b7fd89",
     "semantic_hash": ""
   }
 }
