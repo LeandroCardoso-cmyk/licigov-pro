@@ -33,6 +33,19 @@ export function demonstrativePricesAllowedForOrganization(org: { id: number; slu
   return homologationDemonstrativeAllowed({ appEnv: cfg.appEnv, allowedOrgIds: cfg.allowedOrgIds, organization: org });
 }
 
+/** Papéis que EMITEM (manager+) — os únicos que recebem a projeção do pré-flight. */
+const PREFLIGHT_ROLES = new Set(["manager", "admin", "owner"]);
+
+/**
+ * Projeção SOMENTE LEITURA para o pré-flight da homologação (servida por `organizations.getCurrent`): a decisão continua aqui, no
+ * backend; o router apenas repassa o resultado — nenhum parâmetro do cliente participa e nenhum router decide ou habilita a
+ * exceção (invariante [36]). Abaixo de manager ⇒ null.
+ */
+export function priceGovernancePreflight(org: { id: number; slug: string | null } | null, role: string | null | undefined): { demonstrativePricesAllowed: boolean } | null {
+  if (!PREFLIGHT_ROLES.has(role ?? "")) return null;
+  return { demonstrativePricesAllowed: demonstrativePricesAllowedForOrganization(org) };
+}
+
 function effectiveConfig(): { appEnv: typeof HOMOLOGATION_CONFIG.appEnv; allowedOrgIds: readonly number[] } {
   return testOverride
     ? { appEnv: testOverride.appEnv ?? HOMOLOGATION_CONFIG.appEnv, allowedOrgIds: testOverride.allowedOrgIds }

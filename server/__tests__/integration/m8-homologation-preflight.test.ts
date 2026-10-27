@@ -64,6 +64,12 @@ describe("organizations.getCurrent — capacidade do PRÓPRIO tenant, só para m
     __setHomologationConfigForTests({ allowedOrgIds: [], appEnv: "staging" });
     expect((await current(10)).priceGovernance).toEqual({ demonstrativePricesAllowed: false });
   });
+  it("a decisão fica no serviço: o router só repassa a projeção (invariante [36] — nenhum router decide/habilita a exceção)", async () => {
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(new URL("../../routers/organizationsRouter.ts", import.meta.url), "utf8");
+    expect(src).toContain("priceGovernancePreflight({ id: org.id, slug: org.slug ?? null }, role)");
+    expect(src).not.toMatch(/demonstrativePricesAllowed|HOMOLOGATION_DEMONSTRATIVE|homologationDemonstrativeAllowed/);
+  });
   it("operator e viewer não recebem o campo (null); a resposta nunca carrega a lista configurada", async () => {
     __setHomologationConfigForTests({ allowedOrgIds: [2, 77], appEnv: "staging" });
     h.roleByUser.set(11, "operator");

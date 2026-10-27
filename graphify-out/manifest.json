@@ -8905,8 +8905,8 @@
     "semantic_hash": ""
   },
   "server/routers/organizationsRouter.ts": {
-    "mtime": 1793109037.9161355,
-    "ast_hash": "85f134d33c6ce3bc10c6f91c24309d1a",
+    "mtime": 1793111086.2713633,
+    "ast_hash": "058579ee6acc7b1c013e6ad91189a805",
     "semantic_hash": ""
   },
   "server/routers/passwordResetRouter.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
-    "mtime": 1793109031.9689686,
-    "ast_hash": "a6cdc066347cd4c0c3bf6afb04e1071c",
+    "mtime": 1793111086.270757,
+    "ast_hash": "373ede6749e080e10b2fa3f453e9adad",
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
@@ -15505,8 +15505,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-homologation-preflight.test.ts": {
-    "mtime": 1793109152.2529757,
-    "ast_hash": "fa5568d6a81d7c6083fce148edb18011",
+    "mtime": 1793111086.2717648,
+    "ast_hash": "97833b41ff1e0c9a4d8767a0e8fa8214",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GenerationFollowUpNotice.tsx": {
