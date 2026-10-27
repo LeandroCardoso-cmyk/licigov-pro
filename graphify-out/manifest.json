@@ -8905,8 +8905,8 @@
     "semantic_hash": ""
   },
   "server/routers/organizationsRouter.ts": {
-    "mtime": 1792983547.5912764,
-    "ast_hash": "a2423b006a17720e522415583746d181",
+    "mtime": 1793109037.9161355,
+    "ast_hash": "85f134d33c6ce3bc10c6f91c24309d1a",
     "semantic_hash": ""
   },
   "server/routers/passwordResetRouter.ts": {
@@ -14975,13 +14975,13 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1792985539.8337455,
-    "ast_hash": "300b93098e385e88243dc78ab8b18dd6",
+    "mtime": 1793109088.132972,
+    "ast_hash": "ffc0d71599e7d3c884275857c2cef1a8",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1792985539.8362474,
-    "ast_hash": "4ae0ed7ed4ac5bee9eeaef051092ed75",
+    "mtime": 1793109106.1613226,
+    "ast_hash": "5a88ba68a0a59a0f75f1106911fbd578",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
@@ -15025,8 +15025,8 @@
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
-    "mtime": 1792983547.3578188,
-    "ast_hash": "03d66236c47f98ee78298f6120819215",
+    "mtime": 1793109202.7792056,
+    "ast_hash": "b669c868e016ec4f70f807ad7c76e2a5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
-    "mtime": 1792983547.617108,
-    "ast_hash": "b11d955ca78e951df7007faacea840a6",
+    "mtime": 1793109031.9689686,
+    "ast_hash": "a6cdc066347cd4c0c3bf6afb04e1071c",
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
@@ -15502,6 +15502,11 @@
   "server/__tests__/unit/m8-tr-structured-params-authoring.test.ts": {
     "mtime": 1793108792.9009542,
     "ast_hash": "11ed0eca536104dc6e71b181e6594447",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/m8-homologation-preflight.test.ts": {
+    "mtime": 1793109152.2529757,
+    "ast_hash": "fa5568d6a81d7c6083fce148edb18011",
     "semantic_hash": ""
   }
 }

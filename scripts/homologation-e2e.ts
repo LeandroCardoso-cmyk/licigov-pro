@@ -68,6 +68,38 @@ export function assertOrgRoleAtLeast(role: string | null | undefined, min: "oper
   }
 }
 
+/** Diagnósticos de BLOQUEIO (configuração/credencial/ambiente — ação do Owner), distintos de falha de produto (ação de Dev). */
+export const BLOCKED_DEMONSTRATIVE_PRICES = "BLOCKED_HOMOLOGATION_DEMONSTRATIVE_PRICES_NOT_ENABLED";
+export const BLOCKED_SAME_IDENTITY = "BLOCKED_HOMOLOGATION_SAME_IDENTITY";
+export const BLOCKED_LOGIN_RATE_LIMITED = "BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED";
+
+/**
+ * Pré-flight M8 (ANTES de qualquer escrita): a jornada A emite o TR com cotações FICTÍCIAS, o que só é possível com a exceção
+ * controlada de valores demonstrativos habilitada no backend para o tenant sintético (`organizations.getCurrent().priceGovernance`,
+ * visível só a manager+). Ausente/false/servidor antigo ⇒ bloqueio explícito — nunca descobrir isso depois de criar o processo.
+ */
+export function assertDemonstrativePricesEnabled(current: { priceGovernance?: { demonstrativePricesAllowed?: boolean } | null } | null | undefined): void {
+  if (current?.priceGovernance?.demonstrativePricesAllowed === true) return;
+  const why = current?.priceGovernance == null
+    ? "o servidor não informou a capacidade (papel abaixo de manager ou versão anterior ao pré-flight)"
+    : "a exceção controlada de valores demonstrativos não está habilitada para este tenant neste ambiente";
+  throw new Error(`${BLOCKED_DEMONSTRATIVE_PRICES}: ${why}. Nenhuma escrita foi feita. Ação do Owner (configuração de staging) — ver runbook M8.`);
+}
+
+/** Segregação de funções: as duas credenciais precisam ser usuários DISTINTOS (compara ids, nunca e-mails/senhas). */
+export function assertDistinctIdentities(a: { id: number }, b: { id: number }): void {
+  if (a.id === b.id) {
+    throw new Error(`${BLOCKED_SAME_IDENTITY}: HOMOLOG_EMAIL e HOMOLOG_EMAIL_2 resolvem para o MESMO usuário (id ${a.id}); a emissão do TR exige outro usuário. Nenhuma escrita foi feita. Ação do Owner — ver runbook M8.`);
+  }
+}
+
+/** Login recusado pelo limitador (5 tentativas/15 min por IP) é bloqueio de ambiente, não falha de produto. */
+export function classifyLoginError(e: unknown): Error {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (trpcCode(e) === "TOO_MANY_REQUESTS") return new Error(`${BLOCKED_LOGIN_RATE_LIMITED}: ${msg} Aguarde a janela do limitador; não reinicie o serviço para zerá-lo.`);
+  return e instanceof Error ? e : new Error(msg);
+}
+
 /** Exercício explícito (AAAA, 1900–2099). Sem valor válido ⇒ erro: nunca substituído pelo ano corrente. */
 export function parseExercicio(v: string | undefined): number {
   if (!v || !/^(19|20)\d{2}$/.test(v.trim())) throw new Error("Informe HOMOLOG_EXERCICIO (AAAA) — o exercício do processo sintético nunca é presumido.");

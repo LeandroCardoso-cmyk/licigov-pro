@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure, adminProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, adminProcedure, hasOrgRoleAtLeast } from "../_core/trpc";
 import {
   getOrganizationById,
   getMembersOfOrg,
@@ -20,6 +20,7 @@ import { getUserByEmail } from "../db";
 import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
 import { LAST_TENANT_ADMIN, MEMBER_NOT_FOUND } from "../domain/authErrors";
 import { sanitizeUser } from "../services/userProjection";
+import { demonstrativePricesAllowedForOrganization } from "../services/priceGovernanceService";
 
 /**
  * PR A.1 — Proteção "último admin": rebaixar/desativar/remover um membro com papel admin NÃO
@@ -52,7 +53,13 @@ export const organizationsRouter = router({
     if (!org) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Organização não encontrada." });
     }
-    return { org, role: ctx.orgMembership!.role };
+    const role = ctx.orgMembership!.role;
+    // Pré-flight da homologação M8: capacidade do PRÓPRIO tenant (sem consulta extra; nunca a lista configurada). Só manager+,
+    // que é quem emite; abaixo disso o campo não é informado.
+    const priceGovernance = hasOrgRoleAtLeast(role, "manager")
+      ? { demonstrativePricesAllowed: demonstrativePricesAllowedForOrganization({ id: org.id, slug: org.slug ?? null }) }
+      : null;
+    return { org, role, priceGovernance };
   }),
 
   // ─── Atualizar dados da organização (admin/owner) ────────────────────────

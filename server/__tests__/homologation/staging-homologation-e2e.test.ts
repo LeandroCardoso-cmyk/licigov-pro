@@ -21,6 +21,7 @@ import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
   AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
+  assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError,
   parseExercicio, pendingMarkers, priceImportMode, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
@@ -40,7 +41,7 @@ const ITEMS = [
   { description: `${MARK} Caneta esferográfica azul`, unit: "un", planned: 400, price: "1,75" },
 ];
 const OBJ = `${MARK} Aquisição de material de expediente — execução ${RUN}`;
-const REPORT: { run: string; tenant?: unknown; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
+const REPORT: { run: string; tenant?: unknown; blocked?: string; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
   { run: RUN, journeys: {}, metrics: {}, mode: "HTTP real (APIs oficiais); não é homologação visual" };
 
 const download = async (url: string) => new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -65,7 +66,7 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     // Usuário com várias associações: o cabeçalho X-Organization-Id precisa ir já na 1ª chamada tenant-scoped (listMine).
     const pinned = parseOrganizationId(ENV.HOMOLOG_ORGANIZATION_ID);
     if (pinned) s.state.orgId = pinned;
-    await s.api.auth.login.mutate({ email, password });
+    await s.api.auth.login.mutate({ email, password }).catch((e) => { throw classifyLoginError(e); });
     const me = await s.api.auth.me.query();
     const mine = await s.api.organizations.listMine.query();
     assertSyntheticCredential(me as any, mine.map((m) => m.org.id));
@@ -76,7 +77,7 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     const current = await s.api.organizations.getCurrent.query();
     assertSyntheticTenant(current.org);
     assertOrgRoleAtLeast(current.role, "manager", who);
-    return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role };
+    return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role, current };
   }
 
   beforeAll(async () => {
@@ -85,7 +86,15 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     const a = await login(author, ENV.HOMOLOG_EMAIL, ENV.HOMOLOG_PASSWORD, "usuário 1 (elabora)");
     const b = await login(issuer, ENV.HOMOLOG_EMAIL_2, ENV.HOMOLOG_PASSWORD_2, "usuário 2 (emite)");
     if (a.org.id !== b.org.id) throw new Error("Os dois usuários precisam ser do MESMO tenant sintético.");
-    if (a.me.id === b.me.id) throw new Error("Use dois usuários distintos (segregação de funções na emissão do TR).");
+    // Pré-flight M8 — tudo ANTES da primeira escrita: identidades distintas (SoD) e exceção de valores demonstrativos habilitada
+    // para quem emite (jornada A). Bloqueio é diagnóstico de configuração (Owner), não falha de produto.
+    try {
+      assertDistinctIdentities(a.me, b.me);
+      assertDemonstrativePricesEnabled(b.current);
+    } catch (e) {
+      REPORT.blocked = (e as Error).message.split(":")[0];
+      throw e;
+    }
     orgId = a.org.id;
     decisionA = syntheticDecision(a.me, TODAY);
     REPORT.tenant = { id: orgId, slug: a.org.slug, roles: [a.role, b.role] };
