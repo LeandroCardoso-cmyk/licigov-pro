@@ -96,8 +96,160 @@ export function assertDistinctIdentities(a: { id: number }, b: { id: number }): 
 /** Login recusado pelo limitador (5 tentativas/15 min por IP) é bloqueio de ambiente, não falha de produto. */
 export function classifyLoginError(e: unknown): Error {
   const msg = e instanceof Error ? e.message : String(e);
-  if (trpcCode(e) === "TOO_MANY_REQUESTS") return new Error(`${BLOCKED_LOGIN_RATE_LIMITED}: ${msg} Aguarde a janela do limitador; não reinicie o serviço para zerá-lo.`);
+  if (trpcCode(e) === "TOO_MANY_REQUESTS") return new Error(`${BLOCKED_LOGIN_RATE_LIMITED}: ${msg} Aguarde a janela do limitador; não reinicie o serviço para zerá-lo.`, { cause: e });
   return e instanceof Error ? e : new Error(msg);
+}
+
+// ─── Pré-flight estruturado (M8) ─────────────────────────────────────────────
+
+/** Falha de pré-flight sem código `BLOCKED_*` próprio (ex.: credencial inválida, tenant recusado): continua bloqueio, nunca PASS. */
+export const BLOCKED_PREFLIGHT_FAILED = "BLOCKED_HOMOLOGATION_PREFLIGHT_FAILED";
+
+export type PreflightStage = "target" | "exercicio" | "login_author" | "login_issuer" | "same_tenant" | "distinct_identities" | "demonstrative_prices";
+
+/** Registro do pré-flight no relatório JSON. Nunca carrega senha, cookie, token, header de autorização nem e-mail. */
+export interface PreflightRecord {
+  readonly status: "PASSED" | "BLOCKED";
+  readonly stage: PreflightStage | "completed";
+  readonly code?: string;
+  /** Código tRPC da falha original, quando houver (ex.: TOO_MANY_REQUESTS, UNAUTHORIZED). */
+  readonly cause?: string;
+  readonly environment: "staging" | "local" | "unknown";
+  readonly run: string;
+  readonly tenantId?: number;
+  readonly correlationId?: string;
+  /** Pré-flight só lê/autentica: nenhuma escrita de domínio ocorre antes de ele terminar. */
+  readonly writesPerformed: 0;
+  readonly guidance?: string;
+  readonly detail?: string;
+}
+
+const PREFLIGHT_GUIDANCE: Readonly<Record<string, string>> = {
+  [BLOCKED_LOGIN_RATE_LIMITED]: "Operador: aguarde a janela do limitador de login (15 min) e execute de novo; não reinicie o serviço para zerá-lo.",
+  [BLOCKED_SAME_IDENTITY]: "Owner: HOMOLOG_EMAIL_2 precisa ser OUTRO usuário (manager+) do tenant sintético.",
+  [BLOCKED_DEMONSTRATIVE_PRICES]: "Owner: habilitar a exceção controlada de valores demonstrativos para o tenant sintético neste ambiente (runbook M8).",
+  [BLOCKED_PREFLIGHT_FAILED]: "Conferir `stage`/`detail` e o runbook M8 (credencial, tenant sintético, papel, destino).",
+};
+
+/** Remove material sensível de uma mensagem de diagnóstico (segredos conhecidos, e-mails, JWT, Bearer, cookies). */
+export function sanitizeDiagnostic(text: string, secrets: ReadonlyArray<string | undefined> = []): string {
+  let out = text;
+  for (const secret of secrets) if (secret && secret.length >= 3) out = out.split(secret).join("[REDACTED]");
+  return out
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "[EMAIL]")
+    .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, "[TOKEN]")
+    .replace(/\b(Bearer|Basic)\s+\S+/gi, "$1 [REDACTED]")
+    .replace(/\b(cookie|set-cookie|authorization|password|senha|token)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
+    .slice(0, 300);
+}
+
+export function homologEnvironment(baseUrl: string): PreflightRecord["environment"] {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === STAGING_HOST ? "staging" : LOCAL_HOSTS.has(host) ? "local" : "unknown";
+  } catch { return "unknown"; }
+}
+
+/** Código estável do bloqueio: o prefixo `BLOCKED_*` da mensagem, senão `BLOCKED_HOMOLOGATION_PREFLIGHT_FAILED`. */
+export function preflightBlockCode(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /^(BLOCKED_[A-Z0-9_]+):/.exec(msg)?.[1] ?? BLOCKED_PREFLIGHT_FAILED;
+}
+
+export interface PreflightTracker {
+  /** Etapa corrente (e a sessão cujo correlation id identifica a última chamada). */
+  at(stage: PreflightStage, session?: { state: { lastCorrelationId?: string | null } }): void;
+  tenant(id: number): void;
+}
+
+/**
+ * Executa o pré-flight e SEMPRE registra o desfecho em `report` — inclusive falhas de LOGIN (HTTP 429), que antes escapavam do
+ * `try/catch` e deixavam o JSON sem `blocked`. Falha ⇒ `report.blocked` + `report.preflight` (BLOCKED) e a exceção é RELANÇADA
+ * (o `beforeAll` falha; a execução termina bloqueada, nunca PASS). Sucesso ⇒ `report.preflight` (PASSED).
+ */
+export async function runPreflight<T>(
+  report: { blocked?: string; preflight?: PreflightRecord },
+  base: { run: string; baseUrl: string; secrets?: ReadonlyArray<string | undefined> },
+  body: (t: PreflightTracker) => Promise<T>,
+): Promise<T> {
+  let stage: PreflightStage = "target";
+  let session: { state: { lastCorrelationId?: string | null } } | undefined;
+  let tenantId: number | undefined;
+  const tracker: PreflightTracker = { at: (s, sess) => { stage = s; if (sess) session = sess; }, tenant: (id) => { tenantId = id; } };
+  const common = { run: base.run, environment: homologEnvironment(base.baseUrl), writesPerformed: 0 as const };
+  try {
+    const out = await body(tracker);
+    report.preflight = { status: "PASSED", stage: "completed", ...common, ...(tenantId ? { tenantId } : {}) };
+    return out;
+  } catch (e) {
+    const code = preflightBlockCode(e);
+    const cause = trpcCode((e as { cause?: unknown })?.cause ?? e) || undefined;
+    const correlationId = session?.state.lastCorrelationId ?? undefined;
+    report.blocked = code;
+    report.preflight = {
+      status: "BLOCKED", stage, code, ...common,
+      ...(cause ? { cause } : {}), ...(tenantId ? { tenantId } : {}), ...(correlationId ? { correlationId } : {}),
+      guidance: PREFLIGHT_GUIDANCE[code] ?? PREFLIGHT_GUIDANCE[BLOCKED_PREFLIGHT_FAILED],
+      detail: sanitizeDiagnostic(e instanceof Error ? e.message : String(e), base.secrets),
+    };
+    throw e;
+  }
+}
+
+/**
+ * Login de uma credencial do tenant sintético + guardas (credencial, slug, organização fixada, papel manager+). Só LÊ/autentica.
+ * `organizations.listMine`/`getCurrent` são consultas; nenhuma escrita de domínio.
+ */
+export async function loginSynthetic(
+  s: ReturnType<typeof homologSession>,
+  email: string | undefined, password: string | undefined, who: string, pinned: number | null,
+) {
+  if (!email || !password) throw new Error("Credenciais do tenant sintético ausentes (HOMOLOG_EMAIL/HOMOLOG_PASSWORD e _2).");
+  // Usuário com várias associações: o cabeçalho X-Organization-Id precisa ir já na 1ª chamada tenant-scoped (listMine).
+  if (pinned) s.state.orgId = pinned;
+  await s.api.auth.login.mutate({ email, password }).catch((e) => { throw classifyLoginError(e); });
+  const me = await s.api.auth.me.query();
+  const mine = await s.api.organizations.listMine.query();
+  assertSyntheticCredential(me as { role?: string | null } | null, mine.map((m) => m.org.id));
+  const org = mine.map((m) => m.org).find((o) => o.slug === SYNTHETIC_TENANT_SLUG);
+  assertSyntheticTenant(org);
+  if (pinned && org.id !== pinned) throw new Error(`HOMOLOG_ORGANIZATION_ID=${pinned} não é o tenant sintético (${org.id}).`);
+  s.state.orgId = org.id;
+  const current = await s.api.organizations.getCurrent.query();
+  assertSyntheticTenant(current.org);
+  assertOrgRoleAtLeast(current.role, "manager", who);
+  return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role, current };
+}
+
+/**
+ * Pré-flight OFICIAL do executor M8 (o `beforeAll` só chama esta função): destino, exercício, os DOIS logins, mesmo tenant,
+ * identidades distintas (SoD) e exceção de valores demonstrativos para quem emite — tudo antes da primeira escrita, com o
+ * desfecho sempre registrado em `report` (`runPreflight`).
+ */
+export async function runHomologationPreflight(
+  report: { blocked?: string; preflight?: PreflightRecord },
+  p: { run: string; baseUrl: string; env: Readonly<Record<string, string | undefined>>; author: ReturnType<typeof homologSession>; issuer: ReturnType<typeof homologSession> },
+) {
+  const { env } = p;
+  const secrets = [env.HOMOLOG_PASSWORD, env.HOMOLOG_PASSWORD_2, env.HOMOLOG_EMAIL, env.HOMOLOG_EMAIL_2];
+  return runPreflight(report, { run: p.run, baseUrl: p.baseUrl, secrets }, async (t) => {
+    assertAllowedTarget(p.baseUrl);
+    t.at("exercicio");
+    const exercicio = parseExercicio(env.HOMOLOG_EXERCICIO);
+    const pinned = parseOrganizationId(env.HOMOLOG_ORGANIZATION_ID);
+    t.at("login_author", p.author);
+    const a = await loginSynthetic(p.author, env.HOMOLOG_EMAIL, env.HOMOLOG_PASSWORD, "usuário 1 (elabora)", pinned);
+    t.tenant(a.org.id);
+    t.at("login_issuer", p.issuer);
+    const b = await loginSynthetic(p.issuer, env.HOMOLOG_EMAIL_2, env.HOMOLOG_PASSWORD_2, "usuário 2 (emite)", pinned);
+    t.at("same_tenant");
+    if (a.org.id !== b.org.id) throw new Error("Os dois usuários precisam ser do MESMO tenant sintético.");
+    t.at("distinct_identities");
+    assertDistinctIdentities(a.me, b.me);
+    t.at("demonstrative_prices", p.issuer);
+    assertDemonstrativePricesEnabled(b.current);
+    return { exercicio, a, b };
+  });
 }
 
 /** Exercício explícito (AAAA, 1900–2099). Sem valor válido ⇒ erro: nunca substituído pelo ano corrente. */
@@ -157,16 +309,20 @@ export const trpcCode = (e: unknown): string => (e instanceof TRPCClientError ? 
 
 /** Sessão HTTP real: cookie do login guardado em memória (nunca impresso); `orgId` vira `x-organization-id`. */
 export function homologSession(baseUrl: string) {
-  const state = { cookie: "", orgId: null as number | null };
+  const state = { cookie: "", orgId: null as number | null, lastCorrelationId: null as string | null };
   const api = createTRPCClient<AppRouter>({
     links: [httpLink({
       url: `${baseUrl.replace(/\/$/, "")}/api/trpc`,
       transformer: superjson,
-      headers: () => ({
-        ...(state.cookie ? { cookie: state.cookie } : {}),
-        ...(state.orgId ? { "x-organization-id": String(state.orgId) } : {}),
-        "x-correlation-id": `homolog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      }),
+      headers: () => {
+        // Correlation id da última chamada (não é segredo): vai para o relatório quando o pré-flight bloqueia.
+        state.lastCorrelationId = `homolog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        return {
+          ...(state.cookie ? { cookie: state.cookie } : {}),
+          ...(state.orgId ? { "x-organization-id": String(state.orgId) } : {}),
+          "x-correlation-id": state.lastCorrelationId,
+        };
+      },
       fetch: async (url, init) => {
         const res = await fetch(url, init as RequestInit);
         const session = res.headers.getSetCookie?.().find((c) => c.startsWith(`${COOKIE_NAME}=`));

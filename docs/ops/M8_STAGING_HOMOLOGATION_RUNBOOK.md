@@ -32,9 +32,15 @@ Executor oficial: `pnpm homolog:e2e` (`server/__tests__/homologation/staging-hom
 | `BLOCKED_HOMOLOGATION_DEMONSTRATIVE_PRICES_NOT_ENABLED` | A exceção de valores demonstrativos não está habilitada para o tenant sintético neste ambiente. A guarda `EMISSION_FICTITIOUS_PRICES` está correta: cotação fictícia nunca fundamenta emissão sem essa exceção. | Owner (configuração de staging) |
 | `BLOCKED_HOMOLOGATION_SAME_IDENTITY` | `HOMOLOG_EMAIL` e `HOMOLOG_EMAIL_2` resolvem para o mesmo usuário; a emissão do TR exige outro usuário. | Owner (credencial de homologação) |
 | `BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED` | Limitador de login esgotado no IP de saída. Aguarde a janela (15 min); **não** reinicie o serviço para zerá-lo. | Operador (esperar) |
+| `BLOCKED_HOMOLOGATION_PREFLIGHT_FAILED` | Outra recusa do pré-flight (credencial inválida/ausente, tenant ou papel recusado, destino, exercício). Ver `preflight.stage`, `preflight.cause` e `preflight.detail`. | Owner/Operador conforme o `stage` |
 | Falha de asserção (`expected …`) em uma jornada | Defeito de produto ou de contrato. | Dev — anexar etapa, `run` e correlation id |
 
-O relatório JSON registra `blocked` quando o pré-flight recusa. Com bloqueio, **nenhum processo é criado**.
+O relatório JSON registra `blocked` (código) e `preflight` quando o pré-flight recusa — **inclusive nos dois logins** (antes, um
+HTTP 429 no login saía do bloco que preenchia `blocked`). `preflight` traz `status` (`BLOCKED`/`PASSED`), `stage`
+(`target`, `exercicio`, `login_author`, `login_issuer`, `same_tenant`, `distinct_identities`, `demonstrative_prices`), `code`,
+`cause` (código tRPC), `environment`, `run`, `tenantId` (quando já validado), `correlationId` da última chamada,
+`writesPerformed: 0`, `guidance` e `detail` sanitizado (sem senha, e-mail, cookie, token ou header de autorização). A execução
+termina falha/bloqueada — nunca PASS. Com bloqueio, **nenhum processo é criado**.
 
 ## Verificação segura do ambiente (sem expor configuração)
 - A capacidade é lida pela API oficial, do próprio tenant, só por `manager+`: `organizations.getCurrent().priceGovernance.demonstrativePricesAllowed`.

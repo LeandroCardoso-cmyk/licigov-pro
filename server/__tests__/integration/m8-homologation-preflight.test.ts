@@ -30,8 +30,8 @@ vi.mock("../../db/organizations", async (orig) => ({
 import { organizationsRouter } from "../../routers/organizationsRouter";
 import { __setHomologationConfigForTests, demonstrativePricesAllowedForOrganization } from "../../services/priceGovernanceService";
 import {
-  assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError, redundantReviewMarkers,
-  BLOCKED_DEMONSTRATIVE_PRICES, BLOCKED_SAME_IDENTITY, BLOCKED_LOGIN_RATE_LIMITED,
+  assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError, redundantReviewMarkers, runHomologationPreflight, sanitizeDiagnostic,
+  BLOCKED_DEMONSTRATIVE_PRICES, BLOCKED_SAME_IDENTITY, BLOCKED_LOGIN_RATE_LIMITED, BLOCKED_PREFLIGHT_FAILED, type PreflightRecord,
 } from "../../../scripts/homologation-e2e";
 
 const user = (id: number) => ({ id, role: "user" as const, openId: `u${id}`, name: `U${id}`, email: `u${id}@x`, theme: "light" as const, loginMethod: "email", passwordHash: null, signaturePassword: null, tokenVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
@@ -101,14 +101,13 @@ describe("executor — pré-flight recusa ANTES de qualquer escrita", () => {
     const other = new Error("credenciais inválidas");
     expect(classifyLoginError(other)).toBe(other);
   });
-  it("a ordem no executor: identidades e capacidade são conferidas no beforeAll, antes da primeira escrita da jornada", async () => {
+  it("a ordem no executor: o beforeAll delega ao pré-flight oficial antes da primeira escrita da jornada", async () => {
     const fs = await import("node:fs");
     const src = fs.readFileSync(new URL("../homologation/staging-homologation-e2e.test.ts", import.meta.url), "utf8");
     const before = src.slice(src.indexOf("beforeAll("), src.indexOf("afterAll("));
-    expect(before).toContain("assertDistinctIdentities(a.me, b.me)");
-    expect(before).toContain("assertDemonstrativePricesEnabled(b.current)");
-    expect(before).not.toMatch(/\.mutate\(\{\s*processNumber/);
-    expect(src.indexOf("assertDemonstrativePricesEnabled(b.current)")).toBeLessThan(src.indexOf("procurementProcess.createProcess"));
+    expect(before).toContain("await runHomologationPreflight(REPORT,");
+    expect(before).not.toMatch(/\.mutate\(/);
+    expect(src.indexOf("runHomologationPreflight(REPORT")).toBeLessThan(src.indexOf("procurementProcess.createProcess"));
   });
 });
 
@@ -119,5 +118,119 @@ describe("métrica de [REVISAR] redundantes no TR (M8 — evidência do efeito n
       "[REVISAR: prazo de vigência contratual e prorrogação]", "[REVISAR: Local de execução/entrega]",
     ]);
     expect(redundantReviewMarkers(tr, [])).toEqual([]);
+  });
+});
+
+/**
+ * P2 (revisão independente do PR #329) — os logins ficavam FORA do try/catch que preenche `REPORT.blocked`: um 429 virava
+ * `BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED` na exceção, mas o JSON terminava sem o bloqueio. Agora o pré-flight inteiro (destino,
+ * exercício, os dois logins, tenant, identidades, exceção demonstrativa) passa por `runPreflight`, com sessões HTTP falsas que
+ * contam toda chamada: só `auth.login` é mutation; nenhuma escrita de domínio.
+ */
+describe("executor — pré-flight estruturado: todo bloqueio (inclusive login 429) vai para o relatório JSON", () => {
+  const PASSWORDS = { a: "Senha-Sintetica-A#2026", b: "Senha-Sintetica-B#2026" };
+  const EMAILS = { a: "homolog.a@example.test", b: "homolog.b@example.test" };
+  const env = (over: Record<string, string | undefined> = {}) => ({
+    HOMOLOG_EXERCICIO: "2026", HOMOLOG_EMAIL: EMAILS.a, HOMOLOG_PASSWORD: PASSWORDS.a, HOMOLOG_EMAIL_2: EMAILS.b, HOMOLOG_PASSWORD_2: PASSWORDS.b, ...over,
+  });
+  const limited = () => { const e = new TRPCClientError(`Muitas tentativas de login para ${EMAILS.a}.`); Object.assign(e, { data: { code: "TOO_MANY_REQUESTS" } }); return e; };
+  const unauthorized = () => { const e = new TRPCClientError(`E-mail ou senha inválidos (password=${PASSWORDS.a}).`); Object.assign(e, { data: { code: "UNAUTHORIZED" } }); return e; };
+  type Fake = { calls: string[]; writes: string[] };
+  function fakeSession(o: { userId: number; login?: () => Error | null; allowed?: boolean }, log: Fake) {
+    const state = { cookie: "", orgId: null as number | null, lastCorrelationId: null as string | null };
+    let n = 0;
+    const hit = (name: string, write = false) => { log.calls.push(name); if (write) log.writes.push(name); state.lastCorrelationId = `homolog-test-${o.userId}-${++n}`; };
+    const api = {
+      auth: {
+        login: { mutate: async () => { hit("auth.login"); const err = o.login?.(); if (err) throw err; state.cookie = "app_session_id=SEGREDO-DO-COOKIE"; return { success: true }; } },
+        me: { query: async () => { hit("auth.me"); return { id: o.userId, role: "user", name: `Sintético ${o.userId}` }; } },
+      },
+      organizations: {
+        listMine: { query: async () => { hit("organizations.listMine"); return [{ org: { id: 2, slug: "homologacao-sintetica" } }]; } },
+        getCurrent: { query: async () => { hit("organizations.getCurrent"); return { org: { id: 2, slug: "homologacao-sintetica" }, role: "manager", priceGovernance: { demonstrativePricesAllowed: o.allowed ?? true } }; } },
+      },
+      procurementProcess: { createProcess: { mutate: async () => { hit("procurementProcess.createProcess", true); return {}; } } },
+    };
+    return { api, state } as never;
+  }
+  async function run(p: { env?: Record<string, string | undefined>; a?: Parameters<typeof fakeSession>[0]; b?: Parameters<typeof fakeSession>[0] } = {}) {
+    const log: Fake = { calls: [], writes: [] };
+    const report: { blocked?: string; preflight?: PreflightRecord } = {};
+    const author = fakeSession(p.a ?? { userId: 41 }, log);
+    const issuer = fakeSession(p.b ?? { userId: 42 }, log);
+    const outcome = await runHomologationPreflight(report, { run: "RUNX", baseUrl: "https://licigov-pro-staging.up.railway.app", env: p.env ?? env(), author, issuer })
+      .then((r) => ({ ok: true as const, r }), (e: Error) => ({ ok: false as const, e }));
+    return { log, report, outcome, json: JSON.stringify(report) };
+  }
+  const noSecrets = (json: string) => {
+    for (const secret of [...Object.values(PASSWORDS), ...Object.values(EMAILS), "SEGREDO-DO-COOKIE", "app_session_id"]) expect(json).not.toContain(secret);
+  };
+
+  it("1º login recebe 429 ⇒ BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED no JSON (etapa login_author), execução falha, 2º login nem tentado", async () => {
+    const { report, outcome, log, json } = await run({ a: { userId: 41, login: limited } });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.e.message).toMatch(new RegExp(`^${BLOCKED_LOGIN_RATE_LIMITED}:`));
+    expect(report.blocked).toBe(BLOCKED_LOGIN_RATE_LIMITED);
+    expect(report.preflight).toMatchObject({
+      status: "BLOCKED", stage: "login_author", code: BLOCKED_LOGIN_RATE_LIMITED, cause: "TOO_MANY_REQUESTS", environment: "staging", run: "RUNX",
+      writesPerformed: 0, correlationId: "homolog-test-41-1", guidance: expect.stringMatching(/aguarde a janela/i),
+    });
+    expect(report.preflight?.tenantId).toBeUndefined(); // tenant ainda não validado
+    expect(log.calls).toEqual(["auth.login"]);
+    expect(log.writes).toEqual([]);
+    noSecrets(json);
+  });
+  it("2º login recebe 429 ⇒ bloqueio na etapa login_issuer, com o tenant já validado", async () => {
+    const { report, outcome, log, json } = await run({ b: { userId: 42, login: limited } });
+    expect(outcome.ok).toBe(false);
+    expect(report).toMatchObject({ blocked: BLOCKED_LOGIN_RATE_LIMITED, preflight: { status: "BLOCKED", stage: "login_issuer", tenantId: 2, correlationId: "homolog-test-42-1", writesPerformed: 0 } });
+    expect(log.writes).toEqual([]);
+    noSecrets(json);
+  });
+  it("1º login falha por outro erro (credencial inválida) ⇒ BLOCKED_HOMOLOGATION_PREFLIGHT_FAILED, causa UNAUTHORIZED, sem segredo no detalhe", async () => {
+    const { report, outcome, json } = await run({ a: { userId: 41, login: unauthorized } });
+    expect(outcome.ok).toBe(false);
+    expect(report).toMatchObject({ blocked: BLOCKED_PREFLIGHT_FAILED, preflight: { status: "BLOCKED", stage: "login_author", cause: "UNAUTHORIZED", code: BLOCKED_PREFLIGHT_FAILED } });
+    expect(report.preflight?.detail).toContain("[REDACTED]");
+    noSecrets(json);
+  });
+  it("credenciais ausentes ⇒ bloqueio estruturado (nunca PASS)", async () => {
+    const { report, outcome } = await run({ env: env({ HOMOLOG_PASSWORD_2: undefined }) });
+    expect(outcome.ok).toBe(false);
+    expect(report).toMatchObject({ blocked: BLOCKED_PREFLIGHT_FAILED, preflight: { stage: "login_issuer", status: "BLOCKED" } });
+  });
+  it("identidades iguais ⇒ BLOCKED_HOMOLOGATION_SAME_IDENTITY (etapa distinct_identities)", async () => {
+    const { report, log, json } = await run({ a: { userId: 41 }, b: { userId: 41 } });
+    expect(report).toMatchObject({ blocked: BLOCKED_SAME_IDENTITY, preflight: { stage: "distinct_identities", code: BLOCKED_SAME_IDENTITY, tenantId: 2, writesPerformed: 0 } });
+    expect(log.writes).toEqual([]);
+    noSecrets(json);
+  });
+  it("exceção demonstrativa desabilitada ⇒ BLOCKED_HOMOLOGATION_DEMONSTRATIVE_PRICES_NOT_ENABLED (etapa demonstrative_prices)", async () => {
+    const { report, log } = await run({ b: { userId: 42, allowed: false } });
+    expect(report).toMatchObject({ blocked: BLOCKED_DEMONSTRATIVE_PRICES, preflight: { stage: "demonstrative_prices", code: BLOCKED_DEMONSTRATIVE_PRICES, correlationId: "homolog-test-42-4" } });
+    expect(log.writes).toEqual([]);
+  });
+  it("destino não autorizado / exercício ausente ⇒ bloqueio antes de qualquer chamada HTTP", async () => {
+    const log: Fake = { calls: [], writes: [] };
+    const report: { blocked?: string; preflight?: PreflightRecord } = {};
+    await expect(runHomologationPreflight(report, { run: "R", baseUrl: "https://licigov.example.com", env: env(), author: fakeSession({ userId: 1 }, log), issuer: fakeSession({ userId: 2 }, log) })).rejects.toThrow(/Destino recusado/);
+    expect(report.preflight).toMatchObject({ status: "BLOCKED", stage: "target", environment: "unknown" });
+    const r2 = await run({ env: env({ HOMOLOG_EXERCICIO: undefined }) });
+    expect(r2.report.preflight).toMatchObject({ status: "BLOCKED", stage: "exercicio" });
+    expect([...log.calls, ...r2.log.calls]).toEqual([]);
+  });
+  it("pré-flight integralmente aprovado ⇒ PASSED, sem `blocked`, só leituras + login (nenhuma escrita)", async () => {
+    const { report, outcome, log, json } = await run();
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.r).toMatchObject({ exercicio: 2026, a: { me: { id: 41 } }, b: { me: { id: 42 } } });
+    expect(report.blocked).toBeUndefined();
+    expect(report.preflight).toMatchObject({ status: "PASSED", stage: "completed", tenantId: 2, writesPerformed: 0, environment: "staging" });
+    expect(new Set(log.calls)).toEqual(new Set(["auth.login", "auth.me", "organizations.listMine", "organizations.getCurrent"]));
+    expect(log.writes).toEqual([]);
+    noSecrets(json);
+  });
+  it("sanitizeDiagnostic remove segredos conhecidos, e-mails, JWT, Bearer e cookies", () => {
+    const out = sanitizeDiagnostic("x a@b.co Bearer abc.def eyJhbGciOi.eyJzdWIi.sig cookie=app_session_id=zzz minhaSenha", ["minhaSenha"]);
+    expect(out).not.toMatch(/a@b\.co|abc\.def|eyJhbGciOi|zzz|minhaSenha/);
   });
 });
