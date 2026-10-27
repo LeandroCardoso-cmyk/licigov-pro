@@ -129,7 +129,7 @@ export default function ProcessoLicitatorio() {
       setNotFoundNotice(true);
       backToList();
     }
-  }, [view, activeProcessId, processQuery.isSuccess, processQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, activeProcessId, processQuery.isSuccess, processQuery.data]);
 
   // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial — P0 piloto: o processo
   // começa no ponto em que a Prefeitura já está (DFD, ETP, Pesquisa ou TR), sem pré-requisito artificial.

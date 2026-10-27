@@ -331752,18 +331752,6 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "client_src_components_procurement_processoverview",
-      "target": "client_src_lib_processdocumentstatus_modalitylabel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "client/src/components/procurement/ProcessOverview.tsx",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "client_src_components_procurement_processoverview",
       "target": "client_src_lib_processdocumentstatus_officialversionlabel",
       "confidence_score": 1.0
     },
@@ -925790,5 +925778,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "1df79e464a89ee197db10769c730faf425870640"
+  "built_at_commit": "98292c030f1eab16a4ae4d8dbaa69b3b0803acef"
 }

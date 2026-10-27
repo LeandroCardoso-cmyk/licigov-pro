@@ -1,16 +1,16 @@
 # Graph Report - licigov-pro  (2026-10-27)
 
 ## Corpus Check
-- 3065 files · ~5,133,844 words
+- 3065 files · ~5,133,831 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 24039 nodes · 56886 edges · 1030 communities (895 shown, 135 thin omitted)
+- 24039 nodes · 56885 edges · 1030 communities (895 shown, 135 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 408 edges (avg confidence: 0.73)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1df79e46`
+- Built from commit: `98292c03`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2591,7 +2591,7 @@ Cohesion: 0.52
 Nodes (4): clean(), opinionReferenceLabel(), resolveOpinionReference(), h
 
 ### Community 384 - "m8VisualHomologation.test.ts"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (47): EVENT_LABELS, fmt(), TimelineEvent, timelineEventLabel(), TimelinePanel(), TimelinePanelProps, IngestionSessionHistory(), IngestionSessionHistoryList() (+39 more)
 
 ### Community 385 - "operationalCommunicationService.ts"

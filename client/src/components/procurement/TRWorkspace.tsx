@@ -56,7 +56,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
     if (processId) utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "tr" });
   });
   followInterval.current = followUp.refetchInterval;
-  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]);
   const generateTR = trpc.procurementProcess.generateTR.useMutation({
     // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
     // Resposta que não chegou / geração em voo ⇒ acompanha o rascunho persistido (sem reenviar).

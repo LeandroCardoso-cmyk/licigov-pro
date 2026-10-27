@@ -2,7 +2,7 @@ import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
 import {
-  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel, overviewModalityText,
+  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, overviewModalityText,
   officialVersionLabel, processStatusLabel, stageLabel,
 } from "../../lib/processDocumentStatus";
 

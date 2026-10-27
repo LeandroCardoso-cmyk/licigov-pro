@@ -65,7 +65,7 @@ export function useGenerationFollowUp(currentDraft: { contentHash?: string | nul
 
   useEffect(() => {
     if (status === "done") { setAwaiting(null); onDone(); }
-  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status]);
 
   const start = useCallback((base: { contentHash?: string | null; updatedAt?: string | Date | null } | null | undefined) => {
     setAwaiting({ base: markOf(base), since: Date.now() });

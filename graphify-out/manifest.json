@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1793109355.660409,
-    "ast_hash": "264429de65fc71d8bb1c022bbeae431d",
+    "mtime": 1793110895.7333229,
+    "ast_hash": "b1d1b31af6d251999dc7352a83e65297",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
@@ -1840,8 +1840,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
-    "mtime": 1793110536.869338,
-    "ast_hash": "8fa22feb2d0cf391fd91d9ef7d57bc08",
+    "mtime": 1793110895.7502227,
+    "ast_hash": "c94242800e43e08c23e744dee2f586ad",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessoLicitatorioHome.tsx": {
@@ -1865,8 +1865,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1793109347.8228781,
-    "ast_hash": "fe4d35059863197436b35bc57290020f",
+    "mtime": 1793110895.7360668,
+    "ast_hash": "0a266552fbce250f8ee57d0d1bd4c296",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1793110343.2414777,
-    "ast_hash": "9af9d93cf37e6d5e8ae63748d5eb2445",
+    "mtime": 1793110895.7401538,
+    "ast_hash": "da1d28e151a2a4a31983cf463641a8fd",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -15520,8 +15520,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/generationFollowUp.ts": {
-    "mtime": 1793109317.1249855,
-    "ast_hash": "e23a2d4db23f142bb1da9d6da59e1434",
+    "mtime": 1793110895.7372136,
+    "ast_hash": "6b48068eff8dfd04784a8be621cb57a8",
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-request-router-rbac.test.ts": {
