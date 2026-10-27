@@ -11,7 +11,7 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
-import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
+import { generateStructuredAuthoring, generateEditalAuthoring, type TrConfirmedParams } from "./authoring/structuredAuthoringService";
 import { AuthoringContractError } from "../domain/authoring/authoringSchema";
 import { authoringFailureGuidance } from "../domain/authoring/authoringGuidance";
 import { resolveEditalSources } from "./authoring/editalContext";
@@ -949,7 +949,7 @@ export async function generateDocument(params: {
   expectedContentHash?: string;
   invoke?: (prompt: string) => Promise<string>;
   /** CONTEXT_REUSE 2.0 — bloco determinístico dos Parâmetros estruturados do TR (os MESMOS fatos que o Edital consome). Só TR. */
-  structuredParams?: { block: string; digest: string } | null;
+  structuredParams?: TrConfirmedParams | null;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -1017,6 +1017,9 @@ export async function generateDocument(params: {
         actorUserId: params.actorUserId,
         invoke: params.invoke,
         sourceContext,
+        // M8 pós-homologação — os parâmetros CONFIRMADOS entram na autoria (antes só eram anexados depois): a IA não pede de novo
+        // o que o servidor já informou. O bloco determinístico continua anexado abaixo como autoridade; o digest já está no payloadHash.
+        confirmedParams: params.kind === "tr" ? params.structuredParams ?? null : null,
       }).catch((err: unknown) => {
         // Homologação visual M8: a recusa fail-closed continua — só o motivo vira orientação operacional
         // (o que faltou, onde complementar, próxima ação; rascunho ≠ emissão oficial). Nada é gravado.
