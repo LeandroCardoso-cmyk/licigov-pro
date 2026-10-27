@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { APP_DESCRIPTION, APP_LOGO, APP_TITLE } from "@/const";
 import { isSafeReturnTo } from "@/utils/safeReturnTo";
+import { browserStorage, clearSessionScopedState } from "@/_core/sessionState";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -28,6 +29,7 @@ export default function Login() {
     onSuccess: () => {
       // M8 — nova sessão = novo usuário/tenant: nenhum dado em cache da sessão anterior (capabilities, processos,
       // organização) é reaproveitado. Tudo é relido com a sessão nova; o backend continua autorizando cada leitura.
+      clearSessionScopedState(browserStorage());
       queryClient.removeQueries();
       utils.auth.me.invalidate();
       navigate(destination);

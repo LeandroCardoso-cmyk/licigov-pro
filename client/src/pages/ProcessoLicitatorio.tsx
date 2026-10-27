@@ -22,6 +22,7 @@ import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
 import ProcurementItemPanel, { ITEM_PANEL_TITLE_ID } from "@/components/procurement/ProcurementItemPanel";
+import { processIdFromSearch } from "@shared/operationalCalendar";
 import { startTargetFor } from "@/components/procurement/startOptions";
 
 /**
@@ -105,6 +106,14 @@ export default function ProcessoLicitatorio() {
     setOpenItemId(null);
     setView("process");
   }
+
+  // Link direto (ex.: evento do Calendário Operacional): `/processos?processId=` abre o processo uma vez; o servidor valida o acesso.
+  useEffect(() => {
+    const id = typeof window !== "undefined" ? processIdFromSearch(window.location.search) : null;
+    if (!id) return;
+    openProcess(id);
+    window.history.replaceState(window.history.state, "", window.location.pathname); // voltar à lista não reabre o processo
+  }, []);
 
   // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial — P0 piloto: o processo
   // começa no ponto em que a Prefeitura já está (DFD, ETP, Pesquisa ou TR), sem pré-requisito artificial.

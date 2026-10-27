@@ -126,6 +126,26 @@ export function resolveEditalFormValues<M extends string, F extends string, P ex
   return { modality, form, platform };
 }
 
+/**
+ * C2 — escopo a REGISTRAR (sobrevive ao recarregamento): só antes da 1ª geração (sem parâmetros persistidos nem minuta composta),
+ * só com escolha explícita da pessoa, completa e diferente da já registrada. null ⇒ nada a registrar.
+ */
+export function editalScopeToRecord<M extends string, F extends string, P extends string>(input: {
+  readonly effective: EditalParamValues<M, F, P>;
+  readonly proposed: EditalParamValues<M, F, P>;
+  readonly persisted: unknown;
+  readonly composed: unknown;
+  readonly recorded: EditalParamValues<M, F, P> | null | undefined;
+}): { modality: M; form: F; platform: P | null } | null {
+  const { effective: e, proposed: p, recorded: r } = input;
+  if (input.persisted || input.composed) return null;
+  if (p.modality === null && p.form === null && p.platform === null) return null;
+  if (!editalParamsComplete(e) || !e.modality || !e.form) return null;
+  const platform = e.form === "eletronico" ? e.platform : null;
+  if (r && r.modality === e.modality && r.form === e.form && (r.platform ?? null) === (platform ?? null)) return null;
+  return { modality: e.modality, form: e.form, platform };
+}
+
 /** Os valores efetivos diferem dos persistidos? (troca de parâmetro = ação explícita, atual × proposto). */
 export function editalParamsDiffer<M extends string, F extends string, P extends string>(
   effective: EditalParamValues<M, F, P>,

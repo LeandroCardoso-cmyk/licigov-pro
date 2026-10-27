@@ -46,7 +46,12 @@ export type ItemPath = `items.${string}.${ItemFieldName}`;
  * TIPADO (duração, booleano, texto…) normalizado pelo catálogo; ver `trStructuredParams.ts`. Mesmo ledger, mesma proveniência.
  */
 export type TrParamPath = `tr.param.${string}`;
-export type ContextPath = ScalarPath | ItemPath | TrParamPath;
+/**
+ * Escopo do Edital (modalidade/forma/plataforma) escolhido pela pessoa ANTES da 1ª geração (ver `editalScopeSelection.ts`).
+ * É escolha do usuário, não fato da necessidade: fica fora do digest/versão do contexto de DFD.
+ */
+export type EditalScopePath = "edital.scope";
+export type ContextPath = ScalarPath | ItemPath | TrParamPath | EditalScopePath;
 
 /**
  * POLÍTICA DE AUTORIDADE — quais fontes podem AFIRMAR cada fato. Explícita, testável e documentada.
@@ -80,10 +85,16 @@ export const AUTHORITY_POLICY: Readonly<Record<string, readonly ContextSourceTyp
   "items.*.unit":            ["user", "dfd", "etp", "tr", "approved_document"],
   "items.*.plannedQuantity": ["user", "dfd", "etp", "tr", "approved_document"],
   "tr.param.*":              TR_PARAM_SOURCES,
+  "edital.scope":            ["user"],
 };
 
 export function isTrParamPath(path: string): path is TrParamPath {
   return path.startsWith("tr.param.") && path.length > "tr.param.".length;
+}
+
+/** Caminhos com versionamento próprio (parâmetros do TR, escopo do Edital): fora da versão do contexto de DFD. */
+function isOutsideDfdContextVersion(path: string): boolean {
+  return isTrParamPath(path) || path === "edital.scope";
 }
 
 function policyKey(path: string): string {
@@ -513,8 +524,8 @@ export function resolveCanonicalContext(input: ContextInputs): ProcurementCanoni
     unknownFields: fields.filter((x) => x.value === null && x.status !== "conflict").length,
     conflictCount: fields.filter((x) => x.status === "conflict").length,
   };
-  // Parâmetros do TR não fazem parte do digest/versão do contexto de DFD (têm digest próprio em trStructuredParams).
-  const version = input.assertions.reduce((m, a) => (isTrParamPath(a.path) ? m : Math.max(m, a.id)), 0);
+  // Parâmetros do TR e escopo do Edital não fazem parte do digest/versão do contexto de DFD (versionamento próprio).
+  const version = input.assertions.reduce((m, a) => (isOutsideDfdContextVersion(a.path) ? m : Math.max(m, a.id)), 0);
   const digest = canonicalDigest(digestSnapshot(ctx, priceContext));
   return { ...ctx, priceContext, stats, version, digest };
 }

@@ -4,7 +4,7 @@ import PrepFieldControl from "./PrepFieldControl";
 import UseAsDefaultButton from "./UseAsDefaultButton";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals, trSuppliedFields, suppliedByText,
+  buildTrValues, trConfirmedFields, trFormValue, trOptionalFields, trParamToPrepField, trPendingFields, trProposals, trSuppliedFields, suppliedByText, pendingReasonText, trStructuredUnavailableText,
   type TrParamViewModel, type TrStructuredView,
 } from "@/lib/contextReuse";
 import { evaluateCond, formatDisplay, parseField, type FormValue } from "@/lib/editalPreparation";
@@ -57,6 +57,10 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
     return fields.map((f) => ({ ...f, active: !f.requiredWhen || evaluateCond(f.requiredWhen, facts) }));
   }, [fields, edits]);
 
+  if (view?.status === "UNAVAILABLE") {
+    const text = trStructuredUnavailableText(view.reason);
+    return text ? <p role="status" className="mt-5 text-xs text-muted-foreground" data-testid="tr-structured-unavailable">{text}</p> : null;
+  }
   if (!view || view.status !== "READY") return null;
   const pending = trPendingFields(live);
   const supplied = trSuppliedFields(live);
@@ -83,9 +87,13 @@ export default function TrStructuredParamsSection({ processId, onChanged }: TrSt
   };
 
   const onEdit = (f: TrParamViewModel, v: FormValue) => setEdits((p) => ({ ...p, [f.name]: v }));
-  const control = (f: TrParamViewModel) => (
-    <PrepFieldControl key={f.name} field={trParamToPrepField(f)} value={edits[f.name] ?? trFormValue(f)} error={built.errors[f.name]} disabled={record.isPending} onChange={(v) => onEdit(f, v)} />
-  );
+  const control = (f: TrParamViewModel) => {
+    const why = pendingReasonText(f.pendingReason);
+    const el = <PrepFieldControl key={f.name} field={trParamToPrepField(f)} value={edits[f.name] ?? trFormValue(f)} error={built.errors[f.name]} disabled={record.isPending} onChange={(v) => onEdit(f, v)} />;
+    return why
+      ? <div key={f.name} className="space-y-1">{el}<p className="text-xs text-amber-700 dark:text-amber-300" data-testid="tr-param-pending-reason">{why}</p></div>
+      : el;
+  };
 
   return (
     <details open={open} className="mt-5 rounded-xl border border-border bg-card" aria-label="Parâmetros estruturados da contratação">

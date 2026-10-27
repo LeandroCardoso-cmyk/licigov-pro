@@ -158,6 +158,10 @@ jobs:
       - name: Smoke — concorrência e rollback do versionamento (DATA-012)
         run: pnpm exec vitest run server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts
 
+      # documentEngine.generate × emissão concorrente: a recusa "linhagem já emitida" vale sob o lock da linhagem (interleaving injetado).
+      - name: Smoke — geração genérica × emissão concorrente
+        run: pnpm exec vitest run server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts
+
       # F2 (homologação V1) — transição de Item concorrência-segura (compare-and-set atômico).
       - name: Smoke — transição de Item concorrência-segura (F2 CAS)
         run: pnpm exec vitest run server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts
@@ -482,6 +486,7 @@ jobs:
           server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts \
+          server/__tests__/integration/edital-scope-calendar-mysql-smoke.test.ts \
           server/__tests__/integration/templates-governance-v2-mysql-smoke.test.ts \
           server/__tests__/integration/templates-0318-migration-mysql-smoke.test.ts \
           server/__tests__/integration/templates-fast-mysql-smoke.test.ts

@@ -109,6 +109,17 @@ export async function lockLatestVersionForUpdate(lineageId: string, tenantId: nu
 }
 
 /**
+ * A linhagem já tem versão EMITIDA? Leitura CORRENTE (`FOR UPDATE`) dentro da transação que detém o lock da linhagem — uma
+ * emissão concorrente já commitada é vista mesmo com snapshot REPEATABLE READ antigo (leitura comum não a veria).
+ */
+export async function lineageHasEmittedVersionForUpdate(lineageId: string, tenantId: number, tx: OfficialDocsExecutor): Promise<boolean> {
+  const rows = await tx.select({ id: officialDocumentsTable.id }).from(officialDocumentsTable)
+    .where(and(eq(officialDocumentsTable.tenantId, tenantId), eq(officialDocumentsTable.lineageId, lineageId), eq(officialDocumentsTable.status, "emitido")))
+    .limit(1).for("update");
+  return rows.length > 0;
+}
+
+/**
  * SEM-043 — `updateOfficialDocumentStorageRefs` REMOVIDA. Ela sobrescrevia `storage_key/mime_type/size_bytes/
  * content_hash` da linha da versão a cada export (DOCX apagava o ponteiro/hash do PDF da mesma versão). Os artefatos
  * agora são registrados no ledger append-only `official_document_artifacts` (ver `db/officialDocumentArtifacts.ts` e

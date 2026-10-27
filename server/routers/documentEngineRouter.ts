@@ -7,7 +7,9 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { orgRoleProcedure, router, tenantProcedure } from "../_core/trpc";
+import { getLatestEmittedByOrigin } from "../db/officialDocuments";
+import { LINEAGE_HAS_EMITTED_VERSION } from "../services/officialDocumentLifecycleService";
 import {
   generateOfficialDocument, renderOfficialDocument, previewOfficialDocument,
   getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId,
@@ -20,9 +22,24 @@ const DOMAINS = ["processo_licitatorio", "contratacao_direta", "parecer_juridico
 const DOC_TYPES = ["dfd", "etp", "tr", "edital", "justificativa_contratacao", "justificativa_preco", "ratificacao", "aviso", "extrato_contrato", "parecer_inicial", "parecer_final", "despacho", "contrato", "aditivo", "apostilamento", "rescisao", "outro"] as const;
 const FORMATS = ["docx", "pdf"] as const;
 
+/**
+ * Linhagens que têm gerador GOVERNADO próprio (rascunho → revisão → emissão com SoD): o endpoint genérico não escreve
+ * nelas. Antes, qualquer membro (até viewer) podia anexar versões `gerado` a essas linhagens — inclusive depois da
+ * emissão —, deslocando a numeração das versões oficiais.
+ */
+export const GOVERNED_GENERIC_GENERATE_BLOCK: Readonly<Record<string, readonly string[]>> = {
+  processo_licitatorio: ["dfd", "etp", "tr", "edital"],
+};
+export function isGovernedLineage(businessDomain: string, documentType: string): boolean {
+  return (GOVERNED_GENERIC_GENERATE_BLOCK[businessDomain] ?? []).includes(documentType);
+}
+
 export const documentEngineRouter = router({
-  /** Gera (ou versiona) um documento oficial pelo pipeline único. */
-  generate: tenantProcedure
+  /**
+   * Gera (ou versiona) um documento oficial pelo pipeline único. RBAC: manager+ (mesmo degrau de quem emite). Nunca
+   * escreve em linhagem governada nem em linhagem que já tem versão EMITIDA (a numeração oficial é imutável).
+   */
+  generate: orgRoleProcedure("manager")
     .input(z.object({
       businessDomain: z.enum(DOMAINS),
       documentType: z.enum(DOC_TYPES),
@@ -33,10 +50,18 @@ export const documentEngineRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
+      if (isGovernedLineage(input.businessDomain, input.documentType)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "GOVERNED_LINEAGE: este documento é gerado e emitido pelo seu fluxo governado (rascunho, revisão e emissão)." });
+      }
+      // Recusa rápida (sem abrir transação); a garantia é a checagem SOB o lock da linhagem, no ponto da escrita
+      // (`refuseIfLineageHasEmitted`): uma emissão concluída depois desta leitura também é recusada.
+      if (await getLatestEmittedByOrigin(orgId, input.businessDomain, input.origin, input.documentType)) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${LINEAGE_HAS_EMITTED_VERSION}: a linhagem já tem versão oficial emitida; versões oficiais são imutáveis.` });
+      }
       const document = await generateOfficialDocument({
         organizationId: orgId, businessDomain: input.businessDomain, documentType: input.documentType,
         origin: input.origin, title: input.title, content: input.content, metadata: input.metadata,
-        author: String(ctx.user.id), correlationId: ctx.correlationId,
+        author: String(ctx.user.id), correlationId: ctx.correlationId, refuseIfLineageHasEmitted: true,
       });
       return { document };
     }),
