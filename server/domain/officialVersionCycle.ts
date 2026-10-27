@@ -59,6 +59,7 @@ export function nextOfficialVersion(input: { readonly lineageMaxVersion: number;
 
 /** Ciclo de nova versão aberto sobre uma versão EMITIDA (registro auditável; persistência definida na ativação). */
 export interface OpenVersionCycle {
+  readonly organizationId: number;
   readonly lineageId: string;
   readonly kind: "etp" | "tr" | "edital";
   readonly baseOfficialVersion: number;
@@ -72,24 +73,29 @@ export interface OpenVersionCycle {
 /** Versão emitida vigente, como o ledger a descreve. */
 export interface LatestOfficial {
   readonly version: number;
+  readonly organizationId?: number | null;
   readonly officialDocumentId?: string | null;
   readonly lineageId?: string | null;
   readonly kind?: string | null;
 }
 
-export type CycleRefusal = "CYCLE_BASE_NOT_LATEST" | "CYCLE_CLOSED_BY_EMISSION" | "CYCLE_KIND_MISMATCH" | "CYCLE_DOCUMENT_MISMATCH" | "CYCLE_LINEAGE_MISMATCH";
+export type CycleRefusal = "CYCLE_IDENTITY_UNKNOWN" | "CYCLE_ORGANIZATION_MISMATCH" | "CYCLE_BASE_NOT_LATEST" | "CYCLE_CLOSED_BY_EMISSION" | "CYCLE_KIND_MISMATCH" | "CYCLE_DOCUMENT_MISMATCH" | "CYCLE_LINEAGE_MISMATCH";
 
 /**
  * Recusa tipada de um ciclo frente à emissão vigente (null = ciclo válido). O ciclo vale só sobre a versão emitida
  * VIGENTE: uma emissão posterior (nova versão) fecha o ciclo implicitamente — sem comando de fechamento nem estado extra.
+ * FAIL-CLOSED: sem a identidade completa da emissão vigente (órgão, tipo, linhagem e documento) o ciclo não vale — nunca se
+ * libera por coincidência de número de versão.
  */
 export function cycleRefusal(cycle: OpenVersionCycle, latest: LatestOfficial | null | undefined): CycleRefusal | null {
   if (!latest) return "CYCLE_BASE_NOT_LATEST";
-  if (latest.kind && latest.kind !== cycle.kind) return "CYCLE_KIND_MISMATCH";
-  if (latest.lineageId && latest.lineageId !== cycle.lineageId) return "CYCLE_LINEAGE_MISMATCH";
+  if (latest.organizationId == null || !latest.kind || !latest.lineageId || !latest.officialDocumentId) return "CYCLE_IDENTITY_UNKNOWN";
+  if (latest.organizationId !== cycle.organizationId) return "CYCLE_ORGANIZATION_MISMATCH";
+  if (latest.kind !== cycle.kind) return "CYCLE_KIND_MISMATCH";
+  if (latest.lineageId !== cycle.lineageId) return "CYCLE_LINEAGE_MISMATCH";
   if (latest.version > cycle.baseOfficialVersion) return "CYCLE_CLOSED_BY_EMISSION";
   if (latest.version !== cycle.baseOfficialVersion) return "CYCLE_BASE_NOT_LATEST";
-  if (latest.officialDocumentId && latest.officialDocumentId !== cycle.baseOfficialDocumentId) return "CYCLE_DOCUMENT_MISMATCH";
+  if (latest.officialDocumentId !== cycle.baseOfficialDocumentId) return "CYCLE_DOCUMENT_MISMATCH";
   return null;
 }
 
