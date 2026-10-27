@@ -130,3 +130,38 @@ export function isTerminal(request: InstitutionalRequest): boolean {
 export function isPendingForDestination(request: InstitutionalRequest): boolean {
   return request.status === "PENDING" || request.status === "RECEIVED" || request.status === "IN_PROGRESS" || request.status === "WAITING_INFORMATION";
 }
+
+// ─── NEW-007 — autoridade jurídica: roteamento e fluxo governado ─────────────
+
+/** Domínio dono do parecer jurídico governado (procurador designado, `legalOpinionWorkspace.*`). */
+export const LEGAL_OPINION_DOMAIN: BusinessDomainCode = "parecer_juridico";
+/** Tipos juridicamente tipificados: só o domínio Parecer Jurídico os trata. */
+export const LEGAL_OPINION_REQUEST_TYPES: readonly RequestType[] = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL"];
+export const LEGAL_OPINION_ROUTING_INVALID = "LEGAL_OPINION_ROUTING_INVALID";
+export const LEGAL_OPINION_GOVERNED_FLOW = "LEGAL_OPINION_GOVERNED_FLOW";
+
+export function isLegalOpinionRequestType(requestType: string | null | undefined): boolean {
+  return (LEGAL_OPINION_REQUEST_TYPES as readonly string[]).includes(requestType ?? "");
+}
+
+/**
+ * Solicitação que só o fluxo GOVERNADO do Parecer pode designar, receber, responder/assinar, devolver ou arquivar: destinada ao
+ * Parecer Jurídico OU juridicamente tipificada (inclusive registro legado incoerente, p.ex. `LEGAL_OPINION_*` → `controle_interno`,
+ * que nunca é tratado — nem promovido — pelo caminho genérico).
+ */
+export function requiresGovernedLegalOpinionFlow(request: { destinationDomain: string; requestType?: string | null }): boolean {
+  return request.destinationDomain === LEGAL_OPINION_DOMAIN || isLegalOpinionRequestType(request.requestType);
+}
+
+/**
+ * Roteamento coerente na CRIAÇÃO (antes de qualquer escrita). Origem ≠ destino; `LEGAL_OPINION_*` só com destino Parecer Jurídico
+ * (senão a solicitação escaparia da guarda do fluxo governado e voltaria como "parecer"). Pedidos técnicos (CONTROL_REVIEW,
+ * TECHNICAL_REVIEW, DOCUMENT_REVIEW…) seguem livres entre domínios. Retorna a mensagem da recusa, ou null.
+ */
+export function requestRoutingViolation(p: { sourceDomain: string; destinationDomain: string; requestType: string }): string | null {
+  if (p.sourceDomain === p.destinationDomain) return "Origem e destino não podem ser o mesmo domínio.";
+  if (isLegalOpinionRequestType(p.requestType) && p.destinationDomain !== LEGAL_OPINION_DOMAIN) {
+    return `${LEGAL_OPINION_ROUTING_INVALID}: solicitação de parecer jurídico (${p.requestType}) só pode ser destinada ao domínio Parecer Jurídico; para análise técnica use um pedido técnico (ex.: revisão do controle interno).`;
+  }
+  return null;
+}

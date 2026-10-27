@@ -7,9 +7,9 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
-import { assignTo, transition } from "../domain/institutionalRequest";
+import { assignTo, transition, requestRoutingViolation, requiresGovernedLegalOpinionFlow, LEGAL_OPINION_GOVERNED_FLOW } from "../domain/institutionalRequest";
 import {
-  requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest,
+  requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest, readLegalOpinionForConsumer,
 } from "../services/institutionalRequestService";
 import {
   getRequest, updateRequestStatus, insertAssignment,
@@ -32,14 +32,14 @@ async function requireRequest(id: string, orgId: number) {
 }
 
 /**
- * NEW-007 — solicitação destinada ao Parecer Jurídico só é designada, recebida, respondida/assinada, devolvida ou arquivada pelo
- * fluxo GOVERNADO do Parecer (`legalOpinionWorkspace.*`: autoridade do procurador designado). Pelo router genérico, um operator
- * sem atribuição concluiria a solicitação com um "parecer favorável assinado" que o contrato/contratação direta exibem.
- * Recusa ANTES de qualquer escrita.
+ * NEW-007 — solicitação destinada ao Parecer Jurídico OU juridicamente tipificada (`LEGAL_OPINION_*`, inclusive registro legado com
+ * destino incoerente) só é designada, recebida, respondida/assinada, devolvida ou arquivada pelo fluxo GOVERNADO do Parecer
+ * (`legalOpinionWorkspace.*`: autoridade do procurador designado). Pelo router genérico, um operator sem atribuição concluiria a
+ * solicitação com um "parecer favorável assinado" que o contrato/contratação direta exibem. Recusa ANTES de qualquer escrita.
  */
-function assertNotGovernedLegalOpinion(req: { destinationDomain: string }): void {
-  if (req.destinationDomain === "parecer_juridico") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "LEGAL_OPINION_GOVERNED_FLOW: solicitação de parecer jurídico é tratada no módulo Parecer Jurídico (procurador designado)." });
+function assertNotGovernedLegalOpinion(req: { destinationDomain: string; requestType?: string | null }): void {
+  if (requiresGovernedLegalOpinionFlow(req)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: `${LEGAL_OPINION_GOVERNED_FLOW}: solicitação de parecer jurídico é tratada no módulo Parecer Jurídico (procurador designado).` });
   }
 }
 
@@ -64,9 +64,9 @@ export const institutionalRequestRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      if (input.sourceDomain === input.destinationDomain) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Origem e destino não podem ser o mesmo domínio." });
-      }
+      // NEW-007 — tipo jurídico só com destino Parecer Jurídico (sem rota alternativa ao fluxo governado). Antes de gravar.
+      const violation = requestRoutingViolation(input);
+      if (violation) throw new TRPCError({ code: "BAD_REQUEST", message: violation });
       const result = await requestInstitutionalReview({
         organizationId: orgId, sourceDomain: input.sourceDomain, destinationDomain: input.destinationDomain,
         requestType: input.requestType, referenceProcessId: input.referenceProcessId, title: input.title,
@@ -167,11 +167,13 @@ export const institutionalRequestRouter = router({
     .input(z.object({ requestId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const [timeline, documents, response] = await Promise.all([
+      const [timeline, documents, response, opinion] = await Promise.all([
         listRequestTimeline(input.requestId, orgId),
         listDocumentReferences(input.requestId, orgId),
         getResponseForRequest(input.requestId, orgId),
+        readLegalOpinionForConsumer(input.requestId, orgId),
       ]);
-      return { timeline, documents, response };
+      // NEW-007 — a resposta institucional é exibida como registrada; `legalOpinion` diz se é parecer jurídico governado.
+      return { timeline, documents, response, legalOpinion: opinion.legalOpinion };
     }),
 });

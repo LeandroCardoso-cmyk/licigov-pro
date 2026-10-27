@@ -15,8 +15,7 @@ import { assertKernelAccess } from "./kernelAccessService";
 import { serviceLogger } from "./observabilityService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
-import { requestInstitutionalReview } from "./institutionalRequestService";
-import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
+import { requestInstitutionalReview, readLegalOpinionForConsumer, type LegalOpinionReadResult } from "./institutionalRequestService";
 import { listProcessTimeline, recordProcessEvent } from "../db/procurement";
 import { registerExpiration, rescheduleExpiration, releaseRecordExpiration, linkRecordToContract } from "./operationRecordService";
 import { getCurrentExpirationDate, getOperationRecordById, listOperationRecordIdsLinkedTo } from "../db/departmentOperation";
@@ -1030,9 +1029,9 @@ export async function requestContractLegalOpinion(params: {
   return { requestId: result.request.id };
 }
 
-export async function getContractLegalOpinion(requestId: string, orgId: number): Promise<{ response: Awaited<ReturnType<typeof getResponseForRequest>>; documents: Awaited<ReturnType<typeof listDocumentReferences>> }> {
-  const [response, documents] = await Promise.all([getResponseForRequest(requestId, orgId), listDocumentReferences(requestId, orgId)]);
-  return { response, documents };
+/** NEW-007 — só exibe como parecer a resposta com origem governada (Parecer Jurídico, procurador designado) pedida por Contratos. */
+export async function getContractLegalOpinion(requestId: string, orgId: number): Promise<LegalOpinionReadResult> {
+  return readLegalOpinionForConsumer(requestId, orgId, "contratos");
 }
 
 export { listContractAddenda };

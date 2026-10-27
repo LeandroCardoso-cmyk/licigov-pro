@@ -27,6 +27,7 @@ import { runMigrations, validateSchema } from "../../bootstrap";
 import {
   requestInstitutionalReview,
   receiveRequest,
+  resumeReceiveRequest,
   respondRequest,
   archiveRequest,
   listDocumentReferences,
@@ -146,17 +147,22 @@ describe.skipIf(!DB)("B1 — Institutional Request Engine (MySQL estrito, fluxo 
     for (const n of notif0) expect(n.createdAt).toMatch(ISO_RE);
 
     // Destino recebe e passa a trabalhar (RECEIVED → IN_PROGRESS) — updateRequestStatus sob modo estrito.
-    const inProgress = await receiveRequest(request.id, ORG, LAWYER);
+    // NEW-007 — solicitação ao Parecer: o recebimento genérico é recusado; o Engine recebe pelo caminho governado (o mesmo
+    // que `legalOpinionWorkspace.receiveRequest` usa), com as mesmas gravações de status/timeline sob modo estrito.
+    await expect(receiveRequest(request.id, ORG, LAWYER)).rejects.toThrow(/^LEGAL_OPINION_GOVERNED_FLOW:/);
+    const { request: inProgress } = await resumeReceiveRequest(request.id, ORG, LAWYER);
     expect(inProgress.status).toBe("IN_PROGRESS");
 
     // (5)(6) Resposta assinada: institutional_responses + signedAt persistido.
     const signedAt = new Date().toISOString();
-    const { responseId } = await respondRequest({
-      id: request.id, organizationId: ORG, responder: LAWYER,
+    const respond = { id: request.id, organizationId: ORG, responder: LAWYER,
       responseType: "parecer", responseStatus: "concluido",
       comments: "Parecer favorável com ressalvas.", sign: "manual", signedAt,
-      correlationId: "corr-b1-resp",
-    });
+      correlationId: "corr-b1-resp" } as const;
+    // NEW-007 — sem a autoridade do fluxo governado (returnOpinion), a resposta jurídica é recusada antes de gravar.
+    await expect(respondRequest(respond)).rejects.toThrow(/^LEGAL_OPINION_GOVERNED_FLOW:/);
+    expect(await getResponseForRequest(request.id, ORG)).toBeNull();
+    const { responseId } = await respondRequest({ ...respond, authority: "legal_opinion_workspace" });
     const resp = await getResponseForRequest(request.id, ORG);
     expect(resp).not.toBeNull();
     expect(resp!.id).toBe(responseId);
@@ -181,10 +187,17 @@ describe.skipIf(!DB)("B1 — Institutional Request Engine (MySQL estrito, fluxo 
     const notifRequester = await listNotifications(ORG, REQUESTER);
     expect(notifRequester.some(n => n.requestId === request.id)).toBe(true);
 
-    // (8) Atualização de status: arquivamento.
-    const archived = await archiveRequest(request.id, ORG, LAWYER);
+    // (8) Atualização de status: arquivamento. NEW-007 — o arquivamento genérico não toca solicitação jurídica; o round-trip
+    // de status sob modo estrito segue provado num pedido técnico (Contratação Direta → Controle Interno).
+    await expect(archiveRequest(request.id, ORG, LAWYER)).rejects.toThrow(/^LEGAL_OPINION_GOVERNED_FLOW:/);
+    expect((await getRequest(request.id, ORG))!.status).toBe("RETURNED");
+    const { request: technical } = await requestInstitutionalReview({
+      organizationId: ORG, sourceDomain: "contratacao_direta", destinationDomain: "controle_interno", requestType: "CONTROL_REVIEW",
+      referenceProcessId: "cd-b1-ci", title: "Revisão do Controle Interno", requestedBy: REQUESTER, correlationId: "corr-b1-ci",
+    });
+    const archived = await archiveRequest(technical.id, ORG, LAWYER);
     expect(archived.status).toBe("ARCHIVED");
-    expect((await getRequest(request.id, ORG))!.status).toBe("ARCHIVED");
+    expect((await getRequest(technical.id, ORG))!.status).toBe("ARCHIVED");
   }, 120_000);
 
   it("isolamento multi-tenant: solicitação de um tenant não é visível a outro", async () => {

@@ -58,6 +58,8 @@ export default function RequestDetails({ requestId = "" }: RequestDetailsProps) 
   const timeline = data?.timeline ?? [];
   const documents = data?.documents ?? [];
   const response = data?.response ?? null;
+  // NEW-007 — "parecer" aqui é a resposta institucional registrada; só o fluxo do Procurador produz parecer jurídico governado.
+  const governedLegalOpinion = data?.legalOpinion?.status === "GOVERNED_LEGAL_OPINION";
 
   return (
     <div className="space-y-5">
@@ -127,6 +129,13 @@ export default function RequestDetails({ requestId = "" }: RequestDetailsProps) 
             <p className="mt-2 text-[11px] text-green-700">
               Esta resposta retornou automaticamente ao domínio de origem.
             </p>
+            {governedLegalOpinion ? (
+              <p className="mt-1 text-[11px] text-green-700">Parecer jurídico emitido pelo Procurador designado (módulo Parecer Jurídico).</p>
+            ) : response.responseType === "parecer" ? (
+              <p className="mt-1 text-[11px] text-amber-700">
+                Resposta institucional — não é parecer jurídico emitido pelo fluxo do Procurador.
+              </p>
+            ) : null}
           </div>
         )}
       </section>
