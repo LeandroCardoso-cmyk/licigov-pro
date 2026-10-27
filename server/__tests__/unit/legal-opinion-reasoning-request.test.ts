@@ -9,12 +9,12 @@ import { opinionReferenceLabel } from "../../services/legalOpinionReference";
 describe("opinionReasoningRequest", () => {
   it("com origem identificada inclui o rótulo humano", () => {
     expect(opinionReasoningRequest({ requestId: "req-1", requestType: "parecer_inicial", referenceLabel: "Processo nº 2026/0012" }))
-      .toBe("Analisar juridicamente a solicitação req-1 (parecer_inicial) referente a Processo nº 2026/0012, com base na Lei 14.133/2021.");
+      .toBe("Analisar juridicamente a solicitação req-1 (parecer_inicial) — origem: Processo nº 2026/0012, com base na Lei 14.133/2021.");
   });
   it("sem origem identificada (parecer avulso / origem ilegível) omite a cláusula, sem presumir nada", () => {
     const t = opinionReasoningRequest({ requestId: "req-2", requestType: "parecer", referenceLabel: "  " });
     expect(t).toBe("Analisar juridicamente a solicitação req-2 (parecer), com base na Lei 14.133/2021.");
-    expect(t).not.toMatch(/referente/);
+    expect(t).not.toMatch(/origem|referente/);
   });
   it("sem solicitação nem tipo ⇒ texto coerente com o tipo padrão", () => {
     expect(opinionReasoningRequest({})).toBe("Analisar juridicamente a solicitação (parecer), com base na Lei 14.133/2021.");

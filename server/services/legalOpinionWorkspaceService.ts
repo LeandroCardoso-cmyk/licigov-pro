@@ -304,7 +304,7 @@ export function opinionReasoningRequest(p: { requestId?: string | null; requestT
   const id = p.requestId?.trim();
   const type = p.requestType?.trim() || "parecer";
   const ref = p.referenceLabel?.trim();
-  return `Analisar juridicamente a solicitação${id ? ` ${id}` : ""} (${type})${ref ? ` referente a ${ref}` : ""}, com base na Lei 14.133/2021.`;
+  return `Analisar juridicamente a solicitação${id ? ` ${id}` : ""} (${type})${ref ? ` — origem: ${ref}` : ""}, com base na Lei 14.133/2021.`;
 }
 
 /**
@@ -514,10 +514,10 @@ async function findEmitidoForContent(
   return false;
 }
 
-/** Título do documento do parecer: origem legível quando resolvida; senão o identificador anterior (sem presumir processo). */
+/** Título do documento do parecer: origem legível quando resolvida; senão "origem não identificada" (nunca o id técnico). */
 async function opinionDocumentTitle(ws: LegalOpinionWorkspace): Promise<string> {
   const ref = await resolveOpinionReference(ws.organizationId, ws.requestId, ws.referenceProcessId);
-  return `Parecer — ${ref.label ?? (ws.referenceProcessId || ws.id)}`;
+  return `Parecer — ${ref.label ?? "origem não identificada"}`;
 }
 
 /** Materializa a versão OFICIAL `emitido` do parecer assinado no Document Engine (pipeline ÚNICO). */

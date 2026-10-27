@@ -8830,8 +8830,8 @@
     "semantic_hash": ""
   },
   "server/routers/institutionalRequestRouter.ts": {
-    "mtime": 1793109596.137709,
-    "ast_hash": "46c3db8bfeb13a4835c25eb57a1f1416",
+    "mtime": 1793116305.6115918,
+    "ast_hash": "435a8d5a9f783805cba17e060b580cdb",
     "semantic_hash": ""
   },
   "server/routers/invitationsRouter.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1793109859.8140445,
-    "ast_hash": "fd07f54e6b6f1074a94c245269fb3d98",
+    "mtime": 1793116305.6123083,
+    "ast_hash": "a59701bd9bbf3bbc81bb507132a71b6c",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -15425,8 +15425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/legal-opinion-reasoning-request.test.ts": {
-    "mtime": 1793109911.536937,
-    "ast_hash": "bee542f2648202b62b9a9e319326166f",
+    "mtime": 1793116305.6127393,
+    "ast_hash": "eee65e0163b7e3716eff3db4c9797161",
     "semantic_hash": ""
   },
   "client/src/_core/sessionState.test.ts": {
@@ -15525,8 +15525,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-request-router-rbac.test.ts": {
-    "mtime": 1793109583.6970015,
-    "ast_hash": "def5f30ee6895332c40c8667ea0b95b0",
+    "mtime": 1793116329.6916494,
+    "ast_hash": "76855bbe428e5e3123b6bfcb834d35a4",
     "semantic_hash": ""
   },
   "server/__tests__/unit/login-rate-limit-characterization.test.ts": {

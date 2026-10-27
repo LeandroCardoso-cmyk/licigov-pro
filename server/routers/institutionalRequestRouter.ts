@@ -16,6 +16,7 @@ import {
   listPendingForDomain, listCompletedForDomain, listRequestTimeline, listDocumentReferences, getResponseForRequest,
 } from "../db/institutionalRequests";
 import { createRequestAssignment } from "../domain/requestAssignment";
+import { getMembership } from "../services/tenantService";
 
 const DOMAINS = ["processo_licitatorio", "contratacao_direta", "contratos", "parecer_juridico", "gestao_departamento", "controle_interno"] as const;
 const REQUEST_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL", "CONTROL_REVIEW", "TECHNICAL_REVIEW", "DOCUMENT_REVIEW", "APPROVAL", "SIGNATURE", "INFORMATION_REQUEST", "CORRECTION_REQUEST"] as const;
@@ -28,6 +29,18 @@ async function requireRequest(id: string, orgId: number) {
   const r = await getRequest(id, orgId);
   if (!r) throw new TRPCError({ code: "NOT_FOUND", message: "Solicitação não encontrada nesta organização." });
   return r;
+}
+
+/**
+ * NEW-007 — solicitação destinada ao Parecer Jurídico só é designada, recebida, respondida/assinada, devolvida ou arquivada pelo
+ * fluxo GOVERNADO do Parecer (`legalOpinionWorkspace.*`: autoridade do procurador designado). Pelo router genérico, um operator
+ * sem atribuição concluiria a solicitação com um "parecer favorável assinado" que o contrato/contratação direta exibem.
+ * Recusa ANTES de qualquer escrita.
+ */
+function assertNotGovernedLegalOpinion(req: { destinationDomain: string }): void {
+  if (req.destinationDomain === "parecer_juridico") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "LEGAL_OPINION_GOVERNED_FLOW: solicitação de parecer jurídico é tratada no módulo Parecer Jurídico (procurador designado)." });
+  }
 }
 
 /**
@@ -68,6 +81,10 @@ export const institutionalRequestRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const req = await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(req);
+      // O designado precisa ser membro ATIVO desta organização (nunca um usuário de outro tenant).
+      const member = await getMembership(input.userId, orgId);
+      if (!member || member.ativo === false) throw new TRPCError({ code: "BAD_REQUEST", message: "O usuário designado não é membro ativo desta organização." });
       const assignment = createRequestAssignment({
         requestId: req.id, organizationId: orgId, userId: input.userId, sector: input.sector, queue: input.queue,
         priority: input.priority, correlationId: ctx.correlationId,
@@ -82,7 +99,7 @@ export const institutionalRequestRouter = router({
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
       const request = await receiveRequest(input.requestId, orgId, ctx.user.id);
       return { request };
     }),
@@ -114,7 +131,7 @@ export const institutionalRequestRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
       const result = await respondRequest({
         id: input.requestId, organizationId: orgId, responder: ctx.user.id, responseType: input.responseType,
         responseStatus: input.responseStatus, comments: input.comments, attachedDocuments: input.attachedDocuments,
@@ -128,6 +145,7 @@ export const institutionalRequestRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const req = await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(req);
       if (req.status === "RETURNED") {
         return { success: true, requestId: req.id, status: "RETURNED" as const };
       }
@@ -140,7 +158,7 @@ export const institutionalRequestRouter = router({
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
       const request = await archiveRequest(input.requestId, orgId, ctx.user.id);
       return { success: true, requestId: request.id, status: "ARCHIVED" as const };
     }),

@@ -14,13 +14,15 @@ import { makeContext } from "../helpers/fixtures";
 const h = vi.hoisted(() => ({ ORG: 81001, roleByUser: new Map<number, string>() }));
 
 vi.mock("../../services/tenantService", () => ({
+  getMembership: vi.fn(async (userId: number, orgId: number) => (userId === 9 && orgId === 81001 ? { id: 9, organizationId: orgId, userId, role: "operator", ativo: true } : null)),
   resolveTenantForUser: vi.fn(async (userId: number) => {
     const role = h.roleByUser.get(userId);
     if (!role) throw new TRPCError({ code: "FORBIDDEN", message: "sem membership" });
     return { organizationId: h.ORG, membership: { id: userId, organizationId: h.ORG, userId, role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() } };
   }),
 }));
-const req = { id: "req-1", organizationId: 81001, status: "PENDING", assignedTo: null, updatedAt: "2026-10-27T00:00:00.000Z" };
+const req = { id: "req-1", organizationId: 81001, destinationDomain: "controle_interno", status: "PENDING", assignedTo: null, updatedAt: "2026-10-27T00:00:00.000Z" };
+const legalReq = { ...req, id: "req-lo", destinationDomain: "parecer_juridico" };
 vi.mock("../../services/institutionalRequestService", () => ({
   requestInstitutionalReview: vi.fn(async () => ({ request: req })),
   receiveRequest: vi.fn(async () => req),
@@ -28,7 +30,7 @@ vi.mock("../../services/institutionalRequestService", () => ({
   archiveRequest: vi.fn(async () => req),
 }));
 vi.mock("../../db/institutionalRequests", () => ({
-  getRequest: vi.fn(async () => req),
+  getRequest: vi.fn(async (id: string) => (id === "req-lo" ? legalReq : req)),
   updateRequestStatus: vi.fn(async () => undefined),
   insertAssignment: vi.fn(async () => undefined),
   listPendingForDomain: vi.fn(async () => []),
@@ -77,5 +79,28 @@ describe("institutionalRequestRouter — mutações exigem operator+", () => {
     const src = fs.readFileSync(path.join(__dirname, "../../routers/institutionalRequestRouter.ts"), "utf8");
     for (const name of Object.keys(MUTATIONS)) expect(src).toMatch(new RegExp(`\\n  ${name}: requestMutationProcedure\\n`));
     expect(src).toContain('const requestMutationProcedure = orgRoleProcedure("operator");');
+  });
+});
+
+describe("institutionalRequestRouter — NEW-007: parecer só pelo fluxo governado", () => {
+  const LO: Record<string, (c: ReturnType<typeof as>) => Promise<unknown>> = {
+    assignRequest: (c) => c.assignRequest({ requestId: "req-lo", userId: 9 }),
+    receiveRequest: (c) => c.receiveRequest({ requestId: "req-lo" }),
+    respond: (c) => c.respond({ requestId: "req-lo", responseType: "parecer", responseStatus: "favoravel", sign: "manual" }),
+    returnRequest: (c) => c.returnRequest({ requestId: "req-lo" }),
+    archive: (c) => c.archive({ requestId: "req-lo" }),
+  };
+  it.each(Object.keys(LO))("solicitação destinada ao Parecer Jurídico ⇒ FORBIDDEN em %s (mesmo manager), sem escrita", async (name) => {
+    await expect(LO[name](as("manager"))).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringMatching(/^LEGAL_OPINION_GOVERNED_FLOW:/) });
+    for (const fn of Object.values(svc)) if (vi.isMockFunction(fn)) expect(fn).not.toHaveBeenCalled();
+    expect(reqDb.updateRequestStatus).not.toHaveBeenCalled();
+    expect(reqDb.insertAssignment).not.toHaveBeenCalled();
+  });
+  it("criar a solicitação ao Parecer continua permitido (operator) — quem trata é o fluxo do Parecer", async () => {
+    await expect(MUTATIONS.createRequest(as("operator"))).resolves.toBeDefined();
+  });
+  it("designação só para membro ativo desta organização (usuário de fora ⇒ BAD_REQUEST, sem escrita)", async () => {
+    await expect(as("manager").assignRequest({ requestId: "req-1", userId: 777 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(reqDb.insertAssignment).not.toHaveBeenCalled();
   });
 });
