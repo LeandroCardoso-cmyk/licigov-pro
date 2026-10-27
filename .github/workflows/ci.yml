@@ -509,7 +509,11 @@ jobs:
       # Build REAL — antes era `echo "✅ Build verificado"`. Agora compila de fato e falha se quebrar.
       - name: Build (vite build + esbuild do server)
         run: pnpm build
+      # O único consumidor do `dist` é o job `deploy`, que só roda em refs/heads/main.
+      # Em PR o build continua rodando e reprovando o pipeline; só não publica um
+      # artefato que ninguém baixa (cada `dist` ocupa ~38 MB da cota da conta).
       - name: Publicar artefato de build validado
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: dist
