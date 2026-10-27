@@ -7030,8 +7030,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1793043877.8962681,
-    "ast_hash": "ca840abb369b1750cb8cb5417c6e6921",
+    "mtime": 1793065976.251918,
+    "ast_hash": "93b7e7eaf72475bc9cae5dd0b566161b",
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
@@ -8770,8 +8770,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
-    "mtime": 1793044262.9345315,
-    "ast_hash": "f239c188c840973419418634ba9c73b1",
+    "mtime": 1793065993.7759724,
+    "ast_hash": "ce985a5c08fcaf738244c2990e3ae561",
     "semantic_hash": ""
   },
   "server/routers/documentReviewRouter.ts": {
@@ -9555,8 +9555,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1793043877.9651754,
-    "ast_hash": "224425e52f5d0d92c9fdee5b138119aa",
+    "mtime": 1793065985.1921933,
+    "ast_hash": "06a4067a42032388fb66b055f9b9089b",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
@@ -10055,8 +10055,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1793043878.2062902,
-    "ast_hash": "c99f67d9ef11e8d744b98e1104726f17",
+    "mtime": 1793065981.1828067,
+    "ast_hash": "cd221bb407b5e9f214036fe630b8bf5b",
     "semantic_hash": ""
   },
   "server/services/officialExportEngine.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1793043871.7571623,
-    "ast_hash": "52fe6d57a47af31f31cb568f17a186dc",
+    "mtime": 1793066068.030684,
+    "ast_hash": "e5b1690e0d0be952ce4e12ed3b913f1c",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -15430,13 +15430,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-engine-generate-guard.test.ts": {
-    "mtime": 1793044292.1371903,
-    "ast_hash": "6ad5ca1e40cba4d55a3e0ed8f7aa8692",
+    "mtime": 1793066068.0287886,
+    "ast_hash": "f362559373af7f23c8baf023d61df193",
     "semantic_hash": ""
   },
   "server/__tests__/unit/auth-session-logging.test.ts": {
     "mtime": 1793044233.0398853,
     "ast_hash": "25320f2638ead279c96db6c36edc4e55",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts": {
+    "mtime": 1793065948.6654532,
+    "ast_hash": "537a4b458988ded7523afab2cdb6654b",
     "semantic_hash": ""
   }
 }

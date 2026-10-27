@@ -65,5 +65,7 @@ describe("documentEngine.generate · guarda", () => {
     const r = await caller().generate(input());
     expect(r.document).toMatchObject({ id: "doc-1" });
     expect(engine.generateOfficialDocument).toHaveBeenCalledTimes(1);
+    // a recusa vale também NO PONTO DA ESCRITA (sob o lock da linhagem): a flag segue sempre para o pipeline
+    expect(engine.generateOfficialDocument).toHaveBeenCalledWith(expect.objectContaining({ refuseIfLineageHasEmitted: true }));
   });
 });

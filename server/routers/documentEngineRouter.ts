@@ -9,6 +9,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { orgRoleProcedure, router, tenantProcedure } from "../_core/trpc";
 import { getLatestEmittedByOrigin } from "../db/officialDocuments";
+import { LINEAGE_HAS_EMITTED_VERSION } from "../services/officialDocumentLifecycleService";
 import {
   generateOfficialDocument, renderOfficialDocument, previewOfficialDocument,
   getOfficialDocument, listOfficialDocuments, listVersions, listDocumentTimeline, computeLineageId,
@@ -52,13 +53,15 @@ export const documentEngineRouter = router({
       if (isGovernedLineage(input.businessDomain, input.documentType)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "GOVERNED_LINEAGE: este documento é gerado e emitido pelo seu fluxo governado (rascunho, revisão e emissão)." });
       }
+      // Recusa rápida (sem abrir transação); a garantia é a checagem SOB o lock da linhagem, no ponto da escrita
+      // (`refuseIfLineageHasEmitted`): uma emissão concluída depois desta leitura também é recusada.
       if (await getLatestEmittedByOrigin(orgId, input.businessDomain, input.origin, input.documentType)) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "LINEAGE_HAS_EMITTED_VERSION: a linhagem já tem versão oficial emitida; versões oficiais são imutáveis." });
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${LINEAGE_HAS_EMITTED_VERSION}: a linhagem já tem versão oficial emitida; versões oficiais são imutáveis.` });
       }
       const document = await generateOfficialDocument({
         organizationId: orgId, businessDomain: input.businessDomain, documentType: input.documentType,
         origin: input.origin, title: input.title, content: input.content, metadata: input.metadata,
-        author: String(ctx.user.id), correlationId: ctx.correlationId,
+        author: String(ctx.user.id), correlationId: ctx.correlationId, refuseIfLineageHasEmitted: true,
       });
       return { document };
     }),
