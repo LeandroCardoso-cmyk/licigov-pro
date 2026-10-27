@@ -291,6 +291,17 @@ export async function loadWorkspaceContext(params: {
 }
 
 /**
+ * Pedido ao Copiloto Jurídico. Partes ausentes são OMITIDAS (nunca "referente ao processo " sem número): parecer sem processo
+ * vinculado é pedido sem essa cláusula, sem nada presumido.
+ */
+export function opinionReasoningRequest(p: { requestId?: string | null; requestType?: string | null; referenceProcessId?: string | null }): string {
+  const id = p.requestId?.trim();
+  const type = p.requestType?.trim() || "parecer";
+  const proc = p.referenceProcessId?.trim();
+  return `Analisar juridicamente a solicitação${id ? ` ${id}` : ""} (${type})${proc ? ` referente ao processo ${proc}` : ""}, com base na Lei 14.133/2021.`;
+}
+
+/**
  * Carrega o Reasoning & Explainability (apoio à decisão) via Copiloto Jurídico —
  * Cognitive Kernel (RAG/Retrieval → LLM), SEMPRE pela porta (kernelAccessService).
  * Separado de `loadWorkspaceContext` porque é APOIO, não pré-condição para o
@@ -312,7 +323,7 @@ export async function loadWorkspaceReasoning(params: {
   assertKernelAccess(DOMAIN, "explainability");
   const orchestration = await orchestrateMultiCopilot({
     organizationId: params.organizationId,
-    request: `Analisar juridicamente a solicitação ${requestId} (${ws?.requestType ?? "parecer"}) referente ao processo ${ws?.referenceProcessId ?? ""}, com base na Lei 14.133/2021.`,
+    request: opinionReasoningRequest({ requestId, requestType: ws?.requestType, referenceProcessId: ws?.referenceProcessId }),
     copilotTypes: ["juridico"],
     correlationId: params.correlationId,
     invoke: params.invoke,
