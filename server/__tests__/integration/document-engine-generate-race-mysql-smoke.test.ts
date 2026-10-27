@@ -5,6 +5,8 @@
  * lock, uma emissão pode ser concluída (ex.: parecer assinado) — sem a checagem transacional, a geração genérica anexava uma
  * versão `gerado` ACIMA da versão oficial.
  *  G1  interleaving determinístico: a emissão é concluída DEPOIS da checagem do router e ANTES da escrita ⇒ recusa, sem versão espúria
+ *  G1b emissor em transação EXTERNA ainda não commitada (lock nomeado já liberado — caso NEW-016, o da promoção oficial): a geração
+ *      espera o commit na leitura travada e então recusa
  *  G2  geração depois da emissão ⇒ recusa; repetir a recusa não grava nada; versão emitida intacta
  *  G3  dois escritores genéricos concorrentes na mesma linhagem sem emissão ⇒ versões 1 e 2, sem colisão
  *  G4  linhagem governada (DFD/ETP/TR/Edital do processo) ⇒ FORBIDDEN, nada gravado; viewer/operator ⇒ FORBIDDEN
@@ -41,6 +43,7 @@ import { runMigrations } from "../../bootstrap";
 import { createDocument } from "../../services/officialDocumentLifecycleService";
 import { computeLineageId } from "../../domain/officialDocument";
 import { makeContext, mockUser } from "../helpers/fixtures";
+import { getDb } from "../../db/connection";
 
 const DB = process.env.DATABASE_URL;
 const ORG_A = 996721;
@@ -83,6 +86,29 @@ describe.skipIf(!DB)("documentEngine.generate × emissão concorrente (MySQL rea
     const origin = `ws-g1-${RUN}`;
     race.hook = async () => { await emit(ORG_A, origin); };
     await expect(caller(ORG_A).generate(input(origin))).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("LINEAGE_HAS_EMITTED_VERSION") });
+    expect((await versionsOf(ORG_A, origin)).map((v) => [v.version, v.status])).toEqual([[1, "emitido"]]);
+  }, 120_000);
+
+  it("G1b — emissão em transação externa ainda NÃO commitada: a geração aguarda o commit e recusa (sem versão espúria)", async () => {
+    const origin = `ws-g1b-${RUN}`;
+    let emitting: Promise<unknown> = Promise.resolve();
+    race.hook = async () => {
+      let inserted!: () => void;
+      const ready = new Promise<void>((r) => { inserted = r; });
+      const db = (await getDb())!;
+      // createDocument com executor externo: o GET_LOCK é liberado ao fim da escrita, ANTES do commit (que só vem 400 ms depois).
+      emitting = db.transaction(async (tx) => {
+        await createDocument({
+          organizationId: ORG_A, businessDomain: "parecer_juridico", documentType: "parecer_final", origin, title: "Parecer jurídico (sintético)",
+          content: "Parecer assinado (sintético).", author: "303", status: "emitido", correlationId: `corr-emit-ext-${RUN}`,
+        }, tx);
+        inserted();
+        await new Promise((r) => setTimeout(r, 400));
+      });
+      await ready;
+    };
+    await expect(caller(ORG_A).generate(input(origin))).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("LINEAGE_HAS_EMITTED_VERSION") });
+    await emitting;
     expect((await versionsOf(ORG_A, origin)).map((v) => [v.version, v.status])).toEqual([[1, "emitido"]]);
   }, 120_000);
 

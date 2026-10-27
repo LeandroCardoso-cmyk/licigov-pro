@@ -158,6 +158,10 @@ jobs:
       - name: Smoke — concorrência e rollback do versionamento (DATA-012)
         run: pnpm exec vitest run server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts
 
+      # documentEngine.generate × emissão concorrente: a recusa "linhagem já emitida" vale sob o lock da linhagem (interleaving injetado).
+      - name: Smoke — geração genérica × emissão concorrente
+        run: pnpm exec vitest run server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts
+
       # F2 (homologação V1) — transição de Item concorrência-segura (compare-and-set atômico).
       - name: Smoke — transição de Item concorrência-segura (F2 CAS)
         run: pnpm exec vitest run server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts
@@ -358,10 +362,6 @@ jobs:
       # parecer produzido; contratação direta completa; RBAC, replay e tenant.
       - name: Smoke — continuidade legado, contratos, aditivos e vigência
         run: pnpm exec vitest run server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts
-
-      # documentEngine.generate × emissão concorrente: a recusa "linhagem já emitida" vale sob o lock da linhagem (interleaving injetado).
-      - name: Smoke — geração genérica × emissão concorrente
-        run: pnpm exec vitest run server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts
 
       # Hotfix — elegibilidade dos candidatos da Pesquisa: legado de importação manual sem revisão + Pesquisa em
       # revisão (5 itens / 30 cotações) ⇒ 0 candidatos; revisão + aprovação + promoção ⇒ EXATAMENTE 5; nova sessão

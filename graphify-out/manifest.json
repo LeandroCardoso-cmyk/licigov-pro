@@ -10055,7 +10055,7 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1793065981.1828067,
+    "mtime": 1793066785.7895029,
     "ast_hash": "cd221bb407b5e9f214036fe630b8bf5b",
     "semantic_hash": ""
   },
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1793066068.030684,
-    "ast_hash": "e5b1690e0d0be952ce4e12ed3b913f1c",
+    "mtime": 1793066755.0941823,
+    "ast_hash": "c8259158c0a0b3d33a2375ea6813e232",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -15440,8 +15440,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts": {
-    "mtime": 1793065948.6654532,
-    "ast_hash": "537a4b458988ded7523afab2cdb6654b",
+    "mtime": 1793066768.9496832,
+    "ast_hash": "d65c87363c9953d219bb9af0c88327d9",
     "semantic_hash": ""
   }
 }
