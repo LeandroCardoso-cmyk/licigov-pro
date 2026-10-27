@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { assignTo, transition } from "../domain/institutionalRequest";
 import {
   requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest,
@@ -30,8 +30,15 @@ async function requireRequest(id: string, orgId: number) {
   return r;
 }
 
+/**
+ * M8 pós-homologação — toda MUTAÇÃO da solicitação institucional exige papel operacional (operator+), como as mutações do
+ * Parecer (NEW-007) e da origem. Antes eram `tenantProcedure` puro: um viewer podia criar, designar, receber, "responder com
+ * assinatura" (o contrato lê a resposta como parecer), devolver ou arquivar. Leituras seguem `tenantProcedure`.
+ */
+const requestMutationProcedure = orgRoleProcedure("operator");
+
 export const institutionalRequestRouter = router({
-  createRequest: tenantProcedure
+  createRequest: requestMutationProcedure
     .input(z.object({
       sourceDomain: z.enum(DOMAINS),
       destinationDomain: z.enum(DOMAINS),
@@ -56,7 +63,7 @@ export const institutionalRequestRouter = router({
       return result;
     }),
 
-  assignRequest: tenantProcedure
+  assignRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1), userId: z.number(), sector: z.string().optional(), queue: z.string().optional(), priority: z.enum(PRIORITIES).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -71,7 +78,7 @@ export const institutionalRequestRouter = router({
       return { assignment, requestId: req.id };
     }),
 
-  receiveRequest: tenantProcedure
+  receiveRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -96,7 +103,7 @@ export const institutionalRequestRouter = router({
       return { requests, total: requests.length };
     }),
 
-  respond: tenantProcedure
+  respond: requestMutationProcedure
     .input(z.object({
       requestId: z.string().min(1),
       responseType: z.enum(RESPONSE_TYPES),
@@ -116,7 +123,7 @@ export const institutionalRequestRouter = router({
       return result;
     }),
 
-  returnRequest: tenantProcedure
+  returnRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -129,7 +136,7 @@ export const institutionalRequestRouter = router({
       return { success: true, requestId: req.id, status: "RETURNED" as const };
     }),
 
-  archive: tenantProcedure
+  archive: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
