@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { baseDateSuggestion, BASE_DATE_SUGGESTION_LABEL } from "@/lib/budgetBaseDateSuggestion";
 import { trpc } from "../../lib/trpc";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
@@ -63,9 +64,11 @@ export default function BudgetDisclosureCard({ processId }: { processId: string 
           <input type="date" className={INPUT} value={baseDate || s.baseDate || ""} disabled={busy} onChange={(e) => setBaseDate(e.target.value)} aria-label="Data-base do orçamento" /></label>
         {s.baseDate ? <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">Registrada: <strong>{formatDisplay("date", s.baseDate)}</strong> (revisão {s.baseDateRevision}). Para alterar, registre uma nova decisão.</p>
           : <p className="text-xs text-amber-700 dark:text-amber-300">Data-base do orçamento não registrada.</p>}
-        {s.suggestedBaseDate && s.suggestedBaseDate !== s.baseDate && (
-          <p className="text-xs text-muted-foreground">Sugestão: data da pesquisa — {formatDisplay("date", s.suggestedBaseDate)} (é só uma sugestão; você precisa confirmar){" "}
-            <button type="button" className="text-primary underline" disabled={busy} onClick={() => setBaseDate(s.suggestedBaseDate!)}>Usar sugestão</button></p>
+        {/* M8: a sugestão é a data em que a pesquisa foi REGISTRADA no sistema (não a data declarada no documento da pesquisa)
+            e só aparece enquanto não há data-base registrada. */}
+        {baseDateSuggestion(s) && (
+          <p className="text-xs text-muted-foreground">{BASE_DATE_SUGGESTION_LABEL} — {formatDisplay("date", baseDateSuggestion(s)!)} (não é necessariamente a data da pesquisa declarada no documento; confirme a data-base){" "}
+            <button type="button" className="text-primary underline" disabled={busy} onClick={() => setBaseDate(baseDateSuggestion(s)!)}>Usar sugestão</button></p>
         )}
         {baseDateError && <p role="alert" className="text-xs text-destructive">{baseDateError}</p>}
       </div>

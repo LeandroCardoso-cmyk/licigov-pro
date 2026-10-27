@@ -14560,8 +14560,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "20877989eb71f27d6daa58185dfe2a9f",
+    "mtime": 1793110212.084368,
+    "ast_hash": "0898a20f314b24d9c76457ddc33753e8",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ItemsParticipationCard.tsx": {
@@ -15552,6 +15552,16 @@
   "shared/contractStatus.ts": {
     "mtime": 1793110043.0290287,
     "ast_hash": "ba006480efdf58dec1fbeafdd6b7fd89",
+    "semantic_hash": ""
+  },
+  "client/src/lib/budgetBaseDateSuggestion.test.ts": {
+    "mtime": 1793110212.090516,
+    "ast_hash": "d9c175e9744bd29e68a8843c45da9ce0",
+    "semantic_hash": ""
+  },
+  "client/src/lib/budgetBaseDateSuggestion.ts": {
+    "mtime": 1793110212.0530386,
+    "ast_hash": "28f03472c7fa98cf7224ce8fcba19b21",
     "semantic_hash": ""
   }
 }
