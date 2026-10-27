@@ -26,6 +26,27 @@ describe("processNumberParts — exercício e sequência do número do processo"
     expect(processNumberParts(n)).toEqual({ year: null, sequence: n.trim() });
   });
 
+  // Fronteiras do contrato (determinísticas). Fora de 1900–2099 o lado esquerdo não é ano ⇒ NNNN/AAAA sem ambiguidade.
+  it.each([
+    ["1000/2026", 2026, "1000"],
+    ["1899/2026", 2026, "1899"],
+    ["2100/2026", 2026, "2100"],
+    ["9999/2026", 2026, "9999"],
+  ])("%s ⇒ sequência fora da faixa de ano: exercício %i, sequência %s", (n, year, seq) => {
+    expect(processNumberParts(n)).toEqual({ year, sequence: seq });
+  });
+
+  // ZONA AMBÍGUA: os dois lados parecem ano (1900–2099). Convenção VIGENTE (documentada em processYear.ts): prevalece o formato do
+  // sistema AAAA/NNNN. Ex.: "2093/2026" ⇒ exercício 2093. Mudar isso é decisão de convenção (Owner), não correção de teste.
+  it.each([
+    ["1900/2026", 1900, "2026"],
+    ["2000/2026", 2000, "2026"],
+    ["2093/2026", 2093, "2026"],
+    ["2099/2026", 2099, "2026"],
+  ])("%s ⇒ zona ambígua: convenção vigente lê AAAA/NNNN (exercício %i, sequência %s)", (n, year, seq) => {
+    expect(processNumberParts(n)).toEqual({ year, sequence: seq });
+  });
+
   it("nulo/indefinido ⇒ sem exercício", () => {
     expect(processNumberParts(null)).toEqual({ year: null, sequence: "" });
     expect(processYearOf(undefined)).toBeNull();

@@ -44,3 +44,24 @@ describe("assessReprocessEligibility", () => {
     expect(assessReprocessEligibility({ ...base, stage: REEXTRACTION_STAGE, updatedAt: old }).eligible).toBe(true);
   });
 });
+
+// ─── Reserva com dono (token) — retomada segura de reserva vencida ──────────────────────────────────────────────────
+import { reextractionLeaseOf, stageToRestore, REEXTRACTION_LEASE_KEY } from "../../domain/importReprocess";
+
+describe("reserva de reextração com dono", () => {
+  it("lê a reserva só quando bem-formada (nunca presume dono)", () => {
+    expect(reextractionLeaseOf(null)).toBeNull();
+    expect(reextractionLeaseOf({})).toBeNull();
+    expect(reextractionLeaseOf({ [REEXTRACTION_LEASE_KEY]: "x" })).toBeNull();
+    expect(reextractionLeaseOf({ [REEXTRACTION_LEASE_KEY]: { token: "", reservedAt: "2026-10-26T00:00:00Z" } })).toBeNull();
+    expect(reextractionLeaseOf({ [REEXTRACTION_LEASE_KEY]: { token: "t", reservedAt: 1 } })).toBeNull();
+    expect(reextractionLeaseOf({ [REEXTRACTION_LEASE_KEY]: { token: "t", reservedAt: "2026-10-26T00:00:00Z", previousStage: "awaiting_review" } }))
+      .toEqual({ token: "t", reservedAt: "2026-10-26T00:00:00Z", previousStage: "awaiting_review" });
+  });
+  it("estágio a devolver: reserva normal devolve o estágio atual; retomada devolve o da reserva original (nunca 'reprocessing')", () => {
+    expect(stageToRestore("awaiting_review", {})).toBe("awaiting_review");
+    expect(stageToRestore(null, {})).toBeNull();
+    expect(stageToRestore("reprocessing", { [REEXTRACTION_LEASE_KEY]: { token: "a", reservedAt: "x", previousStage: "needs_attention" } })).toBe("needs_attention");
+    expect(stageToRestore("reprocessing", {})).toBe("awaiting_review"); // reserva legada sem dono
+  });
+});

@@ -13,6 +13,7 @@
  *   4. `releaseReextraction` — falha/abandono: devolve o estágio anterior e audita; o staging antigo permanece.
  * Nunca cria sessão, pesquisa, promoção, cotação ou Item Inteligente. Tudo escopado por organizationId.
  */
+import { randomUUID } from "crypto";
 import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db/connection";
@@ -22,8 +23,9 @@ import { logActivity } from "./activityLogService";
 import { replaceUntouchedStagingTx, StagingAlreadyReviewedError } from "./importStagingService";
 import { isDocumentImportType } from "../domain/documentProjection";
 import {
-  assessProvenanceRevalidation, assessReprocessEligibility, REEXTRACTION_LEASE_MS, REEXTRACTION_STAGE,
-  type ProvenanceRevalidationBlocker, type ReextractionRecord, type ReprocessEligibility,
+  assessProvenanceRevalidation, assessReprocessEligibility, REEXTRACTION_LEASE_KEY, REEXTRACTION_LEASE_MS, REEXTRACTION_STAGE,
+  reextractionLeaseOf, stageToRestore,
+  type ProvenanceRevalidationBlocker, type ReextractionLease, type ReextractionRecord, type ReprocessEligibility,
 } from "../domain/importReprocess";
 import {
   assessProvenanceScan, documentFictitiousDeclaration, hasFileCoverageGap, mergeRevalidatedDeclarationWarnings, mostRestrictiveDeclaration,
@@ -39,7 +41,7 @@ type Session = typeof importSessions.$inferSelect;
 
 /** Reextração/revalidação abortada no commit porque o estado mudou (outra ação ganhou) — nada foi alterado. */
 export class ReextractionAbortedError extends Error {
-  constructor(readonly code: "SESSION_STATE_CHANGED" | "PROMOTED" | "CORRECTION_HISTORY" | ProvenanceRevalidationBlocker, message: string) {
+  constructor(readonly code: "SESSION_STATE_CHANGED" | "LEASE_LOST" | "PROMOTED" | "CORRECTION_HISTORY" | ProvenanceRevalidationBlocker, message: string) {
     super(message);
     this.name = "ReextractionAbortedError";
   }
@@ -99,11 +101,17 @@ export interface ReserveParams {
   requestId?:     string | null;
 }
 
+/** Caminho JSON da reserva no `extraction_summary` (constante do domínio; nunca vem do pedido). */
+const LEASE_PATH = `$.${REEXTRACTION_LEASE_KEY}`;
+const LEASE_TOKEN_PATH = `$.${REEXTRACTION_LEASE_KEY}.token`;
+
 /**
  * Reserva a reextração (atômica). Lança PRECONDITION_FAILED (inelegível: decisão humana/promoção/estado) ou
- * CONFLICT (reprocessamento já em andamento / corrida perdida). Retorna o estágio anterior (para liberar).
+ * CONFLICT (reprocessamento já em andamento / corrida perdida). Retorna o estágio a devolver e o TOKEN da reserva
+ * (dono): só quem o detém aplica (commit) ou devolve (release). A reserva e a auditoria `requested` são gravadas na
+ * MESMA transação — sem auditoria, não há reserva (fail-closed).
  */
-export async function reserveReextraction(p: ReserveParams): Promise<{ previousStage: string | null; stagedCount: number; session: Session }> {
+export async function reserveReextraction(p: ReserveParams): Promise<{ previousStage: string | null; leaseToken: string; stagedCount: number; session: Session }> {
   const db = await requireDb();
   const now = new Date();
   const [session] = await db.select().from(importSessions)
@@ -116,37 +124,55 @@ export async function reserveReextraction(p: ReserveParams): Promise<{ previousS
     throw new TRPCError({ code: inProgress ? "CONFLICT" : "PRECONDITION_FAILED", message: `REPROCESS_FORBIDDEN: ${elig.message}` });
   }
 
-  // Reserva atômica: o UPDATE condicional é resolvido pelo row-lock do MySQL — só um pedido vence.
+  // Reserva atômica: o UPDATE condicional é resolvido pelo row-lock do MySQL — só um pedido vence. Uma reserva vencida
+  // retomada recebe token NOVO; a troca do JSON garante que a linha muda (renova `updatedAt`, ON UPDATE CURRENT_TIMESTAMP).
   const staleBefore = new Date(now.getTime() - REEXTRACTION_LEASE_MS);
-  const result = await db.update(importSessions).set({ stage: REEXTRACTION_STAGE }).where(and(
-    eq(importSessions.id, p.sessionId),
-    eq(importSessions.organizationId, p.organizationId),
-    eq(importSessions.status, "awaiting_review"),
-    eq(importSessions.promotionStatus, "none"),
-    or(isNull(importSessions.stage), ne(importSessions.stage, REEXTRACTION_STAGE), lt(importSessions.updatedAt, staleBefore)),
-  ));
-  const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
-  if ((header?.affectedRows ?? 0) !== 1) {
-    throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um reprocessamento em andamento para esta sessão." });
-  }
-
+  const previousStage = stageToRestore(session.stage ?? null, session.extractionSummary);
+  const lease: ReextractionLease = { token: randomUUID(), reservedAt: now.toISOString(), previousStage };
   const lineage = lineageOf(session.extractionSummary);
-  await logActivity({
-    organizationId: p.organizationId, userId: p.actorUserId, action: "import_reextraction_requested",
-    entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? undefined, requestId: p.requestId ?? undefined,
-    details: {
-      procurementProcessId: session.procurementProcessId ?? null, sourceChecksum: session.checksum ?? null, reason: p.reason,
-      previousParserVersion: session.parserVersion, previousLayoutVersion: lineage?.layoutVersion ?? null,
-      previousStagedCount: elig.stagedCount, requestedAt: now.toISOString(),
-    },
+  await db.transaction(async (tx) => {
+    const result = await tx.update(importSessions).set({
+      stage: REEXTRACTION_STAGE,
+      extractionSummary: sql`JSON_SET(COALESCE(${importSessions.extractionSummary}, JSON_OBJECT()), ${LEASE_PATH}, CAST(${JSON.stringify(lease)} AS JSON))`,
+    }).where(and(
+      eq(importSessions.id, p.sessionId),
+      eq(importSessions.organizationId, p.organizationId),
+      eq(importSessions.status, "awaiting_review"),
+      eq(importSessions.promotionStatus, "none"),
+      or(isNull(importSessions.stage), ne(importSessions.stage, REEXTRACTION_STAGE), lt(importSessions.updatedAt, staleBefore)),
+    ));
+    const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+    if ((header?.affectedRows ?? 0) !== 1) {
+      throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um reprocessamento em andamento para esta sessão." });
+    }
+    // O JSON_SET não grava em resumo que não seja OBJETO JSON (sem erro): confere o token gravado; sem ele, desfaz a reserva
+    // (a sessão nunca fica em `reprocessing` sem dono).
+    const [held] = await tx.select({ token: sql<string | null>`JSON_UNQUOTE(JSON_EXTRACT(${importSessions.extractionSummary}, ${LEASE_TOKEN_PATH}))` })
+      .from(importSessions).where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId))).limit(1);
+    if (held?.token !== lease.token) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "REPROCESS_FORBIDDEN: o resumo da extração desta sessão está em formato inesperado; nada foi alterado." });
+    }
+    // Auditoria append-only NA MESMA transação: se não puder ser gravada, a reserva é desfeita (fail-closed).
+    await tx.insert(activityLogs).values({
+      organizationId: p.organizationId, userId: p.actorUserId, action: "import_reextraction_requested", sourceContext: "api",
+      entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? null, requestId: p.requestId ?? null,
+      details: JSON.stringify({
+        procurementProcessId: session.procurementProcessId ?? null, sourceChecksum: session.checksum ?? null, reason: p.reason,
+        previousParserVersion: session.parserVersion, previousLayoutVersion: lineage?.layoutVersion ?? null,
+        previousStagedCount: elig.stagedCount, requestedAt: now.toISOString(),
+        takeover: session.stage === REEXTRACTION_STAGE,
+      }),
+    });
   });
   log.info("import_reextraction_reserved", { sessionId: p.sessionId, organizationId: p.organizationId, correlationId: p.correlationId });
-  return { previousStage: session.stage ?? null, stagedCount: elig.stagedCount, session };
+  return { previousStage, leaseToken: lease.token, stagedCount: elig.stagedCount, session };
 }
 
 export interface CommitParams {
   sessionId:       number;
   organizationId:  number;
+  /** Token da reserva (dono). Reserva retomada por outro pedido ⇒ LEASE_LOST, nada muda. */
+  leaseToken:      string;
   actorUserId:     number;
   reason:          string;
   correlationId:   string | null;
@@ -171,6 +197,9 @@ export async function commitReextraction(p: CommitParams): Promise<CommitResult>
       .where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId))).for("update");
     if (!session || session.status !== "awaiting_review" || session.stage !== REEXTRACTION_STAGE || (session.promotionStatus ?? "none") !== "none") {
       throw new ReextractionAbortedError("SESSION_STATE_CHANGED", "A sessão mudou de estado durante o reprocessamento; nada foi alterado.");
+    }
+    if (reextractionLeaseOf(session.extractionSummary)?.token !== p.leaseToken) {
+      throw new ReextractionAbortedError("LEASE_LOST", "A reserva deste reprocessamento venceu e foi retomada por outro pedido; nada foi alterado.");
     }
     const ledger = await tx.select({ id: importPromotions.id }).from(importPromotions)
       .where(and(eq(importPromotions.importSessionId, p.sessionId), eq(importPromotions.organizationId, p.organizationId))).limit(1);
@@ -222,25 +251,38 @@ export async function commitReextraction(p: CommitParams): Promise<CommitResult>
 }
 
 /**
- * Libera a reserva (falha, extração sem item válido, decisão humana concorrente): devolve o estágio anterior só
- * se a reserva ainda for desta sessão, e audita o motivo. O staging antigo permanece intacto.
+ * Libera a reserva (falha, extração sem item válido, decisão humana concorrente): devolve o estágio anterior SÓ se a
+ * reserva ainda for DESTE dono (compare-and-set pelo token) e audita na mesma transação. Reserva já retomada por outro
+ * pedido (ou já aplicada) ⇒ nada muda (`released: false`, auditado como `release_skipped`). O staging antigo permanece.
  */
 export async function releaseReextraction(p: {
-  sessionId: number; organizationId: number; previousStage: string | null; actorUserId: number;
+  sessionId: number; organizationId: number; previousStage: string | null; leaseToken: string; actorUserId: number;
   correlationId: string | null; code: string; message: string;
-}): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(importSessions).set({ stage: p.previousStage ?? "awaiting_review" }).where(and(
-    eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId),
-    eq(importSessions.stage, REEXTRACTION_STAGE),
-  ));
-  await logActivity({
-    organizationId: p.organizationId, userId: p.actorUserId, action: "import_reextraction_not_applied", sourceContext: "job",
-    entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? undefined,
-    details: { code: p.code, message: p.message.slice(0, 300) },
+}): Promise<{ released: boolean }> {
+  const db = await requireDb();
+  const released = await db.transaction(async (tx) => {
+    const result = await tx.update(importSessions).set({
+      stage: p.previousStage ?? "awaiting_review",
+      extractionSummary: sql`JSON_REMOVE(${importSessions.extractionSummary}, ${LEASE_PATH})`,
+    }).where(and(
+      eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId),
+      eq(importSessions.stage, REEXTRACTION_STAGE),
+      sql`JSON_UNQUOTE(JSON_EXTRACT(${importSessions.extractionSummary}, ${LEASE_TOKEN_PATH})) = ${p.leaseToken}`,
+    ));
+    const header = (Array.isArray(result) ? result[0] : result) as { affectedRows?: number } | undefined;
+    const ok = (header?.affectedRows ?? 0) === 1;
+    await tx.insert(activityLogs).values({
+      organizationId: p.organizationId, userId: p.actorUserId,
+      action: ok ? "import_reextraction_not_applied" : "import_reextraction_release_skipped", sourceContext: "job",
+      entityType: "import_session", entityId: p.sessionId, correlationId: p.correlationId ?? null,
+      details: JSON.stringify({ code: p.code, message: p.message.slice(0, 300), released: ok }),
+    });
+    return ok;
   });
-  log.warn("import_reextraction_released", { sessionId: p.sessionId, organizationId: p.organizationId, code: p.code, correlationId: p.correlationId });
+  log.warn(released ? "import_reextraction_released" : "import_reextraction_release_skipped", {
+    sessionId: p.sessionId, organizationId: p.organizationId, code: p.code, correlationId: p.correlationId,
+  });
+  return { released };
 }
 
 // ─── M8 (P1-C) — revalidação da análise de proveniência ──────────────────────────────────────────────────────────────

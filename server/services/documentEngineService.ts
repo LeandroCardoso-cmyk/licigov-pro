@@ -48,6 +48,8 @@ export interface GenerateOfficialDocumentParams {
   author: string;
   status?: OfficialDocument["status"];
   correlationId: string;
+  /** Recusa (sob o lock da linhagem) se a linhagem já tem versão emitida — ver `createDocument`. */
+  refuseIfLineageHasEmitted?: boolean;
 }
 
 /**

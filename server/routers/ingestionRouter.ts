@@ -614,12 +614,12 @@ export const ingestionRouter = router({
       });
       const jobId = enqueueImport(session.id, orgId, session.sourceFileId, {
         correlationId: ctx.correlationId,
-        reextract: { actorUserId: ctx.user!.id, reason: input.reason, previousStage: reserved.previousStage },
+        reextract: { actorUserId: ctx.user!.id, reason: input.reason, previousStage: reserved.previousStage, leaseToken: reserved.leaseToken },
       });
       if (jobId === null) {
         // Já há processamento em voo neste processo: devolve a reserva (nada muda) e informa.
         await releaseReextraction({
-          sessionId: session.id, organizationId: orgId, previousStage: reserved.previousStage, actorUserId: ctx.user!.id,
+          sessionId: session.id, organizationId: orgId, previousStage: reserved.previousStage, leaseToken: reserved.leaseToken, actorUserId: ctx.user!.id,
           correlationId: ctx.correlationId ?? null, code: "ALREADY_IN_FLIGHT", message: "Processamento já em andamento.",
         });
         throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um processamento em andamento para esta sessão." });

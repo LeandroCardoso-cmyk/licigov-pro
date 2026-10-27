@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
-    "mtime": 1793044422.942343,
-    "ast_hash": "88ce7097626e96dedd362de76ec8d119",
+    "mtime": 1793072230.769698,
+    "ast_hash": "095017fff6d8212821b3acf6d0a6197a",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useOrgRole.ts": {
@@ -3145,8 +3145,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Login.tsx": {
-    "mtime": 1793044422.9736788,
-    "ast_hash": "4adb6c8c3ceba4c5929a8d4c24d8f60c",
+    "mtime": 1793072230.769698,
+    "ast_hash": "ca42c1358a900478ae811d895786f7d6",
     "semantic_hash": ""
   },
   "client/src/pages/ModuleSelectionDashboard.tsx": {
@@ -5745,13 +5745,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-reextraction-mysql-smoke.test.ts": {
-    "mtime": 1793044423.349195,
-    "ast_hash": "4bec1866124c3ce04f91a0d6949f7470",
+    "mtime": 1793072230.845698,
+    "ast_hash": "9cfdac01c25e43d3e26949232c78caf5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-reprocess-router.test.ts": {
-    "mtime": 1793044423.349195,
-    "ast_hash": "ec05c8ff3c0047ae4548f7d10b082491",
+    "mtime": 1793072230.845698,
+    "ast_hash": "a682a02144edb7b692661dc40e2798e9",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-router.test.ts": {
@@ -6655,8 +6655,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/import-reprocess.test.ts": {
-    "mtime": 1793044423.3755186,
-    "ast_hash": "e5f0253bb59ec64be00487ee4cf3c1d3",
+    "mtime": 1793072230.845698,
+    "ast_hash": "92c54c0e30507faa288291fc204ed240",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legal-article-locator.test.ts": {
@@ -6800,8 +6800,8 @@
     "semantic_hash": ""
   },
   "server/_core/sdk.ts": {
-    "mtime": 1793044423.383527,
-    "ast_hash": "648bc4fd9deb68f6fb3c6cc2b828ad96",
+    "mtime": 1793072230.849698,
+    "ast_hash": "94683c96a76d47f221e49a45c46e9db1",
     "semantic_hash": ""
   },
   "server/_core/systemRouter.ts": {
@@ -7030,8 +7030,8 @@
     "semantic_hash": ""
   },
   "server/db/officialDocuments.ts": {
-    "mtime": 1793044423.3867319,
-    "ast_hash": "ca840abb369b1750cb8cb5417c6e6921",
+    "mtime": 1793072230.849698,
+    "ast_hash": "93b7e7eaf72475bc9cae5dd0b566161b",
     "semantic_hash": ""
   },
   "server/db/organizations.ts": {
@@ -7690,8 +7690,8 @@
     "semantic_hash": ""
   },
   "server/domain/importReprocess.ts": {
-    "mtime": 1793044423.3941987,
-    "ast_hash": "61bd94ef4ebdf710deb9c5144a2343c4",
+    "mtime": 1793072230.849698,
+    "ast_hash": "099f8c4e4438f34d16bb550ba3411181",
     "semantic_hash": ""
   },
   "server/domain/importReviewState.ts": {
@@ -8770,8 +8770,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
-    "mtime": 1793044423.410831,
-    "ast_hash": "0a3211ac07f21db8cc0bab1a29b4fd65",
+    "mtime": 1793072230.849698,
+    "ast_hash": "ce985a5c08fcaf738244c2990e3ae561",
     "semantic_hash": ""
   },
   "server/routers/documentReviewRouter.ts": {
@@ -8815,8 +8815,8 @@
     "semantic_hash": ""
   },
   "server/routers/ingestionRouter.ts": {
-    "mtime": 1793044423.410831,
-    "ast_hash": "bd17cf1851531629f15ae70900674adb",
+    "mtime": 1793072230.849698,
+    "ast_hash": "16dea8aa43fc26642bce190c4ad915a7",
     "semantic_hash": ""
   },
   "server/routers/institutionalConsultationRouter.ts": {
@@ -9555,8 +9555,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1793044423.4187827,
-    "ast_hash": "224425e52f5d0d92c9fdee5b138119aa",
+    "mtime": 1793072230.849698,
+    "ast_hash": "06a4067a42032388fb66b055f9b9089b",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
@@ -9820,13 +9820,13 @@
     "semantic_hash": ""
   },
   "server/services/importQueueService.ts": {
-    "mtime": 1793044423.473195,
-    "ast_hash": "3e918e2d1803b2d9292168bbe7965059",
+    "mtime": 1793072230.849698,
+    "ast_hash": "c287623f86f36fbe5731da445fe7da98",
     "semantic_hash": ""
   },
   "server/services/importReprocessService.ts": {
-    "mtime": 1793044423.473195,
-    "ast_hash": "9c4e0b30063db7d1daef17377986c967",
+    "mtime": 1793072230.853698,
+    "ast_hash": "bf5bf5c7273bfa176b62f7ac8cd96037",
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {
@@ -10055,8 +10055,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
-    "mtime": 1793044423.4862556,
-    "ast_hash": "c99f67d9ef11e8d744b98e1104726f17",
+    "mtime": 1793072230.853698,
+    "ast_hash": "cd221bb407b5e9f214036fe630b8bf5b",
     "semantic_hash": ""
   },
   "server/services/officialExportEngine.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1793044422.873258,
-    "ast_hash": "52fe6d57a47af31f31cb568f17a186dc",
+    "mtime": 1793072230.769698,
+    "ast_hash": "c8259158c0a0b3d33a2375ea6813e232",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -14935,8 +14935,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts": {
-    "mtime": 1793044423.349195,
-    "ast_hash": "6e8c956a945d34ec58306c1e7ea70269",
+    "mtime": 1793072230.845698,
+    "ast_hash": "5a9f5207acfd8bc49deb3456f08430a2",
     "semantic_hash": ""
   },
   "server/__tests__/unit/integrated-journeys-rules.test.ts": {
@@ -14950,8 +14950,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/document-journey-numbering.test.ts": {
-    "mtime": 1793044423.3755186,
-    "ast_hash": "026733039d809e0f181a496aeb4b0363",
+    "mtime": 1793072230.845698,
+    "ast_hash": "a45547bf0d6b968da565fa0d89d7fb16",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/processYear.ts": {
@@ -15427,6 +15427,31 @@
   "server/domain/officialVersionCycle.ts": {
     "mtime": 1793062182.162127,
     "ast_hash": "1d473c60e0f2865a6fed671c8684afd9",
+    "semantic_hash": ""
+  },
+  "client/src/_core/sessionState.test.ts": {
+    "mtime": 1793072230.769698,
+    "ast_hash": "18ef943641dfba7c315ecc02406b0fd2",
+    "semantic_hash": ""
+  },
+  "client/src/_core/sessionState.ts": {
+    "mtime": 1793072230.769698,
+    "ast_hash": "9e753c5dc0f14d3979a9cd28f827e54b",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-engine-generate-guard.test.ts": {
+    "mtime": 1793072230.841698,
+    "ast_hash": "f362559373af7f23c8baf023d61df193",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts": {
+    "mtime": 1793072230.841698,
+    "ast_hash": "d65c87363c9953d219bb9af0c88327d9",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/auth-session-logging.test.ts": {
+    "mtime": 1793072230.845698,
+    "ast_hash": "25320f2638ead279c96db6c36edc4e55",
     "semantic_hash": ""
   }
 }
