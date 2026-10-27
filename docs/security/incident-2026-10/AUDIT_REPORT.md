@@ -273,3 +273,14 @@ Feita pela Railway MCP (leitura) e pela API do GitHub Actions; nenhum valor de v
 | Secrets dos workflows | Repositório, **sem** `environment:`; nenhum secret `STAGING_*` existia. A partir desta revisão os workflows exigem o ambiente explícito e secrets por nome (§7) |
 | Evidência de backup/restore | Backups diários de produção OK até 25/10; `db-restore-test` (fixture isolada, semanal) OK em 19/10; drill real: runs manuais 4–8 (31/07–01/08) **falharam** (URL de destino malformada) — nenhum drill real bem-sucedido |
 | Regenerate no serviço real | Não verificável por leitura de API; confirmar na UI antes do passo 5 |
+
+## 12. Pendências registradas na homologação integrada M8 (27/10/2026)
+Registro, **não** atestação: o incidente **não** está encerrado (§10 continua sem preenchimento).
+- Variáveis ainda presentes no serviço app de **staging** (só os nomes foram conferidos): `ADMIN_PASSWORD`, `A2_HOMOLOG_TOKEN`
+  (segredos sem consumidor), `A2_HOMOLOG_ON_BOOT`, `A3_HOMOLOGATION_RUN`, `A3_HOMOLOGATION_RUN_ID` (flags sem consumidor).
+  Exclusão depende do Owner (ver `CONTAINMENT_CHECKLIST.md` §12, item 6). Nenhuma rotação ou alteração foi feita.
+- `HOMOLOG_EMAIL_2` (credencial de homologação do container de execução) resolvia para o mesmo usuário de `HOMOLOG_EMAIL`;
+  correção é do Owner. O executor agora recusa esse caso antes de qualquer escrita.
+- Artefatos locais temporários de rodadas anteriores (`jwt.txt`, `localpw.txt`, no scratchpad efêmero da sessão de
+  desenvolvimento, apontando para ambiente local) foram **excluídos** sem leitura do conteúdo — declarado, não verificado por
+  terceiros. Excluir arquivo **não** revoga credencial: as rotações P0 (§6) continuam pendentes e prioritárias.
