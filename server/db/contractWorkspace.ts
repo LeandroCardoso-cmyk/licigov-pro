@@ -364,13 +364,13 @@ export async function insertContractAddendum(a: ContractAddendum, executor?: Con
   return a;
 }
 
-export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin: string }>> {
+export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin: string; documentReference: string }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(contractAddendaTable)
     .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
     .orderBy(asc(contractAddendaTable.sequence));
-  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin }));
+  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin, documentReference: r.documentReference ?? "" }));
 }
 
 /**

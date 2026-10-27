@@ -6,6 +6,7 @@
  *  R1  falha no vínculo do registro (após o contrato existir) ⇒ nova tentativa completa vínculo, histórico e vencimento; 3ª tentativa nada grava
  *  R2  contrato externo monitorado: falha ao gravar o vencimento do contrato ⇒ o vencimento do REGISTRO não se perde; retomada transfere sem duplicar
  *  R3  registro ligado a OUTRO contrato continua recusado sem escrita
+ *  R4  retomada que diverge (outro registro, outro término, outro histórico) ⇒ CONFLICT sem escrita
  * Só roda com DATABASE_URL.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -153,6 +154,31 @@ describe.skipIf(!DB)("Contrato vigente legado — retomada após falha parcial (
     expect(await n("SELECT COUNT(*) n FROM operational_timeline WHERE organization_id = ? AND action = 'vigencia_transferida' AND reference_id = ?", [ORG, record.id])).toBe(1);
     await mgr.contractWorkspace.registerInForceContract({ ...input, idempotencyKey: `r2b-${RUN}` });
     expect(await snapshot(cid, record.id)).toEqual(done);
+  }, 120_000);
+
+  it("R4 — retomada que DIVERGE do já gravado é recusada antes de qualquer escrita (outro registro, outro término, outro histórico)", async () => {
+    const op = await caller(U.operator);
+    const mgr = await caller(U.manager);
+    const endA = plusDays(20);
+    const a = await op.operationRecord.createRecord({ recordType: "contrato_externo", origin: "externa", number: `CE-R4A-${RUN}`, object: "Vigilância sintética", expirationDate: endA });
+    const b = await op.operationRecord.createRecord({ recordType: "contrato_externo", origin: "externa", number: `CE-R4B-${RUN}`, object: "Vigilância sintética", expirationDate: plusDays(50) });
+    const base = { contractNumber: `CT-R4-${RUN}`, contractor: "Vigilância Sintética", object: "Vigilância sintética", term: "12 meses",
+      priorAmendments: [{ type: "prazo" as const, reference: "1º TA (sintético)" }] };
+    const r = await mgr.contractWorkspace.registerInForceContract({ ...base, idempotencyKey: `r4a-${RUN}`, legacyRecordId: a.record.id });
+    const cid = r.workspace.id;
+    const before = { b: await snapshot(cid, b.record.id), a: await snapshot(cid, a.record.id) };
+
+    // mesmo contrato a partir de OUTRO registro: recusa; o vencimento de B continua monitorado
+    expect((await err(mgr.contractWorkspace.registerInForceContract({ ...base, idempotencyKey: `r4b-${RUN}`, legacyRecordId: b.record.id })))?.code).toBe("CONFLICT");
+    // outro término: recusa (alteração de vigência é pelo aditivo de prazo)
+    expect((await err(mgr.contractWorkspace.registerInForceContract({ ...base, idempotencyKey: `r4c-${RUN}`, legacyRecordId: a.record.id, endDate: plusDays(99) })))?.code).toBe("CONFLICT");
+    // histórico anterior com outro conteúdo na mesma sequência: recusa
+    expect((await err(mgr.contractWorkspace.registerInForceContract({ ...base, idempotencyKey: `r4d-${RUN}`, legacyRecordId: a.record.id, priorAmendments: [{ type: "valor" as const, reference: "1º TA (sintético)" }] })))?.code).toBe("CONFLICT");
+    expect({ b: await snapshot(cid, b.record.id), a: await snapshot(cid, a.record.id) }).toEqual(before);
+    expect(before.b).toMatchObject({ linkedTo: null, recordExpiry: 6 });
+    // mesmo término já gravado ⇒ converge sem nada novo
+    await mgr.contractWorkspace.registerInForceContract({ ...base, idempotencyKey: `r4e-${RUN}`, legacyRecordId: a.record.id, endDate: endA });
+    expect(await snapshot(cid, a.record.id)).toEqual(before.a);
   }, 120_000);
 
   it("R3 — registro já ligado a OUTRO contrato continua recusado sem escrita", async () => {

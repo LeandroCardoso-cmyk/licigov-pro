@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1793045783.261342,
-    "ast_hash": "460f1ee575ead3bad2311a91f41fc82a",
+    "mtime": 1793061394.8652565,
+    "ast_hash": "107348114f416be3d544f318d1ece6d8",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -6960,8 +6960,8 @@
     "semantic_hash": ""
   },
   "server/db/departmentOperation.ts": {
-    "mtime": 1793045783.261342,
-    "ast_hash": "3b8a52e42547d3c412c7f9cc70f1a628",
+    "mtime": 1793061394.8643646,
+    "ast_hash": "6f225f5fb753c48050378efbc1b10f3c",
     "semantic_hash": ""
   },
   "server/db/directContracts.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1793060902.2654414,
-    "ast_hash": "174168c9ac9bfd36abff1ef5c3f913f4",
+    "mtime": 1793061394.866442,
+    "ast_hash": "0d8002e71ab3ce95e75ef930fbdb4680",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1793060720.4256234,
-    "ast_hash": "9ddf7faab747e1db6a227217f82803fd",
+    "mtime": 1793061489.1362097,
+    "ast_hash": "7e3d5e6c3153b0cfdf55c599fc112e8e",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -15420,8 +15420,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/legacy-contract-resume-mysql-smoke.test.ts": {
-    "mtime": 1793060868.7614405,
-    "ast_hash": "6ba51c57e5534a713ad6c4c477d10382",
+    "mtime": 1793061503.4580235,
+    "ast_hash": "6a4e1b75d2a205a81e68668bdae802af",
     "semantic_hash": ""
   },
   "server/__tests__/unit/legal-opinion-reasoning-request.test.ts": {

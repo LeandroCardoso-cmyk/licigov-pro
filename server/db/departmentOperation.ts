@@ -376,6 +376,16 @@ export async function getOperationRecordById(orgId: number, recordId: string): P
   return { ...mapOperationRecordRow(r), referenceType: r.referenceType, referenceId: r.referenceId, documentReferences: refs };
 }
 
+/** Ids dos registros operacionais (do órgão) já vinculados a um workspace de domínio. */
+export async function listOperationRecordIdsLinkedTo(orgId: number, referenceType: string, referenceId: string): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ id: operationRecordsTable.id }).from(operationRecordsTable).where(and(
+    eq(operationRecordsTable.organizationId, orgId), eq(operationRecordsTable.referenceType, referenceType), eq(operationRecordsTable.referenceId, referenceId),
+  ));
+  return rows.map((r) => r.id);
+}
+
 /**
  * Vincula o registro operacional a UM workspace de domínio (complementa; nunca duplica). Só liga se o registro ainda não
  * referencia nada OU já referencia o MESMO alvo (idempotente). Devolve o estado final: `linked` (novo/igual) ou o alvo
