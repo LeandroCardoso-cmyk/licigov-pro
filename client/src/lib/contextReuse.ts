@@ -16,6 +16,8 @@ export interface TrParamViewModel {
   defaultEligible: boolean;
   /** M8 — suprido pela fonte autoritativa (servidor): não é pendência. */
   suppliedBy?: { source: "tr_oficial"; value: string; version: number } | { source: "processo"; value: string };
+  /** Motivo conhecido de o campo continuar pendente (servidor). */
+  pendingReason?: { code: "LEGACY_TR_WITHOUT_OBJECT"; trVersion: number };
 }
 export type TrStructuredView =
   | { status: "UNAVAILABLE"; reason: string }
@@ -51,6 +53,25 @@ export function suppliedByText(s: NonNullable<TrParamViewModel["suppliedBy"]>): 
     ? `Obtido do TR oficial emitido (v${s.version}), que registra o objeto do processo; o Edital usa este valor. Não é preciso digitar de novo.`
     : "Obtido do objeto do processo: a emissão do TR registra este objeto e o Edital o reaproveita. Não é preciso digitar de novo.";
 }
+/** Explicação do motivo de pendência informado pelo servidor (null = sem motivo especial). */
+export function pendingReasonText(r: TrParamViewModel["pendingReason"]): string | null {
+  if (!r) return null;
+  return `O TR oficial vigente (v${r.trVersion}) foi emitido antes de o sistema registrar o objeto completo. O Edital por modelo `
+    + "institucional usa o objeto registrado no próprio TR emitido; por isso, com esta versão do TR, ele continuará pendente. "
+    + "Informar o valor aqui não altera o TR emitido e só vale para uma versão do TR emitida depois deste registro — a abertura de "
+    + "nova versão de documento já emitido depende de definição institucional ainda pendente.";
+}
+
+/**
+ * Texto do estado "parâmetros estruturados indisponíveis" — só quando há algo que a pessoa possa fazer (escolher o escopo do Edital
+ * para definir o modelo). Demais motivos são técnicos/de configuração: nada é exibido no TR (null).
+ */
+export function trStructuredUnavailableText(reason: string): string | null {
+  return /catálogos diferentes/.test(reason)
+    ? "Parâmetros estruturados da contratação: escolha a modalidade, a forma e a plataforma na etapa Edital para definir o modelo aplicável."
+    : null;
+}
+
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */
 export const trOptionalFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
   fields.filter((f) => f.active && !f.required && !f.conditional && f.status === "UNSET");

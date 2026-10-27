@@ -5,7 +5,9 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../db/procurement", () => ({ listProcesses: async () => [{ id: "canonical", processNumber: "PROC-CANON", object: "Processo canônico fictício", modality: "Pregão", currentStage: "NEW_PROCESS", status: "rascunho" }] }));
+vi.mock("../../db/procurement", () => ({ listProcesses: async () => [{ id: "canonical", processNumber: "PROC-CANON", object: "Processo canônico fictício", modality: "Pregão", currentStage: "NEW_PROCESS", status: "rascunho" }], listActiveProcessRefsByIds: async () => [] }));
+// Sem registros governados de processo: nenhuma sessão derivada da Configuração do certame.
+vi.mock("../../db/institutionalDecisions", () => ({ listCurrentDecisionsBySubjectType: async () => [] }));
 vi.mock("../../db/directProcurement", () => ({ listDirectProcurementWorkspaces: async () => [] }));
 vi.mock("../../db/contractWorkspace", () => ({ listContractWorkspaces: async () => [], countContractAddendaByOrg: async () => 0 }));
 vi.mock("../../db/legalOpinionWorkspace", () => ({ listLegalOpinionWorkspaces: async () => [] }));

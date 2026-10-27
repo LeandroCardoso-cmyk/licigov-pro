@@ -44,6 +44,8 @@ import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
 } from "../domain/processCreateContract";
 import { listContextFacts } from "../db/procurementContext";
+import { editalScopeSelection } from "../domain/editalScopeSelection";
+import { getEditalScopeSelection, recordEditalScope } from "../services/editalScopeService";
 import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
 import { getLatestOfficialPromotion, listLatestOfficialVersions } from "../db/officialDocumentPromotions";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
@@ -149,13 +151,18 @@ const STATUS_SLUGS: Record<string, string> = {
 /** Bridge Edital → Modelos Institucionais: ports de composição quando integrados (senão, feature OFF) e relógio do servidor. */
 const bridgeDeps = (): BridgeDeps => ({ ports: templateCompositionPortsConfigured() ? getTemplateCompositionPorts() : null, now: () => new Date().toISOString() });
 
-/** Parâmetros efetivos da fronteira: proposta explícita sobre os persistidos pelo fluxo legado (campo a campo). */
+/**
+ * Parâmetros efetivos da fronteira: proposta explícita, campo a campo, sobre a BASE = parâmetros persistidos do Edital gerado
+ * (fluxo legado) ou, antes da 1ª geração, o escopo escolhido pela pessoa (`edital.scope`). A base é um conjunto inteiro
+ * (nunca mistura campos de fontes diferentes).
+ */
 async function editalBoundaryParams(orgId: number, processId: string, proposal: { modality?: string; form?: string; platform?: string }) {
   const persisted = persistedEditalParameters(await getGeneratedDocumentByKind(processId, orgId, "edital"));
+  const base = persisted ?? editalScopeSelection(await listContextFacts(orgId, processId)).scope;
   return {
-    modality: proposal.modality ?? persisted?.modality ?? null,
-    form: proposal.form ?? persisted?.form ?? null,
-    platform: proposal.platform ?? persisted?.platform ?? null,
+    modality: proposal.modality ?? base?.modality ?? null,
+    form: proposal.form ?? base?.form ?? null,
+    platform: proposal.platform ?? base?.platform ?? null,
   };
 }
 
@@ -798,6 +805,25 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       return getBudgetDisclosureState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
     }),
+
+  /** Escopo do Edital (modalidade/forma/plataforma) escolhido antes da 1ª geração — somente leitura. */
+  editalScopeSelection: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => getEditalScopeSelection(ctx.organizationId!, input.processId)),
+
+  /**
+   * Registra (humano) o escopo do Edital escolhido antes da 1ª geração, para sobreviver ao recarregamento. Só a escolha: não
+   * gera, não aprova, não publica. CAS por `expectedValueHash`; mesmo valor ⇒ idempotente.
+   */
+  recordEditalScope: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1), modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).nullable().optional(),
+      expectedValueHash: z.string().length(16).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => recordEditalScope({
+      organizationId: ctx.organizationId!, processId: input.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+      scope: { modality: input.modality, form: input.form, platform: input.platform ?? null }, expectedValueHash: input.expectedValueHash,
+    })),
 
   /** Confirma (humano) parâmetros estruturados do TR no Contexto Canônico: append-only, tenant-scoped, sem IA. */
   recordTrStructuredParams: orgRoleProcedure("operator")

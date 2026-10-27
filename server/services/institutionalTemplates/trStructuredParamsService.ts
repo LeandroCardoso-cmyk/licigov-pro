@@ -17,8 +17,8 @@ import { authorityEntryOf, isDefaultEligible } from "../../domain/institutionalT
 import type { EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import {
-  encodeTrParamValue, processObjectSupply, resolveTrParams, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT, trParamPath, trParamsDigest,
-  type TrParamSupply,
+  encodeTrParamValue, processObjectPendingReason, processObjectSupply, resolveTrParams, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT, trParamPath, trParamsDigest,
+  type TrParamPendingReason, type TrParamSupply,
 } from "../../domain/trStructuredParams";
 import { getLatestEmittedByOrigin } from "../../db/officialDocuments";
 import { resolveField } from "../../domain/canonicalProcurementContext";
@@ -54,6 +54,8 @@ export interface TrParamView {
   readonly defaultEligible: boolean;
   /** M8 — sem valor no TR, mas SUPRIDO pela fonte autoritativa (TR oficial vigente ou objeto do processo): não é pendência. */
   readonly suppliedBy?: TrParamSupply;
+  /** Motivo conhecido de o campo continuar pendente (ex.: TR oficial vigente emitido sem registrar o objeto). */
+  readonly pendingReason?: TrParamPendingReason;
 }
 
 export type TrStructuredState =
@@ -89,6 +91,7 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
     getLatestEmittedByOrigin(organizationId, PROCUREMENT_DOMAIN, processId, "tr"),
   ]);
   const objectSupply = processObjectSupply(process?.object, currentTr);
+  const objectPendingReason = processObjectPendingReason(process?.object, currentTr);
   const defs = trParamDefs(catalog);
   const resolved = resolveTrParams(defs, facts);
   const proposals = trParamProposals(catalog, orgRecord);
@@ -116,6 +119,7 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
       ...(prop && r.status === "UNSET" ? { proposal: { value: prop.value, orgProfileRevision: prop.revision } } : {}),
       defaultEligible: isDefaultEligible(def.name),
       ...(r.status === "UNSET" && objectSupply && TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name) ? { suppliedBy: objectSupply } : {}),
+      ...(r.status === "UNSET" && objectPendingReason && TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name) ? { pendingReason: objectPendingReason } : {}),
     };
   });
   const activeFields = fields.filter((f) => f.active && (f.required || f.conditional));

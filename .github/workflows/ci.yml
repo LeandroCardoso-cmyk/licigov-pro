@@ -482,6 +482,7 @@ jobs:
           server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts \
+          server/__tests__/integration/edital-scope-calendar-mysql-smoke.test.ts \
           server/__tests__/integration/templates-governance-v2-mysql-smoke.test.ts \
           server/__tests__/integration/templates-0318-migration-mysql-smoke.test.ts \
           server/__tests__/integration/templates-fast-mysql-smoke.test.ts

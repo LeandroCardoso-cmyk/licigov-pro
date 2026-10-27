@@ -1,5 +1,7 @@
 import React from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
+import { calendarReferenceHref } from "@shared/operationalCalendar";
 import { trpc } from "../../lib/trpc";
 import OperationalDashboard from "./OperationalDashboard";
 import OperationalMonitoringPanel from "./OperationalMonitoringPanel";
@@ -45,7 +47,12 @@ export default function DepartmentOperationHome({ showPageHeader = true }: Depar
   const [tab, setTab] = React.useState<Tab>("centro");
   const [focusRecordId, setFocusRecordId] = React.useState<string | null>(null);
   const openRecord = (id: string) => { setFocusRecordId(id); setTab("registros"); };
-  const openReference = (type: string, id: string) => { if (type === "operation_record") openRecord(id); };
+  const [, navigate] = useLocation();
+  const openReference = (type: string, id: string) => {
+    if (type === "operation_record") { openRecord(id); return; }
+    const href = calendarReferenceHref(type, id);
+    if (href) navigate(href);
+  };
   // PR B (Escopo 4) — o botão agora ENTREGA o relatório: antes a mutation era
   // disparada e o resultado descartado (botão sem comportamento visível). O
   // Document Engine ainda produz o relatório em MARKDOWN; para não prometer o que
