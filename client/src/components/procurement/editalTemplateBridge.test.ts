@@ -48,8 +48,11 @@ describe("EditalTemplateBridgeCard", () => {
     expect(html).toMatch(/name="edital-tr-pin"[^>]*checked/);
     expect(html).toMatch(/disabled=""[^>]*name="edital-tr-pin"|name="edital-tr-pin"[^>]*disabled=""/);   // a versão obsoleta não é selecionável
   });
-  it("BOUND sem TR oficial emitido: TR_OFICIAL_EXATO_NECESSARIO", () => {
-    expect(h({ resolution: BOUND, candidates: [], selectedTrId: null, onSelectTr: () => undefined })).toContain("TR_OFICIAL_EXATO_NECESSARIO");
+  it("BOUND sem TR oficial emitido: mensagem para o servidor, código técnico só como atributo (M8: não exibido)", () => {
+    const html = h({ resolution: BOUND, candidates: [], selectedTrId: null, onSelectTr: () => undefined });
+    expect(html).toContain('data-code="TR_OFICIAL_EXATO_NECESSARIO"');
+    expect(html).not.toContain("TR_OFICIAL_EXATO_NECESSARIO —");
+    expect(html).toContain("Emita o TR oficial deste processo antes.");
   });
   it("NOT_BOUND: mensagem de fluxo governado atual; FEATURE_OFF/parâmetros incompletos: nada", () => {
     expect(h({ resolution: { status: "NOT_BOUND", reason: "NO_BINDING" }, candidates: [], selectedTrId: null, onSelectTr: () => undefined })).toContain(NOT_BOUND_MESSAGE);

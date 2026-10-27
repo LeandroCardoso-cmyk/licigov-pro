@@ -65,7 +65,7 @@ export default function InstitutionalInbox({
             Caixa institucional — {domainLabel(domain)}
           </h2>
           <p className="text-xs text-gray-500">
-            Solicitações encaminhadas pelo Institutional Request Engine. Documentos referenciados, nunca copiados.
+            Solicitações encaminhadas pelos setores do órgão. Os documentos são referenciados, nunca copiados.
           </p>
         </div>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-200">

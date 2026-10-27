@@ -33,6 +33,7 @@ import {
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
+import { getOrganizationMemberNames } from "../db/organizations";
 // NEW-022 — bloqueio da ativação genérica (import isolado: não sobrepõe as linhas de import editadas por NEW-006/PR-08/PR-12).
 import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
@@ -244,7 +245,15 @@ export const contractWorkspaceRouter = router({
         listProcessTimeline(input.contractId, orgId),
         getCurrentExpirationDate(orgId, "contrato", input.contractId), // vigência acompanhada (derivada dos eventos do Centro de Operações)
       ]);
-      return { workspace, documents, addenda, apostilles, occurrences, timeline, expiration: expirationDate ? { endDate: expirationDate, source: "centro_operacoes" as const } : null };
+      // M8 — nome do ator na linha do tempo (o ledger guarda "user:<id>"; append-only, não é reescrito): resolvido só entre
+      // membros DESTA organização; sem membro ⇒ sem nome (a tela mostra "Usuário nº …").
+      const actorIds = timeline.map((ev) => /^(?:user:)?(\d+)$/.exec(String(ev.actor ?? ""))?.[1]).filter((v): v is string => !!v).map(Number);
+      const names = await getOrganizationMemberNames(orgId, actorIds).catch(() => new Map<number, string>());
+      const namedTimeline = timeline.map((ev) => {
+        const id = /^(?:user:)?(\d+)$/.exec(String(ev.actor ?? ""))?.[1];
+        return { ...ev, actorName: id ? names.get(Number(id)) ?? null : null };
+      });
+      return { workspace, documents, addenda, apostilles, occurrences, timeline: namedTimeline, expiration: expirationDate ? { endDate: expirationDate, source: "centro_operacoes" as const } : null };
     }),
 
   listContracts: tenantProcedure

@@ -705,8 +705,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractWorkspace.tsx": {
-    "mtime": 1792983547.077792,
-    "ast_hash": "7586bd3f61428b8a502d2e489d7b2842",
+    "mtime": 1793110516.3209703,
+    "ast_hash": "fbe362f46c748542a21706094a3e96c7",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/ContractsHome.tsx": {
@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/TimelinePanel.tsx": {
-    "mtime": 1792983547.077792,
-    "ast_hash": "e92ac57574f668394c593eaea5b9e0e8",
+    "mtime": 1793110605.0792727,
+    "ast_hash": "9e946761c153753905210a2b70a79b29",
     "semantic_hash": ""
   },
   "client/src/components/contract-workspace/contractErrorPolicy.test.ts": {
@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementHome.tsx": {
-    "mtime": 1792983547.0806003,
-    "ast_hash": "a4d2a5d117d9f5c6d34daa6bd50dee88",
+    "mtime": 1793110516.3198595,
+    "ast_hash": "81d40201b681e17376f4be67e9d17a52",
     "semantic_hash": ""
   },
   "client/src/components/direct-procurement/DirectProcurementOverview.tsx": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": ""
   },
   "client/src/components/institutional-request/InstitutionalInbox.tsx": {
-    "mtime": 1792983547.083776,
-    "ast_hash": "5b34855da9709af256035c3b1174f87d",
+    "mtime": 1793110516.3202035,
+    "ast_hash": "fe3fbbd5b49e2792333e4c78df655b71",
     "semantic_hash": ""
   },
   "client/src/components/institutional-request/NotificationCenter.tsx": {
@@ -1300,8 +1300,8 @@
     "semantic_hash": ""
   },
   "client/src/components/institutional-request/RequestDetails.tsx": {
-    "mtime": 1792983547.083776,
-    "ast_hash": "8bea34d7b02c4819dcd671f6e760b339",
+    "mtime": 1793110516.32064,
+    "ast_hash": "84db9412cd6901363d3c1ec3e6f99bb2",
     "semantic_hash": ""
   },
   "client/src/components/institutional-request/RequestHistory.tsx": {
@@ -1525,8 +1525,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/InstitutionalInbox.tsx": {
-    "mtime": 1792983547.0875216,
-    "ast_hash": "d8e0943be5477f66f3a6f698937a8677",
+    "mtime": 1793110516.3188486,
+    "ast_hash": "9dc3a37ef4f9260ee44888a1dde4271c",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LawyerDashboard.tsx": {
@@ -1560,13 +1560,13 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/RequestContextPanel.tsx": {
-    "mtime": 1792983547.0877106,
-    "ast_hash": "492605f3d4f1c41ed4a073076a1ff39c",
+    "mtime": 1793110563.0973477,
+    "ast_hash": "0cc4c6ab0696f3e23eb24cede2c0ee2c",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/SignaturePanel.tsx": {
-    "mtime": 1792983547.0877106,
-    "ast_hash": "172963d57cd59965e7044892eae887c9",
+    "mtime": 1793110516.3193955,
+    "ast_hash": "620a56669dc161ceb16e1487a4b5d572",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/TimelinePanel.tsx": {
@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1793108337.5024273,
-    "ast_hash": "ed4f9e674666af7e3c0e6d174d08f8b9",
+    "mtime": 1793110485.767892,
+    "ast_hash": "e5a8e0dc6fda7419578a994c077a65be",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1840,8 +1840,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessOverview.tsx": {
-    "mtime": 1792985950.414795,
-    "ast_hash": "935a57332b52e4832fe52a8c25b4911c",
+    "mtime": 1793110536.869338,
+    "ast_hash": "8fa22feb2d0cf391fd91d9ef7d57bc08",
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcessoLicitatorioHome.tsx": {
@@ -8665,8 +8665,8 @@
     "semantic_hash": ""
   },
   "server/routers/authRouter.ts": {
-    "mtime": 1792983547.5912764,
-    "ast_hash": "a604c79ec0dcbf6d410b9bb67035e486",
+    "mtime": 1793110563.116085,
+    "ast_hash": "926d8c7ea9ecc8c2fb2c5d01487aadda",
     "semantic_hash": ""
   },
   "server/routers/billingRouter.ts": {
@@ -8725,8 +8725,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractWorkspaceRouter.ts": {
-    "mtime": 1792983547.5912764,
-    "ast_hash": "eb1e22c20fb18bb2bdae93cd93a6dcce",
+    "mtime": 1793110605.0787075,
+    "ast_hash": "2de56cbe9aa4ac15b795f12d400961ed",
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
@@ -14365,13 +14365,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateBridgeCard.tsx": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "a655d06d2c21121b5c4a319972b94916",
+    "mtime": 1793110477.5862732,
+    "ast_hash": "f28342e44ca99ab1279c816f49c803cd",
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalTemplateBridge.test.ts": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "7ac4b1ee481a5967ea9e12bfc395dbeb",
+    "mtime": 1793110477.5875793,
+    "ast_hash": "ed63ca5dcaa84434b895696a123de646",
     "semantic_hash": ""
   },
   "client/src/lib/editalTemplateBridge.ts": {
@@ -15375,8 +15375,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/m8VisualHomologation.test.ts": {
-    "mtime": 1793108337.5075827,
-    "ast_hash": "a50fe7c73e274d29be71389124fcdb73",
+    "mtime": 1793110581.8510742,
+    "ast_hash": "6e3afecb64dd44817516f755bf393283",
     "semantic_hash": ""
   },
   "client/src/lib/ingestionHistoryView.ts": {
@@ -15385,8 +15385,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/processDocumentStatus.ts": {
-    "mtime": 1792985945.1035311,
-    "ast_hash": "d5aa6eaf5bbe25aefbc74728c2f1000e",
+    "mtime": 1793110536.8688936,
+    "ast_hash": "b78c9b20b07089d885d59800049eaea6",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-visual-homologation-mysql-smoke.test.ts": {
@@ -15562,6 +15562,11 @@
   "client/src/lib/budgetBaseDateSuggestion.ts": {
     "mtime": 1793110212.0530386,
     "ast_hash": "28f03472c7fa98cf7224ce8fcba19b21",
+    "semantic_hash": ""
+  },
+  "client/src/components/contract-workspace/timelinePanel.test.ts": {
+    "mtime": 1793110649.7330647,
+    "ast_hash": "10fc010af9307eca99d8ce0e20a6d3da",
     "semantic_hash": ""
   }
 }

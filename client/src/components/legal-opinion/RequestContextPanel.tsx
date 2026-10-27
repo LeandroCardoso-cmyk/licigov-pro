@@ -80,7 +80,7 @@ export default function RequestContextPanel({
 
       <section className={`rounded-lg border p-4 ${reasoningError ? "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50" : "border-indigo-100 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/40"}`}>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className={`text-sm font-semibold ${reasoningError ? "text-amber-900 dark:text-amber-200" : "text-indigo-900 dark:text-indigo-200"}`}>Reasoning &amp; Explainability</h3>
+          <h3 className={`text-sm font-semibold ${reasoningError ? "text-amber-900 dark:text-amber-200" : "text-indigo-900 dark:text-indigo-200"}`}>Apoio à decisão — Copiloto Jurídico</h3>
           {reasoningError ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-200 dark:ring-amber-800">
               apoio indisponível

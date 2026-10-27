@@ -69,7 +69,7 @@ export default function RequestDetails({ requestId = "" }: RequestDetailsProps) 
           </span>
         </div>
         <p className="mt-1 text-xs text-gray-500">
-          Comunicação intermediada pelo Institutional Request Engine — os domínios não conversam diretamente.
+          A comunicação entre os setores passa por esta solicitação — cada setor mantém os próprios documentos.
         </p>
       </header>
 
