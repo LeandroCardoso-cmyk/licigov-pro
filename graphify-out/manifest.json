@@ -5745,8 +5745,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-reextraction-mysql-smoke.test.ts": {
-    "mtime": 1793044114.8916097,
-    "ast_hash": "627658a3ce71b9342a087973302b9d93",
+    "mtime": 1793062431.7977908,
+    "ast_hash": "9cfdac01c25e43d3e26949232c78caf5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/ingestion-reprocess-router.test.ts": {
@@ -9825,8 +9825,8 @@
     "semantic_hash": ""
   },
   "server/services/importReprocessService.ts": {
-    "mtime": 1793043991.1416018,
-    "ast_hash": "5ba0d5ae2b936a4cc7848689adc0fb51",
+    "mtime": 1793062477.261475,
+    "ast_hash": "bf5bf5c7273bfa176b62f7ac8cd96037",
     "semantic_hash": ""
   },
   "server/services/importStagingService.ts": {

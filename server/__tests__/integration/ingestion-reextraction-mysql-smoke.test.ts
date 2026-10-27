@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { createHash } from "crypto";
 import mysql from "mysql2/promise";
 import PDFDocument from "pdfkit";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 990901;
@@ -448,6 +448,15 @@ describe.skipIf(!DB)("Layout v2 — PDF digital layout-aware + reprocessamento s
     await expect(reserveAs(s.id, "auditoria inválida", "x".repeat(37))).rejects.toThrow(); // correlationId > varchar(36)
     expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
     expect(await leaseTokenIn(s.id)).toBeNull();
+    expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextraction_requested'", [ORG, s.id])).toBe(0);
+  });
+
+  it("15) resumo da extração que não é objeto JSON: a reserva é recusada e desfeita (sessão nunca fica em reprocessing sem dono)", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    await (await getDb())!.update(importSessions).set({ extractionSummary: sql`CAST('[1,2]' AS JSON)` as never }).where(mysqlScope(s.id, ORG));
+    await expect(reserveAs(s.id, "resumo malformado")).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
     expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextraction_requested'", [ORG, s.id])).toBe(0);
   });
 });

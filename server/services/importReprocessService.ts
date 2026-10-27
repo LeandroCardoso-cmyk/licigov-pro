@@ -145,6 +145,13 @@ export async function reserveReextraction(p: ReserveParams): Promise<{ previousS
     if ((header?.affectedRows ?? 0) !== 1) {
       throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um reprocessamento em andamento para esta sessão." });
     }
+    // O JSON_SET não grava em resumo que não seja OBJETO JSON (sem erro): confere o token gravado; sem ele, desfaz a reserva
+    // (a sessão nunca fica em `reprocessing` sem dono).
+    const [held] = await tx.select({ token: sql<string | null>`JSON_UNQUOTE(JSON_EXTRACT(${importSessions.extractionSummary}, ${LEASE_TOKEN_PATH}))` })
+      .from(importSessions).where(and(eq(importSessions.id, p.sessionId), eq(importSessions.organizationId, p.organizationId))).limit(1);
+    if (held?.token !== lease.token) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "REPROCESS_FORBIDDEN: o resumo da extração desta sessão está em formato inesperado; nada foi alterado." });
+    }
     // Auditoria append-only NA MESMA transação: se não puder ser gravada, a reserva é desfeita (fail-closed).
     await tx.insert(activityLogs).values({
       organizationId: p.organizationId, userId: p.actorUserId, action: "import_reextraction_requested", sourceContext: "api",
