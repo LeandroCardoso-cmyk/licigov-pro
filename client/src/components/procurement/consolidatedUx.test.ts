@@ -7,7 +7,7 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { pendingReasonText, trPendingFields, trStructuredUnavailableText, type TrParamViewModel } from "@/lib/contextReuse";
 import { editalScopeToRecord } from "./regenerationGuard";
-import { calendarItemOriginText, calendarReferenceHref, processIdFromSearch } from "@shared/operationalCalendar";
+import { calendarItemOriginText, calendarReferenceHref, processIdFromSearch, processRouteSearch, tabFromSearch } from "@shared/operationalCalendar";
 
 const src = (rel: string) => readFileSync(join(__dirname, rel), "utf8");
 
@@ -87,11 +87,22 @@ describe("C3 — calendário: sessão declarada na Configuração do certame", (
     expect(processIdFromSearch("?processId=abc%2F1")).toBe("abc/1");
     expect(processIdFromSearch("?processId=%20")).toBeNull();
     expect(processIdFromSearch("")).toBeNull();
+    // M8 — ida e volta da rota do processo aberto (só identificadores; aba desconhecida ⇒ visão geral)
+    expect(processRouteSearch("abc/1", "tr")).toBe("?processId=abc%2F1&tab=tr");
+    expect(processRouteSearch("p1", "overview")).toBe("?processId=p1");
+    expect(processIdFromSearch(processRouteSearch("abc/1", "tr"))).toBe("abc/1");
+    expect(tabFromSearch(processRouteSearch("p1", "edital"), ["overview", "tr", "edital"] as const)).toBe("edital");
+    expect(tabFromSearch("?processId=p1&tab=../admin", ["overview", "tr"] as const)).toBeNull();
+    expect(tabFromSearch("?processId=p1", ["overview", "tr"] as const)).toBeNull();
   });
 
   it("Centro de Operações navega para o processo e a página de processos abre pelo link", () => {
     expect(src("../department-operation/DepartmentOperationHome.tsx")).toContain("calendarReferenceHref(type, id)");
     expect(src("../../pages/ProcessoLicitatorio.tsx")).toContain("processIdFromSearch(window.location.search)");
+    // M8 — reload: a URL acompanha processo e aba (replaceState) e o reload reabre os dois; processo alheio volta à lista.
+    expect(src("../../pages/ProcessoLicitatorio.tsx")).toContain("processRouteSearch(activeProcessId, activeTab)");
+    expect(src("../../pages/ProcessoLicitatorio.tsx")).toContain("tabFromSearch(window.location.search, STAGE_TABS.map((t) => t.key))");
+    expect(src("../../pages/ProcessoLicitatorio.tsx")).toContain("processQuery.isSuccess && !processQuery.data?.process");
     expect(src("../department-operation/OperationalCalendar.tsx")).toContain("calendarItemOriginText(e)");
   });
 });

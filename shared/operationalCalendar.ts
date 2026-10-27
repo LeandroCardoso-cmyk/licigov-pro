@@ -42,6 +42,22 @@ export function processIdFromSearch(search: string): string | null {
   return id ? id : null;
 }
 
+/**
+ * M8 — o processo aberto (e a aba) ficam na URL (`/processos?processId=…&tab=…`) para sobreviver ao reload e ao link direto.
+ * Só identificadores: nenhum dado do processo vai para a URL ou para o storage; o servidor continua validando o acesso.
+ */
+export function processRouteSearch(processId: string, tab?: string | null): string {
+  const q = new URLSearchParams({ processId });
+  if (tab && tab !== "overview") q.set("tab", tab);
+  return `?${q.toString()}`;
+}
+
+/** Aba da URL, só se for uma aba conhecida (valor desconhecido ⇒ null: abre a visão geral). */
+export function tabFromSearch<T extends string>(search: string, validTabs: readonly T[]): T | null {
+  const t = new URLSearchParams(search).get("tab")?.trim();
+  return t && (validTabs as readonly string[]).includes(t) ? (t as T) : null;
+}
+
 /** Diferenciação visual mínima exigida pela v1. */
 export type CalendarItemKind = "certame" | "timed" | "allDay";
 

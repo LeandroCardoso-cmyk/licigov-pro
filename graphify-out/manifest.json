@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1793108337.5075827,
-    "ast_hash": "4dce699ef89a8c044e81ccb512624398",
+    "mtime": 1793110343.2414777,
+    "ast_hash": "9af9d93cf37e6d5e8ae63748d5eb2445",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -10510,8 +10510,8 @@
     "semantic_hash": ""
   },
   "shared/operationalCalendar.ts": {
-    "mtime": 1793108337.6449273,
-    "ast_hash": "2f9efc78da0d5934347423db9be6f892",
+    "mtime": 1793110337.749878,
+    "ast_hash": "0e14bc749094990b233c9b4fbc710eb3",
     "semantic_hash": ""
   },
   "shared/timezone.ts": {
@@ -15440,8 +15440,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/consolidatedUx.test.ts": {
-    "mtime": 1793108337.5067284,
-    "ast_hash": "62e1e2dd57203db9118a26354d2b4a48",
+    "mtime": 1793110373.8071651,
+    "ast_hash": "bc317b31ad8cf4e0b38cc5d9fda2b39b",
     "semantic_hash": ""
   },
   "server/__tests__/integration/document-engine-generate-guard.test.ts": {
