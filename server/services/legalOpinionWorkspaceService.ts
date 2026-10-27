@@ -21,8 +21,9 @@ import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
 import { resumeReceiveRequest, respondRequest } from "./institutionalRequestService";
 import { getMembership } from "./tenantService";
 import { getUserById } from "../db/users";
+import { resolveOpinionReference, type OpinionReference } from "./legalOpinionReference";
 import {
-  getRequest, listRequestTimeline, listDocumentReferences,
+  getRequest, listRequestTimeline, listDocumentReferences, getResponseForRequest,
 } from "../db/institutionalRequests";
 import {
   createLegalOpinionWorkspace, transitionLegalStage, assignLawyer, canLegalTransition,
@@ -235,6 +236,8 @@ export interface LegalOpinionContextBundle {
   readonly history: Awaited<ReturnType<typeof listLegalOpinionHistory>>;
   readonly versions: Awaited<ReturnType<typeof listLegalOpinionVersions>>;
   readonly snapshots: readonly string[];
+  /** M8 — origem legível (ex.: "Contrato nº X — Processo nº AAAA/NNNN"); label null = origem não identificada (declarado). */
+  readonly reference: OpinionReference;
 }
 
 /**
@@ -268,12 +271,13 @@ export async function loadWorkspaceContext(params: {
   const ws = await getLegalOpinionWorkspace(params.workspaceId, params.organizationId);
 
   const requestId = ws?.requestId ?? "";
-  const [documents, timeline, history, draft, versions] = await Promise.all([
+  const [documents, timeline, history, draft, versions, reference] = await Promise.all([
     requestId ? listDocumentReferences(requestId, params.organizationId) : Promise.resolve([]),
     requestId ? listRequestTimeline(requestId, params.organizationId) : Promise.resolve([]),
     listLegalOpinionHistory(params.workspaceId, params.organizationId),
     getLegalOpinionDraftByWorkspace(params.workspaceId, params.organizationId),
     Promise.resolve([] as Awaited<ReturnType<typeof listLegalOpinionVersions>>),
+    resolveOpinionReference(params.organizationId, requestId, ws?.referenceProcessId),
   ]);
   const draftVersions = draft ? await listLegalOpinionVersions(draft.id, params.organizationId) : versions;
 
@@ -287,18 +291,20 @@ export async function loadWorkspaceContext(params: {
     history,
     versions: draftVersions,
     snapshots,
+    reference,
   };
 }
 
 /**
- * Pedido ao Copiloto Jurídico. Partes ausentes são OMITIDAS (nunca "referente ao processo " sem número): parecer sem processo
- * vinculado é pedido sem essa cláusula, sem nada presumido.
+ * Pedido ao Copiloto Jurídico. Partes ausentes são OMITIDAS (nunca "referente ao processo " sem número): parecer sem origem
+ * identificada é pedido sem essa cláusula, sem nada presumido. M8: a origem entra pelo RÓTULO humano resolvido no tenant
+ * ("Contrato nº X — Processo nº AAAA/NNNN") — nunca o id técnico do workspace de origem apresentado como número de processo.
  */
-export function opinionReasoningRequest(p: { requestId?: string | null; requestType?: string | null; referenceProcessId?: string | null }): string {
+export function opinionReasoningRequest(p: { requestId?: string | null; requestType?: string | null; referenceLabel?: string | null }): string {
   const id = p.requestId?.trim();
   const type = p.requestType?.trim() || "parecer";
-  const proc = p.referenceProcessId?.trim();
-  return `Analisar juridicamente a solicitação${id ? ` ${id}` : ""} (${type})${proc ? ` referente ao processo ${proc}` : ""}, com base na Lei 14.133/2021.`;
+  const ref = p.referenceLabel?.trim();
+  return `Analisar juridicamente a solicitação${id ? ` ${id}` : ""} (${type})${ref ? ` — origem: ${ref}` : ""}, com base na Lei 14.133/2021.`;
 }
 
 /**
@@ -321,9 +327,10 @@ export async function loadWorkspaceReasoning(params: {
   assertKernelAccess(DOMAIN, "institutional_rag");
   assertKernelAccess(DOMAIN, "copilot_infrastructure");
   assertKernelAccess(DOMAIN, "explainability");
+  const reference = await resolveOpinionReference(params.organizationId, requestId, ws?.referenceProcessId);
   const orchestration = await orchestrateMultiCopilot({
     organizationId: params.organizationId,
-    request: opinionReasoningRequest({ requestId, requestType: ws?.requestType, referenceProcessId: ws?.referenceProcessId }),
+    request: opinionReasoningRequest({ requestId, requestType: ws?.requestType, referenceLabel: reference.label }),
     copilotTypes: ["juridico"],
     correlationId: params.correlationId,
     invoke: params.invoke,
@@ -416,7 +423,7 @@ export async function createOpinionDraft(params: {
   await generateOfficialDocument({
     organizationId: params.organizationId, businessDomain: "parecer_juridico",
     documentType: params.opinionType === "LEGAL_OPINION_FINAL" ? "parecer_final" : "parecer_inicial",
-    origin: ws.id, title: `Parecer — ${ws.referenceProcessId || ws.id}`,
+    origin: ws.id, title: await opinionDocumentTitle(ws),
     content: `# Parecer Jurídico\n\n## Relatório\n${draft.report}\n\n## Fundamentação\n${draft.foundation}\n\n## Conclusão\n${draft.conclusion}`,
     author: String(params.author), correlationId: params.correlationId,
     metadata: { opinionType: params.opinionType, conclusionType: draft.conclusionType },
@@ -507,6 +514,12 @@ async function findEmitidoForContent(
   return false;
 }
 
+/** Título do documento do parecer: origem legível quando resolvida; senão "origem não identificada" (nunca o id técnico). */
+async function opinionDocumentTitle(ws: LegalOpinionWorkspace): Promise<string> {
+  const ref = await resolveOpinionReference(ws.organizationId, ws.requestId, ws.referenceProcessId);
+  return `Parecer — ${ref.label ?? "origem não identificada"}`;
+}
+
 /** Materializa a versão OFICIAL `emitido` do parecer assinado no Document Engine (pipeline ÚNICO). */
 async function materializeSignedParecer(ws: LegalOpinionWorkspace, signed: LegalOpinionDraft, signedBy: number, correlationId: string): Promise<void> {
   // SNAPSHOT humano da assinatura no MOMENTO da emissão (identidade histórica imutável):
@@ -516,7 +529,7 @@ async function materializeSignedParecer(ws: LegalOpinionWorkspace, signed: Legal
   await generateOfficialDocument({
     organizationId: ws.organizationId, businessDomain: "parecer_juridico",
     documentType: parecerDocumentType(signed.opinionType),
-    origin: ws.id, title: `Parecer — ${ws.referenceProcessId || ws.id}`,
+    origin: ws.id, title: await opinionDocumentTitle(ws),
     content: buildSignedParecerContent(signed),
     author: String(signedBy), status: "emitido", correlationId,
     metadata: {
@@ -650,17 +663,24 @@ export async function returnOpinion(params: {
   if (!draft.signed) throw new Error("O parecer precisa estar assinado antes da devolução.");
 
   const responseStatus = draft.conclusionType ? CONCLUSION_TO_RESPONSE[draft.conclusionType] : "concluido";
-  const result = await respondRequest({
+  const returned = transitionLegalStage(ws, "RETURNED"); // valida a etapa ANTES de qualquer escrita
+  // Convergência (NEW-007): falha entre a devolução no Engine e o espelho no workspace deixava a solicitação RETURNED e o
+  // workspace SIGNED; o retry quebrava no Engine e o parecer ficava NOT_GOVERNED para sempre. Se o Engine já devolveu a
+  // resposta "parecer" DESTE procurador, só falta espelhar o workspace — sem regravar a resposta.
+  const [request, existing] = await Promise.all([
+    getRequest(ws.requestId, params.organizationId), getResponseForRequest(ws.requestId, params.organizationId),
+  ]);
+  const alreadyReturned = request?.status === "RETURNED" && existing?.responseType === "parecer" && existing.responder === params.responder;
+  const responseId = alreadyReturned ? existing.id : (await respondRequest({
     id: ws.requestId, organizationId: params.organizationId, responder: params.responder,
     responseType: "parecer", responseStatus,
     comments: draft.conclusion || draft.report, attachedDocuments: [...draft.attachments],
-    correlationId: params.correlationId,
-  });
+    correlationId: params.correlationId, authority: "legal_opinion_workspace",
+  })).responseId;
 
-  const returned = transitionLegalStage(ws, "RETURNED");
   await updateLegalOpinionWorkspaceStage(returned.id, returned.organizationId, returned.currentStage, returned.status, returned.assignedLawyer, returned.updatedAt);
-  await recordHistory(returned, "returned", String(params.responder), `Parecer devolvido automaticamente ao domínio ${ws.sourceDomain}.`, result.responseId);
-  return { workspace: returned, responseId: result.responseId };
+  await recordHistory(returned, "returned", String(params.responder), `Parecer devolvido automaticamente ao domínio ${ws.sourceDomain}.`, responseId);
+  return { workspace: returned, responseId };
 }
 
 export async function archiveWorkspace(params: {

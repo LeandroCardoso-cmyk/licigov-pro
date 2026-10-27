@@ -54,6 +54,15 @@ export function modalityLabel(modality: string | null | undefined): string {
   return MODALITY_LABELS[modality] ?? modality;
 }
 
+/**
+ * M8 — modalidade exibida na Visão Geral: a do processo; se o processo não a tem mas o escopo do Edital foi escolhido (fato
+ * `edital.scope`), mostra-a indicando a origem. Só leitura: nada é gravado no processo.
+ */
+export function overviewModalityText(processModality: string | null | undefined, scopeModality: string | null | undefined): string {
+  if (processModality) return modalityLabel(processModality);
+  return scopeModality ? `${modalityLabel(scopeModality)} (escopo do Edital)` : "—";
+}
+
 export function draftStatusLabel(status: string | null | undefined): string {
   if (!status) return "—";
   return DRAFT_STATUS_LABELS[status] ?? status;

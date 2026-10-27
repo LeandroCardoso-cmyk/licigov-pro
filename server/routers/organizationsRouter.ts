@@ -20,6 +20,7 @@ import { getUserByEmail } from "../db";
 import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
 import { LAST_TENANT_ADMIN, MEMBER_NOT_FOUND } from "../domain/authErrors";
 import { sanitizeUser } from "../services/userProjection";
+import { priceGovernancePreflight } from "../services/priceGovernanceService";
 
 /**
  * PR A.1 — Proteção "último admin": rebaixar/desativar/remover um membro com papel admin NÃO
@@ -52,7 +53,11 @@ export const organizationsRouter = router({
     if (!org) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Organização não encontrada." });
     }
-    return { org, role: ctx.orgMembership!.role };
+    const role = ctx.orgMembership!.role;
+    // Pré-flight da homologação M8: projeção somente leitura do PRÓPRIO tenant, decidida no serviço de governança de preços
+    // (sem consulta extra; nunca a lista configurada; null abaixo de manager). O router só repassa.
+    const priceGovernance = priceGovernancePreflight({ id: org.id, slug: org.slug ?? null }, role);
+    return { org, role, priceGovernance };
   }),
 
   // ─── Atualizar dados da organização (admin/owner) ────────────────────────

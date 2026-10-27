@@ -665,12 +665,17 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       // CONTEXT_REUSE 2.0: o TEXTO do TR consome os MESMOS parâmetros estruturados que o Edital (bloco do sistema; sem IA).
-      const structured = await renderTrStructuredBlock(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {})).catch(() => null);
+      // Falha ao montar o bloco não impede a geração (TR sem parâmetros, como antes), mas não fica silenciosa.
+      const structured = await renderTrStructuredBlock(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {}))
+        .catch((err: unknown) => {
+          log.warn("tr_structured_block_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
+          return null;
+        });
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
         confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
-        structuredParams: structured ? { block: structured.block, digest: structured.digest } : null,
+        structuredParams: structured,
       });
       return { document };
     }),

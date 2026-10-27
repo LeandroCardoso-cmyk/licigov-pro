@@ -40,8 +40,12 @@ incidente); staging `aa05e88` (deploy `700de144-…`, 24/10 14:09Z).
 
 Não-segredos (não rotacionar): `APP_BASE_URL`, `APP_ENV`, `AWS_S3_BUCKET`, `AWS_S3_REGION`,
 `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `EMAIL_ENABLED`, `EMAIL_PROVIDER`, `AI_MODEL`, `AI_MAX_ATTEMPTS`,
-`AI_TIMEOUT_MS`, `A2_HOMOLOG_ON_BOOT`, `A3_HOMOLOGATION_RUN`, `A3_HOMOLOGATION_RUN_ID`,
-`LICIGOV_STAGING_SMOKE_EMAIL`.
+`AI_TIMEOUT_MS`, `LICIGOV_STAGING_SMOKE_EMAIL`, `HOMOLOGATION_DEMONSTRATIVE_ORG_IDS` (staging; lista de ids de tenant
+sintético — nunca em produção).
+
+Sem consumidor no código (27/10/2026, conferido por busca em `server/`, `scripts/`, `shared/`, `.github/`) — **excluir** do
+staging, não rotacionar: `A2_HOMOLOG_ON_BOOT`, `A3_HOMOLOGATION_RUN`, `A3_HOMOLOGATION_RUN_ID` (o runner A3 foi removido; um
+rollback para commit anterior à remoção religaria o runner com essas flags). Seguem presentes no staging (só nomes conferidos).
 
 ## Segredos — Railway, serviço `MySQL` (prod e staging)
 

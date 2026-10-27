@@ -2,7 +2,7 @@ import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
 import {
-  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel,
+  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, overviewModalityText,
   officialVersionLabel, processStatusLabel, stageLabel,
 } from "../../lib/processDocumentStatus";
 
@@ -42,6 +42,8 @@ export default function ProcessOverview({
     { processId },
     { enabled: !!processId },
   );
+  // Escopo do Edital já escolhido (fato próprio, só leitura) — evita "Modalidade: —" quando o processo não a registra.
+  const scopeQuery = trpc.procurementProcess.editalScopeSelection.useQuery({ processId }, { enabled: !!processId });
 
   // Exportação DOCX/PDF via o núcleo comum (documentExportService) — abre a URL
   // assinada retornada. Reutilizável por outros módulos pelo mesmo padrão.
@@ -120,7 +122,7 @@ export default function ProcessOverview({
             Etapa registrada: {stageLabel(process.currentStage)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
-            Modalidade: {modalityLabel(process.modality)}
+            Modalidade: {overviewModalityText(process.modality, scopeQuery.data?.scope?.modality)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
             Assistentes de IA: {process.activeCopilots.length}

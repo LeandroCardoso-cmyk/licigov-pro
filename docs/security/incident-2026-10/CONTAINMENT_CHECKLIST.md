@@ -162,4 +162,4 @@ de backup agendado). Atestação (sem valores) no `AUDIT_REPORT.md` §10.
 | 3 | `AWS_*` | Upload/download S3; CloudTrail data events provavelmente ausentes | §5 |
 | 4 | `BREVO_API_KEY` | E-mails de convite/reset; possível conta compartilhada com SincroSaúde | §6 |
 | 5 | Senha do admin de plataforma | Reset revoga as sessões do admin | §7 |
-| 6 | Remover `ADMIN_PASSWORD`; decidir `A2_HOMOLOG_TOKEN` | Após deploy da PR; confirmar uso fora do repo | §7–§8 |
+| 6 | Remover `ADMIN_PASSWORD`; decidir `A2_HOMOLOG_TOKEN`; excluir `A2_HOMOLOG_ON_BOOT`, `A3_HOMOLOGATION_RUN`, `A3_HOMOLOGATION_RUN_ID` (sem consumidor; presentes no staging em 27/10) | Após deploy da PR; confirmar uso fora do repo | §7–§8 |

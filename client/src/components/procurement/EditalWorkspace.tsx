@@ -18,7 +18,7 @@ import { PublicationPendingNotice } from "./PublicationPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
-import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
+import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, TR_REQUIRED_MESSAGE, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
   editalParamsComplete, editalParamsDiffer, editalScopeToRecord, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
@@ -485,7 +485,7 @@ export default function EditalWorkspace({
             candidatesLoading={bound && trQuery.isLoading}
           />
         )}
-        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && !(coreComplete && trCandidates.length === 0 && bridgeGate.reason === TR_REQUIRED_MESSAGE) && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
         {bound && !selectedTrId && composed?.trPin && !composedTrId && trCandidates.length > 0 && (
           <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
             Esta minuta foi composta sobre o TR oficial v{composed.trPin.version}, que não é mais a versão vigente. Selecione o TR oficial exato para a nova composição — nenhuma versão é escolhida automaticamente.

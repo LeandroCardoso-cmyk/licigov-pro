@@ -10,13 +10,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const st = vi.hoisted(() => ({ load: null as unknown }));
+const st = vi.hoisted(() => ({ load: null as unknown, scope: null as unknown }));
 vi.mock("@/lib/trpc", () => ({ trpc: { procurementProcess: {
   loadProcess: { useQuery: () => ({ data: st.load, isLoading: false }) },
+  editalScopeSelection: { useQuery: () => ({ data: st.scope, isLoading: false }) },
   exportDocument: { useMutation: () => ({ mutate: () => {}, isPending: false, variables: undefined }) },
 } } }));
 vi.mock("../../lib/trpc", () => ({ trpc: { procurementProcess: {
   loadProcess: { useQuery: () => ({ data: st.load, isLoading: false }) },
+  editalScopeSelection: { useQuery: () => ({ data: st.scope, isLoading: false }) },
   exportDocument: { useMutation: () => ({ mutate: () => {}, isPending: false, variables: undefined }) },
 } } }));
 vi.mock("sonner", () => ({ toast: { success: () => {}, error: () => {} } }));
@@ -26,6 +28,7 @@ import ProcessOverview from "./ProcessOverview";
 import { IngestionSessionHistoryList } from "./IngestionSessionHistory";
 import {
   actorLabel, draftStatusLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel, officialVersionLabel, stageLabel,
+  overviewModalityText,
 } from "@/lib/processDocumentStatus";
 import { formatBytes, provenanceLabel, riskTypeLabel, sessionByResearchId, sessionStatusLabel, severityLabel, type SessionHistoryView } from "@/lib/ingestionHistoryView";
 import { bridgeAllowsGeneration, composedTrCandidateId, TR_REQUIRED_MESSAGE, TR_SELECT_MESSAGE, type TrCandidateView } from "@/lib/editalTemplateBridge";
@@ -55,6 +58,14 @@ describe("situação documental (pura)", () => {
     expect(actorLabel(null, "5")).toBe("Usuário nº 5");
     expect(actorLabel(null, "user:5")).toBe("Usuário nº 5");
     expect(actorLabel(null, "sistema")).toBe("Sistema");
+  });
+});
+
+describe("Visão Geral — modalidade (M8)", () => {
+  it("processo sem modalidade mas com escopo do Edital escolhido ⇒ mostra a modalidade indicando a origem", () => {
+    expect(overviewModalityText(null, "pregao")).toBe("Pregão (escopo do Edital)");
+    expect(overviewModalityText("concorrencia", "pregao")).toBe("Concorrência");
+    expect(overviewModalityText(null, null)).toBe("—");
   });
 });
 

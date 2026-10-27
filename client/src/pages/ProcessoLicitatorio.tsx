@@ -22,7 +22,7 @@ import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
 import ProcurementItemPanel, { ITEM_PANEL_TITLE_ID } from "@/components/procurement/ProcurementItemPanel";
-import { processIdFromSearch } from "@shared/operationalCalendar";
+import { processIdFromSearch, processRouteSearch, tabFromSearch } from "@shared/operationalCalendar";
 import { startTargetFor } from "@/components/procurement/startOptions";
 
 /**
@@ -107,13 +107,29 @@ export default function ProcessoLicitatorio() {
     setView("process");
   }
 
-  // Link direto (ex.: evento do Calendário Operacional): `/processos?processId=` abre o processo uma vez; o servidor valida o acesso.
+  // Link direto (ex.: evento do Calendário Operacional) e RELOAD: `/processos?processId=…&tab=…` reabre o processo e a aba; o
+  // servidor valida o acesso (processo de outra organização ⇒ `process: null` ⇒ volta à lista, abaixo).
   useEffect(() => {
     const id = typeof window !== "undefined" ? processIdFromSearch(window.location.search) : null;
     if (!id) return;
-    openProcess(id);
-    window.history.replaceState(window.history.state, "", window.location.pathname); // voltar à lista não reabre o processo
+    openProcess(id, tabFromSearch(window.location.search, STAGE_TABS.map((t) => t.key)) ?? "overview");
   }, []);
+
+  // M8 — a URL acompanha o processo e a aba abertos (replaceState: sem nova entrada no histórico; voltar/ESC inalterados).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const target = view === "process" && activeProcessId ? `${window.location.pathname}${processRouteSearch(activeProcessId, activeTab)}` : window.location.pathname;
+    if (`${window.location.pathname}${window.location.search}` !== target) window.history.replaceState(window.history.state, "", target);
+  }, [view, activeProcessId, activeTab]);
+
+  // Processo inexistente ou de outra organização (link antigo/editado): não fica numa tela vazia.
+  const [notFoundNotice, setNotFoundNotice] = useState(false);
+  useEffect(() => {
+    if (view === "process" && activeProcessId && processQuery.isSuccess && !processQuery.data?.process) {
+      setNotFoundNotice(true);
+      backToList();
+    }
+  }, [view, activeProcessId, processQuery.isSuccess, processQuery.data]);
 
   // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial — P0 piloto: o processo
   // começa no ponto em que a Prefeitura já está (DFD, ETP, Pesquisa ou TR), sem pré-requisito artificial.
@@ -135,9 +151,14 @@ export default function ProcessoLicitatorio() {
   if (view === "list") {
     return (
       <div className="min-h-full bg-background">
+        {notFoundNotice && (
+          <p role="status" className="mx-6 mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+            Processo não encontrado nesta organização. Selecione um processo da lista.
+          </p>
+        )}
         <ProcessoLicitatorioHome
           onCreateProcess={() => setView("new")}
-          onOpenProcess={openProcess}
+          onOpenProcess={(id: string) => { setNotFoundNotice(false); openProcess(id); }}
         />
       </div>
     );

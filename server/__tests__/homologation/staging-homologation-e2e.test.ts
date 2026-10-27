@@ -20,8 +20,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
-  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
-  parseExercicio, pendingMarkers, priceImportMode, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
+  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, directCallAdapter, homologSession, looksLike,
+  runHomologationPreflight, type PreflightRecord,
+  pendingMarkers, priceImportMode, redundantReviewMarkers, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue, type PlannedWrite } from "../../../client/src/lib/editalPreparation";
@@ -40,7 +41,7 @@ const ITEMS = [
   { description: `${MARK} Caneta esferográfica azul`, unit: "un", planned: 400, price: "1,75" },
 ];
 const OBJ = `${MARK} Aquisição de material de expediente — execução ${RUN}`;
-const REPORT: { run: string; tenant?: unknown; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
+const REPORT: { run: string; tenant?: unknown; blocked?: string; preflight?: PreflightRecord; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
   { run: RUN, journeys: {}, metrics: {}, mode: "HTTP real (APIs oficiais); não é homologação visual" };
 
 const download = async (url: string) => new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -60,35 +61,15 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
   let k = 0;
   const key = (p: string) => `homolog-${p}-${RUN}-${++k}`;
 
-  async function login(s: ReturnType<typeof homologSession>, email: string | undefined, password: string | undefined, who: string) {
-    if (!email || !password) throw new Error("Credenciais do tenant sintético ausentes (HOMOLOG_EMAIL/HOMOLOG_PASSWORD e _2).");
-    // Usuário com várias associações: o cabeçalho X-Organization-Id precisa ir já na 1ª chamada tenant-scoped (listMine).
-    const pinned = parseOrganizationId(ENV.HOMOLOG_ORGANIZATION_ID);
-    if (pinned) s.state.orgId = pinned;
-    await s.api.auth.login.mutate({ email, password });
-    const me = await s.api.auth.me.query();
-    const mine = await s.api.organizations.listMine.query();
-    assertSyntheticCredential(me as any, mine.map((m) => m.org.id));
-    const org = mine.map((m) => m.org).find((o) => o.slug === "homologacao-sintetica");
-    assertSyntheticTenant(org);
-    if (pinned && org.id !== pinned) throw new Error(`HOMOLOG_ORGANIZATION_ID=${pinned} não é o tenant sintético (${org.id}).`);
-    s.state.orgId = org.id;
-    const current = await s.api.organizations.getCurrent.query();
-    assertSyntheticTenant(current.org);
-    assertOrgRoleAtLeast(current.role, "manager", who);
-    return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role };
-  }
-
+  // Pré-flight M8 — tudo ANTES da primeira escrita, INCLUSIVE os logins: qualquer recusa (limitador 429, identidades iguais,
+  // exceção de valores demonstrativos desabilitada, credencial/tenant recusados) vai para `REPORT.blocked`/`REPORT.preflight` e
+  // o beforeAll falha (execução bloqueada, nunca PASS). Bloqueio é diagnóstico de configuração/ambiente, não falha de produto.
   beforeAll(async () => {
-    assertAllowedTarget(BASE!);
-    exercicio = parseExercicio(ENV.HOMOLOG_EXERCICIO);
-    const a = await login(author, ENV.HOMOLOG_EMAIL, ENV.HOMOLOG_PASSWORD, "usuário 1 (elabora)");
-    const b = await login(issuer, ENV.HOMOLOG_EMAIL_2, ENV.HOMOLOG_PASSWORD_2, "usuário 2 (emite)");
-    if (a.org.id !== b.org.id) throw new Error("Os dois usuários precisam ser do MESMO tenant sintético.");
-    if (a.me.id === b.me.id) throw new Error("Use dois usuários distintos (segregação de funções na emissão do TR).");
-    orgId = a.org.id;
-    decisionA = syntheticDecision(a.me, TODAY);
-    REPORT.tenant = { id: orgId, slug: a.org.slug, roles: [a.role, b.role] };
+    const pre = await runHomologationPreflight(REPORT, { run: RUN, baseUrl: BASE!, env: ENV, author, issuer });
+    exercicio = pre.exercicio;
+    orgId = pre.a.org.id;
+    decisionA = syntheticDecision(pre.a.me, TODAY);
+    REPORT.tenant = { id: orgId, slug: pre.a.org.slug, roles: [pre.a.role, pre.b.role] };
   }, 120_000);
 
   afterAll(() => {
@@ -192,7 +173,11 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     const trTyped = (await fillTrParams(h, {}, ["processo.objetoCompleto"])).typed;
     const { document: trDraft } = await op.procurementProcess.generateTR.mutate({ processId: pid, object: OBJ, idempotencyKey: key("tr") });
     for (const it of ITEMS) expect(trDraft.content).toContain(it.description);
+    // M8 pós-homologação — métrica: [REVISAR] que pedem parâmetro já confirmado (esperado 0; não bloqueia a jornada).
+    const trConfirmed: any = await op.procurementProcess.trStructuredParams.query({ processId: pid, ...WS });
+    const redundant = redundantReviewMarkers(trDraft.content, trConfirmed.fields.filter((f: any) => f.active && f.status === "SET").map((f: any) => String(f.description ?? "")));
     REPORT.metrics.TR = {
+      redundantReviewMarkers: redundant.length,
       structuredActive: trBefore.fields.filter((f: any) => f.active).length,
       structuredPrefilled: trBefore.fields.filter((f: any) => f.active && f.status === "SET").length,
       structuredProposed: trBefore.fields.filter((f: any) => f.active && f.proposal).length,

@@ -60,6 +60,19 @@ export interface StructuredAuthoringInput {
    * montado por authoringContext.ts. Ausente ⇒ comportamento anterior (só objeto), por compatibilidade.
    */
   readonly sourceContext?: DocumentAuthoringContext;
+  /**
+   * M8 pós-homologação — parâmetros estruturados do TR CONFIRMADOS no processo (bloco do sistema + rótulos pendentes/em conflito).
+   * Só TR. Ausente ⇒ prompt idêntico ao anterior.
+   */
+  readonly confirmedParams?: TrConfirmedParams | null;
+}
+
+/** Parâmetros confirmados do TR para a autoria: o MESMO bloco determinístico anexado ao texto e o que ainda falta (só rótulos). */
+export interface TrConfirmedParams {
+  readonly block: string;
+  readonly digest: string;
+  readonly pending?: readonly string[];
+  readonly conflicting?: readonly string[];
 }
 
 export interface StructuredAuthoringResult {
@@ -236,7 +249,7 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 }
 
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
-function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext): string {
+function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext, confirmedParams?: TrConfirmedParams | null): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
   const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
   const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
@@ -248,20 +261,49 @@ function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: Docu
     `Distinga fato do processo, fundamentação normativa e conclusão: NÃO afirme como conclusão (ex.: parcelamento ou lote único, economicidade, ` +
     `vantajosidade, benefícios) o que não estiver demonstrado no contexto; quando depender de análise ou decisão humana, escreva ` +
     `'[REVISAR: decisão/análise necessária — <qual>]'.`;
-  if (!sourceContext) return base;
+  const params = kind === "tr" ? confirmedParams ?? null : null;
+  if (!sourceContext && !params) return base;
   // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
+  const lines = [base, ""];
+  if (sourceContext) {
+    lines.push(
+      "Reaproveite o CONTEXTO do processo abaixo (DFD" + (kind === "tr" ? ", ETP, Itens Inteligentes aprovados e Pesquisa de Preços" : " e, se houver, a pesquisa de preços") + ").",
+      params
+        ? "Onde o contexto e os parâmetros confirmados NÃO fornecerem a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais."
+        : "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
+      kind === "tr"
+        ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
+        : "Não fixe valores monetários: a seção de estimativa do valor é redigida pelo sistema a partir da Pesquisa de Preços (valores citados fora do quadro serão marcados para revisão).",
+      "",
+      "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
+      sourceContext.promptContext,
+    );
+  }
+  if (params) lines.push(...confirmedParamsPrompt(params));
+  return lines.join("\n");
+}
+
+/**
+ * M8 pós-homologação (LICIGOV-FAST "uma informação, um preenchimento") — os parâmetros que o servidor do órgão JÁ CONFIRMOU entram na
+ * cognição como fatos: a IA os usa literalmente e não pede de novo. O que segue pendente/em conflito continua [REVISAR] (nada presumido);
+ * divergência com DFD/ETP não é resolvida em silêncio — o parâmetro do TR prevalece no TR (autoridade exclusiva do fluxo do TR,
+ * `AUTHORITY_POLICY`) e a divergência vai para as limitações, para a revisão humana. O bloco do sistema continua anexado ao texto.
+ */
+function confirmedParamsPrompt(p: TrConfirmedParams): string[] {
+  const pending = p.pending ?? [];
+  const conflicting = p.conflicting ?? [];
   return [
-    base,
     "",
-    "Reaproveite o CONTEXTO do processo abaixo (DFD" + (kind === "tr" ? ", ETP, Itens Inteligentes aprovados e Pesquisa de Preços" : " e, se houver, a pesquisa de preços") + ").",
-    "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
-    kind === "tr"
-      ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
-      : "Não fixe valores monetários: a seção de estimativa do valor é redigida pelo sistema a partir da Pesquisa de Preços (valores citados fora do quadro serão marcados para revisão).",
+    "=== PARÂMETROS DA CONTRATAÇÃO CONFIRMADOS NESTE PROCESSO (fatos informados pelo servidor do órgão) ===",
+    p.block,
     "",
-    "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
-    sourceContext.promptContext,
-  ].join("\n");
+    "Use estes valores LITERALMENTE nas seções correspondentes (objeto e vigência; requisitos; modelo de execução — local, prazos, " +
+      "recebimento, substituição; modelo de gestão — gestor e fiscal; medição e pagamento — forma, prazo, marco, reajuste; seleção — " +
+      "qualificação). NÃO escreva '[REVISAR]' pedindo informação que consta destes parâmetros e NÃO os altere nem os complete com suposição.",
+    "Se o DFD ou o ETP divergirem de um parâmetro confirmado, use o parâmetro no TR e registre a divergência em 'limitations' (a revisão humana decide).",
+    ...(pending.length > 0 ? [`Parâmetros ainda NÃO confirmados (mantenha '[REVISAR: <parâmetro>]' onde forem necessários; não presuma): ${pending.join("; ")}.`] : []),
+    ...(conflicting.length > 0 ? [`Parâmetros com registro divergente ou inválido (NÃO use valor; marque '[REVISAR: conflito em <parâmetro>]'): ${conflicting.join("; ")}.`] : []),
+  ];
 }
 
 /**
@@ -328,12 +370,12 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   let execution: CognitiveExecution | undefined;
   try {
     if (input.invoke) {
-      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext));
+      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams));
     } else {
       execution = await executeCognitiveTask({
         task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
         userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
-        query: authoringQuery(input.kind, input.object, input.sourceContext), businessDomain: DOMAIN,
+        query: authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams), businessDomain: DOMAIN,
         contextPackage,
         documentRefs: contextPackage.documents.map((d) => d.documentId),
         lawRefs: contextPackage.citations.map((c) => c.reference),

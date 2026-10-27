@@ -16,8 +16,7 @@ import type { InstitutionalDecision } from "../domain/institutionalDecision";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
-import { requestInstitutionalReview } from "./institutionalRequestService";
-import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
+import { requestInstitutionalReview, readLegalOpinionForConsumer, type LegalOpinionReadResult } from "./institutionalRequestService";
 import { FICTITIOUS_QUOTE_MARKER, type PriceResearchSource } from "../domain/priceResearch";
 import { effectiveQuoteProvenance } from "../domain/quoteProvenance";
 import { demonstrativePricesAllowed } from "./priceGovernanceService";
@@ -641,12 +640,9 @@ export async function requestLegalOpinion(params: {
  * Disponibiliza automaticamente o parecer retornado (sem upload/download): lê a
  * resposta institucional e as referências documentais associadas à solicitação.
  */
-export async function getLegalOpinionResult(requestId: string, orgId: number): Promise<{ response: Awaited<ReturnType<typeof getResponseForRequest>>; documents: Awaited<ReturnType<typeof listDocumentReferences>> }> {
-  const [response, documents] = await Promise.all([
-    getResponseForRequest(requestId, orgId),
-    listDocumentReferences(requestId, orgId),
-  ]);
-  return { response, documents };
+export async function getLegalOpinionResult(requestId: string, orgId: number): Promise<LegalOpinionReadResult> {
+  // NEW-007 — só a resposta com origem governada (Parecer Jurídico, procurador designado) pedida por esta origem é parecer.
+  return readLegalOpinionForConsumer(requestId, orgId, "contratacao_direta");
 }
 
 // ─── Publicação (Document Engine) ─────────────────────────────────────────────
