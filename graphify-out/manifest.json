@@ -15425,8 +15425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/edital-scope-calendar-mysql-smoke.test.ts": {
-    "mtime": 1793061993.138266,
-    "ast_hash": "e0da23fafca2431c27878c1a98a25f95",
+    "mtime": 1793068114.7735314,
+    "ast_hash": "e59226da4e4506a78415eca5a59c48c2",
     "semantic_hash": ""
   },
   "server/__tests__/unit/edital-scope-selection.test.ts": {

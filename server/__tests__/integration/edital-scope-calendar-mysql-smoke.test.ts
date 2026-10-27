@@ -126,7 +126,7 @@ describe.skipIf(!DB)("Escopo do Edital persistido + sessão no calendário (MySQ
     expect(await count("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE 'Escopo do Edital escolhido%'", [org, pid])).toBe(2);
 
     // linha do tempo em linguagem humana
-    expect((await rows("SELECT summary FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE 'Escopo do Edital%' ORDER BY id", [org, pid])).map((r: any) => r.summary))
+    expect((await rows("SELECT summary FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE 'Escopo do Edital%' ORDER BY event_order", [org, pid])).map((r: any) => r.summary))
       .toEqual(["Escopo do Edital escolhido antes da geração: Pregão, forma eletrônica, plataforma BLL.", "Escopo do Edital escolhido antes da geração: Concorrência, forma presencial."]);
 
     // CORRIDA: duas pessoas, mesmo valor visto, escolhas diferentes ⇒ exatamente uma grava; a outra recebe CONFLICT
