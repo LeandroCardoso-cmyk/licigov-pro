@@ -4,10 +4,11 @@
  * CAS por `expectedValueHash` (a pessoa altera o escopo que VIU); mesmo valor ⇒ idempotente, nada gravado.
  */
 import { TRPCError } from "@trpc/server";
-import { getProcess, recordProcessEvent } from "../db/procurement";
+import { getProcess, lockActiveProcessTx, recordProcessEvent } from "../db/procurement";
+import { getDb } from "../db/connection";
 import { listContextFacts } from "../db/procurementContext";
 import {
-  EDITAL_SCOPE_PATH, editalScopeSelection, encodeEditalScope, normalizeEditalScope, type EditalScopeSelection,
+  EDITAL_SCOPE_PATH, describeEditalScope, editalScopeSelection, encodeEditalScope, normalizeEditalScope, type EditalScopeSelection,
 } from "../domain/editalScopeSelection";
 import { recordContextAssertions } from "./canonicalContextService";
 import { serviceLogger } from "./observabilityService";
@@ -40,28 +41,38 @@ export async function recordEditalScope(input: RecordEditalScopeInput): Promise<
   const normalized = normalizeEditalScope(input.scope);
   if (!normalized.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `${normalized.reason}: informe modalidade, forma e (na forma eletrônica) plataforma válidas.` });
   await requireTenantProcess(input.organizationId, input.processId);
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
 
-  const facts = await listContextFacts(input.organizationId, input.processId);
-  const current = editalScopeSelection(facts);
-  const encoded = encodeEditalScope(normalized.scope);
-  if (current.scope && encodeEditalScope(current.scope) === encoded) return { recorded: false, selection: current };
-  if (current.conflict || (current.valueHash ?? null) !== (input.expectedValueHash ?? null)) {
-    throw new TRPCError({ code: "CONFLICT", message: `${EDITAL_SCOPE_CHANGED}: o escopo do Edital foi alterado por outra pessoa; recarregue antes de alterar.` });
-  }
-
-  const previous = facts.filter((f) => f.path === EDITAL_SCOPE_PATH).reduce((m, f) => Math.max(m, f.id), 0);
-  await recordContextAssertions({
-    organizationId: input.organizationId, processId: input.processId, correlationId: input.correlationId,
-    facts: [{
-      path: EDITAL_SCOPE_PATH, value: encoded, sourceType: "user", sourceId: "edital-scope", sourceVersion: `rev:${previous}`,
-      status: "confirmed", actorUserId: input.actorUserId, basisValueHash: current.valueHash,
-    }],
+  // Leitura, comparação (CAS), gravação do fato e evento na MESMA transação, com o processo travado: escritas concorrentes
+  // sobre o mesmo valor visto são serializadas (a segunda vê o valor novo e recebe CONFLICT).
+  const recorded = await db.transaction(async (tx) => {
+    if (!(await lockActiveProcessTx(tx, input.organizationId, input.processId))) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
+    }
+    const facts = await listContextFacts(input.organizationId, input.processId, tx);
+    const current = editalScopeSelection(facts);
+    const encoded = encodeEditalScope(normalized.scope);
+    if (current.scope && encodeEditalScope(current.scope) === encoded) return false;
+    if (current.conflict || (current.valueHash ?? null) !== (input.expectedValueHash ?? null)) {
+      throw new TRPCError({ code: "CONFLICT", message: `${EDITAL_SCOPE_CHANGED}: o escopo do Edital foi alterado por outra pessoa; recarregue antes de alterar.` });
+    }
+    const previous = facts.filter((f) => f.path === EDITAL_SCOPE_PATH).reduce((m, f) => Math.max(m, f.id), 0);
+    await recordContextAssertions({
+      organizationId: input.organizationId, processId: input.processId, correlationId: input.correlationId, executor: tx,
+      facts: [{
+        path: EDITAL_SCOPE_PATH, value: encoded, sourceType: "user", sourceId: "edital-scope", sourceVersion: `rev:${previous}`,
+        status: "confirmed", actorUserId: input.actorUserId, basisValueHash: current.valueHash,
+      }],
+    });
+    await recordProcessEvent({
+      organizationId: input.organizationId, processId: input.processId, eventType: "change", actor: String(input.actorUserId),
+      summary: `Escopo do Edital escolhido antes da geração: ${describeEditalScope(normalized.scope)}.`, correlationId: input.correlationId,
+    }, tx);
+    return true;
   });
   const s = normalized.scope;
-  await recordProcessEvent({
-    organizationId: input.organizationId, processId: input.processId, eventType: "change", actor: String(input.actorUserId),
-    summary: `Escopo do Edital escolhido antes da geração: ${s.modality} / ${s.form}${s.platform ? ` / ${s.platform}` : ""}.`, correlationId: input.correlationId,
-  });
+  if (!recorded) return { recorded: false, selection: editalScopeSelection(await listContextFacts(input.organizationId, input.processId)) };
   const selection = editalScopeSelection(await listContextFacts(input.organizationId, input.processId));
   log.info("edital_scope_recorded", {
     organizationId: input.organizationId, processId: input.processId, actorUserId: input.actorUserId, correlationId: input.correlationId,

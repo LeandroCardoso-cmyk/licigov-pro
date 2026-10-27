@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1793044971.2040818,
-    "ast_hash": "286334989887ce8a7cf3468c7633c4dd",
+    "mtime": 1793061945.778367,
+    "ast_hash": "ed4f9e674666af7e3c0e6d174d08f8b9",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -7055,8 +7055,8 @@
     "semantic_hash": ""
   },
   "server/db/procurement.ts": {
-    "mtime": 1793045095.8354123,
-    "ast_hash": "1d7c6125754f6b6f64af0435657aa36e",
+    "mtime": 1793061827.505556,
+    "ast_hash": "b7d4152e85f6f2059e2dcb6e48e7c603",
     "semantic_hash": ""
   },
   "server/db/procurementContext.ts": {
@@ -9460,8 +9460,8 @@
     "semantic_hash": ""
   },
   "server/services/departmentOperationService.ts": {
-    "mtime": 1793045095.83576,
-    "ast_hash": "909af38ac96efca3b47d452fea23ee23",
+    "mtime": 1793062021.3174653,
+    "ast_hash": "196f1913878b3c0d671c44ed04bcea1d",
     "semantic_hash": ""
   },
   "server/services/deploymentValidationService.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1793044693.7717683,
-    "ast_hash": "52fe6d57a47af31f31cb568f17a186dc",
+    "mtime": 1793061718.3951292,
+    "ast_hash": "a120e43a05669d2f8e10dfb8a6153921",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -14505,8 +14505,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/contextReuse.ts": {
-    "mtime": 1793044895.0143893,
-    "ast_hash": "cf298bd4f7253f05cd153718673361ab",
+    "mtime": 1793061911.7892773,
+    "ast_hash": "23d757a69430bcc2a55c122d8dbd4130",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/contextReuseHelpers.ts": {
@@ -15375,8 +15375,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/m8VisualHomologation.test.ts": {
-    "mtime": 1793044693.8497472,
-    "ast_hash": "891e4b9d18822814fc4cabbd0e6296b1",
+    "mtime": 1793061718.3955963,
+    "ast_hash": "a50fe7c73e274d29be71389124fcdb73",
     "semantic_hash": ""
   },
   "client/src/lib/ingestionHistoryView.ts": {
@@ -15420,13 +15420,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/consolidatedUx.test.ts": {
-    "mtime": 1793045229.2540371,
-    "ast_hash": "6dde97a6865872706750364914d4eb8e",
+    "mtime": 1793062027.7347572,
+    "ast_hash": "62e1e2dd57203db9118a26354d2b4a48",
     "semantic_hash": ""
   },
   "server/__tests__/integration/edital-scope-calendar-mysql-smoke.test.ts": {
-    "mtime": 1793045346.081401,
-    "ast_hash": "6a32b9bb9387ff899f59cd821f573ee9",
+    "mtime": 1793061993.138266,
+    "ast_hash": "e0da23fafca2431c27878c1a98a25f95",
     "semantic_hash": ""
   },
   "server/__tests__/unit/edital-scope-selection.test.ts": {
@@ -15440,8 +15440,8 @@
     "semantic_hash": ""
   },
   "server/domain/editalScopeSelection.ts": {
-    "mtime": 1793044781.1413758,
-    "ast_hash": "c8df61337f22161d01ffa048c15298a8",
+    "mtime": 1793061827.5103793,
+    "ast_hash": "12b366b436fd0a28952532a6cea5109d",
     "semantic_hash": ""
   },
   "server/domain/operationalCalendarSources.ts": {
@@ -15450,8 +15450,8 @@
     "semantic_hash": ""
   },
   "server/services/editalScopeService.ts": {
-    "mtime": 1793044837.9082444,
-    "ast_hash": "3d67d29a6a3fff6476cb9c02c6fe565d",
+    "mtime": 1793061827.5060945,
+    "ast_hash": "2e24c37445ae6603846adc4a3ebbfee2",
     "semantic_hash": ""
   }
 }

@@ -35,6 +35,18 @@ export function normalizeEditalScope(input: { readonly modality?: string | null;
   return { ok: true, scope: { modality: modality as EditalModality, form: form as EditalForm, platform: platform as EditalPlatform | null } };
 }
 
+const MODALITY_LABEL: Record<EditalModality, string> = {
+  pregao: "Pregão", concorrencia: "Concorrência", leilao: "Leilão", concurso: "Concurso", chamada_publica: "Chamada pública",
+  credenciamento: "Credenciamento", registro_de_precos: "Registro de preços",
+};
+const FORM_LABEL: Record<EditalForm, string> = { eletronico: "eletrônica", presencial: "presencial" };
+const PLATFORM_LABEL: Record<EditalPlatform, string> = { compras_gov: "Compras.gov.br", bll: "BLL", licitanet: "Licitanet", portal_proprio: "portal próprio", outra: "outra plataforma" };
+
+/** Texto humano do escopo (linha do tempo). */
+export function describeEditalScope(s: EditalScope): string {
+  return `${MODALITY_LABEL[s.modality]}, forma ${FORM_LABEL[s.form]}${s.platform ? `, plataforma ${PLATFORM_LABEL[s.platform]}` : ""}`;
+}
+
 /** Valor canônico do fato (JSON com chaves em ordem fixa ⇒ mesmo escopo, mesmo hash). */
 export function encodeEditalScope(scope: EditalScope): string {
   return JSON.stringify({ modality: scope.modality, form: scope.form, platform: scope.form === "eletronico" ? scope.platform : null });

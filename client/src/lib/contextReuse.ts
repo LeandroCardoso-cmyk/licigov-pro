@@ -56,15 +56,20 @@ export function suppliedByText(s: NonNullable<TrParamViewModel["suppliedBy"]>): 
 /** Explicação do motivo de pendência informado pelo servidor (null = sem motivo especial). */
 export function pendingReasonText(r: TrParamViewModel["pendingReason"]): string | null {
   if (!r) return null;
-  return `O TR oficial vigente (v${r.trVersion}) foi emitido antes de o sistema registrar o objeto completo, por isso o Edital não `
-    + "consegue obtê-lo de lá. Informe-o aqui uma vez (normalmente, o mesmo objeto do processo): o TR emitido não é alterado e o Edital "
-    + "passa a usar este valor.";
+  return `O TR oficial vigente (v${r.trVersion}) foi emitido antes de o sistema registrar o objeto completo. O Edital por modelo `
+    + "institucional usa o objeto registrado no próprio TR emitido; por isso, com esta versão do TR, ele continuará pendente. "
+    + "Informar o valor aqui não altera o TR emitido e só vale para uma versão do TR emitida depois deste registro — a abertura de "
+    + "nova versão de documento já emitido depende de definição institucional ainda pendente.";
 }
 
-/** Texto curto do estado "parâmetros estruturados indisponíveis" (null = não exibir: recurso não se aplica a esta organização). */
+/**
+ * Texto do estado "parâmetros estruturados indisponíveis" — só quando há algo que a pessoa possa fazer (escolher o escopo do Edital
+ * para definir o modelo). Demais motivos são técnicos/de configuração: nada é exibido no TR (null).
+ */
 export function trStructuredUnavailableText(reason: string): string | null {
-  if (/não integrado nesta instalação|não habilitados para esta organização/.test(reason)) return null;
-  return `Parâmetros estruturados da contratação indisponíveis no momento: ${reason}.`;
+  return /catálogos diferentes/.test(reason)
+    ? "Parâmetros estruturados da contratação: escolha a modalidade, a forma e a plataforma na etapa Edital para definir o modelo aplicável."
+    : null;
 }
 
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */

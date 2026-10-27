@@ -107,7 +107,8 @@ describe("Edital — reabertura com o contexto da composição", () => {
   });
   it("workspace: hidrata do contexto composto sem gravar; lista legada de pendências oculta na minuta institucional", () => {
     const src = read("client/src/components/procurement/EditalWorkspace.tsx");
-    expect(src).toContain("resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams)");
+    // Ordem de hidratação: persistido > contexto composto > escopo registrado antes da 1ª geração (rodada consolidada C2).
+    expect(src).toContain("resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams ?? recordedScope)");
     expect(src).toContain('sourceState.data.state !== "template_governed"');
     expect(src).toContain("selectedTrId ?? composedTrId");
   });

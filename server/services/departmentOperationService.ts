@@ -68,17 +68,24 @@ async function certameSessionEvents(
   organizationId: number, window: { from?: string; to?: string },
   existing: readonly { eventType: string; referenceId: string | null; eventDate: string }[],
 ): Promise<DerivedSessionEvent[]> {
-  const decisions = await listCurrentDecisionsBySubjectType(organizationId, GOVERNED_SUBJECT_TYPE.PROCESS);
-  let corrupt = 0;
-  const records: Array<{ subjectId: string; payload: unknown }> = [];
-  for (const d of decisions) {
-    const decoded = decodeGovernedPayload(d.evidence, GOVERNED_FIELDS_SCHEMA);
-    if (!decoded) { corrupt++; continue; }
-    if (sessionScheduleOf(decoded.payload)) records.push({ subjectId: d.subjectId, payload: decoded.payload });
+  try {
+    const decisions = await listCurrentDecisionsBySubjectType(organizationId, GOVERNED_SUBJECT_TYPE.PROCESS);
+    let corrupt = 0;
+    const records: Array<{ subjectId: string; payload: unknown }> = [];
+    for (const d of decisions) {
+      let decoded: ReturnType<typeof decodeGovernedPayload> = null;
+      try { decoded = decodeGovernedPayload(d.evidence, GOVERNED_FIELDS_SCHEMA); } catch { decoded = null; }
+      if (!decoded) { corrupt++; continue; }
+      if (sessionScheduleOf(decoded.payload)) records.push({ subjectId: d.subjectId, payload: decoded.payload });
+    }
+    if (corrupt > 0) log.warn("calendar_certame_record_skipped", { organizationId, corrupt });
+    const activeProcesses = await listActiveProcessRefsByIds(organizationId, records.map((r) => r.subjectId));
+    return deriveSessionEvents({ records, activeProcesses, ...window, existing });
+  } catch (error) {
+    // Fonte DERIVADA: falha aqui nunca derruba o calendário/painel (eventos cadastrados continuam); fica registrada.
+    log.error("calendar_certame_sessions_unavailable", { organizationId, error: error instanceof Error ? error.message : String(error) });
+    return [];
   }
-  if (corrupt > 0) log.warn("calendar_certame_record_skipped", { organizationId, corrupt });
-  const activeProcesses = await listActiveProcessRefsByIds(organizationId, records.map((r) => r.subjectId));
-  return deriveSessionEvents({ records, activeProcesses, ...window, existing });
 }
 
 function lastEventDate(event: { eventDate: string; eventEndDate: string }): string {

@@ -5,6 +5,7 @@ import OfficialPromotionSection from "./OfficialPromotionSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
 import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
@@ -139,19 +140,30 @@ export default function EditalWorkspace({
   // > escolha registrada. Registrar é só guardar a escolha (não gera, não aprova, não publica).
   const scopeQuery = trpc.procurementProcess.editalScopeSelection.useQuery({ processId }, { enabled: !!processId });
   const recordedScope = (scopeQuery.data?.scope ?? null) as { modality: Modality; form: Form; platform: Platform | null } | null;
-  const recordScope = trpc.procurementProcess.recordEditalScope.useMutation();
+  const { hasRole, isLoading: roleLoading } = useOrgRole();
+  const canRecordScope = !roleLoading && hasRole("operator");
+  const [scopeNotice, setScopeNotice] = useState<string | null>(null);
+  // Escolha cuja gravação falhou (ex.: CONFLICT): não é reenviada sozinha — só uma NOVA escolha explícita grava de novo.
+  const [failedScopeKey, setFailedScopeKey] = useState<string | null>(null);
+  const recordScope = trpc.procurementProcess.recordEditalScope.useMutation({
+    // O resultado traz o valor e o hash vigentes: o cache passa a ser a base do próximo CAS (sem esperar a releitura).
+    onSuccess: (r) => { utils.procurementProcess.editalScopeSelection.setData({ processId }, r.selection); setScopeNotice(null); },
+    onError: (e, vars) => {
+      setFailedScopeKey(JSON.stringify({ modality: vars.modality, form: vars.form, platform: vars.platform ?? null }));
+      setScopeNotice(domainErrorMessage(e.message, "Não foi possível guardar a escolha de modalidade, forma e plataforma."));
+      void utils.procurementProcess.editalScopeSelection.invalidate({ processId });
+    },
+  });
   const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams ?? recordedScope);
   const { modality, form, platform } = effective;
   const scopeToRecord = editalScopeToRecord<Modality, Form, Platform>({ effective, proposed, persisted, composed: composedParams, recorded: recordedScope });
   const scopeKey = scopeToRecord ? JSON.stringify(scopeToRecord) : null;
   useEffect(() => {
-    // Sem nova tentativa automática em CONFLICT (outra pessoa alterou): a próxima escolha explícita registra sobre o valor recarregado.
-    if (!scopeToRecord || !scopeQuery.isSuccess) return;
-    recordScope.mutate(
-      { processId, ...scopeToRecord, expectedValueHash: scopeQuery.data?.valueHash ?? null },
-      { onSettled: () => { void utils.procurementProcess.editalScopeSelection.invalidate({ processId }); } },
-    );
-  }, [scopeKey, scopeQuery.isSuccess]);
+    // Uma gravação por vez: com outra em curso, espera; ao terminar, o efeito roda de novo com o hash já atualizado.
+    // Sem nova tentativa automática em CONFLICT (outra pessoa alterou): a tela avisa e a próxima escolha registra sobre o valor relido.
+    if (!scopeToRecord || !scopeQuery.isSuccess || !canRecordScope || recordScope.isPending || scopeKey === failedScopeKey) return;
+    recordScope.mutate({ processId, ...scopeToRecord, expectedValueHash: scopeQuery.data?.valueHash ?? null });
+  }, [scopeKey, scopeQuery.isSuccess, canRecordScope, recordScope.isPending, failedScopeKey]);
   const textValues = resolveEditalTextValues(proposedText, persisted);
   const textProposal = editalTextProposal(proposedText, persisted);
   const textPending = editalTextPendingReview(persisted);
@@ -455,6 +467,7 @@ export default function EditalWorkspace({
               : "Não foi possível identificar o escopo usado nesta minuta: selecione modalidade, forma e plataforma — nenhuma é presumida."}
           </p>
         )}
+        {scopeNotice && <p role="alert" className="text-xs text-destructive" data-testid="edital-scope-notice">{scopeNotice}</p>}
         {!persisted && !composedParams && recordedScope && proposed.modality === null && proposed.form === null && proposed.platform === null && (
           <p className="text-xs text-muted-foreground" data-testid="edital-recorded-scope">
             Modalidade, forma e plataforma escolhidas anteriormente para este processo (o Edital ainda não foi gerado).

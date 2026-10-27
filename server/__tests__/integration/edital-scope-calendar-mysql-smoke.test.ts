@@ -125,6 +125,20 @@ describe.skipIf(!DB)("Escopo do Edital persistido + sessão no calendário (MySQ
     expect(facts[1].basis_value_hash).toBe(reloaded.valueHash);
     expect(await count("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE 'Escopo do Edital escolhido%'", [org, pid])).toBe(2);
 
+    // linha do tempo em linguagem humana
+    expect((await rows("SELECT summary FROM process_timeline WHERE organization_id = ? AND process_id = ? AND summary LIKE 'Escopo do Edital%' ORDER BY id", [org, pid])).map((r: any) => r.summary))
+      .toEqual(["Escopo do Edital escolhido antes da geração: Pregão, forma eletrônica, plataforma BLL.", "Escopo do Edital escolhido antes da geração: Concorrência, forma presencial."]);
+
+    // CORRIDA: duas pessoas, mesmo valor visto, escolhas diferentes ⇒ exatamente uma grava; a outra recebe CONFLICT
+    const pid2 = await newProcess(org, 9);
+    const race = await Promise.allSettled([
+      proc(org, "operator", 301).recordEditalScope({ processId: pid2, modality: "pregao", form: "presencial", expectedValueHash: null }),
+      proc(org, "operator", 302).recordEditalScope({ processId: pid2, modality: "leilao", form: "presencial", expectedValueHash: null }),
+    ]);
+    expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(race.filter((r) => r.status === "rejected").map((r: any) => r.reason?.code)).toEqual(["CONFLICT"]);
+    expect(await count("SELECT COUNT(*) n FROM procurement_context_facts WHERE organization_id = ? AND process_id = ? AND path = 'edital.scope'", [org, pid2])).toBe(1);
+
     // escopo incompleto é recusado pela rota
     await expect(proc(org).recordEditalScope({ processId: pid, modality: "pregao", form: "eletronico", expectedValueHash: r2.selection.valueHash }))
       .rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -188,5 +202,15 @@ describe.skipIf(!DB)("Escopo do Edital persistido + sessão no calendário (MySQ
     expect(otherCal.events.map((e: any) => e.referenceId)).toEqual([pOther]);
 
     expect(await count("SELECT (SELECT COUNT(*) FROM operational_events WHERE organization_id = ?) + (SELECT COUNT(*) FROM institutional_decisions WHERE organization_id = ?) AS n", [org, org])).toBe(writesBefore);
+
+    // registro governado CORROMPIDO (ex.: número não finito no payload) não derruba calendário nem painel: só é ignorado
+    const pBad = await newProcess(org, 36);
+    await declareSession(org, pBad, { dataAbertura: "2099-03-15" }, "pb");
+    await conn.execute("UPDATE institutional_decisions SET evidence = ? WHERE organization_id = ? AND subject_id = ?",
+      [JSON.stringify(["schema:governed-fields/1", "payload:{\"sections\":{\"CERTAME_CONFIG\":{\"dataAbertura\":\"2099-03-15\",\"x\":1e999}}}", "hash:00"]), org, pBad]);
+    const calBad = await ops(org).calendar({ from: "2099-03-01", to: "2099-03-31" });
+    expect(calBad.events.some((e: any) => e.referenceId === pBad)).toBe(false);
+    expect(calBad.events.some((e: any) => e.id === `certame:${p1}`)).toBe(true);
+    await expect(ops(org).dashboard({ today: "2099-03-01" })).resolves.toBeTruthy();
   }, 120_000);
 });

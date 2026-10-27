@@ -16,11 +16,15 @@ describe("C1 — objeto completo pendente por TR legado", () => {
     name: "processo.objetoCompleto", path: "objetoCompleto", type: "text", description: "Objeto completo", required: true, conditional: false,
     requiredWhenVariables: [], active: true, status: "UNSET", defaultEligible: false, pendingReason: { code: "LEGACY_TR_WITHOUT_OBJECT", trVersion: 2 },
   };
-  it("continua pendente e explica por quê, sem dizer que o TR emitido muda", () => {
+  it("continua pendente e explica por quê — sem prometer que o Edital usará o valor com o TR já emitido", () => {
     expect(trPendingFields([field]).map((f) => f.name)).toEqual(["processo.objetoCompleto"]);
     const t = pendingReasonText(field.pendingReason)!;
     expect(t).toContain("v2");
-    expect(t).toContain("o TR emitido não é alterado");
+    expect(t).toContain("não altera o TR emitido");
+    expect(t).toContain("continuará pendente");
+    expect(t).toContain("versão do TR emitida depois deste registro");
+    // A linhagem do TR emitido (digest dos parâmetros) não acompanha registro posterior: nunca prometer o contrário.
+    expect(t).not.toMatch(/passa a usar este valor/);
     expect(pendingReasonText(undefined)).toBeNull();
   });
   it("seção mostra o motivo junto do campo", () => {
@@ -31,11 +35,14 @@ describe("C1 — objeto completo pendente por TR legado", () => {
 });
 
 describe("parâmetros estruturados indisponíveis", () => {
-  it("motivo acionável aparece; recurso não habilitado/integrado fica silencioso", () => {
+  it("só o motivo acionável aparece (escolher o escopo no Edital); motivos técnicos/de configuração ficam fora do TR", () => {
     expect(trStructuredUnavailableText("há modelos de Edital com catálogos diferentes: informe os parâmetros do Edital para escolher o modelo"))
-      .toContain("informe os parâmetros do Edital");
-    expect(trStructuredUnavailableText("modelos institucionais não habilitados para esta organização")).toBeNull();
-    expect(trStructuredUnavailableText("módulo de modelos institucionais não integrado nesta instalação")).toBeNull();
+      .toContain("na etapa Edital");
+    for (const r of [
+      "modelos institucionais não habilitados para esta organização", "módulo de modelos institucionais não integrado nesta instalação",
+      "revisão vinculada ou catálogo tpl-catalog/2 indisponível", "vínculo do modelo do Edital em conflito ou inválido",
+      "nenhum modelo institucional de Edital vigente para esta organização",
+    ]) expect(trStructuredUnavailableText(r)).toBeNull();
   });
 });
 
@@ -61,8 +68,12 @@ describe("C2 — escopo do Edital registrado antes da 1ª geração", () => {
   it("a tela reabre com o escopo registrado (persistido > composto > registrado) e o registra com CAS", () => {
     const s = src("./EditalWorkspace.tsx");
     expect(s).toContain("persisted ?? composedParams ?? recordedScope");
-    expect(s).toContain("trpc.procurementProcess.recordEditalScope.useMutation()");
+    expect(s).toContain("trpc.procurementProcess.recordEditalScope.useMutation({");
     expect(s).toContain("expectedValueHash: scopeQuery.data?.valueHash ?? null");
+    // uma gravação por vez; o hash do resultado vira a base do próximo CAS; escolha que falhou não é reenviada sozinha; só operator+
+    expect(s).toContain("recordScope.isPending || scopeKey === failedScopeKey");
+    expect(s).toContain("editalScopeSelection.setData({ processId }, r.selection)");
+    expect(s).toContain('hasRole("operator")');
   });
 });
 
