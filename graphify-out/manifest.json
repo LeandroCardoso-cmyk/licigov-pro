@@ -1540,8 +1540,8 @@
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionHome.tsx": {
-    "mtime": 1792983547.0877106,
-    "ast_hash": "243c4369e982beeac600346c34ae3716",
+    "mtime": 1793109859.8148525,
+    "ast_hash": "f57d7d18469e028eccb25a6ef7ba6761",
     "semantic_hash": ""
   },
   "client/src/components/legal-opinion/LegalOpinionViewer.tsx": {
@@ -9995,8 +9995,8 @@
     "semantic_hash": ""
   },
   "server/services/legalOpinionWorkspaceService.ts": {
-    "mtime": 1793108337.6441936,
-    "ast_hash": "7e3d5e6c3153b0cfdf55c599fc112e8e",
+    "mtime": 1793109859.8140445,
+    "ast_hash": "fd07f54e6b6f1074a94c245269fb3d98",
     "semantic_hash": ""
   },
   "server/services/legalReasoningEngine.ts": {
@@ -15425,8 +15425,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/legal-opinion-reasoning-request.test.ts": {
-    "mtime": 1793108337.6287518,
-    "ast_hash": "7e986e060e4b7fac1648e664308b61e3",
+    "mtime": 1793109911.536937,
+    "ast_hash": "bee542f2648202b62b9a9e319326166f",
     "semantic_hash": ""
   },
   "client/src/_core/sessionState.test.ts": {
@@ -15532,6 +15532,16 @@
   "server/__tests__/unit/login-rate-limit-characterization.test.ts": {
     "mtime": 1793109694.0010078,
     "ast_hash": "9cf72e78ec95ded304afd22f0c390692",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/legal-opinion-reference-resolve.test.ts": {
+    "mtime": 1793109933.4970222,
+    "ast_hash": "88d5500fc8431c4fe60711be23f6213d",
+    "semantic_hash": ""
+  },
+  "server/services/legalOpinionReference.ts": {
+    "mtime": 1793109831.013016,
+    "ast_hash": "b92181b6fd41d3080f43c676dab264c3",
     "semantic_hash": ""
   }
 }
