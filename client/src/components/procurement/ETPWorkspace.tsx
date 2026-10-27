@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
@@ -8,6 +8,9 @@ import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
+import { generationFollowUp, useGenerationFollowUp } from "./generationFollowUp";
+import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
 
 /**
@@ -38,16 +41,29 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
 
   const { key: etpKey, rotate: rotateEtpKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  // M8 — acompanhamento limitado da geração cuja resposta não chegou (o intervalo vem do hook, por ref: a query é declarada antes dele).
+  const followInterval = useRef<number | false>(false);
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
-    { processId, kind: "etp" }, { enabled: !!processId },
+    { processId, kind: "etp" }, { enabled: !!processId, refetchInterval: () => followInterval.current },
   );
   // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
   const [confirmOpen, setConfirmOpen] = useState(false);
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
+  const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
+  const followUp = useGenerationFollowUp(reviewable.data?.draft, () => {
+    rotateEtpKey();
+    if (processId) utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "etp" });
+  });
+  followInterval.current = followUp.refetchInterval;
+  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]); // eslint-disable-line react-hooks/exhaustive-deps
   const generateETP = trpc.procurementProcess.generateETP.useMutation({
     // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
-    onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
+    // Resposta que não chegou / geração em voo ⇒ acompanha o rascunho persistido (sem reenviar).
+    onError: (e) => {
+      if (isHumanEditRefusal(e.message)) { setConfirmOpen(true); return; }
+      if (generationFollowUp(e.data?.code, e.message) === "follow") followUp.start(draftAtRequest.current);
+    },
     onSuccess: () => {
       setConfirmOpen(false);
       rotateEtpKey();
@@ -69,6 +85,8 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
     const plan = planRegeneration({ confirmed: confirmReplace, needsReplace: needsReplaceConfirmation(draft), block: regenerationBlock });
     if (plan === "blocked") return;
     if (plan === "confirm") { setConfirmOpen(true); return; }
+    draftAtRequest.current = draft;
+    followUp.clear();
     generateETP.mutate({
       processId, object: object.trim(), idempotencyKey: etpKey,
       // Hash do rascunho que o humano VIU: a confirmação vale só para este conteúdo (divergente ⇒ CONFLICT).
@@ -103,10 +121,10 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
         <button
           type="button"
           onClick={() => handleGenerate()}
-          disabled={!processId || !object.trim() || generateETP.isPending || !!regenerationBlock}
+          disabled={!processId || !object.trim() || generateETP.isPending || followUp.following || !!regenerationBlock}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
-          {generateETP.isPending ? "Gerando..." : "Gerar ETP com base no processo"}
+          {generateETP.isPending || followUp.following ? "Gerando..." : "Gerar ETP com base no processo"}
         </button>
         {!processId && (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
@@ -114,8 +132,10 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
           </p>
         )}
         <RegenerationBlockedNotice documentLabel="ETP" block={regenerationBlock} />
-        {generateETP.isError && !isHumanEditRefusal(generateETP.error?.message) && (
-          <p className="mt-2 text-sm text-destructive">{generateETP.error?.message || "Falha ao gerar o ETP."}</p>
+        <GenerationFollowUpNotice status={followUp.status} documentLabel="ETP" onCheckAgain={() => { followUp.restart(); void reviewable.refetch(); }} />
+        {generateETP.isError && !isHumanEditRefusal(generateETP.error?.message) && followUp.status === "idle"
+          && generationFollowUp(generateETP.error?.data?.code, generateETP.error?.message) === "error" && (
+          <p className="mt-2 text-sm text-destructive" role="alert">{domainErrorMessage(generateETP.error?.message, "Falha ao gerar o ETP.")}</p>
         )}
       </div>
 

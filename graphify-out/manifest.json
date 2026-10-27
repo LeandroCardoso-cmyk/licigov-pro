@@ -1780,8 +1780,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDFieldSources.test.ts": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "2ff3af9f45a4ab2b2f6f2490abc2efde",
+    "mtime": 1793109459.6573818,
+    "ast_hash": "148d976cb23a2878935c8d895f2de767",
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDFieldSources.tsx": {
@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "1488a765b5a5c2fcd05189b6159f7914",
+    "mtime": 1793109399.6836097,
+    "ast_hash": "41ed731a79fed741b142566a843c1f37",
     "semantic_hash": ""
   },
   "client/src/components/procurement/DraftEditor.tsx": {
@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1793017716.3051395,
-    "ast_hash": "3a4c09d1ca38c6a41f6d36d82fe17a96",
+    "mtime": 1793109355.660409,
+    "ast_hash": "264429de65fc71d8bb1c022bbeae431d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
@@ -1860,13 +1860,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ProcurementItemsWorkspace.tsx": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "7b26c44fd4a9f0a87410390f5375b49a",
+    "mtime": 1793109391.2443085,
+    "ast_hash": "4562cfb45c8fadd4ac903a1d91a25221",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1793017716.3047721,
-    "ast_hash": "71acdfd49c55660c292d837e5fe72bfb",
+    "mtime": 1793109347.8228781,
+    "ast_hash": "fe4d35059863197436b35bc57290020f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -1895,8 +1895,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/dfdFieldSources.ts": {
-    "mtime": 1792983547.0896602,
-    "ast_hash": "96c488ece0756efb18d318a4a4c0c76b",
+    "mtime": 1793109399.6830957,
+    "ast_hash": "3ce0a55291214952a25aac88fcd13221",
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalWorkspaceContract.test.ts": {
@@ -5385,8 +5385,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4a-replay-safe-generation.test.ts": {
-    "mtime": 1792983547.528118,
-    "ast_hash": "123ea40abb1bcb8a23b5c517c3d9ff3a",
+    "mtime": 1793109459.656986,
+    "ast_hash": "4507b367fa76d19984b7db20177e1d0f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b1-export-gate.test.ts": {
@@ -10170,8 +10170,8 @@
     "semantic_hash": ""
   },
   "server/services/procurementProcessService.ts": {
-    "mtime": 1793108910.6362727,
-    "ast_hash": "00cd6c9ce5bbc8493ae588ae5c31138f",
+    "mtime": 1793109379.4382064,
+    "ast_hash": "1db63e857687b2308ac669607e6ca304",
     "semantic_hash": ""
   },
   "server/services/productionMonitoringService.ts": {
@@ -15507,6 +15507,21 @@
   "server/__tests__/integration/m8-homologation-preflight.test.ts": {
     "mtime": 1793109152.2529757,
     "ast_hash": "fa5568d6a81d7c6083fce148edb18011",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/GenerationFollowUpNotice.tsx": {
+    "mtime": 1793109355.6609879,
+    "ast_hash": "be7b03545b16999c99e564637d03c26f",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/generationFollowUp.test.ts": {
+    "mtime": 1793109459.6615028,
+    "ast_hash": "9211c97d3526cf9946a4654d5fbd4115",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/generationFollowUp.ts": {
+    "mtime": 1793109317.1249855,
+    "ast_hash": "e23a2d4db23f142bb1da9d6da59e1434",
     "semantic_hash": ""
   }
 }

@@ -11,6 +11,7 @@ import {
   legacyDfdRegisteredMessage,
 } from "./legacyDfdImportCopy";
 import { acceptedMessage, buildAcceptInput, isSuggestionObsolete, type JustificationSuggestionUI } from "./dfdJustificationSuggestion";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { shouldProceedWithFieldAction, shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
 
 /**
@@ -107,19 +108,19 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
   const reconcileField = trpc.procurementProcess.reconcileDFDField.useMutation({
     onSuccess: () => { rotateReconcileKey(); reloadEditor(); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateReconcileKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateReconcileKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
     onSettled: () => setReconcilingKey(null),
   });
   // SEM-058 — gerar NÃO altera o DFD: só traz a sugestão para comparar com o texto atual.
   const aiJustification = trpc.procurementProcess.generateDFDJustification.useMutation({
     onSuccess: (r) => { rotateAiKey(); setAcceptedEdited(null); setSuggestion(r as unknown as JustificationSuggestionUI); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateAiKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateAiKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
   });
   // O único write do texto da IA: aceite humano explícito (consentimento literal + texto exibido).
   const acceptJustification = trpc.procurementProcess.acceptDFDJustification.useMutation({
     onSuccess: (r) => { rotateAcceptKey(); setSuggestion(null); setAcceptedEdited(r.edited); reloadEditor(); },
     onError: (e) => {
-      if (shouldRotateAssistKeyOnError(e.data?.code)) rotateAcceptKey();
+      if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateAcceptKey();
       if (e.data?.code === "CONFLICT") { setSuggestion(null); reloadEditor(); }
     },
   });
@@ -194,7 +195,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             </button>
             {generateDFD.isError && (
               <p className="mt-2 text-sm text-destructive">
-                {generateDFD.error?.message || "Falha ao criar o DFD."}
+                {domainErrorMessage(generateDFD.error?.message, "Falha ao criar o DFD.")}
               </p>
             )}
           </div>

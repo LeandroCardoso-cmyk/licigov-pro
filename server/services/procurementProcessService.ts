@@ -182,7 +182,7 @@ async function runReplaySafeGeneration<T>(
     return { result: reviveCached(check.response), replayed: true };
   }
   if (check.status === "processing") {
-    throw new TRPCError({ code: "CONFLICT", message: "Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
+    throw new TRPCError({ code: "CONFLICT", message: "GENERATION_IN_PROGRESS: Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
   }
   // status "new" ou "failed": executa (cognição fora da transação; persistência atômica dentro).
   try {
