@@ -44,6 +44,7 @@ import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 import { cleanupOrgs, decision, publishBllModel, setFlag, syntheticCnpj } from "../helpers/institutionalTemplatesE2eWorld";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue, type PlannedWrite } from "../../../client/src/lib/editalPreparation";
+import { processNumberParts } from "../../domain/institutionalTemplates/processYear";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 996401;
@@ -301,8 +302,13 @@ describe.skipIf(!DB)("LICIGOV-FAST — jornadas integradas (MySQL real, tenant s
 // gerado nesta jornada a partir do DFD/ETP, emitido pela promoção oficial real, e é esse TR (pin exato) que alimenta o Edital.
 // ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const ORG_BLL = 996403;
-/** Número no formato NNNN/AAAA (usual em prefeituras): o exercício do Edital vem do próprio número, sem redigitação. */
-const BLL_SEQ = String(Number.parseInt(RUN, 36) % 9000 + 1000);
+/**
+ * Número no formato NNNN/AAAA (usual em prefeituras): o exercício do Edital vem do próprio número, sem redigitação.
+ * FIXO e fora da zona ambígua (sequência 1900–2099 também "parece ano", e o contrato de `processNumberParts` faz prevalecer o
+ * formato do sistema AAAA/NNNN). O sorteio anterior (1000–9999) caía nessa zona em ~2% das execuções e invertia o número.
+ * O órgão sintético é limpo no início da suíte, então um número fixo não colide entre execuções.
+ */
+const BLL_SEQ = "1450";
 const PUB_VARS = ["processo.numeroPregao", "controle.dataDivulgacaoPrevista", "processo.dataAbertura", "processo.horarioAbertura",
   "processo.dataInicioRecebimentoPropostas", "processo.dataFimRecebimentoPropostas", "processo.horarioFimRecebimentoPropostas"];
 const PUBLICATION_PLACEHOLDER = "A DEFINIR PARA PUBLICAÇÃO";
@@ -378,6 +384,8 @@ describe.skipIf(!DB)("J1-BLL — DFD → ETP → TR (emitido) → Edital BLL Rev
   const J1B_METRICS: Record<string, unknown> = {};
 
   it("J1-BLL — minuta do Edital BLL Rev. 2 gerada sobre o TR emitido NESTA jornada; datas diferidas; DOCX/PDF; tenant; replay; produção intacta", async () => {
+    // contrato do fixture: o número é NNNN/AAAA sem ambiguidade (exercício 2026, sequência BLL_SEQ)
+    expect(processNumberParts(`${BLL_SEQ}/2026`)).toEqual({ year: 2026, sequence: BLL_SEQ });
     const op = await caller(UB.operator, ORG_BLL);
     const mgr = await caller(UB.manager, ORG_BLL);
     const h: ReuseHarness = { org: ORG_BLL, proc: () => op.procurementProcess, tpl: () => mgr.institutionalTemplates, ws: BLL_WS, processId: "", key };
