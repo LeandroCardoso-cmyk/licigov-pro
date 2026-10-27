@@ -121,6 +121,15 @@ export function pendingMarkers(text: string): { revisar: number; aDefinir: numbe
   };
 }
 
+/**
+ * M8 pós-homologação — MÉTRICA (não bloqueia): marcadores [REVISAR] do TR que pedem um parâmetro JÁ CONFIRMADO no processo
+ * (o rótulo do parâmetro aparece no texto do marcador). Esperado: 0 — a autoria recebe os parâmetros confirmados.
+ */
+export function redundantReviewMarkers(content: string, confirmedLabels: readonly string[]): string[] {
+  const labels = confirmedLabels.map((l) => l.replace(/\s*\[[^\]]*\]\s*$/, "").trim().toLowerCase()).filter((l) => l.length >= 6);
+  return (content.match(/\[REVISAR[^\]]*\]/g) ?? []).filter((m) => labels.some((l) => m.toLowerCase().includes(l)));
+}
+
 /** Resíduos técnicos que nunca podem chegar ao documento exportado. */
 export function technicalResidue(text: string): string[] {
   const found: string[] = [];

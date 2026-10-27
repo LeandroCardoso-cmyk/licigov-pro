@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DFDWorkspace.tsx": {
-    "mtime": 1793109399.6836097,
-    "ast_hash": "41ed731a79fed741b142566a843c1f37",
+    "mtime": 1793116113.752992,
+    "ast_hash": "c0543078ee76180e6f8da1f6cd992797",
     "semantic_hash": ""
   },
   "client/src/components/procurement/DraftEditor.tsx": {
@@ -14975,13 +14975,13 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1793109088.132972,
-    "ast_hash": "ffc0d71599e7d3c884275857c2cef1a8",
+    "mtime": 1793116150.4693635,
+    "ast_hash": "4fe281eb087215f766045532fa08e186",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1793109106.1613226,
-    "ast_hash": "5a88ba68a0a59a0f75f1106911fbd578",
+    "mtime": 1793116150.4699707,
+    "ast_hash": "9214d17e1cd9afc9e6cff95258dc0dac",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
@@ -15500,13 +15500,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-tr-structured-params-authoring.test.ts": {
-    "mtime": 1793108792.9009542,
-    "ast_hash": "11ed0eca536104dc6e71b181e6594447",
+    "mtime": 1793116104.067003,
+    "ast_hash": "1d6de1a0cc69c2e3a67086a245688357",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-homologation-preflight.test.ts": {
-    "mtime": 1793111086.2717648,
-    "ast_hash": "97833b41ff1e0c9a4d8767a0e8fa8214",
+    "mtime": 1793116150.4704864,
+    "ast_hash": "60f0b2c93c31ead30fd1c99c6b76e239",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GenerationFollowUpNotice.tsx": {

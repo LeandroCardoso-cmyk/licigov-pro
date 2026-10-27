@@ -30,7 +30,7 @@ vi.mock("../../db/organizations", async (orig) => ({
 import { organizationsRouter } from "../../routers/organizationsRouter";
 import { __setHomologationConfigForTests, demonstrativePricesAllowedForOrganization } from "../../services/priceGovernanceService";
 import {
-  assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError,
+  assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError, redundantReviewMarkers,
   BLOCKED_DEMONSTRATIVE_PRICES, BLOCKED_SAME_IDENTITY, BLOCKED_LOGIN_RATE_LIMITED,
 } from "../../../scripts/homologation-e2e";
 
@@ -109,5 +109,15 @@ describe("executor — pré-flight recusa ANTES de qualquer escrita", () => {
     expect(before).toContain("assertDemonstrativePricesEnabled(b.current)");
     expect(before).not.toMatch(/\.mutate\(\{\s*processNumber/);
     expect(src.indexOf("assertDemonstrativePricesEnabled(b.current)")).toBeLessThan(src.indexOf("procurementProcess.createProcess"));
+  });
+});
+
+describe("métrica de [REVISAR] redundantes no TR (M8 — evidência do efeito na homologação)", () => {
+  it("conta só marcadores que citam um parâmetro confirmado; lacunas legítimas não contam", () => {
+    const tr = "Vigência: [REVISAR: prazo de vigência contratual e prorrogação]. PCA: [REVISAR: item do Plano de Contratações Anual]. Local: [REVISAR: Local de execução/entrega].";
+    expect(redundantReviewMarkers(tr, ["Vigência contratual", "Local de execução/entrega [TR]", "Prazo de pagamento"])).toEqual([
+      "[REVISAR: prazo de vigência contratual e prorrogação]", "[REVISAR: Local de execução/entrega]",
+    ]);
+    expect(redundantReviewMarkers(tr, [])).toEqual([]);
   });
 });

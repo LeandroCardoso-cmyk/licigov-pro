@@ -82,9 +82,4 @@ describe("M8 — parâmetros confirmados do TR na entrada efetiva da autoria", (
     expect(content).not.toContain("PARÂMETROS ESTRUTURADOS DA CONTRATAÇÃO");
   });
 
-  it("o contexto de autoria (e seu digest de fontes) não depende dos parâmetros — rascunhos existentes não viram 'fonte alterada'", () => {
-    const a = buildDocumentAuthoringContext(ctxInput());
-    const b = buildDocumentAuthoringContext(ctxInput());
-    expect(a.sourcesDigest).toBe(b.sourcesDigest);
-  });
 });

@@ -278,7 +278,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             </p>
           )}
           {reconcileField.isError && reconcileField.error?.data?.code !== "CONFLICT" && (
-            <p className="text-sm text-destructive">{reconcileField.error?.message || "Falha ao atualizar o campo."}</p>
+            <p className="text-sm text-destructive">{domainErrorMessage(reconcileField.error?.message, "Falha ao atualizar o campo.")}</p>
           )}
           {saveConflict && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
@@ -310,7 +310,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             )}
             {saveDFD.isError && saveDFD.error?.data?.code !== "CONFLICT" && (
               <span className="text-sm text-destructive">
-                {saveDFD.error?.message || "Falha ao salvar o rascunho."}
+                {domainErrorMessage(saveDFD.error?.message, "Falha ao salvar o rascunho.")}
               </span>
             )}
           </div>
@@ -321,7 +321,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
               docContentHash={doc.contentHash}
               dirty={dirty}
               pending={acceptJustification.isPending}
-              errorMessage={acceptJustification.isError && acceptJustification.error?.data?.code !== "CONFLICT" ? acceptJustification.error?.message || "Falha ao registrar a justificativa." : null}
+              errorMessage={acceptJustification.isError && acceptJustification.error?.data?.code !== "CONFLICT" ? domainErrorMessage(acceptJustification.error?.message, "Falha ao registrar a justificativa.") : null}
               onAccept={onAcceptJustification}
               onDiscard={onDiscardSuggestion}
             />
@@ -336,10 +336,10 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             <p role="status" className="text-xs text-muted-foreground">{acceptedMessage(acceptedEdited)}</p>
           )}
           {acceptJustification.isError && acceptJustification.error?.data?.code === "CONFLICT" && !suggestion && (
-            <p role="alert" className="text-sm text-destructive">{acceptJustification.error.message}</p>
+            <p role="alert" className="text-sm text-destructive">{domainErrorMessage(acceptJustification.error.message, "Não foi possível aceitar a sugestão.")}</p>
           )}
           {aiJustification.isError && (
-            <p className="text-sm text-destructive">{aiJustification.error?.message || "Falha ao gerar a sugestão da justificativa."}</p>
+            <p className="text-sm text-destructive" role="alert">{domainErrorMessage(aiJustification.error?.message, "Falha ao gerar a sugestão da justificativa.")}</p>
           )}
         </div>
       )}

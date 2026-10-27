@@ -22,7 +22,7 @@ import * as mammoth from "mammoth";
 import {
   AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
   assertDemonstrativePricesEnabled, assertDistinctIdentities, classifyLoginError,
-  parseExercicio, pendingMarkers, priceImportMode, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
+  parseExercicio, pendingMarkers, priceImportMode, redundantReviewMarkers, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue, type PlannedWrite } from "../../../client/src/lib/editalPreparation";
@@ -201,7 +201,11 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     const trTyped = (await fillTrParams(h, {}, ["processo.objetoCompleto"])).typed;
     const { document: trDraft } = await op.procurementProcess.generateTR.mutate({ processId: pid, object: OBJ, idempotencyKey: key("tr") });
     for (const it of ITEMS) expect(trDraft.content).toContain(it.description);
+    // M8 pós-homologação — métrica: [REVISAR] que pedem parâmetro já confirmado (esperado 0; não bloqueia a jornada).
+    const trConfirmed: any = await op.procurementProcess.trStructuredParams.query({ processId: pid, ...WS });
+    const redundant = redundantReviewMarkers(trDraft.content, trConfirmed.fields.filter((f: any) => f.active && f.status === "SET").map((f: any) => String(f.description ?? "")));
     REPORT.metrics.TR = {
+      redundantReviewMarkers: redundant.length,
       structuredActive: trBefore.fields.filter((f: any) => f.active).length,
       structuredPrefilled: trBefore.fields.filter((f: any) => f.active && f.status === "SET").length,
       structuredProposed: trBefore.fields.filter((f: any) => f.active && f.proposal).length,
