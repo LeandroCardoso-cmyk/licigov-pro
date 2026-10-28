@@ -1075,8 +1075,8 @@
     "semantic_hash": ""
   },
   "client/src/components/documents/OfficialDocumentPanel.tsx": {
-    "mtime": 1793170437.0699637,
-    "ast_hash": "a29b93271b5c2868a4663cd1d2759571",
+    "mtime": 1793171903.5081112,
+    "ast_hash": "6629ee26c7ac4e1acfd9d26f09b5b261",
     "semantic_hash": ""
   },
   "client/src/components/executive-operations/DeploymentHealthCard.tsx": {
@@ -5865,8 +5865,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/official-document-export-adapter.test.ts": {
-    "mtime": 1793168885.625866,
-    "ast_hash": "a84517d53d5bf80a43bbb274262ca94d",
+    "mtime": 1793171975.1423678,
+    "ast_hash": "35c117d53782dbb00e6a4f93955f3da5",
     "semantic_hash": ""
   },
   "server/__tests__/integration/opaque-tokens.test.ts": {
@@ -8770,8 +8770,8 @@
     "semantic_hash": ""
   },
   "server/routers/documentEngineRouter.ts": {
-    "mtime": 1793170437.068302,
-    "ast_hash": "66e940104b638599341b1854d9a48f65",
+    "mtime": 1793171903.5077941,
+    "ast_hash": "bfed32c831050c1198c1d2f4236f71b6",
     "semantic_hash": ""
   },
   "server/routers/documentReviewRouter.ts": {
@@ -9265,8 +9265,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/structuredAuthoringService.ts": {
-    "mtime": 1793169799.1658528,
-    "ast_hash": "785cfbb723ba4c2f70be455b87332a43",
+    "mtime": 1793171713.4040234,
+    "ast_hash": "b4c240507b623eb40a20b3bb39c6b70d",
     "semantic_hash": ""
   },
   "server/services/autonomousWorkflowService.ts": {
@@ -10050,8 +10050,8 @@
     "semantic_hash": ""
   },
   "server/services/officialDocumentExportAdapter.ts": {
-    "mtime": 1793170332.8137674,
-    "ast_hash": "07093941a19f6b360e28ee7995a28aab",
+    "mtime": 1793171903.5072997,
+    "ast_hash": "11faaf5e00e42f11fb192bf5f9d50e6f",
     "semantic_hash": ""
   },
   "server/services/officialDocumentLifecycleService.ts": {
@@ -10590,8 +10590,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1793168884.9027433,
-    "ast_hash": "0a26848391772b09eeaf4189b956c58c",
+    "mtime": 1793171795.8989165,
+    "ast_hash": "cf665a0cc85760c0c3a4b1137b0eb0f1",
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
@@ -13825,8 +13825,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revalidation.ts": {
-    "mtime": 1793168885.6970108,
-    "ast_hash": "8b338c3c05a9e407c8ce0f46a2d85196",
+    "mtime": 1793172038.1652455,
+    "ast_hash": "26ebe9e646db44225dfab67b97fe7135",
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
@@ -13840,8 +13840,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
-    "mtime": 1793169697.9237216,
-    "ast_hash": "289e3e1c643ac093ddc6d59ff839da2c",
+    "mtime": 1793171822.9871173,
+    "ast_hash": "566b262028ed041b8c56b08238bc1e11",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/errors.ts": {
@@ -14425,8 +14425,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1793169342.4667706,
-    "ast_hash": "4c768350c8269545fc96c5b90cc7ccd7",
+    "mtime": 1793172038.1661654,
+    "ast_hash": "d118de50c067584ad1f7830b4e55faef",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14750,8 +14750,8 @@
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_PUBLICATION_RUNBOOK.md": {
-    "mtime": 1793168884.9790893,
-    "ast_hash": "e4150ddf79894b22980c5805ff9fb248",
+    "mtime": 1793172052.0989316,
+    "ast_hash": "9c6c0f3f8767c7db53a01d8f0c7c1ffc",
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_READINESS_DOSSIER.md": {
@@ -15020,8 +15020,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-etp-factual-coherence.test.ts": {
-    "mtime": 1793170105.1064942,
-    "ast_hash": "0ab149ea4588a4a11a33c84587284718",
+    "mtime": 1793171784.6158986,
+    "ast_hash": "b1333d868f3b87dc62d208e8b08a3c1e",
     "semantic_hash": ""
   },
   "docs/ops/M8_STAGING_HOMOLOGATION_RUNBOOK.md": {
@@ -15580,8 +15580,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/m8PreproductionP1.test.ts": {
-    "mtime": 1793170580.2123625,
-    "ast_hash": "53e8fa39845882419de115036e7dceef",
+    "mtime": 1793172002.507996,
+    "ast_hash": "7f4bb6189b7167084e104fc25b27a27a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-reg-b-self-emission-router.test.ts": {
@@ -15590,13 +15590,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-template-draft-relink-mysql-smoke.test.ts": {
-    "mtime": 1793170668.5028493,
-    "ast_hash": "8a81427805249de562baa921d569cf16",
+    "mtime": 1793171872.8396275,
+    "ast_hash": "c6c5de5d7f2a60e469f617cfc1d74350",
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-preproduction-p2-p3-documents.test.ts": {
-    "mtime": 1793170542.778842,
-    "ast_hash": "4cc9b099609e55d196cefeba6f828a80",
+    "mtime": 1793172066.6809971,
+    "ast_hash": "2a7225bf211073a39a785cd9d56713e2",
     "semantic_hash": ""
   }
 }

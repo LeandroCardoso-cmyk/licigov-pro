@@ -27,12 +27,17 @@ vi.mock("../../services/officialDocumentLifecycleService", () => ({
   recordOfficialArtifact: vi.fn(),
 }));
 vi.mock("../../services/activityLogService", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../db/officialDocuments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
+  listVersions: vi.fn().mockResolvedValue([]),
+}));
 
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
 import { getOfficialDocument } from "../../services/documentEngineService";
 import { exportDocument } from "../../services/documentExportService";
 import { logActivity } from "../../services/activityLogService";
 import { recordOfficialArtifact } from "../../services/officialDocumentLifecycleService";
+import { listVersions } from "../../db/officialDocuments";
 
 function mkDoc(over: Record<string, unknown> = {}) {
   return {
@@ -160,5 +165,48 @@ describe("PR B.1 · exportOfficialDocument (adapter compartilhado)", () => {
     vi.mocked(recordOfficialArtifact).mockRejectedValue(new Error("ledger indisponível"));
     await expect(exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf" })).rejects.toThrow("ledger indisponível");
     expect(logActivity).not.toHaveBeenCalled();
+  });
+});
+
+describe("M8 P3.3 — cabeçalho da versão EMITIDA do processo licitatório: ordinal da emissão + revisão técnica", () => {
+  const lineage = [
+    { id: "g1", version: 1, status: "gerado", replayHash: "r1", createdAt: "x" },
+    { id: "e2", version: 2, status: "emitido", replayHash: "r2", createdAt: "x" },
+    { id: "g3", version: 3, status: "gerado", replayHash: "r3", createdAt: "x" },
+    { id: "e4", version: 4, status: "emitido", replayHash: "r4", createdAt: "x" },
+  ];
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listVersions).mockResolvedValue(lineage);
+    vi.mocked(recordOfficialArtifact).mockResolvedValue({ artifact: { id: "art-1", sourceContentHash: "c".repeat(64) } as any, created: true });
+  });
+  const meta = () => vi.mocked(exportDocument).mock.calls[0][0].meta!;
+
+  it("TR emitido v2 = 1ª emissão; v4 = 2ª emissão (contagem na linhagem do tenant; nada renumerado)", async () => {
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "processo_licitatorio", documentType: "tr", status: "emitido", version: 2 }) as any);
+    await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "e2", format: "pdf" });
+    expect(meta()).toMatchObject({ version: 2, emissionNumber: 1, statusLabel: "EMITIDO", isDraft: false });
+    expect(listVersions).toHaveBeenCalledWith("lin1", 1);
+    vi.mocked(exportDocument).mockClear();
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "processo_licitatorio", documentType: "tr", status: "emitido", version: 4 }) as any);
+    await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "e4", format: "docx" });
+    expect(meta()).toMatchObject({ version: 4, emissionNumber: 2 });
+  });
+
+  it("parecer (NEW-007), contratos e documentos não emitidos mantêm o cabeçalho anterior (sem ordinal)", async () => {
+    for (const over of [
+      { businessDomain: "parecer_juridico", documentType: "parecer", status: "emitido" },
+      { businessDomain: "contratos", documentType: "contrato", status: "emitido" },
+    ]) {
+      vi.mocked(exportDocument).mockClear();
+      vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc(over) as any);
+      await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "d", format: "pdf" });
+      expect(meta()).not.toHaveProperty("emissionNumber");
+      expect(meta().version).toBe(3);
+    }
+    expect(listVersions).not.toHaveBeenCalled();
+    // snapshot técnico do processo licitatório continua NÃO exportável como oficial (gate inalterado)
+    vi.mocked(getOfficialDocument).mockResolvedValue(mkDoc({ businessDomain: "processo_licitatorio", documentType: "tr", status: "gerado" }) as any);
+    await expect(exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "d", format: "pdf" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

@@ -14,10 +14,13 @@ import path from "path";
 import { composeTemplate } from "../../domain/institutionalTemplates/composer";
 import { changedAuthorities } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateAST2 } from "../../domain/institutionalTemplates";
-import { BASE_SCENARIO, BLL_MODEL_DIR, bllComposeRequest, bllTrPin } from "../helpers/institutionalTemplatesBllHarness";
+import { BASE_SCENARIO, BLL_MODEL_DIR, bllCatalog, bllComposeRequest, bllTrPin } from "../helpers/institutionalTemplatesBllHarness";
+import { describeVariable } from "../../services/institutionalTemplates/editalPreparationService";
+import { authorityEntryOf } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { buildInstitutionalModel, renderInstitutionalDOCX, renderInstitutionalPDF, type InstitutionalMeta } from "../../services/documentConverter";
 import { readZipEntry } from "../helpers/zipText";
-import { generateStructuredAuthoring, buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
+import { generateStructuredAuthoring, buildMockProviderAuthoring, missingSourceLabel } from "../../services/authoring/structuredAuthoringService";
+import { buildDocumentAuthoringContext } from "../../services/authoring/authoringContext";
 import { buildOfficialKnowledgeCorpus } from "../../services/officialCorpus/officialCorpusBuilder";
 
 const ast = JSON.parse(readFileSync(path.join(BLL_MODEL_DIR, "ast.json"), "utf8")) as TemplateAST2;
@@ -109,6 +112,42 @@ describe("P2.2/P3.2 — TR: conteúdo do documento sem aviso de rascunho nem met
   });
 });
 
+describe("P2.2/P3.2 — caminho NÃO fundamentado e com fontes ausentes (ressalvas no texto: linguagem do documento)", () => {
+  const sourceContext = buildDocumentAuthoringContext({ organizationId: 975003, processId: "p-ungr", kind: "tr", object: "Computadores", processObject: "Computadores", processNumber: "1/2026", dfd: null, etp: null, approvedItems: [], pendingItemCount: 0 } as never);
+  const gen = () => generateStructuredAuthoring({ organizationId: 975003, kind: "tr", object: "Computadores", correlationId: "m8-p2-ungr", sourceContext, invoke: async () => buildMockProviderAuthoring("tr") } as never);
+
+  it("ressalvas honestas permanecem, sem 'rascunho', sem chaves técnicas e sem nota de proveniência", async () => {
+    const r = await gen();
+    expect(r.groundingState).toBe("ungrounded");
+    expect(sourceContext.missing).toEqual(expect.arrayContaining(["dfd", "etp", "itens"]));
+    expect(r.content).toContain("## Limitações e ressalvas");
+    expect(r.content).toContain("Nenhuma evidência normativa vigente foi recuperada para este documento");
+    expect(r.content).toContain("Informações ausentes no processo (marcadas para revisão): Documento de Formalização da Demanda (DFD); Estudo Técnico Preliminar (ETP); Itens da contratação.");
+    expect(r.content).not.toMatch(/rascunho/i);
+    // chaves técnicas (com sublinhado/sufixo) e a lista crua "dfd, etp, itens" nunca chegam ao texto
+    expect(r.content).not.toMatch(/\b(pesquisa_precos|fonte_alterada:\d+|quantidade_prevista)\b/);
+    expect(r.content).not.toMatch(/\bdfd, etp\b|:\s*dfd\b/);
+    expect(r.content).not.toContain("não pela IA");
+  });
+
+  it("DOCX/PDF do mesmo conteúdo: sem 'rascunho' no corpo de versão emitida e sem os marcadores internos do quadro", async () => {
+    const r = await gen();
+    const model = buildInstitutionalModel(r.content, EMITTED);
+    for (const out of [docxText(await renderInstitutionalDOCX(model)), await pdfText(await renderInstitutionalPDF(model))]) {
+      expect(out).not.toMatch(/rascunho/i);
+      expect(out).not.toContain("licigov:itens-autoritativos");
+      expect(out).toContain("Informações ausentes no processo");
+    }
+  });
+
+  it("rótulo humano para toda chave conhecida; chave desconhecida nunca vaza crua", () => {
+    expect(missingSourceLabel("pesquisa_precos")).toBe("Pesquisa de preços");
+    expect(missingSourceLabel("fonte_alterada:3")).toBe("pesquisa de preços do item 3 alterada após a decisão");
+    expect(missingSourceLabel("quantidade_prevista")).toBe("quantidade prevista dos itens");
+    expect(missingSourceLabel("chave_interna_xyz")).toBe("informação do processo");
+  });
+});
+
 describe("P2.2/P3.3 — exportação: versão EMITIDA × RASCUNHO (preview × DOCX × PDF)", () => {
   const body = "# Termo de Referência — Aquisição\n\n## Definição do objeto\n_Art. 6º, XXIII, a_\n\nAquisição de cadeiras.";
 
@@ -141,5 +180,17 @@ describe("P2.2/P3.3 — exportação: versão EMITIDA × RASCUNHO (preview × DO
     const text = JSON.stringify(model.blocks);
     expect(text).toContain("Aquisição de cadeiras.");
     expect(text).toContain("Art. 6º, XXIII, a");
+  });
+});
+
+describe("P3.4 — dotação orçamentária: orientação de apresentação, sem nova autoridade nem valor presumido", () => {
+  const def = bllCatalog.vars.find((v) => v.name === "julgamento.dotacaoOrcamentaria")!;
+  it("o descritor pergunta pela MESMA dotação da 'Adequação orçamentária' do TR; a autoridade continua a da CertameConfig", () => {
+    const d = describeVariable(def);
+    expect(d.description).toBe("Dotação orçamentária");
+    expect(d.question).toMatch(/mesma indicada na seção "Adequação orçamentária" do TR/);
+    expect(d.question).toMatch(/uma única vez/);
+    expect(authorityEntryOf(def.name)).toMatchObject({ entry: "CERTAME_CONFIG" });   // nenhuma projeção do TR foi criada
+    expect(d).not.toHaveProperty("currentValue");                                     // nada é pré-preenchido/presumido
   });
 });

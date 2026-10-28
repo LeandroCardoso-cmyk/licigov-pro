@@ -75,7 +75,7 @@ describe("P1.1 — campo preenchido continua na tela; a contagem continua caindo
       { ...prorrogacao, status: "PENDING" }, abertaFechada, { ...numero, status: "DECIDED", hasValue: true, currentValue: "12/2026" },
     ], { "julgamento.modoDisputa": "aberto", "julgamento.duracaoEtapaLances": { amount: 10, unit: "minute" }, "controle.numeroPregao": "12/2026" });
     expect(liveRegisteredItems(persisted, {}).map((i) => i.field.name)).toEqual(["julgamento.modoDisputa", "julgamento.duracaoEtapaLances", "controle.numeroPregao"]);
-    expect(shown(persisted, {})).toEqual(["julgamento.regraProrrogacaoAutomatica"]);
+    expect(shown(persisted, {})).toEqual(["julgamento.regraProrrogacaoAutomatica"]);   // controlador registrado ⇒ ordem original
     // rehidratação exata (número E unidade) e nenhuma escrita sem alteração
     expect(toFormValue(duracao, { amount: 10, unit: "minute" })).toEqual({ amount: "10", unit: "minute" });
     expect(buildSavePlan(persisted, { edits: ed({ duracaoEtapaLances: { amount: "10", unit: "minute" } }) }).writes).toEqual([]);
@@ -129,9 +129,10 @@ describe("P3.5 — condicionais do modo de disputa aparecem na escolha, sem grav
   const st = fresh();
   it("antes da escolha: nenhuma filha; 'aberto' ⇒ filhas do ramo aberto; 'aberto e fechado' ⇒ só a do outro ramo", () => {
     expect(shown(st, {})).not.toContain("julgamento.duracaoEtapaLances");
-    expect(shown(st, ed({ modoDisputa: "aberto" }))).toEqual(expect.arrayContaining(["julgamento.modoDisputa", "julgamento.duracaoEtapaLances", "julgamento.regraProrrogacaoAutomatica"]));
+    // ordem de apresentação: as filhas logo ABAIXO do seletor que as ativou (o servidor entrega em ordem alfabética)
+    expect(shown(st, ed({ modoDisputa: "aberto" }))).toEqual(["julgamento.modoDisputa", "julgamento.duracaoEtapaLances", "julgamento.regraProrrogacaoAutomatica", "controle.numeroPregao"]);
     const af = shown(st, ed({ modoDisputa: "aberto e fechado" }));
-    expect(af).toContain("julgamento.regrasEtapaAbertaFechada");
+    expect(af.slice(0, 2)).toEqual(["julgamento.modoDisputa", "julgamento.regrasEtapaAbertaFechada"]);
     expect(af).not.toContain("julgamento.duracaoEtapaLances");
   });
   it("cancelar a escolha (voltar a vazio) oculta as filhas; preencher a filha não a remove; nada é gravado só por aparecer", () => {

@@ -221,7 +221,7 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
   // 3. Mesmas fontes ⇒ mesma composição (determinismo do composer, decisões condicionais e narrativas).
   if (re.composedOutputHash !== m1.composedOutputHash || templateHash(cur.conditionalDecisions) !== templateHash(m1.conditionalDecisions)
       || templateHash(cur.aiNarratives) !== templateHash(m1.aiNarratives)) {
-    return { ok: false, issues: [{ code: "COMPOSITION_DRIFT", path: "composedOutputHash", message: "as mesmas fontes não reproduzem o texto composto do M1" }] };
+    return { ok: false, issues: [{ code: "COMPOSITION_DRIFT", path: "composedOutputHash", message: "a composição atual não reproduz o texto registrado no M1 (dados, narrativas ou apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir" }] };
   }
 
   // 4. Edição humana: cadeia explícita até o conteúdo emitido.

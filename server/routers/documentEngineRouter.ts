@@ -83,7 +83,8 @@ export const documentEngineRouter = router({
       // Só com `origin` (poucas linhagens: as de um processo/contrato); sem ele o campo fica ausente e a tela mostra a revisão técnica.
       const ordinals = new Map<string, number>();
       if (input?.origin) {
-        for (const lineageId of new Set(listed.filter((d) => d.status === "emitido").map((d) => d.lineageId))) {
+        // Só processo licitatório (ETP/TR/Edital): parecer (NEW-007), contratos e contratação direta mantêm a apresentação atual.
+        for (const lineageId of new Set(listed.filter((d) => d.status === "emitido" && d.businessDomain === "processo_licitatorio").map((d) => d.lineageId))) {
           let n = 0;
           for (const v of await listVersions(lineageId, orgId)) if (v.status === "emitido") ordinals.set(v.id, ++n);
         }

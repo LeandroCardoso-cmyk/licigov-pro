@@ -2,7 +2,8 @@
  * M8 P2.1 — consequência controlada: a referência institucional do Anexo I não carrega mais id/hash do TR, então um M1 NOVO (outro pin
  * oficial) pode compor o MESMO texto. O adaptador real do rascunho (`writeDraft`) precisa então:
  *  - mesmo M1 ⇒ replay puro (nada muda);
- *  - outro M1, texto idêntico ⇒ só o vínculo `tpl-m1:` muda (conteúdo, autoria, último ator, updatedAt e ledger de edições intactos);
+ *  - outro M1, texto idêntico ⇒ o vínculo `tpl-m1:` muda; conteúdo, autoria, último ator substantivo e ledger de edições intactos; a
+ *    revisão anterior deixa de valer (updatedAt/correlationId mudam) e um evento de processo AUDITA a troca (mesma transação);
  *  - documento com versão OFICIAL emitida ⇒ recusa (mesma trava da recomposição) e NADA muda — sem isso nasceria uma versão `gerado`
  *    depois da emissão;
  *  - tenant-scoped (o lock/atualização usam a organização do rascunho).
@@ -13,7 +14,7 @@ import mysql from "mysql2/promise";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../db/connection";
 import { runMigrations } from "../../bootstrap";
-import { generatedDocumentEditsTable, generatedDocumentsTable, officialDocumentPromotionsTable } from "../../../drizzle/schema";
+import { generatedDocumentEditsTable, generatedDocumentsTable, officialDocumentPromotionsTable, processTimelineTable } from "../../../drizzle/schema";
 import { createTemplateDraftAdapter, templateDraftId } from "../../services/institutionalTemplates/adapters/draftAdapter";
 import type { TemplateTxExecutor } from "../../services/institutionalTemplates/ports";
 
@@ -32,7 +33,10 @@ describe.skipIf(!DB)("M8 P2.1 — rascunho por modelo: mesmo texto com outro M1 
     await conn.query("DELETE FROM `generated_document_edits` WHERE organization_id IN (?, ?)", [ORG, ORG_OTHER]);
     await conn.query("DELETE FROM `generated_documents` WHERE organization_id IN (?, ?)", [ORG, ORG_OTHER]);
     await conn.query("DELETE FROM `official_document_promotions` WHERE organization_id IN (?, ?)", [ORG, ORG_OTHER]);
+    await conn.query("DELETE FROM `process_timeline` WHERE organization_id IN (?, ?)", [ORG, ORG_OTHER]);
   };
+  const events = async () => (await getDb())!.select().from(processTimelineTable)
+    .where(and(eq(processTimelineTable.organizationId, ORG), eq(processTimelineTable.processId, PID)));
   const row = async (org = ORG) => (await (await getDb())!.select().from(generatedDocumentsTable)
     .where(and(eq(generatedDocumentsTable.id, id), eq(generatedDocumentsTable.organizationId, org))))[0];
   const edits = async () => (await (await getDb())!.select().from(generatedDocumentEditsTable).where(eq(generatedDocumentEditsTable.organizationId, ORG))).length;
@@ -62,14 +66,23 @@ describe.skipIf(!DB)("M8 P2.1 — rascunho por modelo: mesmo texto com outro M1 
     expect(await row()).toEqual(before);
   });
 
-  it("outro M1 com texto idêntico ⇒ só o vínculo muda; autoria/último ator/updatedAt/ledger intactos", async () => {
+  it("outro M1 com texto idêntico ⇒ vínculo muda, revisão anterior invalidada, troca auditada; conteúdo/autoria/ledger intactos", async () => {
     const before = await row();
     const editsBefore = await edits();
+    expect(await events()).toHaveLength(0);
     await write("tplm1_B");
     const after = await row();
     expect(JSON.parse(after.sources ?? "[]")).toEqual(["origem:template", "tpl-m1:tplm1_B"]);
-    expect({ ...after, sources: before.sources }).toEqual(before);
-    expect(await edits()).toBe(editsBefore);
+    expect(after.updatedAt).not.toBe(before.updatedAt);                 // o pin de revisão (id+hash+updatedAt) deixa de valer
+    expect(after.correlationId).toBe("m8-relink-tplm1_B");
+    const { sources: _s, updatedAt: _u, correlationId: _c, ...stable } = after;
+    const { sources: _s0, updatedAt: _u0, correlationId: _c0, ...stableBefore } = before;
+    expect(stable).toEqual(stableBefore);                               // conteúdo, autoria, último ator substantivo, status
+    expect(await edits()).toBe(editsBefore);                            // nenhuma "edição" fictícia no ledger
+    const ev = await events();
+    expect(ev).toHaveLength(1);
+    expect(ev[0].summary).toContain("tplm1_A → tplm1_B");
+    expect(ev[0].correlationId).toBe("m8-relink-tplm1_B");
   });
 
   it("documento com versão oficial emitida ⇒ recusa e nada muda (nunca um 'gerado' depois da emissão)", async () => {
@@ -80,9 +93,10 @@ describe.skipIf(!DB)("M8 P2.1 — rascunho por modelo: mesmo texto com outro M1 
     const before = await row();
     await expect(write("tplm1_C")).rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringMatching(/^OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE:/) });
     expect(await row()).toEqual(before);
-    // replay do M1 vigente continua sendo no-op (sem recusa) mesmo após a emissão
+    // replay do M1 vigente continua sendo no-op (sem recusa e sem novo evento) mesmo após a emissão
     await write("tplm1_B");
     expect(await row()).toEqual(before);
+    expect(await events()).toHaveLength(1);
   });
 
   it("isolamento: o rascunho de outro órgão não é tocado", async () => {

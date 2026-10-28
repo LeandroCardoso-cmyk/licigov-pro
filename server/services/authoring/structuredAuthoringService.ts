@@ -310,11 +310,27 @@ function confirmedParamsPrompt(p: TrConfirmedParams): string[] {
 /**
  * Anexa o bloco AUTORITATIVO de itens (TR) ao texto. O bloco é texto do servidor (determinístico), nunca prosa do provider.
  * As chaves técnicas das fontes usadas/ausentes (`dfd, etp, itens, pesquisa_precos`, `fonte_alterada:N`…) NÃO entram no documento
- * (P3.2): são proveniência, já gravada nos marcadores de lineage do rascunho e exibida ao revisor no resumo de fontes da tela.
+ * (P3.2): são proveniência (marcadores de lineage do rascunho). As AUSENTES continuam visíveis ao revisor como ressalva, em "Limitações e
+ * ressalvas", com rótulo humano (`missingSourceLabel`).
  */
 function withSourceContext(rendered: string, ctx: DocumentAuthoringContext): string {
   return ctx.authoritativeBlock ? `${rendered.replace(/\s+$/, "")}\n\n${ctx.authoritativeBlock}\n` : rendered;
 }
+
+/**
+ * M8 P3.2 — rótulo HUMANO de uma fonte ausente (`DocumentAuthoringContext.missing`): a ressalva do documento nunca expõe a chave técnica
+ * (`dfd`, `pesquisa_precos`, `fonte_alterada:3`…). Chave desconhecida ⇒ rótulo genérico (nunca a chave crua).
+ */
+export function missingSourceLabel(key: string): string {
+  const LABELS: Readonly<Record<string, string>> = {
+    objeto: "objeto da contratação", dfd: "Documento de Formalização da Demanda (DFD)", etp: "Estudo Técnico Preliminar (ETP)",
+    itens: "Itens da contratação", pesquisa_precos: "Pesquisa de preços", quantidade_prevista: "quantidade prevista dos itens",
+  };
+  const changed = /^fonte_alterada:(\d+)$/.exec(key);
+  if (changed) return `pesquisa de preços do item ${changed[1]} alterada após a decisão`;
+  return LABELS[key] ?? "informação do processo";
+}
+const missingSourcesText = (keys: readonly string[]): string => [...new Set(keys.map(missingSourceLabel))].join("; ");
 
 /** Registra proveniência FAILED de contrato de autoria (structured output inválido) — best-effort. */
 async function recordAuthoringContractFailure(input: StructuredAuthoringInput, err: unknown): Promise<void> {
@@ -466,7 +482,8 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   const evidenceComplete = finalCoverage.evidenceComplete;
 
   // Limitações honestas (fundamentação parcial/ausente, citações rejeitadas, seções não contempladas).
-  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o rascunho não está fundamentado e exige elaboração pelo servidor.");
+  // M8 P2.2/P3.2 — as ressalvas entram no TEXTO (que a emissão congela): linguagem do documento, sem "rascunho" nem chaves técnicas.
+  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada para este documento — a fundamentação exige elaboração pelo servidor competente.");
   else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: nem todas as seções que exigem grounding contam com evidência normativa compatível.");
   // Gap 6 — a limitação registra a CATEGORIA da rejeição, sem reproduzir a citação falsa (não vira nota de
   // rodapé que ecoa o dispositivo inexistente). O texto exato fica só em `rejectedReferences` (dado, não render).
@@ -476,10 +493,9 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   if (omittedSections.length > 0) limitations.push(`Seções não contempladas (com justificativa): ${omittedSections.join("; ")}.`);
   const pendingGrounding = sections.filter((s) => s.contentMode === "provided" && !s.grounded).map((s) => s.title);
   if (pendingGrounding.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções produzidas com fundamentação pendente: ${pendingGrounding.join("; ")}.`);
-  limitations.push("Estimativa do valor da contratação redigida pelo sistema a partir do quadro autoritativo (não pela IA).");
   if (unverifiedAmounts > 0) limitations.push(`${unverifiedAmounts} valor(es) monetário(s) citado(s) pela IA não coincidem com o quadro do sistema — marcados [REVISAR].`);
   if (input.sourceContext && input.sourceContext.missing.length > 0) {
-    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+    limitations.push(`Informações ausentes no processo (marcadas para revisão): ${missingSourcesText(input.sourceContext.missing)}.`);
   }
 
   // 8) Contrato Zod bounded → fail-closed (mínimos legais, representação de todas as seções, justificativas).
@@ -655,7 +671,7 @@ export async function generateEditalAuthoring(input: EditalAuthoringInput): Prom
   if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o Edital exige elaboração/validação pelo servidor.");
   else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: uma ou mais citações não puderam ser verificadas e foram removidas.");
   if (input.sourceContext.missing.length > 0) {
-    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+    limitations.push(`Informações ausentes no processo (marcadas para revisão): ${missingSourcesText(input.sourceContext.missing)}.`);
   }
   const rejectionCategories = new Set(rejectedAll.map((r) => rejectionCategory(r.reason)));
   for (const cat of rejectionCategories) limitations.push(`Referências jurídicas não verificadas foram removidas da fundamentação (${cat}).`);

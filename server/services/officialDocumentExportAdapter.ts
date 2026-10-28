@@ -153,7 +153,8 @@ export async function exportOfficialDocument(params: {
   const identityFingerprint = institutionalIdentityFingerprint(identity);
   // M8 P3.3 — a linhagem numera snapshots técnicos e emissões na mesma sequência (1ª emissão costuma ser v2). Para a versão EMITIDA,
   // o cabeçalho informa o ordinal da emissão (contado na própria linhagem, só leitura) ao lado da revisão técnica. Nada é renumerado.
-  const emissionNumber = doc.status === "emitido"
+  // Só o processo licitatório (ETP/TR/Edital): outros domínios (parecer — NEW-007 —, contratos, contratação direta) mantêm o cabeçalho.
+  const emissionNumber = doc.status === "emitido" && doc.businessDomain === "processo_licitatorio"
     ? (await listVersions(doc.lineageId, params.organizationId)).filter((v) => v.status === "emitido" && v.version <= doc.version).length
     : 0;
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();

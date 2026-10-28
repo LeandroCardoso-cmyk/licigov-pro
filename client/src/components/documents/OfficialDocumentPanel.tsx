@@ -84,7 +84,7 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
   const versionText = (d: (typeof all)[number]) => {
     const ordinal = "emissionNumber" in d ? emissionOrdinalLabel((d as { emissionNumber?: number }).emissionNumber) : null;
     if (ordinal) return `${ordinal} (rev. técnica v${d.version})`;
-    return requireStatusForExport && d.status !== requireStatusForExport ? `snapshot técnico v${d.version}` : `v${d.version}`;
+    return businessDomain === "processo_licitatorio" && requireStatusForExport && d.status !== requireStatusForExport ? `snapshot técnico v${d.version}` : `v${d.version}`;
   };
   const renderList = (list: typeof all) => (
     <ul className="divide-y divide-border">

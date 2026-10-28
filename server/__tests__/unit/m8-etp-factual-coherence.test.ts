@@ -32,6 +32,9 @@ describe("M8 — ETP: viabilidade preliminar com lacunas factuais", () => {
     // Estado de fundamentação é proveniência (resultado estruturado/lineage/tela), não texto do documento (M8 P3.2).
     expect(r.groundingState).toBeDefined();
     expect(r.content).not.toMatch(/Estado de fundamentação normativa/);
-    expect(r.content.split("\n")[2]).not.toContain("[REVISAR");
+    // as ressalvas que o SISTEMA escreve no texto usam linguagem natural (nenhum [REVISAR] injetado por conta própria)
+    const ressalva = r.content.split("\n").find((l) => l.includes("Suficiência factual pendente"));
+    expect(ressalva).toBeDefined();
+    expect(ressalva).not.toContain("[REVISAR");
   });
 });

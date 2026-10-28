@@ -356,6 +356,11 @@ jobs:
       - name: Smoke — histórico de ingestão e versões oficiais (homologação visual M8)
         run: pnpm exec vitest run server/__tests__/integration/m8-visual-homologation-mysql-smoke.test.ts
 
+      # M8 pré-produção (P2.1): minuta composta por modelo com texto IDÊNTICO e outro M1 só revincula o M1 (auditado, invalida a
+      # revisão); documento com versão oficial emitida recusa; nada de conteúdo/autoria muda.
+      - name: Smoke — rascunho por modelo revinculado ao M1 vigente (M8 P2.1)
+        run: pnpm exec vitest run server/__tests__/integration/m8-template-draft-relink-mysql-smoke.test.ts
+
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
       # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem
