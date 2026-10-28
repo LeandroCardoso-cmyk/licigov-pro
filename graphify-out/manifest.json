@@ -14405,8 +14405,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationPanel.tsx": {
-    "mtime": 1793211308.1508563,
-    "ast_hash": "8a39478c353936a07dc47ad0f0f2fe8a",
+    "mtime": 1793211884.4208724,
+    "ast_hash": "e5ac9e00c9f69240a98f5cfcf8986ea9",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
@@ -14425,8 +14425,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1793211308.1499333,
-    "ast_hash": "4fb1bc65a0ff40b536f5a3a432def641",
+    "mtime": 1793211884.4203484,
+    "ast_hash": "e2d423937520b936c6f2c22aaca37756",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14445,8 +14445,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationView.tsx": {
-    "mtime": 1793211308.1519437,
-    "ast_hash": "ce47c9afce2561d128dd593e60692714",
+    "mtime": 1793211907.5631547,
+    "ast_hash": "cbae36c4aebd20b243125310a6fe41d3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
@@ -15580,8 +15580,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/m8PreproductionP1.test.ts": {
-    "mtime": 1793211428.3375227,
-    "ast_hash": "5ba535b3ed06564e01c83851d0df328e",
+    "mtime": 1793211951.0316014,
+    "ast_hash": "fba68dfd299a009e309704cbc63f94dc",
     "semantic_hash": ""
   },
   "server/__tests__/integration/m8-reg-b-self-emission-router.test.ts": {
@@ -15600,8 +15600,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalConditionalOrderD01.test.ts": {
-    "mtime": 1793211414.546207,
-    "ast_hash": "03f2054e8ea69190eeace5df97592187",
+    "mtime": 1793211956.4085538,
+    "ast_hash": "4b19ff055a99c5a22008e2f32e1c0a3f",
     "semantic_hash": ""
   }
 }

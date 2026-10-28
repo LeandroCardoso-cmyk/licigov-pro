@@ -193,8 +193,8 @@ describe("integração — o painel desenha a lista ESTÁVEL e conta pela pronti
   it("Panel passa os grupos estáveis por família (liveDecisionGroups ⇒ liveDecisionItems + liveRegisteredItems) para a tela (nunca a lista de contagem livePendingItems)", () => {
     // D-01: os grupos compõem as MESMAS listas estáveis do P1.1, só reposicionando a condicional junto da ativadora.
     expect(panel).toMatch(/const groups = useMemo\(\(\) => \(state \? liveDecisionGroups\(state, edits\)/);
-    expect(panel).toMatch(/const pending = groups\.decisions;/);
-    expect(panel).toMatch(/registered=\{registered\}/);
+    expect(panel).toMatch(/pending=\{groups\?\.decisions \?\? \[\]\}/);
+    expect(panel).toMatch(/registered=\{groups\?\.registered \?\? \[\]\}/);
     expect(panel).not.toMatch(/livePendingItems\(/);
   });
 });

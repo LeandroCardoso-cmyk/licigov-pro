@@ -5,7 +5,7 @@ import { useEditalPreparationState } from "./useEditalPreparationState";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
-  STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveDecisionGroups, liveOptionalItems,
+  STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveDecisionGroups,
   type FormValue, type PlannedWrite, type StageTarget, type PrepField, type SaveOutcome, type SectionEdits,
 } from "@/lib/editalPreparation";
 
@@ -52,10 +52,7 @@ export default function EditalPreparationPanel({ processId, params, trPin = null
   const plan = useMemo(() => (state ? buildSavePlan(state, { edits }) : { writes: [], errors: {}, decisionCount: 0 }), [state, edits]);
   // O que se DESENHA (estável enquanto a pessoa digita; condicional logo abaixo da ativadora, no bloco dela — D-01). A CONTAGEM de
   // pendências continua em `buildEditalReadiness` (livePendingItems).
-  const groups = useMemo(() => (state ? liveDecisionGroups(state, edits) : { decisions: [], registered: [] }), [state, edits]);
-  const pending = groups.decisions;
-  const registered = groups.registered;
-  const optional = useMemo(() => (state ? liveOptionalItems(state, edits) : []), [state, edits]);
+  const groups = useMemo(() => (state ? liveDecisionGroups(state, edits) : null), [state, edits]);
   if (!state) return null;
 
   const onEdit = (source: string, f: PrepField, v: FormValue) => setEdits((p) => ({ ...p, [source]: { ...(p[source] ?? {}), [f.path]: v } }));
@@ -98,7 +95,7 @@ export default function EditalPreparationPanel({ processId, params, trPin = null
 
   return (
     <EditalPreparationView
-      state={state} edits={edits} fieldErrors={plan.errors} pending={pending} registered={registered} optional={optional} onEdit={onEdit}
+      state={state} edits={edits} fieldErrors={plan.errors} pending={groups?.decisions ?? []} registered={groups?.registered ?? []} optional={groups?.optional ?? []} attached={groups?.attached} onEdit={onEdit}
       plan={plan} reviewing={reviewing} onStartReview={() => { setOutcome(null); setNotice(null); setReviewing(true); }} onCancelReview={() => setReviewing(false)}
       decision={decision} onDecision={setDecision} showErrors={showErrors} busy={busy} outcome={outcome} notice={notice} onConfirm={confirm}
       onOpenTr={onOpenTr} onOpenStage={onOpenStage} onRefresh={() => { void utils.procurementProcess.editalTemplatePreparation.invalidate(); }} processId={processId}

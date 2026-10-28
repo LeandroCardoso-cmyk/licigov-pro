@@ -44,6 +44,12 @@ const ABERTO = { "julgamento.modoDisputa": "aberto", "julgamento.duracaoEtapaLan
 const registeredAll = () => state([
   decided(duracao, { amount: 10, unit: "minute" }), decided(modo, "aberto"), decided(prorrog, "2 minutos"), af, decided(numero, "7/2026"),
 ], { ...ABERTO, "controle.numeroPregao": "7/2026" });
+/** Ativadora OPCIONAL (catálogo BLL: decisao.intervaloMinimoLances → julgamento.intervaloMinimoLances, PROCESS/CONFIG distintos). */
+const optionalFamily = () => state([
+  fld({ name: "controle.numeroPregao" }),
+  fld({ name: "decisao.intervaloMinimoLances", type: "boolean", status: "OPTIONAL", required: false }),
+  fld({ name: "julgamento.intervaloMinimoLances", source: "PROCESS", type: "string", status: "HIDDEN_CONDITIONAL", ...when("decisao.intervaloMinimoLances", true) }),
+]);
 const names = (xs: { field: PrepField }[]) => xs.map((i) => i.field.name);
 
 describe("D-01 — grupos por família (lógica pura)", () => {
@@ -79,15 +85,26 @@ describe("D-01 — grupos por família (lógica pura)", () => {
     for (const e of [{}, ed({ CERTAME_CONFIG: { modoDisputa: "aberto e fechado" } }), ed({ CERTAME_CONFIG: { modoDisputa: "" } })]) {
       const st = registeredAll();
       const g = liveDecisionGroups(st, e);
-      const all = [...names(g.decisions), ...names(g.registered)];
+      const all = [...names(g.decisions), ...names(g.registered), ...names(g.optional)];
       expect(new Set(all).size).toBe(all.length);
-      expect(new Set(all)).toEqual(new Set([...names(liveDecisionItems(st, e)), ...names(liveRegisteredItems(st, e))]));
+      expect(new Set(all)).toEqual(new Set([...names(liveDecisionItems(st, e)), ...names(liveRegisteredItems(st, e)), ...names(liveOptionalItems(st, e))]));
     }
   });
   it("prontidão: a contagem de pendências não depende da apresentação", () => {
     const st = registeredAll(); const e = ed({ CERTAME_CONFIG: { modoDisputa: "aberto e fechado" } });
     expect(names(livePendingItems(st, e))).toEqual(["julgamento.regrasEtapaAbertaFechada"]);
     expect(buildEditalReadiness(st, e).counters.PROCESS_DECISIONS_TOTAL).toBe(1);
+  });
+  it("ativadora OPCIONAL (auditoria: intervalo mínimo entre lances) ⇒ a condicional fica logo abaixo dela, no bloco de opcionais", () => {
+    const st = optionalFamily();
+    const off = liveDecisionGroups(st, {});
+    expect(names(off.optional)).toEqual(["decisao.intervaloMinimoLances"]);
+    expect(off.attached.size).toBe(0);
+    const on = liveDecisionGroups(st, ed({ CERTAME_CONFIG: { intervaloMinimoLances: true } }));
+    expect(names(on.optional)).toEqual(["decisao.intervaloMinimoLances", "julgamento.intervaloMinimoLances"]);
+    expect(names(on.decisions)).toEqual(["controle.numeroPregao"]);
+    expect([...on.attached]).toEqual(["julgamento.intervaloMinimoLances"]);
+    expect(buildEditalReadiness(st, ed({ CERTAME_CONFIG: { intervaloMinimoLances: true } })).counters.PROCESS_DECISIONS_TOTAL).toBe(2);
   });
   it("adversarial: cadeia pai→filho→neto, múltiplas filhas e ciclo ⇒ ordem estável e sem laço infinito", () => {
     const a = fld({ name: "a.pai", type: "boolean" });
@@ -113,7 +130,7 @@ describe("D-01 — tela real (SSR): ordem efetiva dos campos no HTML", () => {
   const html = (st: PreparationStateView, edits: Record<string, SectionEdits>) => {
     const g = liveDecisionGroups(st, edits);
     return renderToStaticMarkup(React.createElement(View as unknown as React.ComponentType<never>, {
-      state: st, edits, fieldErrors: buildSavePlan(st, { edits }).errors, pending: g.decisions, registered: g.registered, optional: liveOptionalItems(st, edits),
+      state: st, edits, fieldErrors: buildSavePlan(st, { edits }).errors, pending: g.decisions, registered: g.registered, optional: g.optional, attached: g.attached,
       onEdit: noop, plan: buildSavePlan(st, { edits }), reviewing: false, onStartReview: noop, onCancelReview: noop,
       decision: { decidedByName: "", decidedByRole: "", decidedAt: "2026-10-28", basisReference: "", reason: "", confirmed: false }, onDecision: noop,
       showErrors: false, busy: false, outcome: null, notice: null, onConfirm: noop, initialDecisionsOpen: true,
@@ -152,5 +169,22 @@ describe("D-01 — tela real (SSR): ordem efetiva dos campos no HTML", () => {
     expect(order(out)).toContain("julgamento.duracaoEtapaLances");
     expect(out).toContain("Escolha a unidade.");
     expect(toFormValue(duracao, { amount: 5 })).toEqual({ amount: "5", unit: "" });
+  });
+  it("ativadora OPCIONAL: a condicional vem logo depois dela, sinalizada, e o bloco de opcionais abre sozinho com contagem só das opcionais", () => {
+    const out = html(optionalFamily(), ed({ CERTAME_CONFIG: { intervaloMinimoLances: true } }));
+    const o = order(out);
+    expect(o[o.indexOf("decisao.intervaloMinimoLances") + 1]).toBe("julgamento.intervaloMinimoLances");
+    expect(o.filter((f) => f === "julgamento.intervaloMinimoLances")).toHaveLength(1);
+    expect(out).toMatch(/<details[^>]*aria-label="Decisões opcionais deste certame"[^>]*open=""/);
+    expect(out).toContain("Decisões opcionais (ativam campos adicionais) — 1");
+    expect(out).toMatch(/data-attached-pending="true"[^]*?data-field="julgamento.intervaloMinimoLances"/);
+    const closed = html(optionalFamily(), {});
+    expect(closed).not.toMatch(/<details[^>]*aria-label="Decisões opcionais deste certame"[^>]*open=""/);
+    expect(closed).not.toContain('data-attached-pending="true"');
+  });
+  it("condicional pendente no bloco de registradas é sinalizada; decisões registradas não", () => {
+    const out = html(registeredAll(), ed({ CERTAME_CONFIG: { modoDisputa: "aberto e fechado" } }));
+    expect(out.match(/data-attached-pending="true"/g)).toHaveLength(1);
+    expect(out).toMatch(/data-attached-pending="true"[^>]*><span[^>]*>Ainda não registrada<\/span><div[^>]*data-field="julgamento.regrasEtapaAbertaFechada"/);
   });
 });
