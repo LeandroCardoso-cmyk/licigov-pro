@@ -80,7 +80,8 @@ export default function ProcessOverview({
 
   const { process, items, timeline, documents } = data;
   const officialVersions = data.officialVersions ?? {};
-  const latestOfficial = latestOfficialSummary(officialVersions);
+  const officialEmissions = data.officialEmissions ?? {};
+  const latestOfficial = latestOfficialSummary(officialVersions, officialEmissions);
   const counts: Record<string, number> = {};
   for (const it of items) {
     counts[it.status] = (counts[it.status] ?? 0) + 1;
@@ -176,9 +177,9 @@ export default function ProcessOverview({
                     <span className="text-sm text-foreground">{d.title}</span>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                    {officialVersionLabel(officialVersions, d.kind) && (
-                      <span className="rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300">
-                        {officialVersionLabel(officialVersions, d.kind)}
+                    {officialVersionLabel(officialVersions, d.kind, officialEmissions) && (
+                      <span className="rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300" title={officialVersions[d.kind] ? `Revisão técnica v${officialVersions[d.kind]}` : undefined}>
+                        {officialVersionLabel(officialVersions, d.kind, officialEmissions)}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{draftSituationLabel(d.status)}</span>

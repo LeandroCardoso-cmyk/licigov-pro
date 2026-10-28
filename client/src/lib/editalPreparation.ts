@@ -106,6 +106,8 @@ export interface PreparationStateView {
 export const DURATION_UNIT_LABEL: Record<string, string> = {
   minute: "minuto(s)", hour: "hora(s)", day: "dia(s)", businessDay: "dia(s) útil(eis)", month: "mês(es)", year: "ano(s)",
 };
+/** Unidades do contrato de duração do catálogo (espelho de `DURATION_UNITS` em server/domain/institutionalTemplates/variableCatalog2.ts). */
+export const DURATION_UNITS = ["minute", "hour", "day", "businessDay", "month", "year"] as const;
 
 export const SOURCE_TITLE: Record<string, string> = {
   IDENTITY: "Identidade do órgão", POLICY: "Política do órgão", PROCESS: "Dados do processo", TR: "Dados do TR", CERTAME_CONFIG: "Configuração do certame",
@@ -139,7 +141,8 @@ export function scalarToText(type: string, value: unknown): string {
 export function toFormValue(f: Pick<PrepField, "type" | "itemType" | "columns">, value: unknown): FormValue {
   if (f.type === "duration") {
     const d = value as { amount?: number; unit?: string } | undefined;
-    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "day" };
+    // Sem unidade registrada ⇒ nenhuma unidade presumida: "dia(s)" silencioso gravava, p.ex., a etapa de lances em dias.
+    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "" };
   }
   if (f.type === "list") return Array.isArray(value) ? value.map((v) => scalarToText(f.itemType ?? "string", v)).join("\n") : "";
   if (f.type === "table") {
@@ -192,6 +195,8 @@ export function parseField(f: PrepField, form: FormValue | undefined): ParseResu
     if (!d.amount?.trim()) return okv(undefined);
     const n = parseDecimal(d.amount);
     if (n === null || !Number.isInteger(n) || n < 0) return err("Informe a quantidade (número inteiro).");
+    if (!d.unit) return err("Escolha a unidade.");
+    if (!(DURATION_UNITS as readonly string[]).includes(d.unit)) return err("Escolha uma das unidades.");
     return okv({ amount: n, unit: d.unit });
   }
   if (f.type === "list") {
@@ -361,6 +366,56 @@ export function livePendingItems(state: PreparationStateView, edits: Readonly<Re
     .map((field) => ({ section, field })));
 }
 
+/**
+ * Decisões a DESENHAR no bloco de decisões deste certame. Diferente de `livePendingItems` (que CONTA o que falta), a lista é ancorada
+ * no status do SERVIDOR: um campo pendente continua na tela enquanto a pessoa digita, troca a unidade ou corrige o valor — só sai depois
+ * de registrado (o servidor passa a devolvê-lo como DECIDED). Condicionais entram/saem AO VIVO conforme a decisão que as ativa.
+ */
+export function liveDecisionItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return parentFirst(state.sections.flatMap((section) => section.fields
+    .filter((f) => {
+      const s = live.get(f.name)?.status;
+      if (!f.editable || s === undefined || s === "HIDDEN_CONDITIONAL") return false;
+      // Opcional que uma condição tornou obrigatório: sai da lista de opcionais e fica aqui (com ou sem valor digitado).
+      return f.status === "PENDING" || f.status === "HIDDEN_CONDITIONAL" || (f.status === "OPTIONAL" && s !== "OPTIONAL");
+    })
+    .map((field) => ({ section, field }))));
+}
+
+/**
+ * Ordem de APRESENTAÇÃO: a decisão condicional aparece logo DEPOIS da decisão que a ativa (quando esta está na mesma lista), em vez de
+ * na ordem alfabética do servidor — ao escolher o modo "aberto", a duração da etapa surge abaixo do seletor, não acima dele.
+ * Estável; ciclos ou controlador fora da lista ⇒ ordem original.
+ */
+function parentFirst(items: readonly PendingItem[]): PendingItem[] {
+  const names = new Set(items.map((i) => i.field.name));
+  const parentOf = (i: PendingItem) => i.field.requiredWhenVariables.find((v) => v !== i.field.name && names.has(v));
+  const children = new Map<string, PendingItem[]>();
+  const roots: PendingItem[] = [];
+  for (const i of items) {
+    const p = parentOf(i);
+    if (p) children.set(p, [...(children.get(p) ?? []), i]); else roots.push(i);
+  }
+  const out: PendingItem[] = []; const seen = new Set<PendingItem>();
+  const visit = (i: PendingItem) => {
+    if (seen.has(i)) return;
+    seen.add(i); out.push(i);
+    for (const c of children.get(i.field.name) ?? []) visit(c);
+  };
+  roots.forEach(visit);
+  for (const i of items) if (!seen.has(i)) out.push(i);
+  return out;
+}
+
+/** Decisões JÁ REGISTRADAS deste processo que continuam editáveis (revisão/correção explícita, mesmo fluxo governado de gravação). */
+export function liveRegisteredItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => section.scope === "PROCESS" && f.editable && f.status === "DECIDED" && !f.completionPolicy && live.get(f.name)?.status !== "HIDDEN_CONDITIONAL")
+    .map((field) => ({ section, field })));
+}
+
 /** Decisões opcionais ao vivo (as que ainda não têm valor e não estão ocultas). */
 export function liveOptionalItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
   const live = liveStatuses(state, edits);
@@ -520,7 +575,8 @@ export function revalidationIssueMessage(i: { code: string; path: string; messag
     case "SOURCE_CHANGED":
       return "Os dados do processo mudaram depois da composição desta minuta: ela precisa ser composta novamente pelo modelo institucional antes da emissão.";
     case "COMPOSITION_DRIFT":
-      return "O texto não corresponde mais ao que o modelo institucional compõe com os dados atuais — revise a minuta.";
+      // Inclui a atualização da APRESENTAÇÃO do modelo (ex.: M8 P2.1 — referência do Anexo I sem id/hash): minutas compostas antes dela.
+      return "O texto não corresponde mais ao que o modelo institucional compõe hoje (os dados ou a apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir.";
     case "MISSING_REQUIRED":
       return `Falta uma informação obrigatória para este modelo: ${variableOriginLabel(i.path)}.`;
     case "VALUE_TYPE_INVALID":

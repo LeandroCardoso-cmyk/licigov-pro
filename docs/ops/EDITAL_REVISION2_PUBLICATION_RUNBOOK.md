@@ -208,3 +208,14 @@ Procedência de outro conteúdo (p.ex. com o hash da Revisão 1) é `DIVERGENT` 
 - **Estresse (AUD-STRESS, MySQL real):** swaps idênticos e conflitantes + registros exclusivos + rascunhos comuns em paralelo, 3 rodadas: sempre 1 vínculo ativo, resolução `RESOLVED`, numeração de revisão sem colisão, nenhum deadlock vazando (a transação já tem retry de deadlock, SEM084-A).
 - **Resultado incerto após commit do DRAFT:** a repetição recupera sem 2ª revisão e completa a procedência (`AUD-UNCERTAIN`). **Tenant:** a criação exclusiva é tenant-scoped (`AUD-TENANT`).
 - **Mudança de comportamento a conhecer:** um vínculo ATIVO legado com `effectiveFrom` futuro (criado por versão antiga da tela com relógio de navegador adiantado) passa a valer imediatamente na resolução operacional (era o objetivo do vínculo; antes causava `NOT_BOUND`). Vigência futura não é mais aceita na criação.
+
+## 13. Nota de implantação — M8 pré-produção (P2.1: referência do Anexo I)
+- A referência ao TR no Anexo I passou a ser **institucional** ("Documento de referência: <título> (Termo de Referência — versão oficial emitida no processo).").
+  O id interno, a linhagem, a revisão técnica e o hash **não** aparecem mais no texto; continuam no manifesto M1/M2 (`officialDocRefs`) como evidência de lineage.
+- **Editais já emitidos não mudam** (conteúdo e hash congelados; nunca recompostos).
+- **Minutas compostas pelo modelo ANTES da implantação e ainda não emitidas** passam a ser recusadas na emissão/revisão com `COMPOSITION_DRIFT`
+  (a recomposição com o composer atual não reproduz o texto antigo). Não há corrupção nem escrita: **recomponha a minuta pelo modelo** e revise antes de emitir
+  (com edição humana, a recomposição pede a confirmação de substituição de sempre).
+- Antes do deploy em cada ambiente, inventariar (somente leitura) as minutas `origem:template` sem versão oficial emitida, para orientar os responsáveis.
+- Texto idêntico com outro M1 (ex.: TR reemitido sem mudança no texto do Edital) **revincula** a minuta ao M1 vigente, registra evento no processo e invalida a revisão
+  confirmada antes; com versão oficial emitida, a revinculação é recusada (novo ciclo de versão).

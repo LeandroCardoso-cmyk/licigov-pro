@@ -31,6 +31,29 @@ export function generationFollowUp(code: string | null | undefined, message: str
   return "error";
 }
 
+/** Prefixo do CONFLICT "linhagem ocupada" (server/services/officialDocumentLifecycleService.ts): nada foi criado, tente de novo. */
+export const OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE_PREFIX = "OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE:";
+
+export type PromotionErrorPlan = "stale" | "follow" | "busy" | "error";
+
+/**
+ * M8 (REG-A) — decisão PURA sobre um erro da EMISSÃO oficial. Antes, todo CONFLICT virava "o rascunho mudou desde a revisão" e o erro
+ * sem código mostrava "Failed to fetch" mesmo quando a emissão tinha sido gravada:
+ *  - "follow": emissão idêntica em processamento OU resposta perdida (sem código) — o resultado é conferido pela LEITURA do resumo
+ *    oficial (ledger), nunca reenviando; a chave é preservada (repetir = mesma tentativa lógica, replay idempotente);
+ *  - "busy": linhagem ocupada por outra operação — nada foi criado; tentar de novo é seguro;
+ *  - "stale": conflito real de conteúdo/hash (inclui chave reutilizada com conteúdo diferente) — recarrega e exige nova revisão;
+ *  - "error": demais recusas (SoD, papel, bloqueios), com a mensagem do servidor.
+ */
+export function promotionErrorPlan(code: string | null | undefined, message: string | null | undefined): PromotionErrorPlan {
+  const msg = message ?? "";
+  if (!code) return "follow";
+  if (msg.startsWith(OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE_PREFIX)) return "busy";
+  if (isProcessingConflict(code, msg)) return "follow";
+  if (code === "CONFLICT") return "stale";
+  return "error";
+}
+
 export interface DraftMark { readonly contentHash: string | null; readonly updatedAt: string | null }
 
 export type FollowUpStatus = "idle" | "following" | "done" | "expired";

@@ -26,7 +26,7 @@ import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, canonicalDocumentIdentity, saveReviewableDraft } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
-import { promoteOfficialDocument, draftContentHash } from "../../services/documentPromotionService";
+import { promoteOfficialDocument, draftContentHash, getOfficialPromotionSummary } from "../../services/documentPromotionService";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
 
 const DB = process.env.DATABASE_URL;
@@ -181,6 +181,11 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     expect(res.officialDocument.status).toBe("emitido");
     expect(await countEmitido(ORG, pid)).toBe(1);
     expect(await countLedger(ORG, pid)).toBe(1);
+    // M8 P3.3 — a linhagem numera o snapshot técnico (gerado v1) e a emissão (v2); a UI recebe o ordinal "1ª emissão".
+    expect(res.officialDocument.version).toBe(2);
+    const summary = await getOfficialPromotionSummary({ organizationId: ORG, processId: pid, kind: "etp" });
+    expect(summary.latestOfficial).toMatchObject({ version: 2, emissionNumber: 1 });
+    expect((await getOfficialPromotionSummary({ organizationId: ORG2, processId: pid, kind: "etp" })).latestOfficial).toBeNull();
   }, 60_000);
 
   it("4) replay mesma chave NÃO cria nova versão", async () => {
@@ -236,6 +241,7 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     // Agora há DUAS versões emitidas; a primeira permanece imutável (conteúdo inalterado).
     expect(await countEmitido(ORG, pid)).toBe(2);
     expect(await countLedger(ORG, pid)).toBe(2);
+    expect((await getOfficialPromotionSummary({ organizationId: ORG, processId: pid, kind: "etp" })).latestOfficial?.emissionNumber).toBe(2);
     const { lineageId } = canonicalDocumentIdentity({ organizationId: ORG, processId: pid, kind: "etp" });
     const [rows] = await conn.execute<mysql.RowDataPacket[]>(
       "SELECT CAST(content AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND lineage_id = ? AND status = 'emitido' ORDER BY version",

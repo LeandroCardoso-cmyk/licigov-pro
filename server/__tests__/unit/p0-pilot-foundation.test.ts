@@ -305,8 +305,12 @@ describe("P0 — contexto REAL de autoria (ETP/TR)", () => {
     // (CANONICAL_ITEMS_REQUIRED); aqui, na camada pura, o quadro rotula o total como indicativo.
     expect(sourceContext.legacyQuotedItemCount).toBe(1);
     expect(r.content).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 1.000,00");
-    expect(r.content).toContain("Fontes do processo utilizadas:** dfd, etp, itens, pesquisa_precos");
-    expect(r.content.indexOf("Valor indicativo")).toBeLessThan(r.content.lastIndexOf("Revisão OBRIGATÓRIA"));
+    // M8 P3.2: as chaves técnicas das fontes são proveniência (lineage do rascunho + resumo de fontes da tela), não texto do TR.
+    expect(sourceContext.usedSources).toEqual(["dfd", "etp", "itens", "pesquisa_precos"]);
+    expect(r.content).not.toContain("Fontes do processo utilizadas");
+    expect(r.content).not.toContain("pesquisa_precos");
+    expect(r.content).not.toContain("Revisão OBRIGATÓRIA");
+    expect(r.content.trimEnd().endsWith(sourceContext.authoritativeBlock!.trimEnd())).toBe(true);
   });
 });
 

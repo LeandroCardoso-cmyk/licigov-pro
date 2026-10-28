@@ -326,6 +326,9 @@ export interface InstitutionalMeta {
   statusLabel: string; // "RASCUNHO" | "EM REVISÃO" | "APROVADO" | "REJEITADO"
   isDraft: boolean;
   version: number;
+  /** Ordinal da emissão oficial (1 = primeira). Presente só para versão EMITIDA: o cabeçalho mostra "Emissão oficial: 1ª" e a
+   *  revisão técnica da linhagem, em vez de um "Versão: 2" que parece a segunda emissão. */
+  emissionNumber?: number;
   exportedAtLabel: string; // já formatado pt-BR pela camada de apresentação
   /** Palavra usada no aviso de não-finalizado (default "RASCUNHO"). Documentos
    *  oficiais usam o status real (ex.: "GERADO"/"REVISADO"). */
@@ -459,7 +462,12 @@ function metaLines(meta: InstitutionalMeta): { label: string; value: string; str
   if (meta.processNumber) lines.push({ label: "Processo", value: meta.processNumber });
   if (meta.object) lines.push({ label: "Objeto", value: meta.object });
   lines.push({ label: "Status", value: meta.statusLabel, strong: true });
-  lines.push({ label: "Versão", value: String(meta.version) });
+  if (meta.emissionNumber && meta.emissionNumber > 0) {
+    lines.push({ label: "Emissão oficial", value: `${meta.emissionNumber}ª` });
+    lines.push({ label: "Revisão técnica", value: String(meta.version) });
+  } else {
+    lines.push({ label: "Versão", value: String(meta.version) });
+  }
   lines.push({ label: "Exportado em", value: meta.exportedAtLabel });
   return lines;
 }

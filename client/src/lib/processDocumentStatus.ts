@@ -92,20 +92,33 @@ export function draftSituationLabel(status: string | null | undefined): string {
   return DRAFT_SITUATION_LABELS[status] ?? `Rascunho: ${status}`;
 }
 
-/** "Emitido v2" quando há versão oficial do tipo; null quando nunca foi emitido. */
-export function officialVersionLabel(versions: OfficialVersions | null | undefined, kind: string): string | null {
+/** Número de emissões oficiais por tipo (ledger de emissões; append-only). */
+export type OfficialEmissions = Readonly<Partial<Record<string, number>>>;
+
+/**
+ * M8 P3.3 — "1ª emissão" a partir do ordinal da emissão. A linhagem numera snapshots técnicos e emissões na mesma sequência, então a
+ * revisão técnica da 1ª emissão costuma ser "v2" — mostrada só como detalhe. Sem ordinal conhecido ⇒ null (quem chama mostra "vN").
+ */
+export function emissionOrdinalLabel(n: number | null | undefined): string | null {
+  return typeof n === "number" && Number.isInteger(n) && n > 0 ? `${n}ª emissão` : null;
+}
+
+/** "Emitido · 1ª emissão" quando há versão oficial do tipo ("Emitido v2" se o ordinal não vier); null quando nunca foi emitido. */
+export function officialVersionLabel(versions: OfficialVersions | null | undefined, kind: string, emissions?: OfficialEmissions | null): string | null {
   const v = versions?.[kind];
-  return typeof v === "number" && v > 0 ? `Emitido v${v}` : null;
+  if (!(typeof v === "number" && v > 0)) return null;
+  const ordinal = emissionOrdinalLabel(emissions?.[kind]);
+  return ordinal ? `Emitido · ${ordinal}` : `Emitido v${v}`;
 }
 
 /**
- * Documento oficial mais avançado do fluxo (Edital > TR > ETP), ex.: "TR emitido (v2)". null = nenhum emitido.
+ * Documento oficial mais avançado do fluxo (Edital > TR > ETP), ex.: "TR emitido (1ª emissão)". null = nenhum emitido.
  * Derivado só do ledger de emissões — nunca da etapa registrada.
  */
-export function latestOfficialSummary(versions: OfficialVersions | null | undefined): string | null {
+export function latestOfficialSummary(versions: OfficialVersions | null | undefined, emissions?: OfficialEmissions | null): string | null {
   for (const kind of FLOW_DESC) {
     const v = versions?.[kind];
-    if (typeof v === "number" && v > 0) return `${DOCUMENT_KIND_LABELS[kind]} emitido (v${v})`;
+    if (typeof v === "number" && v > 0) return `${DOCUMENT_KIND_LABELS[kind]} emitido (${emissionOrdinalLabel(emissions?.[kind]) ?? `v${v}`})`;
   }
   return null;
 }

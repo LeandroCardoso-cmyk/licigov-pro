@@ -158,7 +158,10 @@ describe("A2 — contrato Zod + structured output do provider (A)", () => {
   it("estrutura válida (todas as seções representadas) passa; provider omite seção → FAIL", async () => {
     const r = await gen("etp", buildMockProviderAuthoring("etp"));
     expect(r.structured.contract).toBe(AUTHORING_CONTRACT_VERSION);
-    expect(r.content).toContain("Revisão OBRIGATÓRIA");
+    // M8 P2.2: o aviso de revisão obrigatória acompanha o RASCUNHO (resultado estruturado, tela e exportação de rascunho) e não é
+    // congelado no texto — senão a versão EMITIDA diria "rascunho … não constitui documento aprovado".
+    expect(r.structured.reviewNotice).toContain("Revisão OBRIGATÓRIA");
+    expect(r.content).not.toContain("Revisão OBRIGATÓRIA");
     await expect(gen("etp", JSON.stringify({ sections: [{ key: "necessidade", contentMode: "provided", prose: "x" }] }))).rejects.toBeInstanceOf(AuthoringContractError);
   });
   it("seção desconhecida / JSON malformado / prose acima do limite → FAIL", async () => {

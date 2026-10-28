@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
@@ -8,6 +8,8 @@ import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { generationFollowUp, useGenerationFollowUp } from "./generationFollowUp";
+import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
 import EditalPreparationPanel from "./EditalPreparationPanel";
 import EditalPreflightCard from "./EditalPreflightCard";
@@ -124,10 +126,23 @@ export default function EditalWorkspace({
 
   const { key: editalKey, rotate: rotateEditalKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  // M8 (REG-A) — mesmo acompanhamento do TR/ETP: resposta perdida ou geração em voo ⇒ relê o rascunho persistido (sem reenviar).
+  const followInterval = useRef<number | false>(false);
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
-    { processId, kind: "edital" }, { enabled: !!processId },
+    { processId, kind: "edital" }, { enabled: !!processId, refetchInterval: () => followInterval.current },
   );
   const draft = reviewable.data?.draft ?? null;
+  const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
+  const followUp = useGenerationFollowUp(draft, () => {
+    rotateEditalKey();
+    if (processId) {
+      utils.procurementProcess.editalSourceState.invalidate();
+      utils.procurementProcess.editalTemplateReviewState.invalidate({ processId });
+      utils.procurementProcess.editalTemplatePreflight.invalidate();
+    }
+  });
+  followInterval.current = followUp.refetchInterval;
+  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]);
   const persisted = draft?.parameters ?? null;
   // M8 — minuta INSTITUCIONAL já composta: o rascunho não grava modalidade/forma/plataforma (parâmetros legados), mas o
   // servidor recupera, somente leitura, o escopo e o TR oficial da composição (manifest + bindings). Só HIDRATA a tela —
@@ -238,7 +253,8 @@ export default function EditalWorkspace({
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
     // Recusas governadas (conteúdo humano / troca de parâmetros sem confirmação) ⇒ diálogo; nada gravado.
     onError: (e) => {
-      if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) setConfirmOpen(true);
+      if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) { setConfirmOpen(true); return; }
+      if (generationFollowUp(e.data?.code, e.message) === "follow") followUp.start(draftAtRequest.current);
     },
     onSuccess: (data) => {
       setConfirmOpen(false);
@@ -263,6 +279,8 @@ export default function EditalWorkspace({
     if (bound) {
       // Motor institucional (decidido pelo servidor): o TR oficial EXATO confirmado segue no payload; sem confirmação ⇒ nada é enviado.
       if (!trPin || regenerationBlock) return;
+      draftAtRequest.current = draft;
+      followUp.clear();
       generateNotice.mutate({
         processId, object: object.trim(),
         modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
@@ -281,6 +299,8 @@ export default function EditalWorkspace({
     });
     if (plan === "blocked") return;
     if (plan === "confirm") { setConfirmOpen(true); return; }
+    draftAtRequest.current = draft;
+    followUp.clear();
     generateNotice.mutate({
       processId,
       object: object.trim(),
@@ -505,7 +525,7 @@ export default function EditalWorkspace({
         {/* CTA: com pendências, o protagonismo é "Resolver pendências"; a geração existe, desabilitada, com o motivo visível. */}
         <EditalGenerateCta
           cta={cta} bound={bound} pending={generateNotice.isPending} reason={generateBlockedReason} onGenerate={() => handleGenerate()}
-          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
+          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || followUp.following || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
         />
         {!processId && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -513,7 +533,9 @@ export default function EditalWorkspace({
           </p>
         )}
         <RegenerationBlockedNotice documentLabel="Edital" block={regenerationBlock} />
-        {generateNotice.isError && !isHumanEditRefusal(generateNotice.error.message) && !isEditalParametersChangedRefusal(generateNotice.error.message) && (
+        <GenerationFollowUpNotice status={followUp.status} documentLabel="Edital" onCheckAgain={() => { followUp.restart(); void reviewable.refetch(); }} />
+        {generateNotice.isError && !isHumanEditRefusal(generateNotice.error.message) && !isEditalParametersChangedRefusal(generateNotice.error.message)
+          && followUp.status === "idle" && generationFollowUp(generateNotice.error.data?.code, generateNotice.error.message) === "error" && (
           <p className="text-sm text-destructive">
             {domainErrorMessage(generateNotice.error.message, "Falha ao gerar o edital.")}
           </p>

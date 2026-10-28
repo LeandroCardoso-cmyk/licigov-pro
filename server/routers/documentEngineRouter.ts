@@ -78,7 +78,18 @@ export const documentEngineRouter = router({
     .input(z.object({ businessDomain: z.enum(DOMAINS).optional(), origin: z.string().optional(), limit: z.number().min(1).max(200).optional() }).optional())
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const documents = await listOfficialDocuments(orgId, { businessDomain: input?.businessDomain, origin: input?.origin, limit: input?.limit ?? 100 });
+      const listed = await listOfficialDocuments(orgId, { businessDomain: input?.businessDomain, origin: input?.origin, limit: input?.limit ?? 100 });
+      // M8 P3.3 — ordinal da emissão ("1ª emissão") contado na LINHAGEM COMPLETA (a lista é limitada e mistura snapshots técnicos).
+      // Só com `origin` (poucas linhagens: as de um processo/contrato); sem ele o campo fica ausente e a tela mostra a revisão técnica.
+      const ordinals = new Map<string, number>();
+      if (input?.origin) {
+        // Só processo licitatório (ETP/TR/Edital): parecer (NEW-007), contratos e contratação direta mantêm a apresentação atual.
+        for (const lineageId of new Set(listed.filter((d) => d.status === "emitido" && d.businessDomain === "processo_licitatorio").map((d) => d.lineageId))) {
+          let n = 0;
+          for (const v of await listVersions(lineageId, orgId)) if (v.status === "emitido") ordinals.set(v.id, ++n);
+        }
+      }
+      const documents = listed.map((d) => (ordinals.has(d.id) ? { ...d, emissionNumber: ordinals.get(d.id)! } : d));
       return { documents, total: documents.length };
     }),
 
