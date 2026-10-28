@@ -1,16 +1,16 @@
 # Graph Report - licigov-pro  (2026-10-28)
 
 ## Corpus Check
-- 3071 files · ~5,149,599 words
+- 3071 files · ~5,149,607 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 24135 nodes · 57186 edges · 1057 communities (920 shown, 137 thin omitted)
+- 24135 nodes · 57189 edges · 1057 communities (920 shown, 137 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 409 edges (avg confidence: 0.73)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2d71e6a5`
+- Built from commit: `d5cc0bfc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

@@ -13840,8 +13840,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
-    "mtime": 1793171822.9871173,
-    "ast_hash": "566b262028ed041b8c56b08238bc1e11",
+    "mtime": 1793172821.4005291,
+    "ast_hash": "24e034f853646ec306f5cc2fad77d61e",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/errors.ts": {

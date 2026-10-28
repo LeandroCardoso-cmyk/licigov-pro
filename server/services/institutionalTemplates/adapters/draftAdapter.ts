@@ -11,12 +11,13 @@
  *  - só documentos de processo licitatório (dfd/etp/tr/edital); outros tipos ⇒ falha fechada (sem backing).
  */
 import { createHash } from "crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generatedDocumentEditsTable, generatedDocumentsTable } from "../../../../drizzle/schema";
 import { getDb } from "../../../db/connection";
 import { applyDraftContentMutationTx, recordProcessEvent, type ProcurementExecutor } from "../../../db/procurement";
 import { TemplatePersistenceError } from "../../../db/institutionalTemplates";
+import { toDbDatetime } from "../../../db/institutionalConsultations";
 import { draftContentHash, type DocumentKind, type GeneratedDocument } from "../../../domain/generatedDocument";
 import { classifyTemplateDraftHumanState, humanEditRefusalMessage, officialRegenerationBlock, officialRegenerationRefusalMessage } from "../../../domain/draftRegeneration";
 import { getLatestOfficialPromotion, type PromotionExecutor } from "../../../db/officialDocumentPromotions";
@@ -99,7 +100,7 @@ async function relinkIdenticalDraft(
   const previous = sources.find((x) => x.startsWith("tpl-m1:"))?.slice("tpl-m1:".length) ?? "—";
   await tx.update(generatedDocumentsTable).set({
     sources: JSON.stringify([...sources.filter((x) => !x.startsWith("tpl-m1:")), link]),
-    correlationId: draft.correlationId, updatedAt: sql`CURRENT_TIMESTAMP(3)`,
+    correlationId: draft.correlationId, updatedAt: toDbDatetime(new Date().toISOString()) ?? undefined,
   }).where(and(eq(generatedDocumentsTable.id, existing.id), eq(generatedDocumentsTable.organizationId, draft.organizationId)));
   await recordProcessEvent({
     organizationId: draft.organizationId, processId: draft.subjectId, eventType: "change", actor: String(draft.actorUserId),
