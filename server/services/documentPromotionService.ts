@@ -24,7 +24,7 @@ import { getGeneratedDocumentByKind, getProcess, listIntelligentItems, lockedFic
 import { listProcurementItems } from "../db/procurementItems";
 import { resolveProcurementContext } from "./canonicalContextService";
 import { demonstrativePricesAllowed, fictitiousPriceBlocker } from "./priceGovernanceService";
-import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { countOfficialPromotions, insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
@@ -339,6 +339,8 @@ export interface OfficialPromotionSummary {
   draft: { exists: boolean; status: string | null; contentHash: string | null };
   latestOfficial: {
     officialDocumentId: string; version: number; contentHash: string; emittedAt: string;
+    /** M8 P3.3 — ordinal desta emissão (1 = primeira emissão oficial). `version` é a revisão técnica da linhagem (inclui snapshots). */
+    emissionNumber: number;
     /** Quem emitiu (registrado no ledger); nome só quando o usuário é membro desta organização. */
     emittedBy: { userId: number; name: string | null };
   } | null;
@@ -367,11 +369,13 @@ export async function getOfficialPromotionSummary(params: {
     ? await resolveEmissionPreconditions({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, content: draft!.content, contentHash: draftHash })
     : null;
   const emitterName = latest ? (await getOrganizationMemberNames(params.organizationId, [latest.actorUserId])).get(latest.actorUserId) ?? null : null;
+  // Ledger append-only: a última emissão é a de número igual ao total (nunca menor que 1 quando há emissão).
+  const emissionNumber = latest ? Math.max(1, await countOfficialPromotions(params.organizationId, params.processId, params.kind)) : 0;
   return {
     draft: { exists, status: draft?.status ?? null, contentHash: draftHash },
     latestOfficial: latest
       ? {
-        officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt,
+        officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt, emissionNumber,
         emittedBy: { userId: latest.actorUserId, name: emitterName },
       }
       : null,

@@ -9,7 +9,7 @@ import {
 import {
   composeTemplate, MISSING_VALUE_MARK, PENDING_AI_SLOT_MARK, type ComposedDocument, type TemplateComposeRequest,
 } from "../../domain/institutionalTemplates/composer";
-import { revalidateForIssuance } from "../../domain/institutionalTemplates/revalidation";
+import { changedAuthorities, revalidateForIssuance } from "../../domain/institutionalTemplates/revalidation";
 import { buildInstitutionalModel, renderInstitutionalDOCX, renderInstitutionalPDF } from "../../services/documentConverter";
 import { readZipEntry } from "../helpers/zipText";
 import { previewComposeOutcome } from "../../services/institutionalTemplates/adapters/previewAdapter";
@@ -74,8 +74,12 @@ describe("composer v2 — saída completa da fixture", () => {
     expect(text.indexOf("## ANEXO II — Modelo de proposta")).toBeGreaterThan(text.indexOf("## ANEXO I — "));
   });
 
-  it("docRef EXACT_PINNED: linha com título/rótulo, tipo, versão exata, id e hash; nunca 'última versão'", () => {
-    expect(text).toContain("> Documento de referência: Termo de Referência vigente — TR, versão 2 (odoc_tr_1, hash aaaaaaaaaaaa)");
+  it("docRef EXACT_PINNED: texto institucional (rótulo + tipo documental), SEM id/hash/linhagem; pin exato no manifesto; nunca 'última versão'", () => {
+    expect(text).toContain("Documento de referência: Termo de Referência vigente (Termo de Referência — versão oficial emitida no processo).");
+    // P2.1 (M8): identidade técnica do pin não é conteúdo para o leitor…
+    for (const technical of ["odoc_tr_1", "odln_tr_1", "aaaaaaaaaaaa", "hash ", "> Documento de referência"]) expect(text).not.toContain(technical);
+    // …e continua integralmente na evidência de lineage.
+    expect(doc.manifest.officialDocRefs[0]).toMatchObject({ documentId: "odoc_tr_1", lineageId: "odln_tr_1", version: 2, contentHash: H("a") });
     expect(text).not.toMatch(/última|latest/i);
   });
 
@@ -192,8 +196,12 @@ describe("composer v2 — valores, tabela e docRef", () => {
     expect(codes(composeTemplate(composeRequest2({ officialDocuments: trPin2(ORG_B) })))).toContain("CROSS_TENANT_REFERENCE");
     const a = compose();
     const b = compose({ officialDocuments: trPin2(ORG_A, { contentHash: H("b") }) });
-    expect(b.manifest.composedOutputHash).not.toBe(a.manifest.composedOutputHash);
-    expect(b.content.text).toContain("hash bbbbbbbbbbbb");
+    // Outro pin ⇒ outra evidência de lineage (manifesto selado e officialDocRefs), mesmo quando o texto institucional não muda.
+    expect(b.manifest.manifestHash).not.toBe(a.manifest.manifestHash);
+    expect(b.manifest.officialDocRefs[0].contentHash).toBe(H("b"));
+    expect(b.content.text).not.toContain("bbbbbbbbbbbb");
+    expect(b.manifest.composedOutputHash).toBe(a.manifest.composedOutputHash);
+    expect(changedAuthorities(a.manifest, b.manifest)).toContain("official:termo-referencia");
   });
 
   it("docRef usado como 'latest' é irrepresentável: a AST é recusada na validação", () => {

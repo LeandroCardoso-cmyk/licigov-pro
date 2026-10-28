@@ -129,9 +129,9 @@ export default function ProcessoLicitatorioHome({
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   {/* Documento oficial mais avançado (ledger de emissões); sem emissão, a etapa registrada. */}
-                  {latestOfficialSummary(p.officialVersions) ? (
+                  {latestOfficialSummary(p.officialVersions, p.officialEmissions) ? (
                     <span className="rounded-md bg-green-100 dark:bg-green-900 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300">
-                      {latestOfficialSummary(p.officialVersions)}
+                      {latestOfficialSummary(p.officialVersions, p.officialEmissions)}
                     </span>
                   ) : (
                     <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary" title="Etapa registrada no processo">

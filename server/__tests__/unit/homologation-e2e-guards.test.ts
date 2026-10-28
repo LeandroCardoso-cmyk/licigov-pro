@@ -49,6 +49,9 @@ describe("executor de homologação — guardas", () => {
     expect(pendingMarkers(t)).toEqual({ revisar: 1, aDefinir: 1, publicacao: 2 });
     expect(technicalResidue("texto {{var}} SYSTEM NOTE ⟦x⟧")).toEqual(["placeholder {{ }}", "SYSTEM NOTE", "xref"]);
     expect(technicalResidue("texto limpo")).toEqual([]);
+    // M8 P2.1 — a referência antiga do Anexo I ("(odoc_x, hash 0123456789ab)") é resíduo técnico; a institucional não é.
+    expect(technicalResidue("Documento de referência: TR — TR, versão 2 (odoc_tr_1, hash 0123456789ab)")).toEqual(["hash técnico"]);
+    expect(technicalResidue("Documento de referência: TR (Termo de Referência — versão oficial emitida no processo).")).toEqual([]);
     expect(looksLike("docx", new Uint8Array(Buffer.from("PK\u0003\u0004")))).toBe(true);
     expect(looksLike("pdf", new Uint8Array(Buffer.from("%PDF-1.7")))).toBe(true);
     expect(looksLike("pdf", new Uint8Array(Buffer.from("PK\u0003\u0004")))).toBe(false);

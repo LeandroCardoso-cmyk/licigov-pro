@@ -47,7 +47,8 @@ import { listContextFacts } from "../db/procurementContext";
 import { editalScopeSelection } from "../domain/editalScopeSelection";
 import { getEditalScopeSelection, recordEditalScope } from "../services/editalScopeService";
 import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
-import { getLatestOfficialPromotion, listLatestOfficialVersions } from "../db/officialDocumentPromotions";
+import { getLatestOfficialPromotion, listLatestOfficialEmissions, officialEmissionsOf, officialVersionsOf } from "../db/officialDocumentPromotions";
+import { exportOfficialDocument } from "../services/officialDocumentExportAdapter";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
 import { isFeatureEnabled } from "../services/featureFlagService";
@@ -245,7 +246,7 @@ export const procurementProcessRouter = router({
         listIntelligentItems(input.processId, orgId),
         listProcessTimeline(input.processId, orgId),
         listGeneratedDocuments(input.processId, orgId),
-        listLatestOfficialVersions(orgId, [input.processId]),
+        listLatestOfficialEmissions(orgId, [input.processId]),
       ]);
       // Autoria registrada nos eventos é o id do usuário (texto): resolve o nome só entre membros DESTA organização.
       // Formatos registrados: "5" e "user:5" (serviços diferentes); "sistema"/outros ficam sem nome.
@@ -253,7 +254,11 @@ export const procurementProcessRouter = router({
       const names = await getOrganizationMemberNames(orgId, timeline.map((e) => actorId(e.actor)).filter((n): n is number => n !== null));
       const timelineNamed = timeline.map((e) => { const id = actorId(e.actor); return { ...e, actorName: id !== null ? names.get(id) ?? null : null }; });
       // Rascunho ≠ versão oficial: a última versão EMITIDA por tipo vem do ledger de promoções (leitura pura).
-      return { process, items, timeline: timelineNamed, documents, officialVersions: official.get(input.processId) ?? {} };
+      // `officialEmissions` (M8 P3.3): ordinal da emissão vigente ("1ª emissão"), sem renumerar a revisão técnica.
+      return {
+        process, items, timeline: timelineNamed, documents,
+        officialVersions: officialVersionsOf(official.get(input.processId)), officialEmissions: officialEmissionsOf(official.get(input.processId)),
+      };
     }),
 
   listProcesses: tenantProcedure
@@ -261,8 +266,8 @@ export const procurementProcessRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const rows = await listProcesses(orgId, input.limit ?? 50);
-      const official = await listLatestOfficialVersions(orgId, rows.map((p) => p.id));
-      const processes = rows.map((p) => ({ ...p, officialVersions: official.get(p.id) ?? {} }));
+      const official = await listLatestOfficialEmissions(orgId, rows.map((p) => p.id));
+      const processes = rows.map((p) => ({ ...p, officialVersions: officialVersionsOf(official.get(p.id)), officialEmissions: officialEmissionsOf(official.get(p.id)) }));
       return { processes, total: processes.length };
     }),
 
@@ -311,6 +316,23 @@ export const procurementProcessRouter = router({
       const document = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
       if (!document || !document.content.trim()) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+      }
+      // M8 P2.2 — o rascunho cujo conteúdo é EXATAMENTE a versão oficial emitida mais recente não sai como "RASCUNHO … não é versão
+      // oficial": exporta-se a própria versão emitida (conteúdo congelado, status EMITIDO, sem afirmar aprovação/assinatura), pelo
+      // adaptador oficial (mesmo RBAC: tenantProcedure). Rascunho alterado depois da emissão continua exportado como RASCUNHO.
+      if (input.kind !== "dfd") {
+        const emitted = await getLatestOfficialPromotion(orgId, input.processId, input.kind);
+        if (emitted && emitted.contentHash === draftContentHash(document.content)) {
+          const official = await exportOfficialDocument({
+            organizationId: orgId, userId: ctx.user!.id, documentId: emitted.officialDocumentId, format: input.format, correlationId: ctx.correlationId,
+          });
+          await recordProcessEvent({
+            organizationId: orgId, processId: input.processId, eventType: "change", actor: String(ctx.user!.id),
+            summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}) — versão oficial emitida.`,
+            refId: emitted.officialDocumentId, correlationId: ctx.correlationId,
+          });
+          return { url: official.url, format: official.format, fileName: official.fileName };
+        }
       }
       const org = await getOrganizationById(orgId);
       const statusLabel = STATUS_LABELS[document.status] ?? document.status.toUpperCase();

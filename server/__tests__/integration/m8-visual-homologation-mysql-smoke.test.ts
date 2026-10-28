@@ -17,7 +17,7 @@ import {
 } from "../../../drizzle/schema";
 import { runMigrations } from "../../bootstrap";
 import { listProcessImportSessionHistory } from "../../services/fileIngestionService";
-import { listLatestOfficialVersions } from "../../db/officialDocumentPromotions";
+import { countOfficialPromotions, listLatestOfficialEmissions, listLatestOfficialVersions } from "../../db/officialDocumentPromotions";
 import { getOrganizationMemberNames } from "../../db/organizations";
 
 const DB = process.env.DATABASE_URL;
@@ -150,5 +150,17 @@ describe.skipIf(!DB)("M8 — histórico de ingestão e versões oficiais — MyS
     expect(b.get("M8-PC")).toEqual({ tr: 7 });
     expect(b.has("M8-PA")).toBe(false);
     expect((await listLatestOfficialVersions(ORG_A, [])).size).toBe(0);
+  });
+
+  it("M8 P3.3 — ordinal da emissão = contagem no ledger (sem renumerar a revisão técnica), tenant-scoped", async () => {
+    const a = await listLatestOfficialEmissions(ORG_A, ["M8-PA", "M8-PB"]);
+    expect(a.get("M8-PA")).toEqual({ tr: { version: 2, emissions: 2 }, etp: { version: 1, emissions: 1 } });
+    expect(a.has("M8-PB")).toBe(false);
+    const b = await listLatestOfficialEmissions(ORG_B, ["M8-PA", "M8-PC"]);
+    expect(b.get("M8-PC")).toEqual({ tr: { version: 7, emissions: 1 } });   // 1ª emissão na revisão técnica v7
+    expect(b.has("M8-PA")).toBe(false);
+    expect(await countOfficialPromotions(ORG_A, "M8-PA", "tr")).toBe(2);
+    expect(await countOfficialPromotions(ORG_B, "M8-PA", "tr")).toBe(0);     // outro tenant não enxerga
+    expect(await countOfficialPromotions(ORG_A, "M8-PA", "edital")).toBe(0);
   });
 });

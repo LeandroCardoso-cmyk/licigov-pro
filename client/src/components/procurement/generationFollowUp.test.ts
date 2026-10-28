@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { generationFollowUp, followUpStatus, GENERATION_FOLLOW_UP_LIMIT_MS } from "./generationFollowUp";
+import { generationFollowUp, followUpStatus, promotionErrorPlan, GENERATION_FOLLOW_UP_LIMIT_MS } from "./generationFollowUp";
 
 describe("generationFollowUp — processamento × conflito real", () => {
   it.each([
@@ -56,4 +56,42 @@ describe("telas de geração — usam o acompanhamento e não exibem o 409 de pr
       expect(src).toContain("domainErrorMessage(");
     });
   }
+});
+
+describe("M8 REG-A — Edital: mesmo acompanhamento do TR/ETP (sem falsa 'Falha ao gerar' nem nova geração enquanto acompanha)", () => {
+  it("EditalWorkspace.tsx", () => {
+    const src = fs.readFileSync(path.join(__dirname, "EditalWorkspace.tsx"), "utf8");
+    expect(src).toContain("useGenerationFollowUp(draft");
+    expect(src).toContain("refetchInterval: () => followInterval.current");
+    expect(src).toMatch(/generationFollowUp\(e\.data\?\.code, e\.message\) === "follow"\) followUp\.start\(draftAtRequest\.current\)/);
+    expect(src).toContain("generateNotice.isPending || followUp.following");
+    expect(src).toContain('<GenerationFollowUpNotice status={followUp.status} documentLabel="Edital"');
+    // o erro só aparece quando NÃO é acompanhamento
+    expect(src).toMatch(/followUp\.status === "idle" && generationFollowUp\(generateNotice\.error\.data\?\.code, generateNotice\.error\.message\) === "error"/);
+    // as duas rotas de geração (modelo institucional e IA) marcam o rascunho de partida antes de enviar
+    expect(src.match(/draftAtRequest\.current = draft;\s*followUp\.clear\(\);\s*generateNotice\.mutate/g)?.length).toBe(2);
+  });
+});
+
+describe("M8 REG-A — emissão oficial: processamento/resposta perdida não viram 'rascunho mudou' nem falha", () => {
+  it.each([
+    ["CONFLICT", "Uma emissão idêntica já está em processamento para esta chave — aguarde a conclusão.", "follow"],
+    [undefined, "Failed to fetch", "follow"],
+    [null, "Unexpected end of JSON input", "follow"],
+    ["CONFLICT", "OFFICIAL_DOCUMENT_LOCK_UNAVAILABLE: a linhagem documental está ocupada por outra operação — nenhuma versão foi criada. Tente novamente.", "busy"],
+    ["CONFLICT", "Idempotency-Key reutilizada com conteúdo diferente — emissão recusada.", "stale"],
+    ["CONFLICT", "O rascunho mudou desde a revisão — recarregue e revise a versão vigente antes de emitir.", "stale"],
+    ["FORBIDDEN", "Segregação de deveres: o último editor substantivo do rascunho não pode emiti-lo — a emissão exige um terceiro revisor.", "error"],
+    ["FORBIDDEN", "Emissão oficial exige papel mínimo \"manager\".", "error"],
+    ["PRECONDITION_FAILED", "EMISSION_FICTITIOUS_PRICES: cotação fictícia.", "error"],
+  ] as const)("%s · %s ⇒ %s", (code, msg, plan) => {
+    expect(promotionErrorPlan(code, msg)).toBe(plan);
+  });
+  it("OfficialPromotionSection usa o plano: só relê o resumo oficial; chave preservada no acompanhamento e girada na recusa definitiva", () => {
+    const src = fs.readFileSync(path.join(__dirname, "OfficialPromotionSection.tsx"), "utf8");
+    expect(src).toContain("const plan = promotionErrorPlan(e.data?.code, e.message);");
+    expect(src).toMatch(/if \(plan === "stale"\) \{\s*setStaleNotice\(true\);\s*rotateEmitKey\(\);/);
+    expect(src).toMatch(/if \(plan === "follow" \|\| plan === "busy"\) \{\s*setPendingNotice\(plan\);\s*invalidateReview\(\);\s*\}/);
+    expect(src).toContain('promotionErrorPlan(promote.error.data?.code, promote.error.message) === "error"');
+  });
 });

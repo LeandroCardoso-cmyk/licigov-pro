@@ -218,20 +218,22 @@ function sanitizeProse(prose: string, rejected: readonly { raw: string }[]): str
   return out;
 }
 
-/** Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM). */
+/**
+ * Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM).
+ *
+ * O texto é CONTEÚDO DO DOCUMENTO (é o que a emissão congela): leva o dispositivo legal de cada seção e a "Base legal" validada, nunca
+ * metadado técnico (homologação M8, P2.2/P3.2). O estado de fundamentação, o status de grounding por seção e o aviso de rascunho
+ * continuam no resultado estruturado (`groundingState`, `sections[].grounded`, `reviewNotice`), nos marcadores de lineage do rascunho e
+ * na tela/exportação do RASCUNHO — um documento emitido não carrega "rascunho … não constitui documento aprovado" no próprio texto.
+ */
 function renderMarkdown(doc: StructuredAuthoring): string {
   const heading = doc.kind === "tr" ? "Termo de Referência" : doc.kind === "edital" ? "Edital de Licitação" : "Estudo Técnico Preliminar";
-  const stateLabel: Record<GroundingState, string> = {
-    grounded: "Fundamentado", partially_grounded: "Parcialmente fundamentado", ungrounded: "Sem fundamentação recuperada",
-    not_applicable: "Não aplicável", legacy_unclassified: "Não classificado",
-  };
   const lines: string[] = [`# ${heading} — ${doc.object}`, ""];
-  lines.push(`> Estado de fundamentação normativa: **${stateLabel[doc.groundingState]}** — ${doc.evidenceCount} evidência(s) normativa(s) utilizada(s). A suficiência factual depende das lacunas marcadas para revisão no texto.`, "");
   for (const s of doc.sections) {
-    const statusTag = s.contentMode !== "provided"
-      ? (s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)")
-      : (s.grounded ? "fundamentada" : "fundamentação pendente");
-    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel} · ${statusTag}_`, "");
+    // Omissão justificada é conteúdo jurídico (o leitor precisa saber que o elemento não se aplica); "fundamentada/pendente" é grounding.
+    const omission = s.contentMode === "provided" ? null
+      : s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)";
+    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel}${omission ? ` · ${omission}` : ""}_`, "");
     lines.push(s.contentMode === "provided" ? s.prose : `**Justificativa:** ${s.omissionJustification}`, "");
     if (s.legalReferences.length > 0) {
       lines.push("**Base legal:**");
@@ -244,8 +246,7 @@ function renderMarkdown(doc: StructuredAuthoring): string {
     for (const l of doc.limitations) lines.push(`- ${l}`);
     lines.push("");
   }
-  lines.push("---", `> ${doc.reviewNotice}`);
-  return lines.join("\n");
+  return lines.join("\n").replace(/\n+$/, "\n");
 }
 
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
@@ -307,20 +308,12 @@ function confirmedParamsPrompt(p: TrConfirmedParams): string[] {
 }
 
 /**
- * Insere o bloco AUTORITATIVO de itens (TR) e a nota de fontes ANTES do aviso final de revisão. O bloco é
- * texto do servidor (determinístico), nunca prosa do provider.
+ * Anexa o bloco AUTORITATIVO de itens (TR) ao texto. O bloco é texto do servidor (determinístico), nunca prosa do provider.
+ * As chaves técnicas das fontes usadas/ausentes (`dfd, etp, itens, pesquisa_precos`, `fonte_alterada:N`…) NÃO entram no documento
+ * (P3.2): são proveniência, já gravada nos marcadores de lineage do rascunho e exibida ao revisor no resumo de fontes da tela.
  */
 function withSourceContext(rendered: string, ctx: DocumentAuthoringContext): string {
-  const usedLabel = ctx.usedSources.length > 0 ? ctx.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
-  const extra = [
-    ...(ctx.authoritativeBlock ? [ctx.authoritativeBlock, ""] : []),
-    `> **Fontes do processo utilizadas:** ${usedLabel}.`,
-    ...(ctx.missing.length > 0 ? [`> **Pendências (revisar):** ${ctx.missing.join(", ")}.`] : []),
-    "",
-  ].join("\n");
-  const marker = "\n---\n> ";
-  const at = rendered.lastIndexOf(marker);
-  return at < 0 ? `${rendered}\n\n${extra}` : `${rendered.slice(0, at)}\n${extra}${rendered.slice(at)}`;
+  return ctx.authoritativeBlock ? `${rendered.replace(/\s+$/, "")}\n\n${ctx.authoritativeBlock}\n` : rendered;
 }
 
 /** Registra proveniência FAILED de contrato de autoria (structured output inválido) — best-effort. */
@@ -683,17 +676,12 @@ export async function generateEditalAuthoring(input: EditalAuthoringInput): Prom
     throw err;
   }
 
-  // 7) Render markdown + nota de fontes reaproveitadas (explicabilidade mínima na própria minuta).
-  const usedLabel = input.sourceContext.usedSources.length > 0 ? input.sourceContext.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
+  // 7) Render markdown + quadro autoritativo. As fontes reaproveitadas são proveniência (lineage + tela), não texto do Edital (P3.2).
   const content = [
     renderMarkdown(structured),
     "",
     // P0 piloto — quadro AUTORITATIVO de itens/valores (servidor), idêntico ao do TR. Não é prosa da IA.
     input.sourceContext.authoritativeBlock ?? "",
-    "",
-    "---",
-    `> **Fontes reaproveitadas do processo:** ${usedLabel}.`,
-    input.sourceContext.missing.length > 0 ? `> **Pendências (revisar):** ${input.sourceContext.missing.join(", ")}.` : "",
   ].filter(Boolean).join("\n");
 
   return {

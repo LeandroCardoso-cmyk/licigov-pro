@@ -5,7 +5,8 @@
  * Regras:
  *  - id determinístico por (organização, processo, tipo): repetir o comando não cria segundo rascunho;
  *  - NUNCA sobrescreve um rascunho existente com conteúdo diferente (a edição humana não é perdida): falha fechada;
- *    conteúdo idêntico ⇒ no-op (replay); a ÚNICA exceção é a RECOMPOSIÇÃO governada (`draft.replace`): hash esperado sob lock,
+ *    conteúdo idêntico ⇒ no-op (replay) — com OUTRO M1 (ex.: novo pin oficial; a referência institucional não carrega id/hash, então o
+ *    texto pode não mudar) só o vínculo `tpl-m1:` é atualizado, com a MESMA trava de documento oficial da recomposição; a ÚNICA exceção é a RECOMPOSIÇÃO governada (`draft.replace`): hash esperado sob lock,
  *    sem documento aprovado/oficial, sem edição humana (ou `confirmReplace`), com o conteúdo anterior preservado no ledger;
  *  - só documentos de processo licitatório (dfd/etp/tr/edital); outros tipos ⇒ falha fechada (sem backing).
  */
@@ -52,7 +53,10 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
         .limit(1).for("update");
       if (rows.length === 1) {
         const existing = rows[0];
-        if (existing.id === draft.id && draftContentHash(existing.content ?? "") === draftContentHash(draft.content)) return; // replay
+        if (existing.id === draft.id && draftContentHash(existing.content ?? "") === draftContentHash(draft.content)) {
+          await relinkIdenticalDraft(tx, existing, draft, kind);   // replay (mesmo M1) ou só o vínculo do M1 novo
+          return;
+        }
         if (!draft.replace) {
           throw new TemplatePersistenceError("CONFLICT", "já existe rascunho para este processo e tipo com outro conteúdo; descarte-o (reset governado) antes de compor por modelo — nada foi sobrescrito");
         }
@@ -73,6 +77,25 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
       });
     },
   };
+}
+
+/**
+ * Texto IDÊNTICO ao do rascunho `origem:template` existente (já bloqueado FOR UPDATE). Mesmo M1 ⇒ replay puro. OUTRO M1 (fontes/pins
+ * mudaram sem mudar o texto composto) ⇒ nada de conteúdo muda: apenas o vínculo `tpl-m1:` passa a apontar o M1 vigente — sem ledger,
+ * sem mudar autoria nem último ator. Documento com versão OFICIAL emitida nunca é revinculado (mesma recusa da recomposição): sem isso,
+ * um novo M1 geraria uma versão `gerado` depois da emissão.
+ */
+async function relinkIdenticalDraft(
+  tx: ProcurementExecutor, existing: typeof generatedDocumentsTable.$inferSelect,
+  draft: Parameters<TemplateDraftPort["writeDraft"]>[0], kind: DocumentKind,
+): Promise<void> {
+  const sources = parseSources(existing.sources);
+  const link = `tpl-m1:${draft.generationManifestId}`;
+  if (!sources.includes("origem:template") || sources.includes(link)) return;
+  const block = officialRegenerationBlock(existing, await getLatestOfficialPromotion(draft.organizationId, draft.subjectId, kind, tx as unknown as PromotionExecutor));
+  if (block) throw new TRPCError({ code: "PRECONDITION_FAILED", message: officialRegenerationRefusalMessage(kind as "etp" | "tr" | "edital", block) });
+  await tx.update(generatedDocumentsTable).set({ sources: JSON.stringify([...sources.filter((x) => !x.startsWith("tpl-m1:")), link]) })
+    .where(and(eq(generatedDocumentsTable.id, existing.id), eq(generatedDocumentsTable.organizationId, draft.organizationId)));
 }
 
 /** RECOMPOSIÇÃO governada do rascunho `origem:template` existente (já bloqueado FOR UPDATE pelo chamador). */

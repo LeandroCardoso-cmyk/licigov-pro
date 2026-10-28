@@ -106,6 +106,8 @@ export interface PreparationStateView {
 export const DURATION_UNIT_LABEL: Record<string, string> = {
   minute: "minuto(s)", hour: "hora(s)", day: "dia(s)", businessDay: "dia(s) útil(eis)", month: "mês(es)", year: "ano(s)",
 };
+/** Unidades do contrato de duração do catálogo (espelho de `DURATION_UNITS` em server/domain/institutionalTemplates/variableCatalog2.ts). */
+export const DURATION_UNITS = ["minute", "hour", "day", "businessDay", "month", "year"] as const;
 
 export const SOURCE_TITLE: Record<string, string> = {
   IDENTITY: "Identidade do órgão", POLICY: "Política do órgão", PROCESS: "Dados do processo", TR: "Dados do TR", CERTAME_CONFIG: "Configuração do certame",
@@ -139,7 +141,8 @@ export function scalarToText(type: string, value: unknown): string {
 export function toFormValue(f: Pick<PrepField, "type" | "itemType" | "columns">, value: unknown): FormValue {
   if (f.type === "duration") {
     const d = value as { amount?: number; unit?: string } | undefined;
-    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "day" };
+    // Sem unidade registrada ⇒ nenhuma unidade presumida: "dia(s)" silencioso gravava, p.ex., a etapa de lances em dias.
+    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "" };
   }
   if (f.type === "list") return Array.isArray(value) ? value.map((v) => scalarToText(f.itemType ?? "string", v)).join("\n") : "";
   if (f.type === "table") {
@@ -192,6 +195,8 @@ export function parseField(f: PrepField, form: FormValue | undefined): ParseResu
     if (!d.amount?.trim()) return okv(undefined);
     const n = parseDecimal(d.amount);
     if (n === null || !Number.isInteger(n) || n < 0) return err("Informe a quantidade (número inteiro).");
+    if (!d.unit) return err("Escolha a unidade.");
+    if (!(DURATION_UNITS as readonly string[]).includes(d.unit)) return err("Escolha uma das unidades.");
     return okv({ amount: n, unit: d.unit });
   }
   if (f.type === "list") {
@@ -358,6 +363,31 @@ export function livePendingItems(state: PreparationStateView, edits: Readonly<Re
   const live = liveStatuses(state, edits);
   return state.sections.flatMap((section) => section.fields
     .filter((f) => f.editable && live.get(f.name)?.status === "PENDING" && !live.get(f.name)?.edited)
+    .map((field) => ({ section, field })));
+}
+
+/**
+ * Decisões a DESENHAR no bloco de decisões deste certame. Diferente de `livePendingItems` (que CONTA o que falta), a lista é ancorada
+ * no status do SERVIDOR: um campo pendente continua na tela enquanto a pessoa digita, troca a unidade ou corrige o valor — só sai depois
+ * de registrado (o servidor passa a devolvê-lo como DECIDED). Condicionais entram/saem AO VIVO conforme a decisão que as ativa.
+ */
+export function liveDecisionItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => {
+      const s = live.get(f.name)?.status;
+      if (!f.editable || s === undefined || s === "HIDDEN_CONDITIONAL") return false;
+      // Opcional que uma condição tornou obrigatório: sai da lista de opcionais e fica aqui (com ou sem valor digitado).
+      return f.status === "PENDING" || f.status === "HIDDEN_CONDITIONAL" || (f.status === "OPTIONAL" && s !== "OPTIONAL");
+    })
+    .map((field) => ({ section, field })));
+}
+
+/** Decisões JÁ REGISTRADAS deste processo que continuam editáveis (revisão/correção explícita, mesmo fluxo governado de gravação). */
+export function liveRegisteredItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => section.scope === "PROCESS" && f.editable && f.status === "DECIDED" && !f.completionPolicy && live.get(f.name)?.status !== "HIDDEN_CONDITIONAL")
     .map((field) => ({ section, field })));
 }
 

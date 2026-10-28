@@ -288,6 +288,8 @@ export function technicalResidue(text: string): string[] {
   if (/\{\{|\}\}/.test(text)) found.push("placeholder {{ }}");
   if (/SYSTEM NOTE/i.test(text)) found.push("SYSTEM NOTE");
   if (/⟦|⟧|\[XREF|xref:/.test(text)) found.push("xref");
+  // M8 P2.1 — identidade técnica de documento referenciado (id interno + prefixo de hash) no corpo institucional.
+  if (/\bhash [0-9a-f]{12}\b/i.test(text)) found.push("hash técnico");
   return found;
 }
 

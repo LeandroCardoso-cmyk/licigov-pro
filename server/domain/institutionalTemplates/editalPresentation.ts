@@ -17,6 +17,12 @@ export const VARIABLE_PRESENTATION: Readonly<Record<string, VariablePresentation
     label: "Sistema de Registro de Preços (SRP)",
     question: "Esta contratação utilizará Sistema de Registro de Preços?",
   }),
+  // P3.4 (M8): o TR traz a "Adequação orçamentária" como TEXTO (art. 6º, XXIII, j); aqui é o valor ESTRUTURADO consumido pelo Edital.
+  // Não há fonte estruturada anterior para reaproveitar: a pergunta orienta a conferir com o TR em vez de pedir um dado "novo".
+  "julgamento.dotacaoOrcamentaria": Object.freeze({
+    label: "Dotação orçamentária",
+    question: "Informe a dotação orçamentária que custeará a contratação — a mesma indicada na seção \"Adequação orçamentária\" do TR. Registrada aqui uma única vez, ela passa a ser o valor estruturado usado pelo Edital.",
+  }),
 });
 
 export const presentationOf = (variable: string): VariablePresentation | undefined => VARIABLE_PRESENTATION[variable];

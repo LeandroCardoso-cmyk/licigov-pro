@@ -27,7 +27,7 @@ vi.mock("sonner", () => ({ toast: { success: () => {}, error: () => {} } }));
 import ProcessOverview from "./ProcessOverview";
 import { IngestionSessionHistoryList } from "./IngestionSessionHistory";
 import {
-  actorLabel, draftStatusLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel, officialVersionLabel, stageLabel,
+  actorLabel, draftStatusLabel, emissionOrdinalLabel, formatDateTimeBR, latestOfficialSummary, modalityLabel, officialVersionLabel, stageLabel,
   overviewModalityText,
 } from "@/lib/processDocumentStatus";
 import { formatBytes, provenanceLabel, riskTypeLabel, sessionByResearchId, sessionStatusLabel, severityLabel, type SessionHistoryView } from "@/lib/ingestionHistoryView";
@@ -50,6 +50,12 @@ describe("situação documental (pura)", () => {
     expect(latestOfficialSummary({ etp: 1, tr: 2 })).toBe("TR emitido (v2)");
     expect(latestOfficialSummary({ edital: 1, tr: 3 })).toBe("Edital emitido (v1)");
     expect(latestOfficialSummary({})).toBeNull();
+    // M8 P3.3 — ordinal da emissão (ledger) no lugar da revisão técnica; sem ordinal, o "vN" de antes (nada inventado).
+    expect(officialVersionLabel({ tr: 2 }, "tr", { tr: 1 })).toBe("Emitido · 1ª emissão");
+    expect(officialVersionLabel({ tr: 5 }, "tr", { tr: 2 })).toBe("Emitido · 2ª emissão");
+    expect(latestOfficialSummary({ etp: 1, tr: 2 }, { tr: 1 })).toBe("TR emitido (1ª emissão)");
+    expect(latestOfficialSummary({ edital: 2 }, {})).toBe("Edital emitido (v2)");
+    for (const bad of [0, -1, 1.5, undefined, null]) expect(emissionOrdinalLabel(bad as number)).toBeNull();
   });
   it("data pt-BR (nunca ISO cru) e autoria pelo nome, com id quando não há nome", () => {
     expect(formatDateTimeBR("2026-10-23T20:48:03.891Z")).not.toContain("T20:48");
@@ -94,6 +100,14 @@ describe("Visão Geral — TR emitido coexistindo com rascunho", () => {
     expect(html).not.toContain("Copilotos");
     // Edital sem versão emitida não recebe o selo oficial.
     expect(html.match(/Emitido v2/g)?.length).toBe(1);
+  });
+  it("M8 P3.3 — com o ordinal do ledger: '1ª emissão' (não 'v2'); a revisão técnica fica só como detalhe (title)", () => {
+    (st.load as { officialEmissions?: Record<string, number> }).officialEmissions = { tr: 1 };
+    const html = renderToStaticMarkup(createElement(ProcessOverview, { processId: "p1" }));
+    expect(html).toContain("TR emitido (1ª emissão)");
+    expect(html).toContain("Emitido · 1ª emissão");
+    expect(html).not.toContain("Emitido v2");
+    expect(html).toContain('title="Revisão técnica v2"');
   });
   it("eventos com nome do autor e data legível", () => {
     const html = renderToStaticMarkup(createElement(ProcessOverview, { processId: "p1" }));

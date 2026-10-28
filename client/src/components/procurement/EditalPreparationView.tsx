@@ -18,8 +18,13 @@ export interface PreparationViewProps {
   state: PreparationStateView;
   edits: Readonly<Record<string, SectionEdits>>;
   fieldErrors: Readonly<Record<string, Record<string, string>>>;
-  /** Pendências/opcionais AO VIVO (condicionais já aplicadas às edições). */
+  /**
+   * Decisões a DESENHAR, AO VIVO (condicionais já aplicadas às edições) e ESTÁVEIS: um campo pendente não sai da tela ao receber valor
+   * (`liveDecisionItems`). A contagem de pendências não vem daqui — é da prontidão (`buildEditalReadiness`).
+   */
   pending: readonly PendingItem[];
+  /** Decisões já registradas deste processo, editáveis para revisão/correção explícita (`liveRegisteredItems`). */
+  registered?: readonly PendingItem[];
   optional: readonly PendingItem[];
   onEdit: (source: string, field: PrepField, value: FormValue) => void;
   plan: SavePlan;
@@ -138,6 +143,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const { counters, details } = readiness;
   const decisionsOpen = isDecisionsOpen(readiness, userChoice);
   const decisions = p.pending.filter(isCertameDecision);
+  const registeredDecisions = (p.registered ?? []).filter(isCertameDecision);
   const scheduleBlock = decisions.filter((i) => i.field.authority === "CERTAME_SCHEDULE");
   const decisionBlock = decisions.filter((i) => i.field.authority !== "CERTAME_SCHEDULE");
   const allFields = state.sections.flatMap((s2) => s2.fields.map((field) => ({ section: s2, field })));
@@ -155,7 +161,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const defaultsApplied = allFields.filter(({ field }) => field.status === "ORG_DEFAULT");
   const eligibleDecided = allFields.filter(({ field }) => field.status === "DECIDED" && field.defaultEligible && field.hasValue).map(({ field }) => field);
   const canSave = p.plan.writes.length > 0 && Object.keys(p.plan.errors).length === 0 && !p.busy;
-  const hasDecisionArea = decisions.length > 0 || derivedSchedule.length > 0 || awaitingSchedule.length > 0 || p.optional.length > 0;
+  const hasDecisionArea = decisions.length > 0 || derivedSchedule.length > 0 || awaitingSchedule.length > 0 || p.optional.length > 0 || registeredDecisions.length > 0;
   const blocking = readiness.blockingPrerequisites;
   const stepByKey = Object.fromEntries(readiness.steps.map((st) => [st.key, st])) as Record<ReadinessStep["key"], ReadinessStep>;
   const trStep = stepByKey.TR_OFFICIAL; const cfgStep = stepByKey.ONE_TIME_CONFIG; const originStep = stepByKey.ORIGIN; const decStep = stepByKey.PROCESS_DECISIONS;
@@ -296,6 +302,15 @@ export default function EditalPreparationView(p: PreparationViewProps) {
               <p className="text-xs text-muted-foreground">Registradas uma vez na Configuração do certame; o Edital e os demais documentos apenas a consomem.</p>
               <FieldBlock items={decisionBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
             </div>
+          )}
+          {registeredDecisions.length > 0 && (
+            <details className="rounded-lg border border-border" aria-label="Decisões já registradas deste certame">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões já registradas — {registeredDecisions.length} (revisar ou corrigir)</summary>
+              <div className="space-y-2 px-3 pb-3">
+                <p className="text-xs text-muted-foreground">Valores registrados na Configuração do certame. Alterar um valor e salvar registra uma NOVA decisão, com confirmação e histórico; nada muda sem salvar.</p>
+                <FieldBlock items={registeredDecisions} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
+              </div>
+            </details>
           )}
           {p.optional.length > 0 && (
             <details className="rounded-lg border border-border">

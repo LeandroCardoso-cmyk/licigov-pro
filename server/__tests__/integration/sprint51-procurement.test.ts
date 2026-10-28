@@ -324,8 +324,11 @@ describe("Sprint 5.1 — Business Domain: Processo Licitatório", () => {
         correlationId: CORR, invoke: async () => buildMockProviderAuthoring("etp"), idempotencyKey: "t-sprint51-etp", actorUserId: 1,
       });
       expect(doc.kind).toBe("etp");
-      // A2 — rascunho estruturado, seções ancoradas na Lei 14.133/2021 e aviso OBRIGATÓRIO de revisão.
-      expect(doc.content).toContain("Revisão OBRIGATÓRIA");
+      // A2 — rascunho estruturado, seções ancoradas na Lei 14.133/2021; a revisão é exigida pelo ESTADO (rascunho) e o aviso é exibido
+      // na tela/exportação do rascunho, não congelado no texto (M8 P2.2).
+      expect(doc.status).toBe("rascunho");
+      expect(doc.content).toContain("Art. 18");
+      expect(doc.content).not.toContain("Revisão OBRIGATÓRIA");
       expect(doc.content).toContain("Estudo Técnico Preliminar");
     });
 

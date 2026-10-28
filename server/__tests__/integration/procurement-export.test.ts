@@ -18,6 +18,14 @@ vi.mock("../../services/documentExportService", async (importOriginal) => {
     }),
   };
 });
+vi.mock("../../db/officialDocumentPromotions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocumentPromotions")>()),
+  getLatestOfficialPromotion: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("../../services/officialDocumentExportAdapter", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/officialDocumentExportAdapter")>()),
+  exportOfficialDocument: vi.fn().mockResolvedValue({ url: "https://s3/official", format: "pdf", fileName: "TR_100-2026_emitido_v2.pdf", artifactHash: "a", artifactId: null, artifactReused: false }),
+}));
 vi.mock("../../services/tenantService", () => ({
   resolveTenantForUser: vi.fn().mockResolvedValue({
     organizationId: 1,
@@ -34,6 +42,9 @@ import { procurementProcessRouter } from "../../routers/procurementProcessRouter
 import * as procDb from "../../db/procurement";
 import { exportDocument as exportCore } from "../../services/documentExportService";
 import { makeContext, mockUser } from "../helpers/fixtures";
+import { getLatestOfficialPromotion } from "../../db/officialDocumentPromotions";
+import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
+import { draftContentHash } from "../../domain/generatedDocument";
 
 const PID = "proc-x";
 const proc = { id: PID, organizationId: 1, processNumber: "100/2026", object: "Aquisição" };
@@ -41,11 +52,11 @@ const proc = { id: PID, organizationId: 1, processNumber: "100/2026", object: "A
 describe("procurementProcess.exportDocument (adapter)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(procDb.getProcess).mockResolvedValue(proc as any);
+    vi.mocked(procDb.getProcess).mockResolvedValue(proc as never);
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(
-      { id: "d1", kind: "etp", title: "ETP — X", content: "# ETP\nconteúdo", status: "rascunho", updatedAt: "2026-07-26T00:00:00.000Z" } as any,
+      { id: "d1", kind: "etp", title: "ETP — X", content: "# ETP\nconteúdo", status: "rascunho", updatedAt: "2026-07-26T00:00:00.000Z" } as never,
     );
-    vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as any);
+    vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as never);
   });
 
   it("exporta o documento canônico chamando o núcleo comum e retorna a URL", async () => {
@@ -69,17 +80,51 @@ describe("procurementProcess.exportDocument (adapter)", () => {
   });
 
   it("documento inexistente ou vazio → NOT_FOUND, sem chamar o núcleo", async () => {
-    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null as any);
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(null as never);
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     await expect(caller.exportDocument({ processId: PID, kind: "tr", format: "docx" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(exportCore).not.toHaveBeenCalled();
   });
 
   it("cross-tenant / processo inexistente → NOT_FOUND, sem exportar", async () => {
-    vi.mocked(procDb.getProcess).mockResolvedValue(null as any);
+    vi.mocked(procDb.getProcess).mockResolvedValue(null as never);
     const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
     await expect(caller.exportDocument({ processId: "outro", kind: "etp", format: "pdf" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(exportCore).not.toHaveBeenCalled();
+  });
+
+  describe("M8 P2.2 — TR emitido não sai com rótulo de rascunho", () => {
+    const TR = "# Termo de Referência — Aquisição\n\n## Definição do objeto\nTexto.";
+    const promotion = (contentHash: string) => ({ officialDocumentId: "odoc_tr_2", lineageId: "odln_tr", version: 2, contentHash, actorUserId: 2, createdAt: "2026-10-28 10:00:00" });
+    beforeEach(() => {
+      vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue({ id: "d-tr", kind: "tr", title: "TR — X", content: TR, status: "rascunho", updatedAt: "2026-10-28T00:00:00.000Z" } as never);
+    });
+
+    it("rascunho IDÊNTICO à versão emitida ⇒ exporta a versão oficial (adaptador oficial: EMITIDO), nunca 'RASCUNHO'", async () => {
+      vi.mocked(getLatestOfficialPromotion).mockResolvedValue(promotion(draftContentHash(TR)));
+      const r = await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "tr", format: "pdf" });
+      expect(r).toEqual({ url: "https://s3/official", format: "pdf", fileName: "TR_100-2026_emitido_v2.pdf" });
+      expect(getLatestOfficialPromotion).toHaveBeenCalledWith(1, PID, "tr");                 // tenant-scoped
+      expect(vi.mocked(exportOfficialDocument).mock.calls[0][0]).toMatchObject({ organizationId: 1, userId: mockUser.id, documentId: "odoc_tr_2", format: "pdf" });
+      expect(exportCore).not.toHaveBeenCalled();                                              // sem cabeçalho de rascunho
+      expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][0]).toMatchObject({ refId: "odoc_tr_2" });
+    });
+
+    it("rascunho ALTERADO depois da emissão ⇒ continua exportado como RASCUNHO (não finge ser a versão oficial)", async () => {
+      vi.mocked(getLatestOfficialPromotion).mockResolvedValue(promotion(draftContentHash(`${TR}\nalteração`)));
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "tr", format: "docx" });
+      expect(exportOfficialDocument).not.toHaveBeenCalled();
+      expect(vi.mocked(exportCore).mock.calls[0][0].meta).toMatchObject({ statusLabel: "RASCUNHO", isDraft: true });
+    });
+
+    it("sem emissão ⇒ rascunho; DFD (não promovível) nem consulta o ledger", async () => {
+      vi.mocked(getLatestOfficialPromotion).mockResolvedValue(null);
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "tr", format: "pdf" });
+      expect(vi.mocked(exportCore).mock.calls[0][0].meta?.isDraft).toBe(true);
+      vi.mocked(getLatestOfficialPromotion).mockClear();
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "dfd", format: "pdf" });
+      expect(getLatestOfficialPromotion).not.toHaveBeenCalled();
+    });
   });
 
   it("exige autenticação (UNAUTHORIZED)", async () => {
