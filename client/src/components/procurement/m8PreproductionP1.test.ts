@@ -190,9 +190,11 @@ describe("SSR — tela real (EditalPreparationView)", () => {
 
 describe("integração — o painel desenha a lista ESTÁVEL e conta pela prontidão", () => {
   const panel = readFileSync(path.resolve("client/src/components/procurement/EditalPreparationPanel.tsx"), "utf8");
-  it("Panel passa liveDecisionItems/liveRegisteredItems para a tela (nunca a lista de contagem livePendingItems)", () => {
-    expect(panel).toMatch(/const pending = useMemo\(\(\) => \(state \? liveDecisionItems\(state, edits\)/);
-    expect(panel).toMatch(/registered=\{registered\}/);
+  it("Panel passa os grupos estáveis por família (liveDecisionGroups ⇒ liveDecisionItems + liveRegisteredItems) para a tela (nunca a lista de contagem livePendingItems)", () => {
+    // D-01: os grupos compõem as MESMAS listas estáveis do P1.1, só reposicionando a condicional junto da ativadora.
+    expect(panel).toMatch(/const groups = useMemo\(\(\) => \(state \? liveDecisionGroups\(state, edits\)/);
+    expect(panel).toMatch(/pending=\{groups\?\.decisions \?\? \[\]\}/);
+    expect(panel).toMatch(/registered=\{groups\?\.registered \?\? \[\]\}/);
     expect(panel).not.toMatch(/livePendingItems\(/);
   });
 });
