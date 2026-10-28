@@ -416,6 +416,29 @@ export function liveRegisteredItems(state: PreparationStateView, edits: Readonly
     .map((field) => ({ section, field })));
 }
 
+/**
+ * D-01 — apresentação por FAMÍLIA: a condicional fica logo abaixo da decisão que a ativa, mesmo quando a ativadora já está REGISTRADA
+ * (antes, a filha pendente caía no bloco de pendências, acima, e o bloco de registradas seguia a ordem alfabética do servidor).
+ * Cada item vai para o bloco da sua ativadora RAIZ (pendências × registradas), na ordem pai→filhos. As duas listas continuam disjuntas
+ * (nenhuma decisão aparece duas vezes); só a apresentação muda — a contagem de pendências segue em `livePendingItems`.
+ */
+export function liveDecisionGroups(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): { decisions: PendingItem[]; registered: PendingItem[] } {
+  const pending = liveDecisionItems(state, edits);
+  const registered = liveRegisteredItems(state, edits);
+  const inRegistered = new Set(registered.map((i) => i.field.name));
+  const ordered = parentFirst([...registered, ...pending]);
+  const byName = new Map(ordered.map((i) => [i.field.name, i] as const));
+  const parentOf = (i: PendingItem) => i.field.requiredWhenVariables.find((v) => v !== i.field.name && byName.has(v));
+  const rootOf = (i: PendingItem): PendingItem => {
+    let cur = i; const seen = new Set<string>([i.field.name]);
+    for (let p = parentOf(cur); p && !seen.has(p); p = parentOf(cur)) { seen.add(p); cur = byName.get(p)!; }
+    return cur;
+  };
+  const decisions: PendingItem[] = []; const reg: PendingItem[] = [];
+  for (const i of ordered) (inRegistered.has(rootOf(i).field.name) ? reg : decisions).push(i);
+  return { decisions, registered: reg };
+}
+
 /** Decisões opcionais ao vivo (as que ainda não têm valor e não estão ocultas). */
 export function liveOptionalItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
   const live = liveStatuses(state, edits);

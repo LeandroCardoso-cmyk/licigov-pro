@@ -5,7 +5,7 @@ import { useEditalPreparationState } from "./useEditalPreparationState";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { decisionPayload, emptyDecisionForm, validateDecisionForm, type DecisionFormState } from "@/lib/institutionalTemplatesView";
 import {
-  STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveDecisionItems, liveOptionalItems, liveRegisteredItems,
+  STALE_NOTICE, buildSavePlan, executeSavePlan, isStaleSave, liveDecisionGroups, liveOptionalItems,
   type FormValue, type PlannedWrite, type StageTarget, type PrepField, type SaveOutcome, type SectionEdits,
 } from "@/lib/editalPreparation";
 
@@ -50,9 +50,11 @@ export default function EditalPreparationPanel({ processId, params, trPin = null
   const recordOrg = trpc.institutionalTemplates.governed.recordOrganizationFields.useMutation();
 
   const plan = useMemo(() => (state ? buildSavePlan(state, { edits }) : { writes: [], errors: {}, decisionCount: 0 }), [state, edits]);
-  // O que se DESENHA (estável enquanto a pessoa digita) — a CONTAGEM de pendências continua em `buildEditalReadiness` (livePendingItems).
-  const pending = useMemo(() => (state ? liveDecisionItems(state, edits) : []), [state, edits]);
-  const registered = useMemo(() => (state ? liveRegisteredItems(state, edits) : []), [state, edits]);
+  // O que se DESENHA (estável enquanto a pessoa digita; condicional logo abaixo da ativadora, no bloco dela — D-01). A CONTAGEM de
+  // pendências continua em `buildEditalReadiness` (livePendingItems).
+  const groups = useMemo(() => (state ? liveDecisionGroups(state, edits) : { decisions: [], registered: [] }), [state, edits]);
+  const pending = groups.decisions;
+  const registered = groups.registered;
   const optional = useMemo(() => (state ? liveOptionalItems(state, edits) : []), [state, edits]);
   if (!state) return null;
 

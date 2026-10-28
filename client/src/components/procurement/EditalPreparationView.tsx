@@ -63,15 +63,21 @@ function FixButton({ action, onOpenStage }: { action: FixAction; onOpenStage?: (
 }
 
 function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly PendingItem[]; edits: PreparationViewProps["edits"]; errors: PreparationViewProps["fieldErrors"]; busy: boolean; onEdit: PreparationViewProps["onEdit"] }) {
-  const sources = [...new Set(items.map((i) => i.section.source))];
+  // Sequências CONTÍGUAS por fonte, na ordem recebida (D-01): reagrupar por fonte separava a condicional da sua ativadora quando as
+  // fontes diferem (ex.: critério de julgamento × casas decimais). Para listas já agrupadas por fonte, a renderização é a mesma.
+  const runs: { src: string; items: PendingItem[] }[] = [];
+  for (const i of items) {
+    const last = runs[runs.length - 1];
+    if (last && last.src === i.section.source) last.items.push(i); else runs.push({ src: i.section.source, items: [i] });
+  }
   return (
     <div className="space-y-4">
-      {sources.map((src) => (
-        <div key={src} className="space-y-3" data-source={src}>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{SOURCE_TITLE[src] ?? src}</h4>
-          {items.filter((i) => i.section.source === src).map(({ field }) => (
-            <PrepFieldControl key={field.path} field={field} value={edits[src]?.[field.path] ?? toFormValue(field, field.currentValue)}
-              error={errors[src]?.[field.path]} disabled={busy} onChange={(v) => onEdit(src, field, v)} />
+      {runs.map((run, n) => (
+        <div key={`${run.src}-${n}`} className="space-y-3" data-source={run.src}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{SOURCE_TITLE[run.src] ?? run.src}</h4>
+          {run.items.map(({ field }) => (
+            <PrepFieldControl key={field.path} field={field} value={edits[run.src]?.[field.path] ?? toFormValue(field, field.currentValue)}
+              error={errors[run.src]?.[field.path]} disabled={busy} onChange={(v) => onEdit(run.src, field, v)} />
           ))}
         </div>
       ))}
@@ -144,6 +150,9 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const decisionsOpen = isDecisionsOpen(readiness, userChoice);
   const decisions = p.pending.filter(isCertameDecision);
   const registeredDecisions = (p.registered ?? []).filter(isCertameDecision);
+  // D-01 — condicionais ainda NÃO registradas exibidas junto da ativadora registrada: o bloco abre sozinho para não escondê-las.
+  const registeredOnly = registeredDecisions.filter((i) => i.field.status === "DECIDED").length;
+  const pendingInRegistered = registeredDecisions.length - registeredOnly;
   const scheduleBlock = decisions.filter((i) => i.field.authority === "CERTAME_SCHEDULE");
   const decisionBlock = decisions.filter((i) => i.field.authority !== "CERTAME_SCHEDULE");
   const allFields = state.sections.flatMap((s2) => s2.fields.map((field) => ({ section: s2, field })));
@@ -304,10 +313,15 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             </div>
           )}
           {registeredDecisions.length > 0 && (
-            <details className="rounded-lg border border-border" aria-label="Decisões já registradas deste certame">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões já registradas — {registeredDecisions.length} (revisar ou corrigir)</summary>
+            <details className="rounded-lg border border-border" aria-label="Decisões já registradas deste certame" open={pendingInRegistered > 0 || undefined}>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões já registradas — {registeredOnly} (revisar ou corrigir)</summary>
               <div className="space-y-2 px-3 pb-3">
                 <p className="text-xs text-muted-foreground">Valores registrados na Configuração do certame. Alterar um valor e salvar registra uma NOVA decisão, com confirmação e histórico; nada muda sem salvar.</p>
+                {pendingInRegistered > 0 && (
+                  <p role="status" className="text-xs text-amber-700 dark:text-amber-300" data-testid="pending-in-registered">
+                    {pendingInRegistered} {pendingInRegistered === 1 ? "decisão ainda não registrada aparece" : "decisões ainda não registradas aparecem"} logo abaixo da decisão que a{pendingInRegistered === 1 ? "" : "s"} ativou.
+                  </p>
+                )}
                 <FieldBlock items={registeredDecisions} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
               </div>
             </details>
