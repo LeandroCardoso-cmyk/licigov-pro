@@ -65,8 +65,8 @@ E2E HTTP 4/4 do run `MVR71VFS`; **M8 aceita com ressalvas pelo Owner em 28/10/20
 | M1 — Graphify e reutilização | 5 | 100 | Mapa de reutilização; grafo regenerado por merge e idempotente | — |
 | M2 — BLL diferido | 10 | 90 | Minuta BLL Rev. 2 gerada sobre TR emitido: 7 dados "A DEFINIR PARA PUBLICAÇÃO", 0 datas inventadas (SMOKE + HTTP-LOCAL) | Rev. 2 vinculada no tenant sintético do staging; ativação na org real é decisão institucional |
 | M3 — Motor documental | 10 | 90 | Mesmo motor para Edital BLL; mesma exportação/versionamento para DFD/ETP/TR/termos | Pacotes de modelo para os demais tipos |
-| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL; STAGING contado em M8) | Homologação visual concluída em 27/10/2026, contada só no M8; percentual mantido até deliberação do Owner |
-| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido (STAGING contado em M8) | Jornada B aprovada em staging em 27/10/2026, contada só no M8; percentual mantido até deliberação do Owner |
+| M4 — Jornada principal | 15 | 90 | DFD → ETP → TR (emitido por outro usuário) → Edital BLL → DOCX/PDF, replay (SMOKE + HTTP-LOCAL; STAGING contado em M8) | Homologação visual concluída em 27/10/2026, contada só no M8; percentual mantido por decisão do Owner (28/10/2026) |
+| M5 — Processos legados | 10 | 90 | Registro legado → contrato vigente → histórico declarado → aditivo; extrator de importação corrigido (STAGING contado em M8) | Jornada B aprovada em staging em 27/10/2026, contada só no M8; percentual mantido por decisão do Owner (28/10/2026) |
 | M6 — Contratos/aditivos/direta | 10 | 80 | Reagendamento de vigência, termo DOCX/PDF; contratação direta sem DFD (SMOKE) | Ativação de minuta e pós-parecer pendentes (jurídico) |
 | M7 — Pareceres/monitoramento | 10 | 80 | Calendário/alertas/indicador sem duplicidade (HTTP-LOCAL); pedido de parecer sem parecer fabricado (SMOKE) | Parecer avulso |
 | M8 — Homologação E2E staging | 15 | 100 | **ACEITA COM RESSALVAS (Owner, 28/10/2026)**: HTTP real 4/4 em STAGING (run `MVR71VFS`, processo `9992/2026`; histórico: run `MV9SXMKG`, 15/10/2026) + homologação visual integral (processo `8828/2026`), staging `967a931`, org 2 sintética | Ressalvas pré-produção P1/P2/P3 (seção "Aceite M8"); produção não homologada |
@@ -132,7 +132,7 @@ Até a execução em staging, os percentuais ficaram **mantidos** (83,75%). O ma
   - Nenhum dado modificado.
   - `catalog:sync` **não executado**: a sincronização inicial do CATSER é operação institucional separada, sob autorização
     expressa do Owner.
-  - Produção e `main` não tocadas. Percentuais inalterados (M8 80%, global 88,25%).
+  - Produção e `main` não tocadas. Percentuais inalterados à época (M8 80%, global 88,25%).
 
 #### Marco M8 — Homologação E2E HTTP real: **APROVADO (4/4)**
 
@@ -216,7 +216,7 @@ R$ 40.000,00 e 7 linhas ignoradas; item aprovado (CATMAT não confirmado) e inco
 lint dos arquivos alterados e build limpos.
 
 **Percentuais mantidos (M8 80%, global 88,25%).** Os 20% restantes do M8 exigem a homologação visual completa — TR gerado
-e Edital BLL alcançado na tela —, o que ainda não ocorreu.
+e Edital BLL alcançado na tela —, o que ainda não ocorreu. *(Superado em 28/10/2026 — ver "Aceite M8": M8 100%, global 91,25%.)*
 
 #### Reconciliação CATMAT/CATSER com o catálogo oficial (16/10/2026, mesmo PR #306)
 
@@ -439,7 +439,7 @@ banco, S3 do staging e provedor de IA) e documentos confirmados. Nenhum impedime
   permanece no padrão "dia(s)" se não for escolhida antes do número.
 - **P2 — Integridade/apresentação documental:** id interno e hash do TR aparecem no Anexo I do Edital emitido; rodapé de
   rascunho aparece no TR emitido.
-- **P3 — Qualidade e experiência:** textos "Texto sintético de <chave>" vindos do perfil de homologação; lista técnica de
+- **P3 — Qualidade e experiência:** textos `Texto sintético de <chave>` vindos do perfil de homologação; lista técnica de
   fontes no TR; rótulo "v2" na primeira emissão; dotação solicitada novamente; decisões condicionais exibidas somente
   após gravação.
 
