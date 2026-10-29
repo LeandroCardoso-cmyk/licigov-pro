@@ -11,7 +11,8 @@ import { inflateRawSync } from "zlib";
 import { PDFParse } from "pdf-parse";
 
 const stored: Buffer[] = [];
-vi.mock("../../storage", () => ({
+vi.mock("../../storage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../storage")>()),
   assertStorageUsable: vi.fn(),
   storagePut: vi.fn(async (_key: string, buf: Buffer) => { stored.push(buf); return { key: _key }; }),
   storageSignedUrl: vi.fn(async (key: string) => ({ key, url: "https://s3/signed" })),
@@ -34,6 +35,16 @@ vi.mock("../../services/tenantService", () => ({
   getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
   NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
 }));
+// Render OFICIAL real (documentEngineService.renderOfficialDocument): só a leitura do documento e o ciclo de vida (S3/ledger) são simulados.
+const officialStored: Buffer[] = [];
+vi.mock("../../db/officialDocuments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
+  getOfficialDocument: vi.fn(),
+}));
+vi.mock("../../services/officialDocumentLifecycleService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/officialDocumentLifecycleService")>()),
+  storeRenderedArtifact: vi.fn(async ({ buffer }: { buffer: Buffer }) => { officialStored.push(buffer); return { url: "https://s3/official" }; }),
+}));
 vi.mock("../../_core/sdk", () => ({ sdk: { signSession: vi.fn().mockResolvedValue("t"), authenticateRequest: vi.fn().mockResolvedValue(null) } }));
 
 import { procurementProcessRouter } from "../../routers/procurementProcessRouter";
@@ -43,6 +54,8 @@ import { exportOfficialDocument } from "../../services/officialDocumentExportAda
 import { draftContentHash } from "../../domain/generatedDocument";
 import { buildInstitutionalModel, renderInstitutionalDOCX, renderInstitutionalPDF } from "../../services/documentConverter";
 import { makeContext, mockUser } from "../helpers/fixtures";
+import { getOfficialDocument } from "../../db/officialDocuments";
+import { renderOfficialDocument } from "../../services/documentEngineService";
 import { UNISSUED_DRAFT_MARKING } from "@shared/documentMarkers";
 
 const PID = "proc-sint";
@@ -123,6 +136,23 @@ describe("PR #334 — MINUTA — NÃO EMITIDA OFICIALMENTE em todo arquivo não 
     expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);   // só o evento de auditoria da exportação
   });
 
+  it("emitida e ALTERADA depois (hash diferente no ledger) ⇒ sai como MINUTA, nunca pelo adaptador oficial", async () => {
+    vi.mocked(getLatestOfficialPromotion).mockResolvedValue({ officialDocumentId: "odoc_tr", lineageId: "l", version: 2, contentHash: draftContentHash(`${LONG}\nversão emitida anterior`), actorUserId: 2, createdAt: "2026-10-29 10:00:00" } as never);
+    const pages = await pdfPages(await exportVia("aprovado", "pdf"));
+    expect(exportOfficialDocument).not.toHaveBeenCalled();
+    expect(pages[0]).toContain(`${UNISSUED_DRAFT_MARKING} — situação interna: APROVADO`);
+    pages.forEach((t) => expect(t).toContain(UNISSUED_DRAFT_MARKING));
+  }, 30_000);
+
+  it("título e número de processo LONGOS: a marca abre o rodapé e nunca é cortada pela reticência", async () => {
+    vi.mocked(procDb.getProcess).mockResolvedValue({ id: PID, organizationId: 1, processNumber: "9".repeat(200), object: "Objeto sintético" } as never);
+    const pages = await pdfPages(await exportVia("em_revisao", "pdf"));
+    pages.forEach((t, i) => {
+      expect(t).toContain(`${UNISSUED_DRAFT_MARKING} · TR`);
+      expect(t).toContain(`Página ${i + 1} de ${pages.length}`);
+    });
+  }, 30_000);
+
   it("versão emitida idêntica (ledger) ⇒ sai pelo adaptador oficial, sem passar pelo caminho da minuta", async () => {
     vi.mocked(getLatestOfficialPromotion).mockResolvedValue({ officialDocumentId: "odoc_tr", lineageId: "l", version: 2, contentHash: draftContentHash(LONG), actorUserId: 2, createdAt: "2026-10-29 10:00:00" } as never);
     vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue({ id: "d1", kind: "tr", title: "TR", content: LONG, status: "aprovado", updatedAt: "2026-10-29T00:00:00.000Z" } as never);
@@ -133,7 +163,29 @@ describe("PR #334 — MINUTA — NÃO EMITIDA OFICIALMENTE em todo arquivo não 
   });
 });
 
-describe("PR #334 — documento emitido (meta do adaptador oficial) segue sem marca de minuta", () => {
+describe("PR #334 — documento emitido pelo render OFICIAL real (Document Engine) segue sem marca de minuta", () => {
+  const official = (status: string) => ({
+    id: "odoc_tr", organizationId: 1, businessDomain: "processo_licitatorio", documentType: "tr", origin: PID, title: "TR — Termo de Referência",
+    content: LONG, status, version: 2, replayHash: "h", template: "t", author: "1", createdAt: "2026-10-29 10:00:00",
+  });
+  for (const format of ["pdf", "docx"] as const) {
+    it(`status emitido (${format}): sem MINUTA/RASCUNHO; snapshot técnico 'gerado' continua com o aviso próprio (inalterado)`, async () => {
+      officialStored.length = 0;
+      vi.mocked(getOfficialDocument).mockResolvedValueOnce(official("emitido") as never);
+      await renderOfficialDocument({ organizationId: 1, documentId: "odoc_tr", format, actorUserId: 1 });
+      const emitted = format === "pdf" ? (await pdfPages(officialStored[0])).join(" ") : Object.values(unzip(officialStored[0])).join("\n");
+      if (format === "pdf") expect((await pdfPages(officialStored[0])).length).toBeGreaterThan(1);
+      expect(emitted).not.toMatch(/MINUTA|RASCUNHO|NÃO EMITIDA|não é versão oficial/);
+      vi.mocked(getOfficialDocument).mockResolvedValueOnce(official("gerado") as never);
+      await renderOfficialDocument({ organizationId: 1, documentId: "odoc_tr", format, actorUserId: 1 });
+      const generated = format === "pdf" ? (await pdfPages(officialStored[1])).join(" ") : Object.values(unzip(officialStored[1])).join("\n");
+      expect(generated).toContain("GERADO — não é versão oficial");          // outro domínio/caminho: comportamento anterior
+      expect(generated).not.toContain(UNISSUED_DRAFT_MARKING);
+    }, 30_000);
+  }
+});
+
+describe("PR #334 — renderizador com meta de emitido montada à mão", () => {
   const EMITTED = { documentTitle: "TR — Termo de Referência", processNumber: "9901/2026", statusLabel: "EMITIDO", isDraft: false, emissionNumber: 1, version: 2, exportedAtLabel: "29/10/2026 10:00" };
   it("PDF multipágina: paginado e sem MINUTA/RASCUNHO em nenhuma página", async () => {
     const pages = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(LONG, EMITTED)));
