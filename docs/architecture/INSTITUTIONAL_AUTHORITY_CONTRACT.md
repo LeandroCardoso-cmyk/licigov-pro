@@ -62,7 +62,11 @@ A membership é relida da fonte autoritativa **a cada ato**. Não há cache, e o
 - **Autoconcessão:** ninguém concede vínculo a si mesmo (`SELF_GRANT_FORBIDDEN`).
 - **Revalidação no aceite:** o emissor ainda precisa ser admin real (`INVITATION_GRANT_AUTHORITY_REQUIRED`), relido sob trava na transação do aceite; o aceitante nunca é o emissor; o aceite não sobrescreve o papel de quem já é membro ativo (`MEMBER_ALREADY_EXISTS`).
 - **Autorrebaixamento:** continua possível (sujeito à proteção de último admin); só a autopromoção é recusada.
-- **Exceção (bootstrap do onboarding):** convite `owner` criado pelo onboarding de tenant, só enquanto o órgão não tem nenhum membro ativo.
+- **Exceção (bootstrap do onboarding):** convite `owner` criado pelo onboarding de tenant, só enquanto o órgão não tem nenhum membro ativo, e somente com **evidência verificável**:
+  - quem emitiu o convite é admin de plataforma (`users.role = 'admin'`, o único que executa o onboarding);
+  - existe o registro `tenant.onboarded` do mesmo órgão para o mesmo e-mail (gravado por `onboardTenant`).
+
+  Convite `owner` legado ou gravado por outra via **não** é presumido bootstrap. No aceite, a regra é verificada **sob trava da organização** (`FOR UPDATE`) dentro da transação: dois aceites concorrentes de convites `owner` do mesmo órgão resultam em exatamente um titular (provado em `security02-bootstrap-owner-mysql-smoke`).
 - **Continuam técnicos:** desativar e remover terceiros, listar membros e cancelar convites.
 
 ## Ledger eletrônico

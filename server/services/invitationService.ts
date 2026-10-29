@@ -14,7 +14,7 @@ import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { getDb } from "../db/connection";
-import { institutionalInvitations, organizationMembers, users, type InstitutionalInvitation, type OrgRole } from "../../drizzle/schema";
+import { activityLogs, institutionalInvitations, organizationMembers, organizations, users, type InstitutionalInvitation, type OrgRole } from "../../drizzle/schema";
 import { getUserByEmail } from "../db/users";
 import { getMembersOfOrg, getOrganizationById } from "../db/organizations";
 import { hashPassword } from "./passwordSecurity";
@@ -93,12 +93,63 @@ async function organizationHasNoActiveMembers(organizationId: number): Promise<b
   return (await getMembersOfOrg(organizationId)).length === 0;
 }
 
+/** Ação do activity log gravada pelo onboarding de tenant — a EVIDÊNCIA verificável do bootstrap da 1ª autoridade. */
+const TENANT_ONBOARDED_ACTION = "tenant.onboarded";
+
 /**
- * SECURITY-02 — releitura DENTRO da transação do aceite (FOR SHARE): o emissor do convite (não-bootstrap) precisa continuar admin
- * real até o commit; um rebaixamento concorrente não confirma entre a checagem e a criação do vínculo.
+ * SECURITY-02 — EVIDÊNCIA do bootstrap: o convite `owner` só concede a 1ª autoridade se (a) quem o emitiu é admin de plataforma
+ * (`users.role = 'admin'`, o único que executa o onboarding) e (b) existe o registro `tenant.onboarded` DO MESMO órgão para o MESMO
+ * e-mail (gravado por `onboardTenant`). Convite `owner` legado/gravado por outra via NÃO é presumido bootstrap. Fail-closed.
+ */
+async function bootstrapEvidenceHolds(
+  executor: AuthorityExecutor, p: { organizationId: number; grantorUserId: number | null; emailNormalized: string },
+): Promise<boolean> {
+  if (p.grantorUserId == null) return false;
+  try {
+    const grantor = await executor.select({ role: users.role }).from(users).where(eq(users.id, p.grantorUserId)).limit(1);
+    if (grantor[0]?.role !== "admin") return false;
+    const logs = await executor.select({ details: activityLogs.details }).from(activityLogs)
+      .where(and(eq(activityLogs.organizationId, p.organizationId), eq(activityLogs.action, TENANT_ONBOARDED_ACTION)));
+    return logs.some((l) => {
+      try {
+        const email = (JSON.parse(l.details ?? "{}") as { firstAdminEmail?: unknown }).firstAdminEmail;
+        return typeof email === "string" && normalizeInvitationEmail(email) === p.emailNormalized;
+      } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * SECURITY-02 — bootstrap `owner` SERIALIZADO: trava a organização (FOR UPDATE) e, sob a trava, exige órgão sem nenhum membro ativo
+ * (leitura travada) e a evidência do onboarding. Dois aceites concorrentes de convites `owner` do mesmo órgão se serializam na trava
+ * da organização: o segundo vê o titular já criado e é recusado.
+ */
+async function assertBootstrapUnderLock(tx: AuthorityExecutor, row: InstitutionalInvitation, correlationId?: string): Promise<void> {
+  const deny = (reason: string): never => {
+    log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason, correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: GRANT_AUTHORITY_MESSAGE });
+  };
+  const org = await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, row.organizationId)).limit(1).for("update");
+  if (!org[0]) deny("bootstrap_organization_missing");
+  const active = await tx.select({ id: organizationMembers.id }).from(organizationMembers)
+    .where(and(eq(organizationMembers.organizationId, row.organizationId), eq(organizationMembers.ativo, true))).limit(1).for("share");
+  if (active.length > 0) deny("bootstrap_organization_not_empty");
+  if (!(await bootstrapEvidenceHolds(tx, { organizationId: row.organizationId, grantorUserId: row.createdByUserId, emailNormalized: row.emailNormalized }))) {
+    deny("bootstrap_evidence_missing");
+  }
+}
+
+/**
+ * SECURITY-02 — releitura DENTRO da transação do aceite: o emissor do convite (não-bootstrap) precisa continuar admin real até o
+ * commit (FOR SHARE); o convite `owner` (bootstrap) é revalidado sob a trava da organização com a evidência do onboarding.
  */
 async function reassertGrantorInTx(tx: AuthorityExecutor, row: InstitutionalInvitation, correlationId?: string): Promise<void> {
-  if (row.role === "owner") return; // bootstrap: validado pela ausência de membros ativos antes da transação
+  if (row.role === "owner") {
+    await assertBootstrapUnderLock(tx, row, correlationId);
+    return;
+  }
   try {
     await requireInstitutionalAuthority({
       userId: row.createdByUserId!, organizationId: row.organizationId, minRole: "admin", operation: "invitation.accept", correlationId, executor: tx,
@@ -114,10 +165,19 @@ async function reassertGrantorInTx(tx: AuthorityExecutor, row: InstitutionalInvi
  * Exceção única e estreita: convite `owner` de bootstrap para órgão SEM membros ativos (onboarding).
  */
 async function assertGrantAuthority(p: {
-  organizationId: number; grantorUserId: number; role: OrgRole; operation: string; correlationId?: string | null; bootstrapAllowed: boolean;
+  organizationId: number; grantorUserId: number; role: OrgRole; operation: string; correlationId?: string | null;
+  /**
+   * Bootstrap `owner`: `false` (proibido); `"onboarding"` (criação pelo onboarding de um órgão recém-criado — a evidência é gravada
+   * logo em seguida); `{ emailNormalized }` (reenvio/aceite: exige a EVIDÊNCIA verificável do onboarding para esse e-mail).
+   */
+  bootstrap: false | "onboarding" | { emailNormalized: string };
 }): Promise<void> {
   if (p.role === "owner") {
-    if (p.bootstrapAllowed && await organizationHasNoActiveMembers(p.organizationId)) return;
+    const allowed = p.bootstrap !== false && await organizationHasNoActiveMembers(p.organizationId) && (
+      p.bootstrap === "onboarding"
+      || await (async () => { const db = await getDb(); return !!db && bootstrapEvidenceHolds(db, { organizationId: p.organizationId, grantorUserId: p.grantorUserId, emailNormalized: (p.bootstrap as { emailNormalized: string }).emailNormalized }); })()
+    );
+    if (allowed) return;
     log.warn("invitation_grant_denied", { organizationId: p.organizationId, actorUserId: p.grantorUserId, operation: p.operation, reason: "owner_outside_bootstrap", correlationId: p.correlationId ?? undefined });
     throw new TRPCError({ code: "FORBIDDEN", message: GRANT_AUTHORITY_MESSAGE });
   }
@@ -136,7 +196,7 @@ async function assertInvitationStillGranted(row: InstitutionalInvitation, accept
     if (row.createdByUserId == null) throw new Error("grantor_unknown");
     await assertGrantAuthority({
       organizationId: row.organizationId, grantorUserId: row.createdByUserId, role: row.role, operation: "invitation.accept",
-      correlationId, bootstrapAllowed: true,
+      correlationId, bootstrap: { emailNormalized: row.emailNormalized },
     });
   } catch {
     log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "grantor_without_authority", correlationId });
@@ -160,7 +220,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
   }
   await assertGrantAuthority({
     organizationId: input.organizationId, grantorUserId: input.createdByUserId, role: input.role, operation: "invitation.create",
-    correlationId: input.correlationId, bootstrapAllowed: input.bootstrap === "tenant_onboarding",
+    correlationId: input.correlationId, bootstrap: input.bootstrap === "tenant_onboarding" ? "onboarding" : false,
   });
   if (targetUser) {
     const activeMembers = await getMembersOfOrg(input.organizationId);
@@ -302,7 +362,7 @@ export async function resendInvitation(input: ResendInvitationInput): Promise<In
   }
   await assertGrantAuthority({
     organizationId: input.organizationId, grantorUserId: input.actorUserId, role: current.role, operation: "invitation.resend",
-    correlationId: input.correlationId, bootstrapAllowed: true,
+    correlationId: input.correlationId, bootstrap: { emailNormalized: current.emailNormalized },
   });
 
   const org = await getOrganizationById(input.organizationId);

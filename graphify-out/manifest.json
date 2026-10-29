@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1793287419.7492826,
-    "ast_hash": "f2e2fe79ad398eaddb1daf4fec7a2925",
+    "mtime": 1793303257.4823205,
+    "ast_hash": "118947ec7fbd71d72e26ccc2a2283efd",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -5780,8 +5780,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitation-service.test.ts": {
-    "mtime": 1793298089.3745506,
-    "ast_hash": "c3a1f140971102c1bdf1deaf60084481",
+    "mtime": 1793303270.790449,
+    "ast_hash": "dacabc2d02f0e9571091506396ee2070",
     "semantic_hash": ""
   },
   "server/__tests__/integration/invitations-mysql-smoke.test.ts": {
@@ -9885,8 +9885,8 @@
     "semantic_hash": ""
   },
   "server/services/invitationService.ts": {
-    "mtime": 1793298032.701122,
-    "ast_hash": "74be1c6c89379de74b2e65a82dc643d7",
+    "mtime": 1793303211.0525277,
+    "ast_hash": "4a93cc1f2c7b9bb3bbfe9a72fc2f8d77",
     "semantic_hash": ""
   },
   "server/services/itemAnalyticsService.ts": {
@@ -15650,8 +15650,13 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_AUTHORITY_CONTRACT.md": {
-    "mtime": 1793298368.7181466,
-    "ast_hash": "78a9b2457f144646849935868bab39da",
+    "mtime": 1793303502.7783337,
+    "ast_hash": "f170fdcfae0423ef54615e8a8d0c4ba3",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/security02-bootstrap-owner-mysql-smoke.test.ts": {
+    "mtime": 1793303282.3574927,
+    "ast_hash": "54d7c0ad291f1799c991f7e5a0ddceef",
     "semantic_hash": ""
   }
 }

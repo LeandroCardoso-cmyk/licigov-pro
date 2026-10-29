@@ -370,14 +370,18 @@ describe("SECURITY-02 · invitationService — admin de plataforma não fabrica 
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
-  it("ACEITE do convite owner de bootstrap só enquanto o órgão não tem membros ativos", async () => {
+  it("ACEITE do convite owner de bootstrap: recusado com membros ativos E recusado sem evidência do onboarding", async () => {
     authority.deny(1);
     const { db } = makeFakeDb({ selectResult: [makeInvitation({ role: "owner", emailNormalized: "fulano@x.com" })] });
     getDbMock.mockResolvedValue(db as never);
     getMembersOfOrgMock.mockResolvedValue([{ userId: 5, organizationId: 700001, role: "owner", ativo: true } as never]);
     await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(db.transaction).not.toHaveBeenCalled();
+    // Órgão vazio NÃO basta: sem a evidência verificável do onboarding (emissor admin de plataforma + registro
+    // `tenant.onboarded` para o e-mail), o convite owner não é presumido bootstrap. O caminho legítimo e a corrida
+    // de aceites concorrentes são provados contra MySQL real em security02-bootstrap-owner-mysql-smoke.
     getMembersOfOrgMock.mockResolvedValue([]);
-    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).resolves.toEqual({ organizationId: 700001 });
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INVITATION_GRANT_AUTHORITY_REQUIRED") });
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 });
