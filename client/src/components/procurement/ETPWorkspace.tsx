@@ -31,9 +31,11 @@ export type ETPWorkspaceProps = {
   processId?: string;
   /** Abre a importação expandida (processo iniciado por "Importar ETP existente"). */
   startWithImport?: boolean;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function ETPWorkspace({ processId = "", startWithImport = false }: ETPWorkspaceProps) {
+export default function ETPWorkspace({ processId = "", startWithImport = false, onDirtyChange }: ETPWorkspaceProps) {
   const [object, setObject] = useState("");
   const utils = trpc.useUtils();
   const processQuery = trpc.procurementProcess.loadProcess.useQuery({ processId }, { enabled: !!processId });
@@ -51,6 +53,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false }
   const [confirmOpen, setConfirmOpen] = useState(false);
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
+  useEffect(() => { onDirtyChange?.(editorDirty); }, [editorDirty, onDirtyChange]);
   const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
   const followUp = useGenerationFollowUp(reviewable.data?.draft, () => {
     rotateEtpKey();

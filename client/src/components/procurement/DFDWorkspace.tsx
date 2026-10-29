@@ -41,9 +41,11 @@ export type DFDWorkspaceProps = {
   processId?: string;
   /** Abre a importação expandida (processo iniciado por "Importar DFD existente"). */
   startWithImport?: boolean;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function DFDWorkspace({ processId = "", startWithImport = false }: DFDWorkspaceProps) {
+export default function DFDWorkspace({ processId = "", startWithImport = false, onDirtyChange }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
@@ -126,6 +128,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   });
 
   const dirty = !!doc && draft !== doc.content;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const assistFields = (assist?.available ? assist.fields : []) as DFDFieldViewUI[];
 
   const onFieldAction = (key: string) => {
