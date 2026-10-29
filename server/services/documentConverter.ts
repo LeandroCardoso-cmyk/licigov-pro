@@ -333,6 +333,9 @@ export interface InstitutionalMeta {
   /** Palavra usada no aviso de não-finalizado (default "RASCUNHO"). Documentos
    *  oficiais usam o status real (ex.: "GERADO"/"REVISADO"). */
   draftNoticeLabel?: string;
+  /** Marca integral de documento não emitido (ex.: "MINUTA — NÃO EMITIDA OFICIALMENTE"). Com `isDraft`, substitui o aviso padrão
+   *  na 1ª página (mantendo o status interno ao lado) e abre o rodapé de todas as páginas. Ausente ⇒ comportamento anterior. */
+  draftMarking?: string;
   /** Bloco de assinatura institucional (opcional). Presente apenas quando o ato tem
    *  assinatura registrada — ex.: Parecer Jurídico emitido/assinado. Ausente para os
    *  demais documentos/domínios, que permanecem inalterados. */
@@ -475,6 +478,7 @@ function metaLines(meta: InstitutionalMeta): { label: string; value: string; str
 }
 
 function draftNotice(meta: InstitutionalMeta): string {
+  if (meta.draftMarking) return `${meta.draftMarking} — situação interna: ${meta.statusLabel}. Revisão obrigatória; este arquivo não é documento oficial.`;
   const label = meta.draftNoticeLabel ?? "RASCUNHO";
   return `${label} — revisão obrigatória. Este arquivo ainda NÃO é uma versão oficial finalizada.`;
 }
@@ -486,6 +490,10 @@ function draftNotice(meta: InstitutionalMeta): string {
 function footerText(meta: InstitutionalMeta): string {
   // Partes LIMITADAS (títulos/números livres podem ser longos): o rodapé cabe numa linha e nunca empurra conteúdo/páginas.
   const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+  // A marca de não emitido vem PRIMEIRO: título/processo longos podem ser cortados pela reticência, a marca nunca.
+  if (meta.isDraft && meta.draftMarking) {
+    return [meta.draftMarking, clip(meta.documentTitle, 70), meta.processNumber ? `Processo ${clip(meta.processNumber, 30)}` : null].filter(Boolean).join(" · ");
+  }
   return [clip(meta.documentTitle, 70), meta.processNumber ? `Processo ${clip(meta.processNumber, 30)}` : null,
     meta.isDraft ? `${clip(meta.draftNoticeLabel ?? "RASCUNHO", 20)} — não é versão oficial` : null].filter(Boolean).join(" · ");
 }

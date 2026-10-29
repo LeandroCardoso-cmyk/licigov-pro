@@ -30,9 +30,11 @@ export type TRWorkspaceProps = {
   processId?: string;
   /** Abre a importação expandida (processo iniciado por "Importar TR existente"). */
   startWithImport?: boolean;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function TRWorkspace({ processId = "", startWithImport = false }: TRWorkspaceProps) {
+export default function TRWorkspace({ processId = "", startWithImport = false, onDirtyChange }: TRWorkspaceProps) {
   const [object, setObject] = useState("");
   const utils = trpc.useUtils();
   // Objeto pré-preenchido com o do processo (sem reentrada de dado já existente).
@@ -51,6 +53,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
   const [confirmOpen, setConfirmOpen] = useState(false);
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
+  useEffect(() => { onDirtyChange?.(editorDirty); }, [editorDirty, onDirtyChange]);
   const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
   const followUp = useGenerationFollowUp(reviewable.data?.draft, () => {
     rotateTrKey();

@@ -137,6 +137,40 @@ describe("procurementProcess.exportDocument (adapter)", () => {
     });
   });
 
+  describe("LICIGOV-FAST PR-1 — Visualizar/Imprimir na etapa (disposition inline)", () => {
+    it("inline só muda o Content-Disposition: mesmo conteúdo salvo, mesma marcação de rascunho, mesmo evento", async () => {
+      const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+      await caller.exportDocument({ processId: PID, kind: "etp", format: "pdf", disposition: "inline" });
+      const arg = vi.mocked(exportCore).mock.calls[0][0];
+      expect(arg.disposition).toBe("inline");
+      expect(arg.content).toBe("# ETP\nconteúdo");                       // conteúdo persistido — nada é gerado/regenerado
+      expect(arg.meta).toMatchObject({ statusLabel: "RASCUNHO", isDraft: true });
+      expect(procDb.recordProcessEvent).toHaveBeenCalledTimes(1);          // auditoria inalterada
+    });
+
+    it("sem disposition ⇒ comportamento anterior (o núcleo aplica attachment)", async () => {
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "dfd", format: "docx" });
+      expect(vi.mocked(exportCore).mock.calls[0][0].disposition).toBeUndefined();
+    });
+
+    it("versão emitida idêntica ⇒ o inline segue pelo adaptador oficial", async () => {
+      vi.mocked(getLatestOfficialPromotion).mockResolvedValueOnce({ officialDocumentId: "odoc_etp", lineageId: "l", version: 2, contentHash: draftContentHash("# ETP\nconteúdo"), actorUserId: 2, createdAt: "2026-10-28 10:00:00" } as never);
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "etp", format: "pdf", disposition: "inline" });
+      expect(vi.mocked(exportOfficialDocument).mock.calls[0][0]).toMatchObject({ documentId: "odoc_etp", disposition: "inline" });
+      expect(exportCore).not.toHaveBeenCalled();
+    });
+
+    it("disposition inválida é recusada pelo contrato; sem membership continua negado (nada exportado)", async () => {
+      const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+      await expect(caller.exportDocument({ processId: PID, kind: "etp", format: "pdf", disposition: "download" as never })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const { resolveTenantForUser } = await import("../../services/tenantService");
+      vi.mocked(resolveTenantForUser).mockRejectedValueOnce(new Error("NO_ORGANIZATION_MEMBERSHIP"));
+      await expect(caller.exportDocument({ processId: PID, kind: "etp", format: "pdf", disposition: "inline" })).rejects.toBeTruthy();
+      expect(exportCore).not.toHaveBeenCalled();
+      expect(exportOfficialDocument).not.toHaveBeenCalled();
+    });
+  });
+
   it("exige autenticação (UNAUTHORIZED)", async () => {
     await expect(
       procurementProcessRouter.createCaller(makeContext(null)).exportDocument({ processId: PID, kind: "etp", format: "pdf" }),

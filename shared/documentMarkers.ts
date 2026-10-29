@@ -25,3 +25,10 @@ export function hasHiddenContent(content: string): boolean {
   const text = stripInternalMarkers(content);
   return /<!--|<\/?[A-Za-z][^>]*>/.test(text) || /!\[[^\]]*\]\(/.test(text);
 }
+
+/**
+ * Decisão do Owner (PR #334) — identificação de TODO documento do Processo Licitatório que não é a versão emitida
+ * oficialmente (fonte de verdade: ledger de emissões), qualquer que seja o status interno do rascunho. Aplicada na 1ª
+ * página e no rodapé de todas as páginas do DOCX/PDF; a barra LICIGOV-FAST usa o mesmo texto.
+ */
+export const UNISSUED_DRAFT_MARKING = "MINUTA — NÃO EMITIDA OFICIALMENTE";

@@ -36,6 +36,7 @@ import {
   importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
 import { findPriceOutliers } from "@shared/itemApprovalGate";
+import { UNISSUED_DRAFT_MARKING } from "@shared/documentMarkers";
 import { reaisToCents } from "../domain/money";
 import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
@@ -310,6 +311,9 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1),
       kind: z.enum(["dfd", "etp", "tr", "edital"]),
       format: z.enum(["docx", "pdf"]),
+      // LICIGOV-FAST PR-1 — "inline" abre o PDF no navegador (Visualizar/Imprimir na etapa); default: baixar. Só o
+      // Content-Disposition da URL assinada muda — conteúdo, marcação, RBAC e evento são os mesmos.
+      disposition: z.enum(["attachment", "inline"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -325,7 +329,7 @@ export const procurementProcessRouter = router({
         const emitted = await getLatestOfficialPromotion(orgId, input.processId, input.kind);
         if (emitted && emitted.contentHash === draftContentHash(document.content)) {
           const official = await exportOfficialDocument({
-            organizationId: orgId, userId: ctx.user!.id, documentId: emitted.officialDocumentId, format: input.format, correlationId: ctx.correlationId,
+            organizationId: orgId, userId: ctx.user!.id, documentId: emitted.officialDocumentId, format: input.format, disposition: input.disposition, correlationId: ctx.correlationId,
           });
           await recordProcessEvent({
             organizationId: orgId, processId: input.processId, eventType: "change", actor: String(ctx.user!.id),
@@ -350,6 +354,7 @@ export const procurementProcessRouter = router({
         // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
         downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,
         format: input.format,
+        disposition: input.disposition,
         scope: "processo",
         meta: {
           organizationName: org?.nome || undefined,
@@ -357,7 +362,11 @@ export const procurementProcessRouter = router({
           processNumber: process.processNumber,
           object: process.object,
           statusLabel,
-          isDraft: document.status === "rascunho",
+          // Decisão do Owner (PR #334): chegar aqui significa que o ledger NÃO tem esta versão como emitida (a emitida idêntica saiu
+          // acima, pelo adaptador oficial). Logo, todo arquivo deste caminho é MINUTA não emitida — qualquer status interno, que segue
+          // no cabeçalho. Só a apresentação muda: conteúdo, hash, lineage e regras de emissão intactos.
+          isDraft: true,
+          draftMarking: UNISSUED_DRAFT_MARKING,
           // Pós-M8 — o MESMO aviso da prévia (fonte única), no cabeçalho do arquivo exportado do rascunho.
           notices: input.kind === "dfd" ? [] : [demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId))].filter((n): n is string => !!n),
           version,

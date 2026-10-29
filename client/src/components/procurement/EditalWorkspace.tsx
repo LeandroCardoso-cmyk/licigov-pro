@@ -101,16 +101,20 @@ export type EditalWorkspaceProps = {
   onOpenTr?: () => void;
   /** Abre a etapa onde um dado é resolvido na origem (Itens, Pesquisa de Preços, DFD, TR). */
   onOpenStage?: (stage: StageTarget) => void;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 export default function EditalWorkspace({
   processId = "",
   onOpenTr,
   onOpenStage,
+  onDirtyChange,
 }: EditalWorkspaceProps) {
   const [object, setObject] = useState("");
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
+  useEffect(() => { onDirtyChange?.(editorDirty); }, [editorDirty, onDirtyChange]);
   // PR-09 (SEM-009) — escolha EXPLÍCITA do usuário (null = não tocou). Sem padrão de useState: o valor
   // exibido é a escolha explícita OU o parâmetro PERSISTIDO (hidratação), nunca um default silencioso.
   const [proposed, setProposed] = useState<{ modality: Modality | null; form: Form | null; platform: Platform | null }>({

@@ -24,6 +24,9 @@ import EditalWorkspace from "@/components/procurement/EditalWorkspace";
 import ProcurementItemPanel, { ITEM_PANEL_TITLE_ID } from "@/components/procurement/ProcurementItemPanel";
 import { processIdFromSearch, processRouteSearch, tabFromSearch } from "@shared/operationalCalendar";
 import { startTargetFor } from "@/components/procurement/startOptions";
+import DocumentJourneyBar from "@/components/procurement/DocumentJourneyBar";
+import { useJourneyExport } from "@/components/procurement/useJourneyExport";
+import { canLeaveStage, isJourneyKind, journeyStates } from "@/lib/documentJourney";
 
 /**
  * PR B — Processo Licitatório (fluxo canônico, jornada única).
@@ -87,6 +90,52 @@ export default function ProcessoLicitatorio() {
   );
   const processNumber = processQuery.data?.process?.processNumber ?? null;
 
+  // LICIGOV-FAST PR-1 — jornada DFD → ETP → TR → Edital: estado derivado do MESMO `loadProcess` (sem persistência
+  // nova). Edição não salva na etapa aberta é informada pelo workspace e protege a navegação (confirmar ou ficar).
+  const journeyKind = view === "process" && isJourneyKind(activeTab) ? activeTab : null;
+  const [stageDirty, setStageDirty] = useState(false);
+  const journeyExport = useJourneyExport(activeProcessId ?? "");
+  // ETP/TR/Edital gravam pelo rascunho revisável (não invalidam `loadProcess`): quando o rascunho da etapa aberta
+  // muda (gerado, salvo, importado, emitido), relê o processo para a jornada refletir o estado real.
+  const draftKind = journeyKind && journeyKind !== "dfd" ? journeyKind : null;
+  const draftProbe = trpc.procurementProcess.reviewableDraft.useQuery(
+    { processId: activeProcessId ?? "", kind: draftKind ?? "etp" },
+    { enabled: !!activeProcessId && !!draftKind },
+  );
+  const probeDraft = draftProbe.data ? draftProbe.data.draft : undefined;
+  const probeKey = probeDraft === undefined ? undefined
+    : JSON.stringify(probeDraft ? [probeDraft.status, probeDraft.contentHash, probeDraft.regenerationBlock ?? null] : null);
+  const lastProbe = useRef<{ kind: string | null; key: string | undefined }>({ kind: null, key: undefined });
+  useEffect(() => {
+    const prev = lastProbe.current;
+    lastProbe.current = { kind: draftKind, key: probeKey };
+    if (prev.kind === draftKind && prev.key !== undefined && probeKey !== undefined && prev.key !== probeKey) void processQuery.refetch();
+  }, [draftKind, probeKey]);
+
+  // Recarregar/fechar a aba com edição não salva: o navegador pede confirmação.
+  useEffect(() => {
+    if (!stageDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [stageDirty]);
+
+  /** Sai da etapa aberta só com confirmação quando há edição não salva (cancelar mantém a etapa e o texto). */
+  function confirmLeaveStage(): boolean {
+    if (!canLeaveStage(stageDirty && journeyKind ? journeyKind : null, (m) => window.confirm(m))) return false;
+    setStageDirty(false);
+    return true;
+  }
+
+  function navigateTab(tab: StageTab) {
+    if (tab === activeTab || !confirmLeaveStage()) return;
+    setActiveTab(tab);
+  }
+
+  function leaveToList() {
+    if (confirmLeaveStage()) backToList();
+  }
+
   /**
    * Após criar/atualizar um processo canônico, invalida a listagem E as consultas
    * da Central de Operações — assim o processo recém-criado aparece na Central
@@ -104,6 +153,7 @@ export default function ProcessoLicitatorio() {
     setActiveProcessId(processId);
     setActiveTab(tab);
     setOpenItemId(null);
+    setStageDirty(false);
     setView("process");
   }
 
@@ -194,17 +244,17 @@ export default function ProcessoLicitatorio() {
         <div className="flex items-center justify-between gap-3">
           <Breadcrumb
             trail={[
-              { label: "Processo Licitatório", onClick: backToList },
+              { label: "Processo Licitatório", onClick: leaveToList },
               {
                 label: processNumber ?? "Processo",
-                onClick: () => setActiveTab("overview"),
+                onClick: () => navigateTab("overview"),
               },
               { label: STAGE_TAB_LABELS[activeTab] },
             ]}
           />
           <button
             type="button"
-            onClick={backToList}
+            onClick={leaveToList}
             aria-label="Voltar aos processos"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -226,7 +276,7 @@ export default function ProcessoLicitatorio() {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => navigateTab(tab.key)}
                 aria-current={active ? "page" : undefined}
                 className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   active
@@ -242,6 +292,20 @@ export default function ProcessoLicitatorio() {
         </nav>
       </div>
 
+      {/* LICIGOV-FAST PR-1 — jornada documental + exportação individual do documento aberto */}
+      {activeProcessId && journeyKind && (
+        <DocumentJourneyBar
+          current={journeyKind}
+          states={journeyStates(processQuery.data?.documents, processQuery.data?.officialVersions, processQuery.data?.officialEmissions)}
+          loading={processQuery.isLoading}
+          onNavigate={navigateTab}
+          onExport={(action) => void journeyExport.run(journeyKind, action)}
+          pendingAction={journeyExport.pending?.kind === journeyKind ? journeyExport.pending.action : null}
+          exportBusy={!!journeyExport.pending}
+          hasUnsavedEdits={stageDirty}
+        />
+      )}
+
       {/* Conteúdo da etapa ativa */}
       <div>
         {activeProcessId && (
@@ -250,7 +314,8 @@ export default function ProcessoLicitatorio() {
             processId={activeProcessId}
             onOpenItem={setOpenItemId}
             startWithImport={importOpenFor === activeTab}
-            onNavigate={setActiveTab}
+            onNavigate={navigateTab}
+            onDirtyChange={setStageDirty}
           />
         )}
       </div>
@@ -269,18 +334,21 @@ function StagePanel({
   onOpenItem,
   startWithImport = false,
   onNavigate,
+  onDirtyChange,
 }: {
   tab: StageTab;
   processId: string;
   onOpenItem: (itemId: string) => void;
   startWithImport?: boolean;
   onNavigate?: (tab: StageTab) => void;
+  /** Edição não salva na etapa (DFD/ETP/TR/Edital) — protege a navegação. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   switch (tab) {
     case "overview":
       return <ProcessOverview processId={processId} />;
     case "dfd":
-      return <DFDWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <DFDWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "price":
       return <PesquisaPrecosWorkspace processId={processId} onReviewItems={() => onNavigate?.("items")} />;
     case "contract_items":
@@ -293,11 +361,11 @@ function StagePanel({
         />
       );
     case "etp":
-      return <ETPWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <ETPWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "tr":
-      return <TRWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <TRWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "edital":
-      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} onOpenStage={(stage) => onNavigate?.(stage)} />;
+      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} onOpenStage={(stage) => onNavigate?.(stage)} onDirtyChange={onDirtyChange} />;
     default:
       return null;
   }
