@@ -29,8 +29,8 @@ export const START_OPTIONS: { value: StartOption; title: string; description: st
   { value: "importar_tr", title: "Importar TR", description: "O TR já veio pronto: importe, revise e siga para o Edital." },
   { value: "iniciar_tr", title: "Iniciar TR", description: "Gere o Termo de Referência com base no processo." },
   // LICIGOV-FAST PR-1 — ofício/memorando só ficam registrados como origem do processo: nada é lido nem extraído.
-  { value: "importar_oficio", title: "A partir de ofício", description: "Registra o ofício como origem da demanda e abre o DFD para elaboração. O conteúdo do ofício não é lido automaticamente." },
-  { value: "importar_memorando", title: "A partir de memorando", description: "Registra o memorando como origem da demanda e abre o DFD para elaboração. O conteúdo não é lido automaticamente." },
+  { value: "importar_oficio", title: "A partir de ofício", description: "Indica no processo que a demanda chegou por ofício e abre o DFD para elaboração. O conteúdo do ofício não é lido automaticamente." },
+  { value: "importar_memorando", title: "A partir de memorando", description: "Indica no processo que a demanda chegou por memorando e abre o DFD para elaboração. O conteúdo não é lido automaticamente." },
   { value: "importar_pdf", title: "Importar PDF", description: "Abre a importação do DFD: envie o PDF (com texto), o texto é extraído sem IA e você revisa." },
 ];
 

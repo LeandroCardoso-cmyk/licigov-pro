@@ -28,7 +28,9 @@ export default function NovoProcessoWizard({
   const [requestingUnit, setRequestingUnit] = useState("");
   const [startOption, setStartOption] = useState<StartOption | null>(null);
   // Descrições honestas: sem a importação documental habilitada, "Importar …" não promete ler o arquivo.
-  const { enabled: fileImportEnabled } = useIngestionCapabilities();
+  // Enquanto a capacidade carrega, mantém o texto padrão (não anuncia indisponibilidade antes de saber).
+  const { enabled: ingestionEnabled, isLoading: capabilitiesLoading } = useIngestionCapabilities();
+  const fileImportEnabled = ingestionEnabled || capabilitiesLoading;
 
   const createProcess = trpc.procurementProcess.createProcess.useMutation({
     onSuccess: (result) => {

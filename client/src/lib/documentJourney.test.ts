@@ -4,18 +4,18 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import {
-  canLeaveStage, deliverExport, exportDoneMessage, exportPlaceholderText, exportRequestFor, journeyDocState, journeyStates,
-  nextActionLabel, nextJourneyKind, unsavedLeaveMessage,
+  canLeaveStage, deliverExport, exportDoneMessage, exportNote, exportPlaceholderText, exportRequestFor, journeyDocState, journeyStates,
+  nextActionLabel, nextJourneyKind, runJourneyExport, unsavedLeaveMessage, type JourneyExportRunDeps,
 } from "./documentJourney";
 
 describe("estado real de cada documento", () => {
   it("documento inexistente ⇒ 'Não iniciado', sem exportação (nunca concluído)", () => {
-    expect(journeyDocState("dfd", [], {}, {})).toEqual({ kind: "dfd", phase: "absent", label: "Não iniciado", exportable: false });
+    expect(journeyDocState("dfd", [], {}, {})).toEqual({ kind: "dfd", phase: "absent", label: "Não iniciado", exportable: false, draftStatus: null });
     expect(journeyDocState("etp", null)).toMatchObject({ phase: "absent", exportable: false });
   });
 
   it("rascunho ⇒ minuta exportável; status 'aprovado'/'emitido' do rascunho continua minuta (não oficial)", () => {
-    expect(journeyDocState("dfd", [{ kind: "dfd", status: "rascunho" }])).toEqual({ kind: "dfd", phase: "draft", label: "Minuta (rascunho)", exportable: true });
+    expect(journeyDocState("dfd", [{ kind: "dfd", status: "rascunho" }])).toEqual({ kind: "dfd", phase: "draft", label: "Minuta (rascunho)", exportable: true, draftStatus: "rascunho" });
     expect(journeyDocState("tr", [{ kind: "tr", status: "em_revisao" }])).toMatchObject({ phase: "review", label: "Minuta em revisão" });
     expect(journeyDocState("etp", [{ kind: "etp", status: "aprovado" }])).toMatchObject({ phase: "draft", label: "Minuta revisada" });
     const emittedDraft = journeyDocState("edital", [{ kind: "edital", status: "emitido" }]);
@@ -24,7 +24,7 @@ describe("estado real de cada documento", () => {
   });
 
   it("emitido só pelo ledger de emissões (rótulo do ledger)", () => {
-    expect(journeyDocState("tr", [{ kind: "tr", status: "rascunho" }], { tr: 2 }, { tr: 1 })).toEqual({ kind: "tr", phase: "official", label: "Emitido · 1ª emissão", exportable: true });
+    expect(journeyDocState("tr", [{ kind: "tr", status: "rascunho" }], { tr: 2 }, { tr: 1 })).toEqual({ kind: "tr", phase: "official", label: "Emitido · 1ª emissão", exportable: true, draftStatus: "rascunho" });
   });
 
   it("ingresso direto em etapa posterior: só o que existe aparece, sem completar etapas anteriores", () => {
@@ -95,5 +95,66 @@ describe("edição não salva", () => {
     expect(canLeaveStage("etp", confirm)).toBe(true);
     expect(confirm).toHaveBeenCalledWith(unsavedLeaveMessage("etp"));
     expect(unsavedLeaveMessage("etp")).toMatch(/alterações não salvas no ETP/);
+  });
+});
+
+describe("nota do arquivo exportado (diz o que o arquivo mostra)", () => {
+  it("só o status 'rascunho' sai marcado como RASCUNHO; os demais mostram a situação, sem se dizer emitidos", () => {
+    expect(exportNote(journeyDocState("etp", []))).toMatch(/Ainda não há minuta/);
+    expect(exportNote(journeyDocState("etp", [{ kind: "etp", status: "rascunho" }]))).toBe("Minuta: o arquivo sai marcado como RASCUNHO (não é versão oficial).");
+    const aprovado = exportNote(journeyDocState("etp", [{ kind: "etp", status: "aprovado" }]));
+    expect(aprovado).toMatch(/situação “APROVADO” no cabeçalho — ainda não é versão emitida/);
+    expect(aprovado).not.toMatch(/marcado como RASCUNHO/);
+    expect(exportNote(journeyDocState("tr", [{ kind: "tr", status: "rejeitado" }]))).toMatch(/“REJEITADO”/);
+    expect(journeyDocState("tr", [{ kind: "tr", status: "rejeitado" }]).label).toBe("Minuta rejeitada");
+    expect(exportNote(journeyDocState("tr", [{ kind: "tr", status: "em_revisao" }], { tr: 2 }, { tr: 1 })))
+      .toMatch(/^Há versão emitida\. .*se mudou, o arquivo sai com a situação “EM REVISÃO”/);
+  });
+});
+
+describe("fluxo da ação de exportação", () => {
+  const makeDeps = (over: Partial<JourneyExportRunDeps> = {}) => {
+    const tab = { location: { href: "about:blank" }, closed: false, close: vi.fn() };
+    const deps = {
+      exportDocument: vi.fn().mockResolvedValue({ url: "https://s3/signed", fileName: "ETP.pdf" }),
+      openPlaceholderTab: vi.fn().mockReturnValue(tab),
+      delivery: { openTab: vi.fn(), download: vi.fn() },
+      notify: { success: vi.fn(), error: vi.fn() },
+      ...over,
+    };
+    return { deps, tab };
+  };
+
+  it("Imprimir: abre a aba no gesto com o texto do documento, pede o PDF inline e o entrega nessa aba", async () => {
+    const { deps, tab } = makeDeps();
+    expect(await runJourneyExport("etp", "print", deps)).toBe("delivered");
+    expect(deps.openPlaceholderTab).toHaveBeenCalledWith(exportPlaceholderText("etp", "print"));
+    expect(deps.exportDocument).toHaveBeenCalledWith({ format: "pdf", disposition: "inline" });
+    expect(tab.location.href).toBe("https://s3/signed");
+    expect(deps.notify.success).toHaveBeenCalledWith(exportDoneMessage("etp", "print"));
+  });
+
+  it("Baixar DOCX: sem aba, download no lugar", async () => {
+    const { deps } = makeDeps();
+    await runJourneyExport("dfd", "docx", deps);
+    expect(deps.openPlaceholderTab).not.toHaveBeenCalled();
+    expect(deps.exportDocument).toHaveBeenCalledWith({ format: "docx", disposition: "attachment" });
+    expect(deps.delivery.download).toHaveBeenCalledWith("https://s3/signed", "ETP.pdf");
+  });
+
+  it("erro do servidor (ex.: acesso negado): fecha a aba pré-aberta e mostra a falha, sem sucesso", async () => {
+    const { deps, tab } = makeDeps({ exportDocument: vi.fn().mockRejectedValue(new Error("Acesso negado")) });
+    expect(await runJourneyExport("tr", "view", deps)).toBe("failed");
+    expect(tab.close).toHaveBeenCalled();
+    expect(deps.notify.error).toHaveBeenCalledWith("Falha ao exportar: Acesso negado");
+    expect(deps.notify.success).not.toHaveBeenCalled();
+  });
+
+  it("aba bloqueada e fallback bloqueado: avisa, não simula sucesso", async () => {
+    const { deps } = makeDeps({ openPlaceholderTab: vi.fn().mockReturnValue(null) });
+    deps.delivery.openTab.mockReturnValue(null);
+    expect(await runJourneyExport("edital", "view", deps)).toBe("blocked");
+    expect(deps.notify.error).toHaveBeenCalled();
+    expect(deps.notify.success).not.toHaveBeenCalled();
   });
 });

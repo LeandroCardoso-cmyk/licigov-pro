@@ -301,6 +301,7 @@ export default function ProcessoLicitatorio() {
           onNavigate={navigateTab}
           onExport={(action) => void journeyExport.run(journeyKind, action)}
           pendingAction={journeyExport.pending?.kind === journeyKind ? journeyExport.pending.action : null}
+          exportBusy={!!journeyExport.pending}
           hasUnsavedEdits={stageDirty}
         />
       )}

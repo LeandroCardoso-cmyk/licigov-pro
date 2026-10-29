@@ -27,7 +27,7 @@ describe("DocumentJourneyBar", () => {
     expect(disabledButtons(html)).toBe(0);
     expect(html).toContain("Ir para ETP (não iniciado)");
     expect(html).toContain("Minuta (rascunho)");
-    expect(html).toContain("não é documento oficial");
+    expect(html).toContain("marcado como RASCUNHO (não é versão oficial)");
   });
 
   it("DFD inexistente: as 4 ações ficam indisponíveis e o motivo é dito", () => {
@@ -53,6 +53,9 @@ describe("DocumentJourneyBar", () => {
     const html = render({ current: "tr", states: journeyStates([{ kind: "tr", status: "rascunho" }], { tr: 2 }, { tr: 1 }) });
     expect(html).toContain("Emitido · 1ª emissão");
     expect(html).toContain("Se a minuta não mudou desde a emissão, o arquivo é a versão oficial");
+    const aprovado = render({ current: "etp", states: journeyStates([{ kind: "etp", status: "aprovado" }]) });
+    expect(aprovado).toContain("Minuta revisada");
+    expect(aprovado).not.toContain("marcado como RASCUNHO");
   });
 
   it("edição não salva: avisa que o arquivo usa o último conteúdo salvo; exportação em andamento bloqueia nova", () => {
@@ -61,6 +64,8 @@ describe("DocumentJourneyBar", () => {
     const busy = render({ current: "etp", states, pendingAction: "print" });
     expect(busy).toContain("Preparando…");
     expect(disabledButtons(busy)).toBe(4);
+    // exportação de outra etapa ainda em andamento: as ações desta etapa também esperam
+    expect(disabledButtons(render({ current: "etp", states, exportBusy: true }))).toBe(4);
   });
 });
 

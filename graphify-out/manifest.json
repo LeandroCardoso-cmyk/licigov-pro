@@ -1820,8 +1820,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/NovoProcessoWizard.tsx": {
-    "mtime": 1793287474.8255475,
-    "ast_hash": "ce1527257830654d7d985ca7e62a7602",
+    "mtime": 1793288225.0789788,
+    "ast_hash": "24a01baafc6e75b02e5811d1f9d5327f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/OfficialPromotionSection.tsx": {
@@ -1930,8 +1930,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/startOptions.ts": {
-    "mtime": 1793287474.8249702,
-    "ast_hash": "ab7443a657faa28eeb4ceaf8cefc4394",
+    "mtime": 1793288225.0798109,
+    "ast_hash": "29508ffa5f3921261334725b6b71be73",
     "semantic_hash": ""
   },
   "client/src/components/production-readiness/CacheMetricsWidget.tsx": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/ProcessoLicitatorio.tsx": {
-    "mtime": 1793287447.8517902,
-    "ast_hash": "7d0b4b8b5ed12942d5abbdf95f75bfd7",
+    "mtime": 1793288225.0784225,
+    "ast_hash": "764062990f21f03a9d447b2fd946a82c",
     "semantic_hash": ""
   },
   "client/src/pages/PublicationLogs.tsx": {
@@ -15625,28 +15625,28 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/DocumentJourneyBar.tsx": {
-    "mtime": 1793287387.114327,
-    "ast_hash": "997bc476626f28d99fc9e73a9a8134a9",
+    "mtime": 1793288225.0778112,
+    "ast_hash": "66899766a1c7c1b13775fdff6bbfba0f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/documentJourney.render.test.ts": {
-    "mtime": 1793287686.3050885,
-    "ast_hash": "9dcc1c05677f3f56f53096320cf00b97",
+    "mtime": 1793288248.809434,
+    "ast_hash": "385c52e9f3d385762d0239d81f7b2ac2",
     "semantic_hash": ""
   },
   "client/src/components/procurement/useJourneyExport.ts": {
-    "mtime": 1793287368.0623274,
-    "ast_hash": "52deff9f531a0956f02a3658b8b7fe09",
+    "mtime": 1793288213.2623081,
+    "ast_hash": "6bf12170fddd1d10531b709cef61ff61",
     "semantic_hash": ""
   },
   "client/src/lib/documentJourney.test.ts": {
-    "mtime": 1793287656.418321,
-    "ast_hash": "09f2485d4ba985d2d088e72747117bd1",
+    "mtime": 1793288248.8090026,
+    "ast_hash": "e64487ecbfc94f97ebecc12f8df6341f",
     "semantic_hash": ""
   },
   "client/src/lib/documentJourney.ts": {
-    "mtime": 1793287356.5343277,
-    "ast_hash": "75ec523d0d234c190b9bef28140947bc",
+    "mtime": 1793288204.5285254,
+    "ast_hash": "9b37eb0b73b7d2473617f19c8dd5fb28",
     "semantic_hash": ""
   }
 }

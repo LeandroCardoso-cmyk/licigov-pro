@@ -34,12 +34,15 @@ export type JourneyDocState = {
   label: string;
   /** Há conteúdo para visualizar/exportar (rascunho existente). */
   exportable: boolean;
+  /** Situação persistida do rascunho (`generated_documents.status`), null sem rascunho. */
+  draftStatus: string | null;
 };
 
 const DRAFT_LABELS: Readonly<Record<string, string>> = {
   rascunho: "Minuta (rascunho)",
   em_revisao: "Minuta em revisão",
   aprovado: "Minuta revisada",
+  rejeitado: "Minuta rejeitada",
 };
 
 /**
@@ -54,10 +57,30 @@ export function journeyDocState(
 ): JourneyDocState {
   const doc = documents?.find((d) => d.kind === kind) ?? null;
   const official = officialVersionLabel(officialVersions, kind, officialEmissions);
-  if (official) return { kind, phase: "official", label: official, exportable: !!doc };
-  if (!doc) return { kind, phase: "absent", label: "Não iniciado", exportable: false };
-  if (doc.status === "em_revisao") return { kind, phase: "review", label: DRAFT_LABELS.em_revisao, exportable: true };
-  return { kind, phase: "draft", label: DRAFT_LABELS[doc.status] ?? "Minuta (rascunho)", exportable: true };
+  const draftStatus = doc?.status ?? null;
+  if (official) return { kind, phase: "official", label: official, exportable: !!doc, draftStatus };
+  if (!doc) return { kind, phase: "absent", label: "Não iniciado", exportable: false, draftStatus };
+  if (doc.status === "em_revisao") return { kind, phase: "review", label: DRAFT_LABELS.em_revisao, exportable: true, draftStatus };
+  return { kind, phase: "draft", label: DRAFT_LABELS[doc.status] ?? "Minuta (rascunho)", exportable: true, draftStatus };
+}
+
+/** Situação que o exportador canônico imprime no cabeçalho do arquivo do rascunho (espelha o router). */
+const FILE_STATUS_LABELS: Readonly<Record<string, string>> = {
+  rascunho: "RASCUNHO", em_revisao: "EM REVISÃO", aprovado: "APROVADO", rejeitado: "REJEITADO",
+};
+
+/**
+ * Nota sobre o arquivo que será exportado — diz exatamente o que o arquivo mostra. Só o status "rascunho" recebe a
+ * marca "RASCUNHO — não é versão oficial"; os demais saem com a situação do rascunho no cabeçalho (sem essa marca).
+ */
+export function exportNote(state: JourneyDocState): string {
+  if (!state.exportable) return "Ainda não há minuta deste documento para visualizar ou exportar.";
+  const status = state.draftStatus ?? "rascunho";
+  const draftFile = status === "rascunho"
+    ? "o arquivo sai marcado como RASCUNHO (não é versão oficial)"
+    : `o arquivo sai com a situação “${FILE_STATUS_LABELS[status] ?? status.toUpperCase()}” no cabeçalho — ainda não é versão emitida`;
+  if (state.phase === "official") return `Há versão emitida. Se a minuta não mudou desde a emissão, o arquivo é a versão oficial; se mudou, ${draftFile}.`;
+  return `Minuta: ${draftFile}.`;
 }
 
 export function journeyStates(
@@ -150,7 +173,7 @@ export function deliverExport(
   return deps.openTab(result.url) ? "delivered" : "blocked";
 }
 
-/** O arquivo sai do conteúdo SALVO: com edição pendente, o servidor é avisado antes de exportar. */
+/** O arquivo sai do conteúdo SALVO: com edição pendente, o usuário é avisado antes de exportar. */
 export const UNSAVED_EXPORT_NOTE = "Há alterações não salvas: o arquivo usa o último conteúdo salvo.";
 
 /** Mensagem de confirmação ao sair de uma etapa com edição não salva (cancelar = permanecer). */
@@ -160,9 +183,38 @@ export function unsavedLeaveMessage(kind: JourneyKind): string {
 
 /**
  * Decide se a navegação pode prosseguir. Sem edição pendente ⇒ segue sem perguntar; com edição pendente ⇒
- * só segue se o servidor confirmar (cancelar mantém a etapa e o texto).
+ * só segue se o usuário confirmar (cancelar mantém a etapa e o texto).
  */
 export function canLeaveStage(dirtyKind: JourneyKind | null, confirm: (message: string) => boolean): boolean {
   if (!dirtyKind) return true;
   return confirm(unsavedLeaveMessage(dirtyKind));
+}
+
+export type JourneyExportRunDeps = {
+  /** Chamada ao contrato canônico `procurementProcess.exportDocument`. */
+  exportDocument: (input: { format: "docx" | "pdf"; disposition: "attachment" | "inline" }) => Promise<{ url: string; fileName: string }>;
+  /** Abre (no clique) a aba que receberá o PDF, já com o texto do que está sendo preparado. */
+  openPlaceholderTab: (text: string) => (ExportTab & { close: () => void }) | null;
+  delivery: ExportDeliveryDeps;
+  notify: { success: (message: string) => void; error: (message: string) => void };
+};
+
+/**
+ * Fluxo completo de uma ação de exportação: abre a aba no gesto (se for o caso), chama o exportador canônico,
+ * entrega o arquivo e avisa. Em erro fecha a aba pré-aberta e mostra a falha — nunca simula sucesso.
+ */
+export async function runJourneyExport(kind: JourneyKind, action: JourneyExportAction, deps: JourneyExportRunDeps): Promise<"delivered" | "blocked" | "failed"> {
+  const request = exportRequestFor(action);
+  const tab = request.opensTab ? deps.openPlaceholderTab(exportPlaceholderText(kind, action)) : null;
+  try {
+    const result = await deps.exportDocument({ format: request.format, disposition: request.disposition });
+    const outcome = deliverExport(result, request, tab, deps.delivery);
+    if (outcome === "blocked") deps.notify.error(EXPORT_TAB_BLOCKED_MESSAGE);
+    else deps.notify.success(exportDoneMessage(kind, action));
+    return outcome;
+  } catch (e) {
+    tab?.close();
+    deps.notify.error("Falha ao exportar: " + (e instanceof Error ? e.message : "erro desconhecido"));
+    return "failed";
+  }
 }

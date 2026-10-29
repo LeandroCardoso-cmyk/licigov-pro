@@ -1,6 +1,6 @@
 import { ArrowRight, Check, ChevronRight, Download, Eye, Printer } from "lucide-react";
 import {
-  JOURNEY_LABELS, nextActionLabel, nextJourneyKind, UNSAVED_EXPORT_NOTE,
+  exportNote, JOURNEY_LABELS, nextActionLabel, nextJourneyKind, UNSAVED_EXPORT_NOTE,
   type JourneyDocPhase, type JourneyDocState, type JourneyExportAction, type JourneyKind,
 } from "@/lib/documentJourney";
 
@@ -20,13 +20,7 @@ const PHASE_CLASSES: Record<JourneyDocPhase, string> = {
   official: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
 };
 
-const PHASE_NOTES: Record<JourneyDocPhase, string> = {
-  absent: "Ainda não há minuta deste documento para visualizar ou exportar.",
-  draft: "Minuta em elaboração: o arquivo sai marcado como rascunho — não é documento oficial.",
-  review: "Minuta em revisão: o arquivo sai marcado como rascunho — não é documento oficial.",
-  official:
-    "Há versão emitida. Se a minuta não mudou desde a emissão, o arquivo é a versão oficial; se mudou, sai marcado como rascunho.",
-};
+const NO_DRAFT_NOTE = "Ainda não há minuta deste documento para visualizar ou exportar.";
 
 const ACTIONS: { action: JourneyExportAction; label: string; icon: typeof Eye; title: string }[] = [
   { action: "view", label: "Visualizar", icon: Eye, title: "Abre o PDF deste documento numa nova aba." },
@@ -42,13 +36,15 @@ export type DocumentJourneyBarProps = {
   onExport: (action: JourneyExportAction) => void;
   /** Ação de exportação em andamento para o documento aberto (null = nenhuma). */
   pendingAction?: JourneyExportAction | null;
+  /** Alguma exportação em andamento (inclusive de outra etapa): as ações ficam indisponíveis até terminar. */
+  exportBusy?: boolean;
   /** Há edição não salva na etapa aberta (o arquivo usa o último conteúdo salvo). */
   hasUnsavedEdits?: boolean;
   loading?: boolean;
 };
 
 export default function DocumentJourneyBar({
-  current, states, onNavigate, onExport, pendingAction = null, hasUnsavedEdits = false, loading = false,
+  current, states, onNavigate, onExport, pendingAction = null, exportBusy = false, hasUnsavedEdits = false, loading = false,
 }: DocumentJourneyBarProps) {
   const currentState = states.find((s) => s.kind === current);
   const nextKind = nextJourneyKind(current);
@@ -92,8 +88,8 @@ export default function DocumentJourneyBar({
               key={action}
               type="button"
               onClick={() => onExport(action)}
-              disabled={!canExport || pendingAction !== null}
-              title={canExport ? title : PHASE_NOTES.absent}
+              disabled={!canExport || pendingAction !== null || exportBusy}
+              title={canExport ? title : NO_DRAFT_NOTE}
               className={btn}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -115,7 +111,7 @@ export default function DocumentJourneyBar({
 
       {!loading && currentState && (
         <p className="mt-2 text-xs text-muted-foreground" role="note">
-          {PHASE_NOTES[currentState.exportable ? currentState.phase : "absent"]}
+          {exportNote(currentState)}
           {hasUnsavedEdits && currentState.exportable && <span className="ml-1 font-medium text-amber-700 dark:text-amber-300">{UNSAVED_EXPORT_NOTE}</span>}
         </p>
       )}
