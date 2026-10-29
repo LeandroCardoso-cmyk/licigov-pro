@@ -92,6 +92,17 @@ describe("fiação no Processo Licitatório (fonte)", () => {
     expect(shell).not.toMatch(/documentEngine\.download/);
   });
 
+  it("SECURITY-02: a barra só lê e exporta — nenhuma chamada a ato institucional (emitir/aprovar/publicar/decidir)", () => {
+    const bar = read("client/src/components/procurement/DocumentJourneyBar.tsx");
+    const lib = read("client/src/lib/documentJourney.ts");
+    const institutionalAct = /issueProcess|promote[A-Z]|approve[A-Z]|reject[A-Z]|publish[A-Z]|ratif|recordDecision|\.useMutation/;
+    expect(bar).not.toMatch(institutionalAct);
+    expect(lib).not.toMatch(institutionalAct);
+    // única mutação do fluxo da barra: a exportação canônica (leitura do rascunho salvo; não é ato institucional)
+    expect(hook.match(/\.useMutation/g)).toHaveLength(1);
+    expect(hook).not.toMatch(/issueProcess|promote[A-Z]|approve[A-Z]|publish[A-Z]/);
+  });
+
   it("navegar não grava a etapa registrada do processo", () => {
     expect(shell).not.toMatch(/updateStage|issueProcess/);
   });

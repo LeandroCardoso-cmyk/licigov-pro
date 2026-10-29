@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { inflateRawSync } from "zlib";
 import { PDFParse } from "pdf-parse";
 
+// Tenant SINTÉTICO explicitamente identificado (a organização 1 é Moreira Sales — nunca usada como sintética).
+const { SYNTHETIC_ORG } = vi.hoisted(() => ({ SYNTHETIC_ORG: 9901 }));
 const stored: Buffer[] = [];
 vi.mock("../../storage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../storage")>()),
@@ -18,7 +20,7 @@ vi.mock("../../storage", async (importOriginal) => ({
   storageSignedUrl: vi.fn(async (key: string) => ({ key, url: "https://s3/signed" })),
 }));
 vi.mock("../../db/procurement");
-vi.mock("../../db/organizations", () => ({ getOrganizationById: vi.fn().mockResolvedValue({ id: 1, nome: "Prefeitura Sintética de Teste" }) }));
+vi.mock("../../db/organizations", () => ({ getOrganizationById: vi.fn().mockResolvedValue({ id: SYNTHETIC_ORG, nome: "Prefeitura Sintética de Teste (tenant 9901)" }) }));
 vi.mock("../../db/officialDocumentPromotions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/officialDocumentPromotions")>()),
   getLatestOfficialPromotion: vi.fn().mockResolvedValue(null),
@@ -29,10 +31,10 @@ vi.mock("../../services/officialDocumentExportAdapter", async (importOriginal) =
 }));
 vi.mock("../../services/tenantService", () => ({
   resolveTenantForUser: vi.fn().mockResolvedValue({
-    organizationId: 1,
-    membership: { id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
+    organizationId: SYNTHETIC_ORG,
+    membership: { id: 1, organizationId: SYNTHETIC_ORG, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
   }),
-  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
+  getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: SYNTHETIC_ORG, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
   NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
 }));
 // Render OFICIAL real (documentEngineService.renderOfficialDocument): só a leitura do documento e o ciclo de vida (S3/ledger) são simulados.
@@ -97,7 +99,7 @@ async function exportVia(status: string, format: "docx" | "pdf"): Promise<Buffer
 describe("PR #334 — MINUTA — NÃO EMITIDA OFICIALMENTE em todo arquivo não emitido", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(procDb.getProcess).mockResolvedValue({ id: PID, organizationId: 1, processNumber: "9901/2026", object: "Objeto sintético" } as never);
+    vi.mocked(procDb.getProcess).mockResolvedValue({ id: PID, organizationId: SYNTHETIC_ORG, processNumber: "9901/2026", object: "Objeto sintético" } as never);
     vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as never);
     vi.mocked(procDb.listIntelligentItems).mockResolvedValue([] as never);
     vi.mocked(getLatestOfficialPromotion).mockResolvedValue(null);
@@ -145,7 +147,7 @@ describe("PR #334 — MINUTA — NÃO EMITIDA OFICIALMENTE em todo arquivo não 
   }, 30_000);
 
   it("título e número de processo LONGOS: a marca abre o rodapé e nunca é cortada pela reticência", async () => {
-    vi.mocked(procDb.getProcess).mockResolvedValue({ id: PID, organizationId: 1, processNumber: "9".repeat(200), object: "Objeto sintético" } as never);
+    vi.mocked(procDb.getProcess).mockResolvedValue({ id: PID, organizationId: SYNTHETIC_ORG, processNumber: "9".repeat(200), object: "Objeto sintético" } as never);
     const pages = await pdfPages(await exportVia("em_revisao", "pdf"));
     pages.forEach((t, i) => {
       expect(t).toContain(`${UNISSUED_DRAFT_MARKING} · TR`);
@@ -165,19 +167,19 @@ describe("PR #334 — MINUTA — NÃO EMITIDA OFICIALMENTE em todo arquivo não 
 
 describe("PR #334 — documento emitido pelo render OFICIAL real (Document Engine) segue sem marca de minuta", () => {
   const official = (status: string) => ({
-    id: "odoc_tr", organizationId: 1, businessDomain: "processo_licitatorio", documentType: "tr", origin: PID, title: "TR — Termo de Referência",
+    id: "odoc_tr", organizationId: SYNTHETIC_ORG, businessDomain: "processo_licitatorio", documentType: "tr", origin: PID, title: "TR — Termo de Referência",
     content: LONG, status, version: 2, replayHash: "h", template: "t", author: "1", createdAt: "2026-10-29 10:00:00",
   });
   for (const format of ["pdf", "docx"] as const) {
     it(`status emitido (${format}): sem MINUTA/RASCUNHO; snapshot técnico 'gerado' continua com o aviso próprio (inalterado)`, async () => {
       officialStored.length = 0;
       vi.mocked(getOfficialDocument).mockResolvedValueOnce(official("emitido") as never);
-      await renderOfficialDocument({ organizationId: 1, documentId: "odoc_tr", format, actorUserId: 1 });
+      await renderOfficialDocument({ organizationId: SYNTHETIC_ORG, documentId: "odoc_tr", format, actorUserId: 1 });
       const emitted = format === "pdf" ? (await pdfPages(officialStored[0])).join(" ") : Object.values(unzip(officialStored[0])).join("\n");
       if (format === "pdf") expect((await pdfPages(officialStored[0])).length).toBeGreaterThan(1);
       expect(emitted).not.toMatch(/MINUTA|RASCUNHO|NÃO EMITIDA|não é versão oficial/);
       vi.mocked(getOfficialDocument).mockResolvedValueOnce(official("gerado") as never);
-      await renderOfficialDocument({ organizationId: 1, documentId: "odoc_tr", format, actorUserId: 1 });
+      await renderOfficialDocument({ organizationId: SYNTHETIC_ORG, documentId: "odoc_tr", format, actorUserId: 1 });
       const generated = format === "pdf" ? (await pdfPages(officialStored[1])).join(" ") : Object.values(unzip(officialStored[1])).join("\n");
       expect(generated).toContain("GERADO — não é versão oficial");          // outro domínio/caminho: comportamento anterior
       expect(generated).not.toContain(UNISSUED_DRAFT_MARKING);
