@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure, adminProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, adminProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   getOrganizationById,
   getMembersOfOrg,
@@ -21,6 +21,8 @@ import { logFromCtx, type TrpcAuditCtx } from "../services/activityLogService";
 import { LAST_TENANT_ADMIN, MEMBER_NOT_FOUND } from "../domain/authErrors";
 import { sanitizeUser } from "../services/userProjection";
 import { priceGovernancePreflight } from "../services/priceGovernanceService";
+// SECURITY-02 — ninguém concede vínculo/papel a si mesmo (mesmo código estável do serviço de convites).
+import { SELF_GRANT_MESSAGE, roleRankAtLeast } from "../domain/institutionalAuthority";
 
 /**
  * PR A.1 — Proteção "último admin": rebaixar/desativar/remover um membro com papel admin NÃO
@@ -91,7 +93,9 @@ export const organizationsRouter = router({
 
   // ─── Convidar membro (por email) ─────────────────────────────────────────
 
-  inviteMember: orgRoleProcedure("admin").input(
+  // SECURITY-02 — conceder vínculo/papel é ato institucional: membership REAL admin+ (a projeção do admin de plataforma não concede
+  // autoridade municipal) e nunca a si mesmo.
+  inviteMember: institutionalProcedure("admin").input(
     z.object({
       email: z.string().email(),
       role: z.enum(["admin", "manager", "operator", "viewer"]),
@@ -103,6 +107,9 @@ export const organizationsRouter = router({
         code: "NOT_FOUND",
         message: "Usuário não encontrado. O usuário precisa ter uma conta no LiciGov Pro.",
       });
+    }
+    if (targetUser.id === ctx.user.id) {
+      throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
     }
 
     // Verificar se já é membro
@@ -134,7 +141,7 @@ export const organizationsRouter = router({
 
   // ─── Alterar papel de membro ─────────────────────────────────────────────
 
-  updateMemberRole: orgRoleProcedure("admin").input(
+  updateMemberRole: institutionalProcedure("admin").input(
     z.object({
       userId: z.number().int().positive(),
       role: z.enum(["admin", "manager", "operator", "viewer"]),
@@ -153,6 +160,10 @@ export const organizationsRouter = router({
         code: "FORBIDDEN",
         message: "O papel de owner não pode ser alterado por esta API.",
       });
+    }
+    // SECURITY-02 — autopromoção nunca; rebaixar o próprio papel continua possível (sujeito à proteção de último admin).
+    if (input.userId === ctx.user.id && roleRankAtLeast(input.role, target.role) && input.role !== target.role) {
+      throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
     }
 
     // PR A.1 — rebaixar o último admin ativo deixaria a organização sem ninguém que possa
@@ -267,9 +278,12 @@ export const organizationsRouter = router({
 
   // ─── PR A.1 — Reativar membro previamente desativado ────────────────────────
 
-  activateMember: orgRoleProcedure("admin").input(
+  activateMember: institutionalProcedure("admin").input(
     z.object({ userId: z.number().int().positive() }),
   ).mutation(async ({ ctx, input }) => {
+    if (input.userId === ctx.user.id) {
+      throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
+    }
     const members = await getAllMembersOfOrg(ctx.organizationId!);
     const target = members.find(m => m.userId === input.userId);
     if (!target) {

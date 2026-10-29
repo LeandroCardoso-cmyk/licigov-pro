@@ -22,6 +22,7 @@
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, canonicalDocumentIdentity, saveReviewableDraft } from "../../services/procurementProcessService";
@@ -149,10 +150,13 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG, "C4B1 Org", "c4b1-org"]).catch(() => {});
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG2, "C4B1 Org 2", "c4b1-org-2"]).catch(() => {});
     await cleanup();
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG, EMITTER);
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
+    await removeRealMemberships(conn, ORG, [EMITTER]).catch(() => {});
     await cleanup().catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG, ORG2]).catch(() => {});
     await conn.end();

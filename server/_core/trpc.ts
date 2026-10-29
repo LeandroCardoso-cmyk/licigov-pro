@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import type { OrgRole } from "../../drizzle/schema";
 import { resolveTenantForUser } from "../services/tenantService";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { structuredLog } from "../services/observabilityService";
 import * as db from "../db";
 
@@ -116,11 +117,15 @@ const resolveTenant = t.middleware(async opts => {
       });
     }
 
+    // SECURITY-02 — escopo TÉCNICO (suporte/diagnóstico): a membership abaixo é uma PROJEÇÃO sintética, nunca
+    // vínculo com o órgão. `platformAdminAccess` marca a origem; atos institucionais não leem este papel —
+    // exigem membership real (`institutionalProcedure` / `requireInstitutionalAuthority`).
     return next({
       ctx: {
         ...ctx,
         user: ctx.user,
         organizationId,
+        platformAdminAccess: true as boolean,
         orgMembership: {
           id: 0,
           organizationId,
@@ -153,6 +158,7 @@ const resolveTenant = t.middleware(async opts => {
       ...ctx,
       user: ctx.user,
       organizationId,
+      platformAdminAccess: false as boolean,
       orgMembership: membership,
     },
   });
@@ -212,5 +218,21 @@ export function orgRoleProcedure(minRole: OrgRole) {
     const { ctx, next, path } = opts;
     assertOrgRoleAtLeast(ctx, minRole, path);
     return next();
+  });
+}
+
+// ─── institutionalProcedure ─────────────────────────────────────────────────
+// SECURITY-02 — ATO INSTITUCIONAL (emitir, aprovar, ratificar, publicar, formalizar, registrar decisão governada,
+// conceder privilégio no órgão). Além do piso do `orgRoleProcedure`, exige membership REAL, ativa e persistida do
+// ator no órgão, com papel ≥ piso — relida da fonte autoritativa a cada chamada (fail-closed, recusa logada).
+// A projeção sintética do admin de plataforma NÃO satisfaz este contrato. `ctx.institutionalAuthority` carrega o
+// papel PERSISTIDO: é o único que o ato/ledger pode registrar.
+export function institutionalProcedure(minRole: OrgRole) {
+  return orgRoleProcedure(minRole).use(async opts => {
+    const { ctx, next, path } = opts;
+    const institutionalAuthority = await requireInstitutionalAuthority({
+      userId: ctx.user.id, organizationId: ctx.organizationId, minRole, operation: path, correlationId: ctx.correlationId,
+    });
+    return next({ ctx: { ...ctx, institutionalAuthority } });
   });
 }

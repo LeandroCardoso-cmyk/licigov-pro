@@ -18,6 +18,7 @@
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, saveDFDDraft, generateDFDDraft } from "../../services/procurementProcessService";
@@ -90,10 +91,13 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
     await conn.query(`SET SESSION sql_mode = '${STRICT}'`);
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG, "C4B3A Org", "c4b3a-org"]).catch(() => {});
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG2, "C4B3A Org 2", "c4b3a-org-2"]).catch(() => {});
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG, C);
     await cleanup();
   }, 300_000);
 
   afterAll(async () => {
+    if (conn) await removeRealMemberships(conn, ORG, [C]).catch(() => {});
     if (!conn) return;
     await cleanup().catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG, ORG2]).catch(() => {});

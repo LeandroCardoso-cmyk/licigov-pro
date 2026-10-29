@@ -20,6 +20,9 @@ import mysql from "mysql2/promise";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — a autoridade institucional é lida da fonte autoritativa (getMembership): o ator do router destes cenários
+  // é MEMBRO REAL do órgão com o papel do contexto (a releitura transacional da emissão continua no MySQL real).
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: tenant.org,
     membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
@@ -85,6 +88,8 @@ async function cleanup(): Promise<void> {
     `DELETE FROM ai_orchestrations WHERE organization_id IN (${q})`,
     `DELETE FROM tenant_feature_flags WHERE organizationId IN (${q})`,
     `DELETE FROM procurement_processes WHERE organization_id IN (${q})`,
+    // SECURITY-02 — só o vínculo sintético do emissor criado por seedOrg.
+    `DELETE FROM organization_members WHERE organizationId IN (${q}) AND userId = ${U_MANAGER}`,
   ];
   for (const sql of stmts) await conn.query(sql).catch(() => { /* tabela/coluna ausente em esquemas antigos: limpeza best-effort */ });
 }
@@ -122,6 +127,8 @@ async function seedOrg(label: string, flagOn = true): Promise<{ org: number; pro
     "INSERT INTO procurement_processes (id, organization_id, process_number, object, modality, current_stage, status, responsible_user, created_at, updated_at) VALUES (?, ?, ?, ?, 'pregao', 'TR', 'rascunho', ?, NOW(), NOW())",
     [processId, org, `2026/${org % 10000}`, "Aquisição sintética de material de expediente", U_AUTHOR]);
   await setFlag(org, flagOn);
+  // SECURITY-02 — o emissor (U_MANAGER) é membro REAL e ativo do órgão: a emissão relê organization_members.
+  await exec("INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'manager', 1) ON DUPLICATE KEY UPDATE role = 'manager', ativo = 1", [org, U_MANAGER]);
   return { org, processId };
 }
 async function setFlag(org: number, on: boolean): Promise<void> {

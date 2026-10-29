@@ -17,6 +17,10 @@
  * owner(5) e deixa passar quem tem papel >= mínimo; admin de plataforma entra como `owner` do órgão
  * informado em X-Organization-Id (com auditoria fail-closed). Nenhum sistema RBAC novo é criado.
  *
+ * SECURITY-02 — ratify, publish e configureFlags (decisão administrativa: ex. dispensar parecer) usam
+ * `institutionalProcedure("manager")`: além do piso, exigem membership REAL e ativa no órgão. A projeção sintética
+ * do admin de plataforma é acesso técnico, não autoridade do órgão — e é recusada nesses atos.
+ *
  * IMPORTANTE — `manager` é APENAS um PISO TÉCNICO de RBAC. Esta matriz NÃO afirma nem codifica que o papel
  * `manager` seja a autoridade legalmente competente para ratificar/publicar a contratação direta. Autoridade
  * competente, distinção decidedBy × recordedBy e segregação de funções (SoD) pertencem ao PR-07; a semântica
@@ -142,7 +146,7 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
     sideEffects: "Nenhum.",
   },
   ratify: {
-    rbacClass: "INSTITUTIONAL_DECISION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
+    rbacClass: "INSTITUTIONAL_DECISION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'institutionalProcedure("manager")',
     rationale: "Registro da ratificação (ato institucional). manager+ é só o PISO técnico de quem REGISTRA; a autoridade que decidiu é declarada (decidedBy ≠ recordedBy) e sua competência não é validada pelo sistema (R4.2 pendente) — PR-07.",
     sideEffects: "institutional_decisions (INSERT append-only, revisão CAS, idempotência) + etapa RATIFICATION só se 'ratificado' + process_timeline(approval, id estável). Sem IA/notificação.",
   },
@@ -152,12 +156,12 @@ export const DIRECT_PROCUREMENT_RBAC_MATRIX = {
     sideEffects: "Nenhum.",
   },
   publish: {
-    rbacClass: "PUBLICATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
+    rbacClass: "PUBLICATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'institutionalProcedure("manager")',
     rationale: "Materializa publicações oficiais (aviso, termo de ratificação; extrato só de contrato registrado); exige ratificação 'ratificado' (fail-closed no service).",
     sideEffects: "generated_publications + official_documents (Document Engine) + process_timeline(decision, evento singleton por conteúdo) + etapa/status PUBLICATION/publicado só após gravar. Extrato de contrato só com includeContractExtract e contrato registrado (SEM-064). Sem IA.",
   },
   configureFlags: {
-    rbacClass: "WORKFLOW_CONFIGURATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'orgRoleProcedure("manager")',
+    rbacClass: "WORKFLOW_CONFIGURATION", oldBuilder: "tenantProcedure", minRole: "manager", newBuilder: 'institutionalProcedure("manager")',
     rationale: "Altera exigências do fluxo adaptativo (ex.: requiresLegalOpinion, requiresPriceResearch).",
     sideEffects: "direct_procurement_workspaces.flags (UPDATE só das flags) + process_timeline(change|decision, antes→depois, ator humano) na mesma transação; sem mudança ⇒ sem escrita (SEM-064). Sem IA/notificação.",
   },

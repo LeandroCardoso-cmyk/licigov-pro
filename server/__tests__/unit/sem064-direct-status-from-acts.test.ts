@@ -87,7 +87,7 @@ describe("SEM-064 — guards estáticos", () => {
   const read = (rel: string) => readFileSync(resolve(__dirname, "../../..", rel), "utf8");
   it("publish só marca 'publicado' DEPOIS de gerar as publicações e não usa o extrato incondicional", () => {
     const r = read("server/routers/directProcurementRouter.ts");
-    const publish = r.slice(r.indexOf("  publish: orgRoleProcedure"), r.indexOf("// NEW-005 — WORKFLOW_CONFIGURATION"));
+    const publish = r.slice(r.indexOf("  publish: institutionalProcedure"), r.indexOf("// NEW-005 — WORKFLOW_CONFIGURATION"));
     expect(publish.indexOf("generatePublications(")).toBeGreaterThan(-1);
     expect(publish.indexOf("generatePublications(")).toBeLessThan(publish.indexOf("markDirectPublished("));
     expect(publish).not.toContain('setDirectStage(ws, "PUBLICATION")');
@@ -96,7 +96,7 @@ describe("SEM-064 — guards estáticos", () => {
   });
   it("configureFlags não usa o upsert do workspace (que regravava etapa/status) e grava o evento", () => {
     const r = read("server/routers/directProcurementRouter.ts");
-    const cf = r.slice(r.indexOf("  configureFlags: orgRoleProcedure"));
+    const cf = r.slice(r.indexOf("  configureFlags: institutionalProcedure"));
     expect(cf).toContain("updateDirectWorkspaceFlagsWithEvent");
     expect(cf).not.toContain("insertDirectProcurementWorkspace");
   });

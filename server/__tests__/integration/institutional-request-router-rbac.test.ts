@@ -14,7 +14,13 @@ import { makeContext } from "../helpers/fixtures";
 const h = vi.hoisted(() => ({ ORG: 81001, roleByUser: new Map<number, string>() }));
 
 vi.mock("../../services/tenantService", () => ({
-  getMembership: vi.fn(async (userId: number, orgId: number) => (userId === 9 && orgId === 81001 ? { id: 9, organizationId: orgId, userId, role: "operator", ativo: true } : null)),
+  // Usuário 9: membro ativo designável. SECURITY-02: os atores do teste também são membros REAIS com o papel do contexto.
+  getMembership: vi.fn(async (userId: number, orgId: number) => {
+    if (orgId !== 81001) return null;
+    if (userId === 9) return { id: 9, organizationId: orgId, userId, role: "operator", ativo: true };
+    const role = h.roleByUser.get(userId);
+    return role ? { id: 100 + userId, organizationId: orgId, userId, role, ativo: true } : null;
+  }),
   resolveTenantForUser: vi.fn(async (userId: number) => {
     const role = h.roleByUser.get(userId);
     if (!role) throw new TRPCError({ code: "FORBIDDEN", message: "sem membership" });
