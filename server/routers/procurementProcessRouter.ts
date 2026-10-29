@@ -39,6 +39,7 @@ import { findPriceOutliers } from "@shared/itemApprovalGate";
 import { reaisToCents } from "../domain/money";
 import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
+import { demonstrativePriceNotice } from "../services/priceGovernanceService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
@@ -357,6 +358,8 @@ export const procurementProcessRouter = router({
           object: process.object,
           statusLabel,
           isDraft: document.status === "rascunho",
+          // Pós-M8 — o MESMO aviso da prévia (fonte única), no cabeçalho do arquivo exportado do rascunho.
+          notices: input.kind === "dfd" ? [] : [demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId))].filter((n): n is string => !!n),
           version,
           exportedAtLabel: formatBrazilianDateTime(new Date()),
         },
@@ -1020,6 +1023,8 @@ export const procurementProcessRouter = router({
             : null,
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,
+          // Pós-M8 — aditivo, somente leitura: aviso de valores demonstrativos (cotação fictícia/sintética no processo) ou null.
+          priceNotice: demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId)),
         },
       };
     }),

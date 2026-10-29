@@ -1800,13 +1800,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/ETPWorkspace.tsx": {
-    "mtime": 1793168884.9472609,
-    "ast_hash": "b1d1b31af6d251999dc7352a83e65297",
+    "mtime": 1793278502.9723988,
+    "ast_hash": "64b0b30b589cd44b4c965a1bb33419fb",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1793170851.533208,
-    "ast_hash": "c3c50791b5a5894e48475fee8575891c",
+    "mtime": 1793278502.9716299,
+    "ast_hash": "7a3d459db06c21971de882df3bd5782c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -1865,8 +1865,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/TRWorkspace.tsx": {
-    "mtime": 1793168884.9528332,
-    "ast_hash": "0a266552fbce250f8ee57d0d1bd4c296",
+    "mtime": 1793278502.9721122,
+    "ast_hash": "db500277be9bbf50552532081051686b",
     "semantic_hash": ""
   },
   "client/src/components/procurement/TimelinePanel.tsx": {
@@ -7175,8 +7175,8 @@
     "semantic_hash": ""
   },
   "server/domain/authoritativeItems.ts": {
-    "mtime": 1793168885.6834009,
-    "ast_hash": "665ec9c8157aebb993b899b0c2ea5126",
+    "mtime": 1793278290.8491824,
+    "ast_hash": "59da9bacb08b1088d717857f6acffe00",
     "semantic_hash": ""
   },
   "server/domain/bootstrap/bootstrapDependencyGraph.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1793170270.2124362,
-    "ast_hash": "0978ff3ca0c0636d0c32238d3c160651",
+    "mtime": 1793278313.1748867,
+    "ast_hash": "a8602101486c10f399df889733cffc69",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9240,8 +9240,8 @@
     "semantic_hash": ""
   },
   "server/services/authoring/authoringContext.ts": {
-    "mtime": 1793168885.7189598,
-    "ast_hash": "7dff50115c2c41dd381a537d2b429af8",
+    "mtime": 1793278290.8499768,
+    "ast_hash": "0cf6ca603cdd4721e5b5a5b5156188b9",
     "semantic_hash": ""
   },
   "server/services/authoring/authoringCorpus.ts": {
@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1793170332.8168352,
-    "ast_hash": "23f46827a31a10809aa1138985198515",
+    "mtime": 1793278401.0442967,
+    "ast_hash": "6b60330cb4f70001dcc8067b4fad7793",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -9555,8 +9555,8 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1793168885.7213774,
-    "ast_hash": "06a4067a42032388fb66b055f9b9089b",
+    "mtime": 1793278474.3274417,
+    "ast_hash": "16afdbe9656f5fca50d130a5e05ddd4a",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
-    "mtime": 1793168885.7388365,
-    "ast_hash": "373ede6749e080e10b2fa3f453e9adad",
+    "mtime": 1793278303.3597963,
+    "ast_hash": "7bc16150ad0ffe40a9871f7dcff85df5",
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
@@ -15602,6 +15602,16 @@
   "client/src/components/procurement/editalConditionalOrderD01.test.ts": {
     "mtime": 1793211956.4085538,
     "ast_hash": "4b19ff055a99c5a22008e2f32e1c0a3f",
+    "semantic_hash": ""
+  },
+  "client/src/components/procurement/DemonstrativePriceNotice.tsx": {
+    "mtime": 1793278493.9137046,
+    "ast_hash": "27cab59ddc6b25363cf135829fceaaeb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-documental-stabilization.test.ts": {
+    "mtime": 1793278594.159801,
+    "ast_hash": "e543b18e6cca44a0583c3ed236588fa7",
     "semantic_hash": ""
   }
 }

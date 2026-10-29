@@ -63,3 +63,17 @@ export async function fictitiousPriceBlocker(
   const allowed = await demonstrativePricesAllowed(organizationId);
   return (item) => item.fictitiousQuoteCount > 0 && !allowed;
 }
+
+/**
+ * Pós-M8 — AVISO DE APRESENTAÇÃO (prévia e exportação do rascunho): o processo tem item com cotação de fonte FICTÍCIA/sintética.
+ * Vale com a exceção de homologação ativa ou não: com ela, valores demonstrativos podem estar no texto (minuta de homologação);
+ * sem ela, o preço fica suspenso — e rascunhos compostos durante uma janela de exceção continuam carregando aqueles valores. Só
+ * rotula: não altera valor, cálculo, bloqueio, geração nem emissão. Puro (os itens já vêm do tenant). `null` ⇒ nenhum aviso.
+ */
+export function demonstrativePriceNotice(items: ReadonlyArray<{ status: string; fictitiousQuoteCount: number }>): string | null {
+  const affected = items.filter((i) => i.status !== "rejeitado" && i.fictitiousQuoteCount > 0);
+  if (affected.length === 0) return null;
+  const quotes = affected.reduce((n, i) => n + i.fictitiousQuoteCount, 0);
+  return `VALORES DEMONSTRATIVOS — ${affected.length} item(ns) deste processo com ${quotes} cotação(ões) de fonte fictícia/sintética `
+    + "(homologação). Valores de referência baseados nelas são demonstrativos e não constituem pesquisa de preços oficial.";
+}

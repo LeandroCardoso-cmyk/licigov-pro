@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import DemonstrativePriceNotice from "./DemonstrativePriceNotice";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
@@ -578,6 +579,7 @@ export default function EditalWorkspace({
           )}
 
           <PublicationPendingNotice pending={publicationPendingView} variant="drafting" />
+          <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
             emissão oficial exige revisão de um terceiro (SoD).
