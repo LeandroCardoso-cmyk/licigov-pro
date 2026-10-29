@@ -9,6 +9,7 @@
  * emissões (versão oficial imutável). O status do rascunho "aprovado" continua sendo minuta.
  */
 import { officialVersionLabel, type OfficialEmissions, type OfficialVersions } from "./processDocumentStatus";
+import { UNISSUED_DRAFT_MARKING } from "@shared/documentMarkers";
 
 export const JOURNEY_KINDS = ["dfd", "etp", "tr", "edital"] as const;
 export type JourneyKind = (typeof JOURNEY_KINDS)[number];
@@ -70,17 +71,19 @@ const FILE_STATUS_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Nota sobre o arquivo que será exportado — diz exatamente o que o arquivo mostra. Só o status "rascunho" recebe a
- * marca "RASCUNHO — não é versão oficial"; os demais saem com a situação do rascunho no cabeçalho (sem essa marca).
+ * Nota sobre o arquivo que será exportado — diz exatamente o que o arquivo mostra. Todo arquivo que não é a versão emitida
+ * (ledger) sai identificado como MINUTA — NÃO EMITIDA OFICIALMENTE na 1ª página e no rodapé de todas as páginas, com a
+ * situação interna do rascunho preservada no cabeçalho. A versão emitida sai sem marca de minuta.
  */
 export function exportNote(state: JourneyDocState): string {
   if (!state.exportable) return "Ainda não há minuta deste documento para visualizar ou exportar.";
   const status = state.draftStatus ?? "rascunho";
-  const draftFile = status === "rascunho"
-    ? "o arquivo sai marcado como RASCUNHO (não é versão oficial)"
-    : `o arquivo sai com a situação “${FILE_STATUS_LABELS[status] ?? status.toUpperCase()}” no cabeçalho — ainda não é versão emitida`;
-  if (state.phase === "official") return `Há versão emitida. Se a minuta não mudou desde a emissão, o arquivo é a versão oficial; se mudou, ${draftFile}.`;
-  return `Minuta: ${draftFile}.`;
+  const draftFile = `sai identificado como “${UNISSUED_DRAFT_MARKING}” na 1ª página e no rodapé de todas as páginas`
+    + `, com a situação interna “${FILE_STATUS_LABELS[status] ?? status.toUpperCase()}” no cabeçalho`;
+  if (state.phase === "official") {
+    return `Há versão emitida. Se a minuta não mudou desde a emissão, o arquivo é a versão oficial (sem marca de minuta); se mudou, ${draftFile}.`;
+  }
+  return `O arquivo ${draftFile}.`;
 }
 
 export function journeyStates(

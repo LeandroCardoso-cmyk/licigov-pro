@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1793287395.675512,
-    "ast_hash": "be175e72a697bfe2d466ce369a9037a7",
+    "mtime": 1793293594.9971967,
+    "ast_hash": "a5c6d9d3171cc3fef744db97c4bb3412",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1793287078.1863341,
-    "ast_hash": "17fe7047ebe671408adf9608ff1ffcb5",
+    "mtime": 1793293594.9952252,
+    "ast_hash": "f60dc2c43cc60e2e21c973a307441d4f",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -15400,8 +15400,8 @@
     "semantic_hash": ""
   },
   "shared/documentMarkers.ts": {
-    "mtime": 1793287079.1464798,
-    "ast_hash": "b1b653c1d8cb24853d7eba8dbf2799cf",
+    "mtime": 1793293594.930527,
+    "ast_hash": "bec3d4b11b2bbb0c87b4dfae860d99a6",
     "semantic_hash": ""
   },
   "client/src/components/procurement/authoringSourcesView.ts": {
@@ -15630,8 +15630,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/documentJourney.render.test.ts": {
-    "mtime": 1793288248.809434,
-    "ast_hash": "385c52e9f3d385762d0239d81f7b2ac2",
+    "mtime": 1793293626.194366,
+    "ast_hash": "8f160374fac6c6689325749055028c4f",
     "semantic_hash": ""
   },
   "client/src/components/procurement/useJourneyExport.ts": {
@@ -15640,13 +15640,18 @@
     "semantic_hash": ""
   },
   "client/src/lib/documentJourney.test.ts": {
-    "mtime": 1793288248.8090026,
-    "ast_hash": "e64487ecbfc94f97ebecc12f8df6341f",
+    "mtime": 1793293626.193952,
+    "ast_hash": "db75f2cfc46979508b2c762b8c1dd948",
     "semantic_hash": ""
   },
   "client/src/lib/documentJourney.ts": {
-    "mtime": 1793288204.5285254,
-    "ast_hash": "9b37eb0b73b7d2473617f19c8dd5fb28",
+    "mtime": 1793293609.8725147,
+    "ast_hash": "19f7a5c6b872cd623d9dc50ae481c50c",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/pr334-unissued-draft-marking.test.ts": {
+    "mtime": 1793293704.6373658,
+    "ast_hash": "c96f07487cba0edf49571653b7af023c",
     "semantic_hash": ""
   }
 }

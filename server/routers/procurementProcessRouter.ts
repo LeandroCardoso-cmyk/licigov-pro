@@ -36,6 +36,7 @@ import {
   importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
 import { findPriceOutliers } from "@shared/itemApprovalGate";
+import { UNISSUED_DRAFT_MARKING } from "@shared/documentMarkers";
 import { reaisToCents } from "../domain/money";
 import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
@@ -361,7 +362,11 @@ export const procurementProcessRouter = router({
           processNumber: process.processNumber,
           object: process.object,
           statusLabel,
-          isDraft: document.status === "rascunho",
+          // Decisão do Owner (PR #334): chegar aqui significa que o ledger NÃO tem esta versão como emitida (a emitida idêntica saiu
+          // acima, pelo adaptador oficial). Logo, todo arquivo deste caminho é MINUTA não emitida — qualquer status interno, que segue
+          // no cabeçalho. Só a apresentação muda: conteúdo, hash, lineage e regras de emissão intactos.
+          isDraft: true,
+          draftMarking: UNISSUED_DRAFT_MARKING,
           // Pós-M8 — o MESMO aviso da prévia (fonte única), no cabeçalho do arquivo exportado do rascunho.
           notices: input.kind === "dfd" ? [] : [demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId))].filter((n): n is string => !!n),
           version,

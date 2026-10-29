@@ -27,7 +27,7 @@ describe("DocumentJourneyBar", () => {
     expect(disabledButtons(html)).toBe(0);
     expect(html).toContain("Ir para ETP (não iniciado)");
     expect(html).toContain("Minuta (rascunho)");
-    expect(html).toContain("marcado como RASCUNHO (não é versão oficial)");
+    expect(html).toContain("MINUTA — NÃO EMITIDA OFICIALMENTE");
   });
 
   it("DFD inexistente: as 4 ações ficam indisponíveis e o motivo é dito", () => {
@@ -55,7 +55,8 @@ describe("DocumentJourneyBar", () => {
     expect(html).toContain("Se a minuta não mudou desde a emissão, o arquivo é a versão oficial");
     const aprovado = render({ current: "etp", states: journeyStates([{ kind: "etp", status: "aprovado" }]) });
     expect(aprovado).toContain("Minuta revisada");
-    expect(aprovado).not.toContain("marcado como RASCUNHO");
+    expect(aprovado).toContain("MINUTA — NÃO EMITIDA OFICIALMENTE");
+    expect(aprovado).toContain("situação interna “APROVADO”");
   });
 
   it("edição não salva: avisa que o arquivo usa o último conteúdo salvo; exportação em andamento bloqueia nova", () => {

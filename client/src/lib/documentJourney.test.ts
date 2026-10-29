@@ -99,16 +99,16 @@ describe("edição não salva", () => {
 });
 
 describe("nota do arquivo exportado (diz o que o arquivo mostra)", () => {
-  it("só o status 'rascunho' sai marcado como RASCUNHO; os demais mostram a situação, sem se dizer emitidos", () => {
+  it("decisão do Owner: os 4 status não emitidos saem como MINUTA — NÃO EMITIDA OFICIALMENTE, com a situação interna preservada", () => {
     expect(exportNote(journeyDocState("etp", []))).toMatch(/Ainda não há minuta/);
-    expect(exportNote(journeyDocState("etp", [{ kind: "etp", status: "rascunho" }]))).toBe("Minuta: o arquivo sai marcado como RASCUNHO (não é versão oficial).");
-    const aprovado = exportNote(journeyDocState("etp", [{ kind: "etp", status: "aprovado" }]));
-    expect(aprovado).toMatch(/situação “APROVADO” no cabeçalho — ainda não é versão emitida/);
-    expect(aprovado).not.toMatch(/marcado como RASCUNHO/);
-    expect(exportNote(journeyDocState("tr", [{ kind: "tr", status: "rejeitado" }]))).toMatch(/“REJEITADO”/);
+    for (const [status, label] of [["rascunho", "RASCUNHO"], ["em_revisao", "EM REVISÃO"], ["aprovado", "APROVADO"], ["rejeitado", "REJEITADO"]]) {
+      expect(exportNote(journeyDocState("etp", [{ kind: "etp", status }]))).toBe(
+        `O arquivo sai identificado como “MINUTA — NÃO EMITIDA OFICIALMENTE” na 1ª página e no rodapé de todas as páginas, com a situação interna “${label}” no cabeçalho.`,
+      );
+    }
     expect(journeyDocState("tr", [{ kind: "tr", status: "rejeitado" }]).label).toBe("Minuta rejeitada");
     expect(exportNote(journeyDocState("tr", [{ kind: "tr", status: "em_revisao" }], { tr: 2 }, { tr: 1 })))
-      .toMatch(/^Há versão emitida\. .*se mudou, o arquivo sai com a situação “EM REVISÃO”/);
+      .toMatch(/^Há versão emitida\. .*versão oficial \(sem marca de minuta\); se mudou, sai identificado como “MINUTA — NÃO EMITIDA OFICIALMENTE”/);
   });
 });
 
