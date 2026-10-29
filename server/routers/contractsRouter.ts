@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
 import { checkContractExpirationsForOrganization, getExpirationSummaryForOrganization } from "../services/contractNotifications";
@@ -44,6 +44,12 @@ async function requireContractForOrg(contractId: number, organizationId: number)
  * Router de Contratos
  * Gerencia contratos administrativos, aditivos, apostilamentos e documentos
  */
+// Tipos dos geradores legados (antes `as any`; tipagem apenas — sem efeito em runtime).
+type ContractTypeArg = Parameters<typeof generateContractMinuta>[0]["type"];
+type OriginTypeArg = Parameters<typeof generateContractMinuta>[0]["originType"];
+type AmendmentTypeArg = Parameters<typeof generateAmendmentTerm>[1]["type"];
+type ApostilleTypeArg = Parameters<typeof generateApostilleTerm>[1]["type"];
+
 export const contractsRouter = router({
   // ============================================================================
   // CONTRATOS
@@ -52,7 +58,7 @@ export const contractsRouter = router({
   /**
    * Criar novo contrato
    */
-  create: tenantProcedure
+  create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
     .input(
       z.object({
         number: z.string(),
@@ -126,7 +132,7 @@ export const contractsRouter = router({
   /**
    * Atualizar contrato
    */
-  update: tenantProcedure
+  update: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
     .input(
       z.object({
         id: z.number(),
@@ -175,7 +181,7 @@ export const contractsRouter = router({
     /**
      * Criar aditivo
      */
-    create: tenantProcedure
+    create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
       .input(
         z.object({
           contractId: z.number(),
@@ -219,8 +225,8 @@ export const contractsRouter = router({
 
             const existingAmendments = await db.listAmendmentsForOrganization(input.contractId, ctx.organizationId);
             const totalExistingValue = existingAmendments
-              .filter((a: any) => a.valueChange)
-              .reduce((sum: any, a: any) => sum + (a.valueChange || 0), 0);
+              .filter((a) => a.valueChange)
+              .reduce((sum: number, a) => sum + (a.valueChange || 0), 0);
 
             const valueValidation = validateAmendmentValue(
               contract.value,
@@ -265,7 +271,7 @@ export const contractsRouter = router({
           }, ctx.organizationId);
           if (!amendment) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
 
-          const updates: any = {};
+          const updates: Parameters<typeof db.updateContractForOrganization>[2] = {};
           if (input.newEndDate) updates.endDate = input.newEndDate;
           if (input.newTotalValue) updates.currentValue = input.newTotalValue;
           if (Object.keys(updates).length > 0) {
@@ -302,7 +308,7 @@ export const contractsRouter = router({
     /**
      * Criar apostilamento
      */
-    create: tenantProcedure
+    create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
       .input(
         z.object({
           contractId: z.number(),
@@ -361,7 +367,7 @@ export const contractsRouter = router({
     /**
      * Criar documento
      */
-    create: tenantProcedure
+    create: institutionalProcedure("viewer") // SECURITY-02 — pode nascer `final`: membership REAL (piso legado inalterado)
       .input(
         z.object({
           contractId: z.number(),
@@ -402,7 +408,7 @@ export const contractsRouter = router({
     /**
      * Atualizar documento
      */
-    update: tenantProcedure
+    update: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
       .input(
         z.object({
           id: z.number(),
@@ -514,7 +520,7 @@ export const contractsRouter = router({
             number: contract.number,
             year: contract.year,
             object: contract.object,
-            type: contract.type as any,
+            type: contract.type as ContractTypeArg,
             contractorName: contract.contractorName,
             contractorCNPJ: contract.contractorCNPJ || undefined,
             contractorAddress: contract.contractorAddress || undefined,
@@ -525,7 +531,7 @@ export const contractsRouter = router({
             endDate: contract.endDate,
             fiscalUserName: contract.fiscalUserName || undefined,
             notes: contract.notes || undefined,
-            originType: contract.originType as any || undefined,
+            originType: contract.originType as OriginTypeArg || undefined,
           });
 
           const document = await db.createContractDocumentForOrganization({
@@ -568,7 +574,7 @@ export const contractsRouter = router({
               number: contract.number,
               year: contract.year,
               object: contract.object,
-              type: contract.type as any,
+              type: contract.type as ContractTypeArg,
               contractorName: contract.contractorName,
               contractorCNPJ: contract.contractorCNPJ || undefined,
               value: contract.value,
@@ -578,7 +584,7 @@ export const contractsRouter = router({
             },
             {
               number: amendment.number,
-              type: amendment.type as any,
+              type: amendment.type as AmendmentTypeArg,
               justification: amendment.justification,
               newEndDate: amendment.newEndDate || undefined,
               daysAdded: amendment.daysAdded || undefined,
@@ -630,7 +636,7 @@ export const contractsRouter = router({
               number: contract.number,
               year: contract.year,
               object: contract.object,
-              type: contract.type as any,
+              type: contract.type as ContractTypeArg,
               contractorName: contract.contractorName,
               contractorCNPJ: contract.contractorCNPJ || undefined,
               value: contract.value,
@@ -641,7 +647,7 @@ export const contractsRouter = router({
             },
             {
               number: apostille.number,
-              type: apostille.type as any,
+              type: apostille.type as ApostilleTypeArg,
               description: apostille.description,
               valueChange: apostille.valueChange ?? undefined,
               newTotalValue: apostille.newTotalValue ?? undefined,
@@ -675,7 +681,7 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Rescisão
      */
-    generateRescission: tenantProcedure
+    generateRescission: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
       .input(
         z.object({
           contractId: z.number(),
@@ -695,7 +701,7 @@ export const contractsRouter = router({
               number: contract.number,
               year: contract.year,
               object: contract.object,
-              type: contract.type as any,
+              type: contract.type as ContractTypeArg,
               contractorName: contract.contractorName,
               contractorCNPJ: contract.contractorCNPJ || undefined,
               value: contract.value,
@@ -768,7 +774,7 @@ export const contractsRouter = router({
     exportAlertsExcel: tenantProcedure.mutation(async ({ ctx }) => {
       return audited("reports.exportAlertsExcel", ctx, async () => {
         const buffer = await generateAlertsExcelReportForOrganization(ctx.organizationId);
-        const base64 = Buffer.from(buffer as any).toString("base64");
+        const base64 = Buffer.from(buffer as ArrayBuffer).toString("base64");
         return {
           data: base64,
           filename: `alertas-contratos-${new Date().toISOString().split('T')[0]}.xlsx`,
@@ -789,7 +795,7 @@ export const contractsRouter = router({
           } catch {
             throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
           }
-          const base64 = Buffer.from(buffer as any).toString("base64");
+          const base64 = Buffer.from(buffer as ArrayBuffer).toString("base64");
           return {
             data: base64,
             filename: `auditoria-contrato-${input.contractId}-${new Date().toISOString().split('T')[0]}.xlsx`,

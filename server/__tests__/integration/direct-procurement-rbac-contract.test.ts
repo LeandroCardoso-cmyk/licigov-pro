@@ -21,7 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const tenant = vi.hoisted(() => ({ role: "operator" as string, org: 1 }));
+const tenant = vi.hoisted(() => ({ role: "operator" as string, org: 1, realMember: true }));
 
 /** Substitui TODA função exportada por um spy inerte: qualquer chamada vira evidência de efeito antes da recusa. */
 const spyAll = vi.hoisted(() => async (importOriginal: () => Promise<Record<string, unknown>>) => {
@@ -39,6 +39,11 @@ vi.mock("../../services/tenantService", () => ({
       createdAt: new Date(), updatedAt: new Date(),
     },
   })),
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: membro real ⇒ membership persistida com o papel do teste;
+  // admin de plataforma (projeção sintética, sem vínculo) ⇒ nenhuma membership.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => (tenant.realMember ? {
+    id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date(),
+  } : null)),
 }));
 vi.mock("../../db", (io) => spyAll(io as never));
 vi.mock("../../db/procurement", (io) => spyAll(io as never));
@@ -131,6 +136,7 @@ function allSpyCalls(): Array<{ fn: string; calls: number }> {
 
 function callerFor(role: Role | "platform_admin", correlationId = "corr-new005-contract"): Caller {
   const platformAdmin = role === "platform_admin";
+  tenant.realMember = !platformAdmin;
   if (!platformAdmin) tenant.role = role;
   return directProcurementRouter.createCaller({
     user: { id: 77, role: platformAdmin ? "admin" : "user", name: "Ator", email: "ator@teste.local" },
@@ -194,16 +200,36 @@ describe("NEW-005 — RBAC congelado do directProcurementRouter (mock)", () => {
     }
   }
 
-  it("admin de plataforma entra como owner do órgão informado (alcança ratify/publish/configureFlags)", async () => {
+  // SECURITY-02 — antes este teste AFIRMAVA o comportamento vulnerável (admin de plataforma alcançava ratify/publish/configureFlags
+  // como `owner` sintético). Agora: acesso técnico preservado (leitura/rascunho), atos institucionais RECUSADOS sem efeito.
+  it("admin de plataforma (owner sintético, sem vínculo real) NÃO ratifica/publica/configura — recusa sem efeito", async () => {
     vi.mocked(db.getOrganizationById).mockResolvedValue({ id: 1 } as never);
     vi.mocked(db.createAuditLog).mockResolvedValue(undefined as never);
     for (const name of ["ratify", "publish", "configureFlags"] as const) {
       const e = await errOf(() => CALLS[name](callerFor("platform_admin")));
-      expect(e.message, name).not.toMatch(/papel mínimo/);
+      expect(e.code, name).toBe("FORBIDDEN");
+      expect(e.message, name).toMatch(/INSTITUTIONAL_AUTHORITY_REQUIRED/);
     }
+    expect(allSpyCalls().filter((c) => c.fn !== "db.getOrganizationById" && c.fn !== "db.createAuditLog")).toEqual([]);
     // Auditoria fail-closed do acesso cross-tenant do admin, com correlationId.
     const details = vi.mocked(db.createAuditLog).mock.calls.map(c => JSON.parse(String((c[0] as { details: string }).details)));
     expect(details.every(d => d.event === "platform_admin_tenant_access" && d.correlationId === "corr-new005-contract")).toBe(true);
+  });
+
+  it("admin de plataforma mantém o acesso TÉCNICO: leitura e rascunho alcançam o handler", async () => {
+    vi.mocked(db.getOrganizationById).mockResolvedValue({ id: 1 } as never);
+    vi.mocked(db.createAuditLog).mockResolvedValue(undefined as never);
+    for (const name of ["loadProcess", "createProcess", "characterizeNeed"] as const) {
+      const e = await errOf(() => CALLS[name](callerFor("platform_admin")));
+      expect(e.message, name).not.toMatch(/INSTITUTIONAL_AUTHORITY_REQUIRED|papel mínimo/);
+    }
+  });
+
+  it("manager REAL (membership persistida) continua alcançando ratify/publish/configureFlags", async () => {
+    for (const name of ["ratify", "publish", "configureFlags"] as const) {
+      const e = await errOf(() => CALLS[name](callerFor("manager")));
+      expect(e.message, name).not.toMatch(/INSTITUTIONAL_AUTHORITY_REQUIRED|papel mínimo/);
+    }
   });
 
   it("recusa de viewer em ratify/publish/configureFlags: sem IA, sem notificação, sem timeline, sem escrita", async () => {

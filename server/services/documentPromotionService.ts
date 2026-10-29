@@ -28,6 +28,7 @@ import { countOfficialPromotions, insertOfficialPromotion, getLatestOfficialProm
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
+import { requireInstitutionalAuthority } from "./institutionalAuthorityService";
 import { draftContentHash } from "../domain/generatedDocument";
 import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 import type { OrgRole } from "../../drizzle/schema";
@@ -179,6 +180,14 @@ export async function promoteOfficialDocument(params: {
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde a revisão — recarregue e revise a versão vigente antes de emitir." });
   }
 
+  // SECURITY-02 — `actorRole` vem do chamador (e, para o admin de plataforma, é a projeção sintética `owner`): NÃO prova vínculo.
+  // A emissão exige membership REAL, ativa e ≥ manager no órgão, relida da fonte autoritativa ANTES de qualquer escrita (nem a
+  // chave de idempotência é reservada) e revalidada sob trava dentro da transação, abaixo.
+  await requireInstitutionalAuthority({
+    userId: params.actorUserId, organizationId: params.organizationId, minRole: MIN_EMIT_ROLE,
+    operation: PROMOTE_OP, correlationId: params.correlationId,
+  });
+
   const payloadHash = payloadHashOf({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, contentHash });
 
   const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, PROMOTE_OP, payloadHash);
@@ -265,6 +274,12 @@ export async function promoteOfficialDocument(params: {
       // M8 (emenda de integridade) — FRONTEIRA DECISIVA da elegibilidade de preço: trava as fontes do processo (FOR SHARE,
       // ordem estável) e RECALCULA o bloqueio sob a trava. Uma cotação que se tornou fictícia depois das pré-condições
       // (ou cujo escritor ainda não commitou) é vista aqui; nenhum escritor confirma mudança até este commit.
+      // SECURITY-02 — TOCTOU: a autoridade do emissor é relida DENTRO da tentativa transacional com FOR SHARE (a membership fica
+      // travada até o commit; rebaixamento/remoção concorrente não confirma entre a checagem e a emissão).
+      const lockedEmitterAuthority = await requireInstitutionalAuthority({
+        userId: params.actorUserId, organizationId: params.organizationId, minRole: MIN_EMIT_ROLE,
+        operation: PROMOTE_OP, correlationId: params.correlationId, executor: tx,
+      });
       const lockedFictitious = await lockedFictitiousPriceItemCount(tx, params.organizationId, params.processId, demonstrativeAllowed);
       if (emissionHook) await emissionHook("after_source_locks");
       if (lockedFictitious > 0) {
@@ -291,6 +306,8 @@ export async function promoteOfficialDocument(params: {
           promotedFromDraftId: draft.id, contentHash,
           ...(officialContentHash !== contentHash ? { reviewedContentHash: contentHash, officialContentHash } : {}),
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
+          // SECURITY-02 — papel institucional EFETIVO do emissor (membership persistida), nunca o do contexto.
+          emitterInstitutionalRole: lockedEmitterAuthority.role,
           // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
           reason: params.reason ?? null,

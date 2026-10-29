@@ -15,7 +15,7 @@
 import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
 import type { TrpcAuditCtx } from "../services/activityLogService";
 import { logActivity } from "../services/activityLogService";
@@ -995,7 +995,7 @@ export const ingestionRouter = router({
       });
     }),
 
-  promoteSession: orgRoleProcedure("manager")
+  promoteSession: institutionalProcedure("manager")
     .input(z.object({
       sessionId:            z.number().int().positive(),
       procurementProcessId: z.string().min(1).max(20),

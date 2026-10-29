@@ -36,6 +36,8 @@ import { kick as kickEmailDispatcher } from "./email/emailDispatcher";
 import { EMAIL_CONFIG } from "../config/email";
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
+import { requireInstitutionalAuthority, type AuthorityExecutor } from "./institutionalAuthorityService";
+import { SELF_GRANT_MESSAGE } from "../domain/institutionalAuthority";
 import {
   INVITATION_NOT_FOUND,
   INVITATION_EXPIRED,
@@ -71,6 +73,75 @@ export interface CreateInvitationInput {
   invitedName?: string;
   createdByUserId: number;
   correlationId?: string;
+  /**
+   * SECURITY-02 — SÓ o onboarding de tenant (`tenantOnboardingService`) informa: convite `owner` da PRIMEIRA autoridade de
+   * um órgão sem nenhum membro ativo. Fora disso, todo convite exige autoridade REAL (admin+) de quem convida.
+   */
+  bootstrap?: "tenant_onboarding";
+}
+
+/** SECURITY-02 — códigos estáveis (não traduzir) das recusas de concessão de vínculo. */
+export { SELF_GRANT_FORBIDDEN } from "../domain/institutionalAuthority";
+export const INVITATION_GRANT_AUTHORITY_REQUIRED = "INVITATION_GRANT_AUTHORITY_REQUIRED";
+const GRANT_AUTHORITY_MESSAGE =
+  `Este convite não é mais válido: quem o emitiu não possui (ou não possui mais) vínculo ativo de administrador no órgão. Solicite um novo convite a um administrador da organização (${INVITATION_GRANT_AUTHORITY_REQUIRED}).`;
+
+/** Órgão sem nenhum membro ativo — única situação em que o convite `owner` de bootstrap (onboarding) é legítimo. */
+async function organizationHasNoActiveMembers(organizationId: number): Promise<boolean> {
+  // Fail-closed: sem banco, `getMembersOfOrg` devolveria [] e o bootstrap pareceria legítimo.
+  if (!(await getDb())) return false;
+  return (await getMembersOfOrg(organizationId)).length === 0;
+}
+
+/**
+ * SECURITY-02 — releitura DENTRO da transação do aceite (FOR SHARE): o emissor do convite (não-bootstrap) precisa continuar admin
+ * real até o commit; um rebaixamento concorrente não confirma entre a checagem e a criação do vínculo.
+ */
+async function reassertGrantorInTx(tx: AuthorityExecutor, row: InstitutionalInvitation, correlationId?: string): Promise<void> {
+  if (row.role === "owner") return; // bootstrap: validado pela ausência de membros ativos antes da transação
+  try {
+    await requireInstitutionalAuthority({
+      userId: row.createdByUserId!, organizationId: row.organizationId, minRole: "admin", operation: "invitation.accept", correlationId, executor: tx,
+    });
+  } catch {
+    throw new TRPCError({ code: "FORBIDDEN", message: GRANT_AUTHORITY_MESSAGE });
+  }
+}
+
+/**
+ * SECURITY-02 — quem CONCEDE vínculo no órgão precisa ser autoridade REAL dele (membership persistida e ativa, admin+).
+ * O admin de plataforma (projeção sintética `owner`) não concede autoridade municipal — nem a si, nem a terceiros.
+ * Exceção única e estreita: convite `owner` de bootstrap para órgão SEM membros ativos (onboarding).
+ */
+async function assertGrantAuthority(p: {
+  organizationId: number; grantorUserId: number; role: OrgRole; operation: string; correlationId?: string | null; bootstrapAllowed: boolean;
+}): Promise<void> {
+  if (p.role === "owner") {
+    if (p.bootstrapAllowed && await organizationHasNoActiveMembers(p.organizationId)) return;
+    log.warn("invitation_grant_denied", { organizationId: p.organizationId, actorUserId: p.grantorUserId, operation: p.operation, reason: "owner_outside_bootstrap", correlationId: p.correlationId ?? undefined });
+    throw new TRPCError({ code: "FORBIDDEN", message: GRANT_AUTHORITY_MESSAGE });
+  }
+  await requireInstitutionalAuthority({
+    userId: p.grantorUserId, organizationId: p.organizationId, minRole: "admin", operation: p.operation, correlationId: p.correlationId,
+  });
+}
+
+/** No ACEITE: o convite só vale se quem o emitiu AINDA é autoridade real (ou é o bootstrap `owner` de órgão vazio). */
+async function assertInvitationStillGranted(row: InstitutionalInvitation, acceptingUserId: number | null, correlationId?: string): Promise<void> {
+  if (acceptingUserId !== null && acceptingUserId === row.createdByUserId) {
+    log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "self_grant", correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
+  }
+  try {
+    if (row.createdByUserId == null) throw new Error("grantor_unknown");
+    await assertGrantAuthority({
+      organizationId: row.organizationId, grantorUserId: row.createdByUserId, role: row.role, operation: "invitation.accept",
+      correlationId, bootstrapAllowed: true,
+    });
+  } catch {
+    log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "grantor_without_authority", correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: GRANT_AUTHORITY_MESSAGE });
+  }
 }
 
 /**
@@ -82,6 +153,15 @@ export async function createInvitation(input: CreateInvitationInput): Promise<In
   const emailNormalized = normalizeInvitationEmail(input.email);
 
   const targetUser = await getUserByEmail(emailNormalized);
+  // SECURITY-02 — autoconvite nunca (inclusive no onboarding) e concessão só por autoridade real do órgão, ANTES de qualquer escrita.
+  if (targetUser && targetUser.id === input.createdByUserId) {
+    log.warn("invitation_grant_denied", { organizationId: input.organizationId, actorUserId: input.createdByUserId, reason: "self_grant", correlationId: input.correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
+  }
+  await assertGrantAuthority({
+    organizationId: input.organizationId, grantorUserId: input.createdByUserId, role: input.role, operation: "invitation.create",
+    correlationId: input.correlationId, bootstrapAllowed: input.bootstrap === "tenant_onboarding",
+  });
   if (targetUser) {
     const activeMembers = await getMembersOfOrg(input.organizationId);
     if (activeMembers.some(m => m.userId === targetUser.id)) {
@@ -214,6 +294,16 @@ export async function resendInvitation(input: ResendInvitationInput): Promise<In
       effective === "expired" ? "EXPIRED" : effective === "accepted" ? "ALREADY_ACCEPTED" : "CANCELLED"
     );
   }
+
+  // SECURITY-02 — reenviar EMITE novo token em nome de quem reenvia: mesma exigência de concessão (bootstrap `owner` só com órgão vazio).
+  const resendTarget = await getUserByEmail(current.emailNormalized);
+  if (resendTarget && resendTarget.id === input.actorUserId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });
+  }
+  await assertGrantAuthority({
+    organizationId: input.organizationId, grantorUserId: input.actorUserId, role: current.role, operation: "invitation.resend",
+    correlationId: input.correlationId, bootstrapAllowed: true,
+  });
 
   const org = await getOrganizationById(input.organizationId);
   const organizationName = org?.nome ?? "sua organização";
@@ -388,6 +478,7 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<Ac
     now,
   });
   if (!eligibility.eligible || !row) throw mapAcceptRejection(eligibility.reason!);
+  await assertInvitationStillGranted(row, null, input.correlationId);
 
   const existingUser = await getUserByEmail(row.emailNormalized);
   if (existingUser) {
@@ -406,6 +497,7 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<Ac
   let createdUserId!: number;
   try {
     await db.transaction(async tx => {
+      await reassertGrantorInTx(tx as unknown as AuthorityExecutor, row, input.correlationId);
       await tx.insert(users).values({
         openId,
         email: row.emailNormalized,
@@ -480,8 +572,15 @@ export async function acceptExistingInvitation(input: AcceptExistingInvitationIn
     acceptingEmail: input.userEmail,
   });
   if (!eligibility.eligible || !row) throw mapAcceptRejection(eligibility.reason!);
+  await assertInvitationStillGranted(row, input.userId, input.correlationId);
+  // SECURITY-02 — o aceite não sobrescreve o papel de quem JÁ é membro ativo (contornaria owner/último-admin de updateMemberRole).
+  const existingMembers = await getMembersOfOrg(row.organizationId);
+  if (existingMembers.some((m) => m.userId === input.userId)) {
+    throw new TRPCError({ code: "CONFLICT", message: MEMBER_ALREADY_EXISTS });
+  }
 
   await db.transaction(async tx => {
+    await reassertGrantorInTx(tx as unknown as AuthorityExecutor, row, input.correlationId);
     await tx
       .insert(organizationMembers)
       .values({

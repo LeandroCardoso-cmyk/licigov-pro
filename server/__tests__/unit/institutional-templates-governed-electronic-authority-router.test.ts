@@ -7,14 +7,22 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const tenant = vi.hoisted(() => ({ org: 1, role: "manager" as string }));
+const tenant = vi.hoisted(() => ({ org: 1, role: "manager" as string, realMember: true }));
 const recorded = vi.hoisted(() => ({ requests: [] as Array<Record<string, unknown>> }));
 
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: o fixture é um MEMBRO REAL com o mesmo papel do contexto.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => (tenant.realMember ? { id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() } : null)),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: tenant.org,
     membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
   })),
+}));
+// SECURITY-02 — admin de plataforma: o resolveTenant valida a organização e audita o acesso (fail-closed).
+vi.mock("../../db", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getOrganizationById: vi.fn(async (id: number) => ({ id, nome: "Órgão Sintético" })),
+  createAuditLog: vi.fn(async () => undefined),
 }));
 vi.mock("../../db/procurement", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -73,7 +81,7 @@ beforeEach(() => {
     });
   }
 });
-afterEach(() => { resetTemplateWorkflowPorts(); vi.restoreAllMocks(); });
+afterEach(() => { resetTemplateWorkflowPorts(); vi.restoreAllMocks(); tenant.realMember = true; });
 
 const electronic = (action: RegExp) => ({
   decidedByName: "Usuário Teste", decidedByRole: "Gestor do órgão (manager)", decidedByUserId: mockUser.id, decidedAt: SERVER_DAY,
@@ -170,5 +178,28 @@ describe("evidência jurídica NÃO muda: fundamento institucional declarado con
     const r = await trpcErr(as("owner").governance.recordLegalEvidence({ revisionId: "tr1", expectedVersion: 0, confirm: true, idempotencyKey: "idem-ev-1", evidence: { sourceLogicalVersion: "v", sourceSha256: "a".repeat(64) } } as never));
     expect(r?.code).toBe("BAD_REQUEST");
     expect(r?.message).toMatch(/decision/);
+  });
+});
+
+describe("SECURITY-02 — admin de plataforma (owner sintético) não registra decisão institucional do órgão", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const platformAdmin = () => { tenant.realMember = false; const ctx = makeContext({ ...mockUser, role: "admin" } as any); (ctx.req.headers as Record<string, string>)["x-organization-id"] = "1"; return institutionalTemplatesRouter.createCaller({ ...ctx, correlationId: "corr-s02-tpl" } as any); };
+
+  it("decisões governadas (govern) e revisão do documento composto (review) ⇒ FORBIDDEN, nada registrado", async () => {
+    const c = platformAdmin();
+    const e1 = await trpcErr(c.governed.recordCertameConfig({ processId: "P1", source: "CERTAME_CONFIG", catalogVersion: "cat-v1", fields: {}, ...act() }));
+    expect(e1?.code).toBe("FORBIDDEN");
+    expect(e1?.message).toMatch(/INSTITUTIONAL_AUTHORITY_REQUIRED/);
+    const e2 = await trpcErr(c.reviews.acceptAiNarrative({ manifestId: "m1", slotKey: "s1", executionId: "e1", outputHash: "h".repeat(64), confirm: true, idempotencyKey: `idem-s02-${++seq}` }));
+    expect(e2?.code).toBe("FORBIDDEN");
+    expect(captured).toEqual([]);
+    expect(recorded.requests).toEqual([]);
+  });
+
+  it("o mesmo usuário COM vínculo real manager registra, e o ledger grava o papel PERSISTIDO (nunca 'Titular' sintético)", async () => {
+    const c = platformAdmin();
+    tenant.realMember = true; tenant.role = "manager";
+    await c.reviews.acceptAiNarrative({ manifestId: "m1", slotKey: "s1", executionId: "e1", outputHash: "h".repeat(64), confirm: true, idempotencyKey: `idem-s02-${++seq}` });
+    expect(last().decidedByRole).toBe("Gestor do órgão (manager)");
   });
 });

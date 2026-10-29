@@ -15,7 +15,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const effectOrder: string[] = [];
-const fakeTx = { __tx: true };
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+// SECURITY-02 — fonte autoritativa da autoridade do emissor (membership REAL); padrão: todo ator é manager real.
+const authority = createAuthorityFixture();
+const fakeTx = { __tx: true, select: () => authority.txSelect() };
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o) }));
 
 // createDocument (lifecycle) espião: devolve uma versão oficial fake e registra o status recebido.
 const createDocument = vi.fn(async (params: { status?: string }, _executor?: unknown) => {
@@ -87,6 +91,7 @@ function base(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authority.reset();
   effectOrder.length = 0;
   getGeneratedDocumentByKind.mockResolvedValue({ ...DRAFT });
   checkIdempotency.mockResolvedValue({ status: "new" });
@@ -225,5 +230,47 @@ describe("C.4B.1 — hardening de governança (fail-closed)", () => {
     await expect(promoteOfficialDocument(base())).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     expect(createDocument).not.toHaveBeenCalled();
     expect(failIdempotencyKey).toHaveBeenCalledTimes(1); // sem efeito; chave liberada para retry
+  });
+});
+
+// ─── SECURITY-02 — emissão exige autoridade institucional REAL (serviço, não só o router) ──────────────────────
+describe("SECURITY-02 — emissão oficial: membership real, não o papel do contexto", () => {
+  it("ator SEM membership real (admin de plataforma com owner sintético) ⇒ FORBIDDEN antes de qualquer escrita (nem idempotência)", async () => {
+    authority.deny(7);
+    await expect(promoteOfficialDocument(base({ actorRole: "owner" }))).rejects.toMatchObject({
+      code: "FORBIDDEN", message: expect.stringContaining("INSTITUTIONAL_AUTHORITY_REQUIRED"),
+    });
+    expect(checkIdempotency).not.toHaveBeenCalled();
+    expect(createDocument).not.toHaveBeenCalled();
+    expect(insertOfficialPromotion).not.toHaveBeenCalled();
+    expect(saveIdempotencyResult).not.toHaveBeenCalled();
+  });
+
+  it("chamada DIRETA ao serviço com actorRole 'owner' mas membership persistida 'operator' ⇒ recusada", async () => {
+    authority.setRole(7, "operator");
+    await expect(promoteOfficialDocument(base({ actorRole: "owner" }))).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it("falha na consulta da fonte autoritativa ⇒ fail-closed (FORBIDDEN), nada emitido", async () => {
+    authority.state.failLookup = true;
+    await expect(promoteOfficialDocument(base())).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it("TOCTOU: membership removida entre a checagem e a transação ⇒ releitura travada recusa; nenhuma versão/ledger", async () => {
+    checkIdempotency.mockImplementation(async () => { authority.deny(7); return { status: "new" }; });
+    await expect(promoteOfficialDocument(base())).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(createDocument).not.toHaveBeenCalled();
+    expect(insertOfficialPromotion).not.toHaveBeenCalled();
+    expect(saveIdempotencyResult).not.toHaveBeenCalled();
+  });
+
+  it("emissão legítima registra o papel institucional PERSISTIDO (não o do contexto)", async () => {
+    authority.setRole(7, "manager");
+    await promoteOfficialDocument(base({ actorRole: "owner" }));
+    const meta = (createDocument.mock.calls[0][0] as { metadata?: Record<string, unknown> }).metadata!;
+    expect(meta.emitterUserId).toBe(7);
+    expect(meta.emitterInstitutionalRole).toBe("manager");
   });
 });

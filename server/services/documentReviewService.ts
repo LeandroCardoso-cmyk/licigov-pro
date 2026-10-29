@@ -25,6 +25,8 @@ import { getDocumentByIdForOrganization, getProcessByIdForOrganization } from ".
 import { getDocumentReviewDecisions, type DocumentReviewAction } from "../db/documentReviewDecisions";
 import { runWithIdempotency } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
+import { requireInstitutionalAuthority } from "./institutionalAuthorityService";
+import { roleRankAtLeast } from "../domain/institutionalAuthority";
 import { isValidTransition, WORKFLOW_ROLE_REQUIREMENTS, type DocumentStatusValue } from "../domain/documentTypes";
 import { logActivity } from "./activityLogService";
 import { serviceLogger } from "./observabilityService";
@@ -90,6 +92,17 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
   const observedVersion = document.version;
   const processId = document.processId;
 
+  // SECURITY-02 — decisão institucional (piso ≥ manager): autoridade REAL verificada ANTES de qualquer escrita (inclusive a
+  // reserva de idempotência) e revalidada sob trava na transação. O papel registrado é o persistido.
+  const decisionMinRole = (WORKFLOW_ROLE_REQUIREMENTS[toState] ?? "manager") as OrgRole;
+  let decisionRole: OrgRole | null = null;
+  if (roleRankAtLeast(decisionMinRole, "manager")) {
+    decisionRole = (await requireInstitutionalAuthority({
+      userId: p.actorUserId, organizationId: p.organizationId, minRole: decisionMinRole,
+      operation: `document.review.${p.action}`, correlationId: p.correlationId,
+    })).role;
+  }
+
   // Idempotência PRIMEIRO: um replay válido (mesma chave + mesmo payload) resolve o resultado
   // persistido ANTES de qualquer validação dependente do estado mutável. As validações de
   // versão/transição/RBAC/SoD só rodam na execução NOVA, sob SELECT … FOR UPDATE.
@@ -135,6 +148,14 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
         const minRole = (WORKFLOW_ROLE_REQUIREMENTS[toState] ?? "manager") as OrgRole;
         if (!orgRoleMeets(p.actorRole, minRole)) {
           throw new TRPCError({ code: "FORBIDDEN", message: `Papel insuficiente para esta ação — requer no mínimo "${minRole}".` });
+        }
+        // 3b) SECURITY-02 — decisão institucional (aprovar/rejeitar/arquivar: piso ≥ manager) exige membership REAL do ator,
+        // relida sob trava nesta transação; o papel do contexto (ex.: projeção sintética do admin de plataforma) não basta.
+        if (roleRankAtLeast(minRole, "manager")) {
+          decisionRole = (await requireInstitutionalAuthority({
+            userId: p.actorUserId, organizationId: p.organizationId, minRole,
+            operation: `document.review.${p.action}`, correlationId: p.correlationId, executor: tx,
+          })).role;
         }
         // 4) Segregação de deveres institucional (autor real da versão bloqueada).
         assertInstitutionalDecisionRules({
@@ -188,7 +209,7 @@ export async function decideDocumentReview(p: DocumentReviewParams): Promise<Doc
       userId: p.actorUserId,
       actorName: p.actorName ?? undefined,
       actorEmail: p.actorEmail ?? undefined,
-      actorRole: p.actorRole ?? undefined,
+      actorRole: decisionRole ?? p.actorRole ?? undefined,
       orgName: p.orgName ?? undefined,
       sourceContext: "api",
       action: `document_${p.action}`,

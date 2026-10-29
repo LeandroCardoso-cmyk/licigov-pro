@@ -52,12 +52,17 @@ export async function logActivity(payload: ActivityLogPayload): Promise<void> {
   }
 }
 
+/** SECURITY-02 — rótulo do acesso técnico de plataforma no activity log (não é papel do órgão). */
+export const PLATFORM_ADMIN_ACTOR_ROLE = "platform_admin";
+
 export type TrpcAuditCtx = {
   organizationId: number | null;
   user: { id: number; name?: string | null; email?: string | null };
   correlationId: string;
   requestId: string;
   orgMembership?: { role: OrgRole } | null;
+  /** SECURITY-02 — acesso técnico do admin de plataforma (projeção sintética): nunca registrar como papel do órgão. */
+  platformAdminAccess?: boolean;
   orgName?: string | null;
   req?: { ip?: string; socket?: { remoteAddress?: string } };
 };
@@ -88,7 +93,7 @@ export async function logFromCtx(
     userId: ctx.user.id,
     actorName: ctx.user.name ?? undefined,
     actorEmail: ctx.user.email ?? undefined,
-    actorRole: ctx.orgMembership?.role ?? undefined,
+    actorRole: ctx.platformAdminAccess ? PLATFORM_ADMIN_ACTOR_ROLE : ctx.orgMembership?.role ?? undefined,
     orgName: ctx.orgName ?? undefined,
     sourceContext: extras?.sourceContext ?? "api",
     ipAddress: ip,

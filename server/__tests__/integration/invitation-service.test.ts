@@ -11,6 +11,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { User, InstitutionalInvitation } from "../../../drizzle/schema";
 
 vi.mock("../../db/connection", () => ({ getDb: vi.fn() }));
+// SECURITY-02 — quem concede vínculo precisa ser autoridade REAL (admin+) do órgão: por padrão o emissor dos convites é admin real.
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+const authority = createAuthorityFixture();
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o) }));
 vi.mock("../../db/users", () => ({ getUserByEmail: vi.fn() }));
 vi.mock("../../db/organizations", () => ({ getMembersOfOrg: vi.fn(), getOrganizationById: vi.fn(), getOrganizationBySlug: vi.fn() }));
 vi.mock("../../services/email/emailOutboxService", () => ({ enqueueEmail: vi.fn() }));
@@ -76,7 +80,8 @@ function makeFakeDb(opts: { selectResult?: unknown[] } = {}) {
   const insertChainAwaitable = Object.assign(Promise.resolve([{ insertId: 999 }]), { onDuplicateKeyUpdate: vi.fn().mockResolvedValue(undefined) });
 
   const db = {
-    select: vi.fn(() => { selectChain.limit = vi.fn(() => Promise.resolve(selectResult)); return selectChain; }),
+    // SECURITY-02 — a releitura transacional da autoridade do emissor usa `.limit(1).for("share")`: delega à fonte autoritativa simulada.
+    select: vi.fn(() => { selectChain.limit = vi.fn(() => Object.assign(Promise.resolve(selectResult), { for: () => authority.txSelect().from().where().limit().for() })); return selectChain; }),
     update: vi.fn(() => updateChain),
     insert: vi.fn(() => ({
       values: vi.fn((v: unknown) => { insertValuesCalls.push(v); return insertChainAwaitable; }),
@@ -87,6 +92,8 @@ function makeFakeDb(opts: { selectResult?: unknown[] } = {}) {
 }
 
 beforeEach(() => {
+  authority.reset();
+  authority.state.defaultRole = "admin";
   vi.clearAllMocks();
   getOrganizationByIdMock.mockResolvedValue({ id: 700001, nome: "Prefeitura de Moreira Sales" } as never);
   getMembersOfOrgMock.mockResolvedValue([]);
@@ -254,5 +261,123 @@ describe("invitationService · acceptExistingInvitation", () => {
     const result = await acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "Fulano@X.com" });
     expect(result).toEqual({ organizationId: 700001 });
     expect(logActivityMock).toHaveBeenCalledWith(expect.objectContaining({ action: "invitation.accepted", userId: 42 }));
+  });
+});
+
+// ─── SECURITY-02 — concessão de vínculo só por autoridade REAL do órgão ─────────────────────────────────────────
+describe("SECURITY-02 · invitationService — admin de plataforma não fabrica autoridade municipal", () => {
+  it("emissor SEM membership real (ex.: admin de plataforma) não cria convite para terceiro — FORBIDDEN, sem escrita", async () => {
+    authority.deny(1);
+    await expect(
+      createInvitation({ organizationId: 700001, email: "terceiro@x.com", role: "manager", createdByUserId: 1, correlationId: "c-s02" })
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INSTITUTIONAL_AUTHORITY_REQUIRED") });
+    expect(getDbMock).not.toHaveBeenCalled();
+    expect(enqueueEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("emissor manager real (abaixo de admin) não concede vínculo", async () => {
+    authority.setRole(1, "manager");
+    await expect(createInvitation({ organizationId: 700001, email: "terceiro@x.com", role: "viewer", createdByUserId: 1 }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
+  it("autoconvite é recusado (SELF_GRANT_FORBIDDEN) mesmo para admin real e mesmo no onboarding", async () => {
+    getUserByEmailMock.mockResolvedValue(makeUser({ id: 1 }));
+    await expect(createInvitation({ organizationId: 700001, email: "fulano@x.com", role: "admin", createdByUserId: 1 }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    await expect(createInvitation({ organizationId: 700001, email: "fulano@x.com", role: "owner", createdByUserId: 1, bootstrap: "tenant_onboarding" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    expect(getDbMock).not.toHaveBeenCalled();
+  });
+
+  it("convite owner fora do bootstrap é recusado; bootstrap só vale para órgão SEM membros ativos", async () => {
+    authority.deny(1);
+    await expect(createInvitation({ organizationId: 700001, email: "titular@x.com", role: "owner", createdByUserId: 1 }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    getMembersOfOrgMock.mockResolvedValue([{ userId: 5, organizationId: 700001, role: "owner", ativo: true } as never]);
+    await expect(createInvitation({ organizationId: 700001, email: "titular@x.com", role: "owner", createdByUserId: 1, bootstrap: "tenant_onboarding" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(enqueueEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("bootstrap é fail-closed sem banco (a lista vazia de membros não é tomada como órgão vazio)", async () => {
+    authority.deny(1);
+    getDbMock.mockResolvedValue(null as never);
+    await expect(createInvitation({ organizationId: 700001, email: "titular@x.com", role: "owner", createdByUserId: 1, bootstrap: "tenant_onboarding" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("aceite por quem JÁ é membro ativo não sobrescreve o papel (MEMBER_ALREADY_EXISTS), sem transação", async () => {
+    const { db } = makeFakeDb({ selectResult: [makeInvitation({ role: "admin", emailNormalized: "fulano@x.com" })] });
+    getDbMock.mockResolvedValue(db as never);
+    getMembersOfOrgMock.mockResolvedValue([{ userId: 42, organizationId: 700001, role: "viewer", ativo: true } as never]);
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).rejects.toMatchObject({ message: "MEMBER_ALREADY_EXISTS" });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("TOCTOU: emissor rebaixado entre a checagem e a transação do aceite ⇒ releitura travada recusa (nenhum vínculo criado)", async () => {
+    const { db, insertValuesCalls } = makeFakeDb({ selectResult: [makeInvitation({ role: "manager", emailNormalized: "fulano@x.com" })] });
+    getDbMock.mockResolvedValue(db as never);
+    const tx = db.transaction;
+    db.transaction = vi.fn(async (cb: (t: unknown) => Promise<void>) => { authority.setRole(1, "operator"); return tx(cb); });
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INVITATION_GRANT_AUTHORITY_REQUIRED") });
+    expect(insertValuesCalls).toHaveLength(0);
+  });
+
+  it("onboarding legítimo: convite owner de bootstrap para órgão vazio é criado pelo admin de plataforma sem vínculo", async () => {
+    authority.deny(1);
+    getMembersOfOrgMock.mockResolvedValue([]);
+    const { db, insertValuesCalls } = makeFakeDb();
+    getDbMock.mockResolvedValue(db as never);
+    await createInvitation({ organizationId: 700001, email: "titular@x.com", role: "owner", createdByUserId: 1, bootstrap: "tenant_onboarding" });
+    expect((insertValuesCalls[0] as Record<string, unknown>).role).toBe("owner");
+  });
+
+  it("admin real convida terceiro normalmente (caminho legítimo)", async () => {
+    const { db, insertValuesCalls } = makeFakeDb();
+    getDbMock.mockResolvedValue(db as never);
+    await createInvitation({ organizationId: 700001, email: "terceiro@x.com", role: "manager", createdByUserId: 1 });
+    expect(insertValuesCalls).toHaveLength(1);
+  });
+
+  it("reenvio por quem NÃO é autoridade real é recusado sem novo token", async () => {
+    authority.deny(1);
+    const { db, insertValuesCalls } = makeFakeDb({ selectResult: [makeInvitation({ role: "manager" })] });
+    getDbMock.mockResolvedValue(db as never);
+    await expect(resendInvitation({ invitationId: 1, organizationId: 700001, actorUserId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(insertValuesCalls).toHaveLength(0);
+  });
+
+  it("ACEITE de convite cujo emissor perdeu (ou nunca teve) vínculo admin real ⇒ INVITATION_GRANT_AUTHORITY_REQUIRED, sem membership", async () => {
+    authority.deny(1); // emissor (createdByUserId=1) sem vínculo — ex.: convite emitido pelo admin de plataforma antes da correção
+    const { db } = makeFakeDb({ selectResult: [makeInvitation({ role: "manager", emailNormalized: "fulano@x.com" })] });
+    getDbMock.mockResolvedValue(db as never);
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INVITATION_GRANT_AUTHORITY_REQUIRED") });
+    await expect(acceptInvitation({ token: "a".repeat(43), name: "Novo", password: "Senha-Forte-2026!" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INVITATION_GRANT_AUTHORITY_REQUIRED") });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("ACEITE pelo próprio emissor do convite ⇒ SELF_GRANT_FORBIDDEN", async () => {
+    const { db } = makeFakeDb({ selectResult: [makeInvitation({ role: "admin", emailNormalized: "fulano@x.com", createdByUserId: 42 })] });
+    getDbMock.mockResolvedValue(db as never);
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("ACEITE do convite owner de bootstrap só enquanto o órgão não tem membros ativos", async () => {
+    authority.deny(1);
+    const { db } = makeFakeDb({ selectResult: [makeInvitation({ role: "owner", emailNormalized: "fulano@x.com" })] });
+    getDbMock.mockResolvedValue(db as never);
+    getMembersOfOrgMock.mockResolvedValue([{ userId: 5, organizationId: 700001, role: "owner", ativo: true } as never]);
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.transaction).not.toHaveBeenCalled();
+    getMembersOfOrgMock.mockResolvedValue([]);
+    await expect(acceptExistingInvitation({ token: "a".repeat(43), userId: 42, userEmail: "fulano@x.com" })).resolves.toEqual({ organizationId: 700001 });
   });
 });

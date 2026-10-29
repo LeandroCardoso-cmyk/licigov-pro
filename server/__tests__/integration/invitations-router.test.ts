@@ -8,10 +8,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeContext } from "../helpers/fixtures";
 
-vi.mock("../../services/tenantService", () => ({
-  resolveTenantForUser: vi.fn(),
+vi.mock("../../services/tenantService", () => {
+  const resolveTenantForUser = vi.fn();
+  return {
+  resolveTenantForUser,
+  // SECURITY-02 — fonte autoritativa: o ator destes testes é membro REAL com o mesmo vínculo resolvido para a requisição.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => {
+    const last = resolveTenantForUser.mock.results.at(-1);
+    const r = (last ? await last.value : null) as { organizationId: number; membership: { userId: number } | null } | null;
+    return r && r.organizationId === organizationId && r.membership?.userId === userId ? r.membership : null;
+  }),
   NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
-}));
+};
+});
 vi.mock("../../services/rateLimiter", async () => {
   const trpc = await import("../../_core/trpc");
   return { rateLimitMiddleware: (_type: string) => trpc.middleware(({ next }: { next: () => unknown }) => next()) };
