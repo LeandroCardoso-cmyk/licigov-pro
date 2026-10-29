@@ -27,6 +27,7 @@ import { TemplateGovernanceService } from "../services/institutionalTemplates/go
 import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../services/institutionalTemplates/modelRegistrationService";
 import { TemplatePreviewDossierService } from "../services/institutionalTemplates/previewDossierService";
 import { resolveAuthority } from "../services/institutionalTemplates/electronicAuthority";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { TemplateDerivationService } from "../services/institutionalTemplates/templateDerivationService";
 import { TemplateReadinessService } from "../services/institutionalTemplates/readinessService";
 import { INTEGRATED_CAPABILITIES } from "../domain/institutionalTemplates/governance/capabilities";
@@ -135,9 +136,18 @@ const previewContext = z.object({ scope, sampleValues }).strict();
 
 /** LICIGOV-FAST: autoridade da decisão = a informada (fundamento institucional explícito) OU o registro eletrônico do usuário autenticado. */
 const authorityOf = (
-  ctx: { user: { id: number; name?: string | null; email?: string | null }; orgMembership?: { role?: string | null } | null; ports: { clock: { now(): string } } },
+  ctx: {
+    user: { id: number; name?: string | null; email?: string | null }; orgMembership?: { role?: string | null } | null; ports: { clock: { now(): string } };
+    institutionalAuthority?: { role: string } | null; platformAdminAccess?: boolean;
+  },
   action: string, decision: z.infer<typeof declaredAuthority> | undefined, note?: string,
-) => resolveAuthority(decision, { userId: ctx.user.id, userName: ctx.user.name, userEmail: ctx.user.email, orgRole: ctx.orgMembership?.role ?? null, today: ctx.ports.clock.now().slice(0, 10), action, note });
+) => resolveAuthority(decision, {
+  userId: ctx.user.id, userName: ctx.user.name, userEmail: ctx.user.email,
+  // SECURITY-02 — papel registrado = o PERSISTIDO (autoridade comprovada); a projeção do admin de plataforma nunca vira "Titular do órgão".
+  orgRole: ctx.institutionalAuthority?.role ?? (ctx.platformAdminAccess ? null : ctx.orgMembership?.role ?? null),
+  platformTechnicalAccess: !ctx.institutionalAuthority && ctx.platformAdminAccess === true,
+  today: ctx.ports.clock.now().slice(0, 10), action, note,
+});
 
 const importInput = z.object({
   format: z.enum(["markdown", "docx"]),
@@ -212,6 +222,12 @@ async function guarded<T>(fn: () => Promise<T> | T): Promise<T> {
   try { return await fn(); } catch (err) { return mapError(err); }
 }
 
+/** SECURITY-02 — ações que registram ato/decisão institucional do órgão (exigem membership real). Curadoria técnica
+ *  (ler, pré-visualizar, rascunho, importar, registrar/derivar modelo em DRAFT, compor minuta) continua no piso de papel. */
+const INSTITUTIONAL_TEMPLATE_ACTIONS: ReadonlySet<TemplateAction> = new Set<TemplateAction>([
+  "approve", "publish", "available", "deprecate", "bind", "policy", "evidence", "govern", "review",
+]);
+
 /** Procedure com piso de papel + módulo habilitado (flag) + ports configurados + ator humano do contexto autenticado. */
 function templatesProcedure(action: TemplateAction) {
   return orgRoleProcedure(TEMPLATE_ACTION_MIN_ROLE[action]).use(async ({ ctx, next }) => {
@@ -222,6 +238,15 @@ function templatesProcedure(action: TemplateAction) {
       }
       return new InstitutionalTemplatesWorkflow(ports);
     });
+    // SECURITY-02 — atos institucionais do órgão sobre seus modelos e fontes governadas (aprovar, publicar, disponibilizar,
+    // depreciar, vincular, política, evidência, decisões governadas, revisão do documento composto) exigem membership REAL:
+    // o papel do contexto (ex.: projeção sintética `owner` do admin de plataforma) não é autoridade do órgão.
+    const institutionalAuthority = INSTITUTIONAL_TEMPLATE_ACTIONS.has(action)
+      ? await requireInstitutionalAuthority({
+        userId: ctx.user.id, organizationId: ctx.organizationId!, minRole: TEMPLATE_ACTION_MIN_ROLE[action],
+        operation: `institutionalTemplates.${action}`, correlationId: ctx.correlationId,
+      })
+      : null;
     const wctx: WorkflowContext = {
       organizationId: ctx.organizationId!, actor: { kind: "human", userId: ctx.user.id }, correlationId: ctx.correlationId ?? "",
     };
@@ -233,12 +258,12 @@ function templatesProcedure(action: TemplateAction) {
       if (action !== "publish") needs.push(["aprovar", effective.policy.approveMinRole]);
       if (action !== "approve") needs.push(["publicar", effective.policy.publishMinRole]);
       for (const [verb, floor] of needs) {
-        if (!roleMeetsFloor(ctx.orgMembership?.role, floor)) {
+        if (!roleMeetsFloor(institutionalAuthority?.role, floor)) {
           throw new TRPCError({ code: "FORBIDDEN", message: `A política de governança de modelos deste órgão exige papel ${floor} (ou superior) para ${verb} modelos.` });
         }
       }
     }
-    return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts() } });
+    return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts(), institutionalAuthority } });
   });
 }
 

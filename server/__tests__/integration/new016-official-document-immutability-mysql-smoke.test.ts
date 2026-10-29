@@ -22,6 +22,7 @@
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode. Nenhum provider real (invoke determinístico).
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { sql } from "drizzle-orm";
 import { runMigrations } from "../../bootstrap";
@@ -132,10 +133,13 @@ describe.skipIf(!DB)("NEW-016 — imutabilidade da versão oficial (MySQL estrit
       await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [id, `NEW-016 ${id}`, slug]).catch(() => {});
     }
     await cleanup();
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG, EMITTER);
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
+    await removeRealMemberships(conn, ORG, [EMITTER]).catch(() => {});
     await cleanup().catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG, ORG2]).catch(() => {});
     await conn.end();

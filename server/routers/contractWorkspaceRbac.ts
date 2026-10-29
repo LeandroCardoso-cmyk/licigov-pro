@@ -45,6 +45,11 @@ export interface ContractWorkspaceRbacEntry {
    * `status` diferente do atual ⇒ manager). Checado ANTES de qualquer escrita.
    */
   readonly conditionalMinRole?: { readonly when: string; readonly minRole: Extract<OrgRole, "manager"> };
+  /**
+   * SECURITY-02 — ato institucional: além do piso, exige membership REAL, ativa e persistida (`institutionalProcedure`;
+   * em `updateContract`, só quando o status muda). A projeção sintética do admin de plataforma não satisfaz.
+   */
+  readonly requiresRealMembership?: true;
   readonly rationale: string;
   readonly sideEffects: readonly string[];
 }
@@ -71,7 +76,7 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     sideEffects: ["contract_workspaces (upsert)", "imported_contracts", "process_timeline"],
   },
   registerInForceContract: {
-    classes: ["STATE_CHANGE", "DRAFT_CREATE"], oldBuilder: null, minRole: "manager",
+    classes: ["STATE_CHANGE", "DRAFT_CREATE"], oldBuilder: null, minRole: "manager", requiresRealMembership: true,
     rationale: "LICIGOV-FAST — contrato JÁ FORMALIZADO fora do sistema (processo anterior) registrado por declaração: nasce VIGENTE (informação declarada, não verificada). PISO TÉCNICO manager por nascer vigente; não transiciona minuta.",
     sideEffects: ["contract_workspaces (insert-only)", "process_timeline", "operational_events (se término informado)", "operational_timeline (se término informado)", "idempotency_keys"],
   },
@@ -92,7 +97,7 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     rationale: "SEM-062: leitura escopada por organização (proposta de contratado/valor com procedência; nunca grava nem decide).", sideEffects: [],
   },
   updateContract: {
-    classes: ["DRAFT_EDIT", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "operator",
+    classes: ["DRAFT_EDIT", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "operator", requiresRealMembership: true,
     conditionalMinRole: { when: "input.status presente e diferente do status atual", minRole: "manager" },
     rationale: "Mistura edição de campos (operator) e transição de status (vigente/encerrado/rescindido/arquivado — efeito institucional). Checagem DIVIDIDA no handler: operator edita campos; manager exigido só quando o status muda (o cliente — ContractEditor — nunca envia status). Checada sobre o MESMO snapshot usado na transição e antes de qualquer escrita.",
     sideEffects: ["contract_workspaces (upsert)"],
@@ -103,12 +108,12 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     sideEffects: ["AI (orchestrateMultiCopilot → AIExecutionEngine)", "contract_ws_documents", "official_documents (status gerado)", "official_document_timeline", "process_timeline"],
   },
   createAddendum: {
-    classes: ["INSTRUMENT_CREATION", "STATE_CHANGE", "OFFICIAL_DECISION"], oldBuilder: "tenantProcedure", minRole: "manager",
+    classes: ["INSTRUMENT_CREATION", "STATE_CHANGE", "OFFICIAL_DECISION"], oldBuilder: "tenantProcedure", minRole: "manager", requiresRealMembership: true,
     rationale: "Além da minuta, MUDA o status institucional do contrato para 'aditado' (main: updateContractWorkspaceStatus direto; PR-08: via máquina de estados, ainda mudando o status) e finaliza automaticamente aditivo de prazo/qualitativo ('finalizado'). Piso manager até draft e decisão serem separados.",
     sideEffects: ["contract_addenda", "AI (minuta do aditivo)", "contract_ws_documents", "official_documents", "contract_workspaces.status → aditado", "process_timeline"],
   },
   createApostille: {
-    classes: ["INSTRUMENT_CREATION", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "manager",
+    classes: ["INSTRUMENT_CREATION", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "manager", requiresRealMembership: true,
     rationale: "Além da minuta, MUDA o status institucional do contrato para 'apostilado' e, nos apostilamentos de gestor/fiscal (SEM-062), APLICA a designação em manager/inspector. Piso manager até draft e decisão serem separados.",
     sideEffects: ["contract_ws_apostilles", "AI (minuta do apostilamento)", "contract_ws_documents", "official_documents", "contract_workspaces.status → apostilado", "contract_workspaces.manager/inspector (apostilamento gestor/fiscal)", "process_timeline"],
   },

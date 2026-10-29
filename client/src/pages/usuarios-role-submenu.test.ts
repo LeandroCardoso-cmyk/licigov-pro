@@ -45,7 +45,8 @@ describe("Usuarios · submenu Alterar papel", () => {
   });
 
   it("backend protege: admin-only, owner intocável, último admin e auditoria", () => {
-    expect(ROUTER).toMatch(/updateMemberRole: orgRoleProcedure\("admin"\)/);
+    // SECURITY-02 — piso admin + membership REAL (institutionalProcedure = orgRoleProcedure + autoridade persistida).
+    expect(ROUTER).toMatch(/updateMemberRole: institutionalProcedure\("admin"\)/);
     expect(ROUTER).toContain("O papel de owner não pode ser alterado por esta API.");
     expect(ROUTER).toContain("assertNotLastActiveAdmin");
     expect(ROUTER).toContain("org.member_role_updated");

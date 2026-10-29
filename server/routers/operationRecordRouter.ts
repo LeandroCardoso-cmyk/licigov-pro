@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   createRecord, importLegacyRecord, registerExpiration, createManualEvent,
   registerMilestone, setPublicationStatus, updateRecordSchedule, changeRecordLifecycle,
@@ -145,7 +145,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Registra um marco externo (certame, homologação, assinatura). */
-  registerMilestone: tenantProcedure
+  // SECURITY-02 — declarar marco oficial (homologação, assinatura…) é registro EM NOME do órgão: membership REAL (piso inalterado).
+  registerMilestone: institutionalProcedure("viewer")
     .input(z.object({ referenceType: z.string().min(1), referenceId: z.string().min(1), milestoneType: z.enum(MILESTONE_TYPES), date: z.string().optional(), time: z.string().optional(), result: z.string().optional(), observation: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -162,7 +163,7 @@ export const operationRecordRouter = router({
     }),
 
   /** Atualiza status/data de uma publicação (status + data apenas). */
-  setPublication: tenantProcedure
+  setPublication: institutionalProcedure("viewer") // SECURITY-02 — status de publicação oficial: membership REAL (piso inalterado)
     .input(z.object({ referenceType: z.string().min(1), referenceId: z.string().min(1), channel: z.enum(CHANNELS), status: z.enum(PUB_STATUSES), date: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

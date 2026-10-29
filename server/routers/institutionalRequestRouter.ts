@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { assignTo, transition, requestRoutingViolation, requiresGovernedLegalOpinionFlow, LEGAL_OPINION_GOVERNED_FLOW } from "../domain/institutionalRequest";
 import {
   requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest, readLegalOpinionForConsumer,
@@ -132,6 +133,12 @@ export const institutionalRequestRouter = router({
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
+      // SECURITY-02 — a resposta institucional (aprovação, assinatura, manifestação favorável/desfavorável) é ato do órgão:
+      // exige membership REAL do respondente; a projeção sintética do admin de plataforma não responde pelo órgão.
+      await requireInstitutionalAuthority({
+        userId: ctx.user.id, organizationId: orgId, minRole: "operator",
+        operation: "institutionalRequest.respond", correlationId: ctx.correlationId,
+      });
       const result = await respondRequest({
         id: input.requestId, organizationId: orgId, responder: ctx.user.id, responseType: input.responseType,
         responseStatus: input.responseStatus, comments: input.comments, attachedDocuments: input.attachedDocuments,

@@ -9,7 +9,7 @@ import { displayLateBoundForDraft } from "../domain/institutionalTemplates/lifec
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   createProcurementWorkspace,
   setStage,
@@ -1115,7 +1115,7 @@ export const procurementProcessRouter = router({
    * qualquer uma → PRECONDITION_FAILED listando o que falta, sem nenhuma escrita.
    * Papel mínimo alinhado à emissão (manager).
    */
-  issueProcess: orgRoleProcedure("manager")
+  issueProcess: institutionalProcedure("manager")
     .input(z.object({ processId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
