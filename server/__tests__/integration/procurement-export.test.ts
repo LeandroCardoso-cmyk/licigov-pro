@@ -57,6 +57,16 @@ describe("procurementProcess.exportDocument (adapter)", () => {
       { id: "d1", kind: "etp", title: "ETP — X", content: "# ETP\nconteúdo", status: "rascunho", updatedAt: "2026-07-26T00:00:00.000Z" } as never,
     );
     vi.mocked(procDb.recordProcessEvent).mockResolvedValue(undefined as never);
+    vi.mocked(procDb.listIntelligentItems).mockResolvedValue([] as never);
+  });
+
+  it("pós-M8: rascunho com item de cotação fictícia ⇒ aviso de VALORES DEMONSTRATIVOS no cabeçalho do arquivo; sem fictícia ⇒ nenhum", async () => {
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    await caller.exportDocument({ processId: PID, kind: "etp", format: "pdf" });
+    expect(vi.mocked(exportCore).mock.calls[0][0].meta?.notices).toEqual([]);
+    vi.mocked(procDb.listIntelligentItems).mockResolvedValue([{ status: "aprovado", fictitiousQuoteCount: 3 }] as never);
+    await caller.exportDocument({ processId: PID, kind: "etp", format: "docx" });
+    expect(vi.mocked(exportCore).mock.calls[1][0].meta?.notices?.[0]).toMatch(/^VALORES DEMONSTRATIVOS — 1 item\(ns\) deste processo com 3 cotação/);
   });
 
   it("exporta o documento canônico chamando o núcleo comum e retorna a URL", async () => {

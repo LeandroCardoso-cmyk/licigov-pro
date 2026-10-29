@@ -484,8 +484,10 @@ function draftNotice(meta: InstitutionalMeta): string {
  * O cabeçalho completo continua só na 1ª página; documento emitido nunca recebe a marca de rascunho.
  */
 function footerText(meta: InstitutionalMeta): string {
-  return [meta.documentTitle, meta.processNumber ? `Processo ${meta.processNumber}` : null,
-    meta.isDraft ? `${meta.draftNoticeLabel ?? "RASCUNHO"} — não é versão oficial` : null].filter(Boolean).join(" · ");
+  // Partes LIMITADAS (títulos/números livres podem ser longos): o rodapé cabe numa linha e nunca empurra conteúdo/páginas.
+  const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+  return [clip(meta.documentTitle, 70), meta.processNumber ? `Processo ${clip(meta.processNumber, 30)}` : null,
+    meta.isDraft ? `${clip(meta.draftNoticeLabel ?? "RASCUNHO", 20)} — não é versão oficial` : null].filter(Boolean).join(" · ");
 }
 
 /** Renderiza o modelo institucional para DOCX. */
@@ -586,8 +588,12 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
       doc.switchToPage(i);
       const bottom = doc.page.margins.bottom;
       doc.page.margins.bottom = 0;
+      // Duas caixas de UMA linha (height + ellipsis): o texto nunca quebra/transborda (com `width`, o PDFKit quebraria linhas e,
+      // com páginas bufferizadas, criaria página nova); o número de página fica numa caixa própria e nunca é cortado.
+      const y = doc.page.height - 36;
       doc.fontSize(8).font("Helvetica").fillColor("#555555")
-        .text(`${label} · Página ${i - range.start + 1} de ${range.count}`, 56, doc.page.height - 36, { width: pageWidth, align: "center", lineBreak: false });
+        .text(label, 56, y, { width: pageWidth - 90, height: 10, ellipsis: true, lineBreak: false })
+        .text(`Página ${i - range.start + 1} de ${range.count}`, 56 + pageWidth - 85, y, { width: 85, height: 10, align: "right", lineBreak: false });
       doc.page.margins.bottom = bottom;
     }
     doc.fillColor("black");

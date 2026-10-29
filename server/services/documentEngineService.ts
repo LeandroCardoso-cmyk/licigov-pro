@@ -15,6 +15,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { formatBrazilianDateTime } from "../domain/brazilianDateTime";
 // Motor de conversão (ENGINE OFICIAL) — produz o artefato binário (DOCX/PDF).
 import {
   convertToDOCX, convertToPDF,
@@ -94,8 +95,6 @@ export async function renderOfficialDocument(params: {
   // cabeçalho com status e rodapé paginado). Versão não emitida sai marcada como não final pelo próprio status. Contrato,
   // permissões e ledger de artefatos inalterados.
   const statusLabel = doc.status.toUpperCase();
-  // import dinâmico: documentExportService importa este módulo (evita ciclo estático); só o formatador pt-BR é usado.
-  const { formatBrazilianDateTime } = await import("./documentExportService");
   const buffer = await renderInstitutionalContent({
     content: doc.content, format: params.format,
     meta: {

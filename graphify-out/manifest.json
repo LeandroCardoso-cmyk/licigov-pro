@@ -5410,8 +5410,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b2-reviewable-draft.test.ts": {
-    "mtime": 1793168824.7282944,
-    "ast_hash": "84e202ea6c447f6627ec78499f77515d",
+    "mtime": 1793279283.2535005,
+    "ast_hash": "364fc682726e50e1f3c4e802269017c3",
     "semantic_hash": ""
   },
   "server/__tests__/integration/c4b3a-draft-provenance-mysql-smoke.test.ts": {
@@ -6060,8 +6060,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-export.test.ts": {
-    "mtime": 1793170953.1027284,
-    "ast_hash": "235732b213bc6936bbd5c2e44f6d597d",
+    "mtime": 1793278948.3369038,
+    "ast_hash": "956686979b261849685ef79ce6b6ddbb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/procurement-items-mysql-smoke.test.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1793278313.1748867,
-    "ast_hash": "a8602101486c10f399df889733cffc69",
+    "mtime": 1793278948.3376167,
+    "ast_hash": "38ce675dc6c251afe6bd8dda9c0ee3ae",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1793278401.0442967,
-    "ast_hash": "6b60330cb4f70001dcc8067b4fad7793",
+    "mtime": 1793279230.4096456,
+    "ast_hash": "17fe7047ebe671408adf9608ff1ffcb5",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -9555,13 +9555,13 @@
     "semantic_hash": ""
   },
   "server/services/documentEngineService.ts": {
-    "mtime": 1793278474.3274417,
-    "ast_hash": "16afdbe9656f5fca50d130a5e05ddd4a",
+    "mtime": 1793279230.409195,
+    "ast_hash": "d55098deb3736d4158dd58c9dad476ba",
     "semantic_hash": ""
   },
   "server/services/documentExportService.ts": {
-    "mtime": 1793168885.7213774,
-    "ast_hash": "29da03dbc583b5864ad6c05709132f81",
+    "mtime": 1793279230.4086618,
+    "ast_hash": "b5be0cb991609599419967397e06a2b8",
     "semantic_hash": ""
   },
   "server/services/documentIntakeService.ts": {
@@ -15190,8 +15190,8 @@
     "semantic_hash": ""
   },
   "server/services/priceGovernanceService.ts": {
-    "mtime": 1793278303.3597963,
-    "ast_hash": "7bc16150ad0ffe40a9871f7dcff85df5",
+    "mtime": 1793279230.4101348,
+    "ast_hash": "ce50de202c89e1a92d05664310b6e30b",
     "semantic_hash": ""
   },
   "docs/architecture/PRICE_QUOTE_PROVENANCE.md": {
@@ -15610,8 +15610,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/m8-documental-stabilization.test.ts": {
-    "mtime": 1793278594.159801,
-    "ast_hash": "e543b18e6cca44a0583c3ed236588fa7",
+    "mtime": 1793279283.2530344,
+    "ast_hash": "3da3004de256c61141c4ebb1f8b6f454",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/m8-legacy-download-render.test.ts": {
+    "mtime": 1793279523.1827054,
+    "ast_hash": "3ec6cdc31e9894af3f8cbb8811298795",
+    "semantic_hash": ""
+  },
+  "server/domain/brazilianDateTime.ts": {
+    "mtime": 1793279230.4088614,
+    "ast_hash": "817b8118b5b40ecb57481f9c73587689",
     "semantic_hash": ""
   }
 }

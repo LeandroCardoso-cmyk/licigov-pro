@@ -1024,7 +1024,13 @@ export const procurementProcessRouter = router({
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,
           // Pós-M8 — aditivo, somente leitura: aviso de valores demonstrativos (cotação fictícia/sintética no processo) ou null.
-          priceNotice: demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId)),
+          // Falha na leitura dos itens NUNCA derruba a leitura do rascunho: degrada para null (como `composedContext`).
+          priceNotice: await listIntelligentItems(input.processId, orgId).then(demonstrativePriceNotice).catch((err: unknown) => {
+            log.warn("draft_price_notice_unavailable", {
+              organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId, error: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+          }),
         },
       };
     }),

@@ -58,9 +58,10 @@ describe("Correção 1 — aviso de valores demonstrativos (fonte única; só ro
     expect(demonstrativePriceNotice([])).toBeNull();
     expect(demonstrativePriceNotice([{ status: "aprovado", fictitiousQuoteCount: 0 }, { status: "rejeitado", fictitiousQuoteCount: 4 }])).toBeNull();
   });
-  it("com cotação fictícia ⇒ aviso explícito com contagens", () => {
-    const n = demonstrativePriceNotice([{ status: "aprovado", fictitiousQuoteCount: 3 }, { status: "pendente", fictitiousQuoteCount: 1 }, { status: "aprovado", fictitiousQuoteCount: 0 }]);
-    expect(n).toBe("VALORES DEMONSTRATIVOS — 2 item(ns) deste processo com 4 cotação(ões) de fonte fictícia/sintética (homologação). Valores de referência baseados nelas são demonstrativos e não constituem pesquisa de preços oficial.");
+  it("com cotação fictícia em item APROVADO (base dos documentos) ⇒ aviso explícito com contagens; pendente/em análise não contam", () => {
+    const n = demonstrativePriceNotice([{ status: "aprovado", fictitiousQuoteCount: 3 }, { status: "pendente", fictitiousQuoteCount: 1 }, { status: "em_analise", fictitiousQuoteCount: 2 }, { status: "aprovado", fictitiousQuoteCount: 0 }]);
+    expect(n).toBe("VALORES DEMONSTRATIVOS — 1 item(ns) deste processo com 3 cotação(ões) de fonte fictícia/sintética (dados sintéticos). Valores de referência baseados nelas são demonstrativos e não constituem pesquisa de preços oficial.");
+    expect(demonstrativePriceNotice([{ status: "pendente", fictitiousQuoteCount: 5 }])).toBeNull();
   });
   it("exceção AUSENTE: continua fail-closed (nenhuma organização recebe valores demonstrativos), o aviso independe dela", async () => {
     __setHomologationConfigForTests({ allowedOrgIds: [] });
@@ -70,7 +71,7 @@ describe("Correção 1 — aviso de valores demonstrativos (fonte única; só ro
   });
   it("router: a MESMA função alimenta a prévia (reviewableDraft.priceNotice) e o cabeçalho do arquivo do rascunho (meta.notices)", () => {
     const src = readFileSync(path.resolve("server/routers/procurementProcessRouter.ts"), "utf8");
-    expect(src).toContain("priceNotice: demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId)),");
+    expect(src).toContain("priceNotice: await listIntelligentItems(input.processId, orgId).then(demonstrativePriceNotice)");
     expect(src).toMatch(/notices: input\.kind === "dfd" \? \[\] : \[demonstrativePriceNotice\(await listIntelligentItems\(input\.processId, orgId\)\)\]/);
     for (const f of ["EditalWorkspace", "TRWorkspace", "ETPWorkspace"]) {
       expect(readFileSync(path.resolve(`client/src/components/procurement/${f}.tsx`), "utf8")).toContain("<DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />");
@@ -131,6 +132,12 @@ describe("Correção 2 — PDF: paginação e RASCUNHO em todas as páginas; emi
     expect(all).toContain("Caneta azul"); expect(all).toContain("25,50");
     expect(all).toContain("ANEXO I — TERMO DE REFERÊNCIA");
     expect(all).not.toContain("licigov:");
+  }, 30_000);
+  it("título/processo LONGOS (auditoria): rodapé numa linha, sem páginas extras e numeração correta", async () => {
+    const base = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(LONG, META)));
+    const pages = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(LONG, { ...META, documentTitle: "T".repeat(500), processNumber: "9".repeat(200) })));
+    expect(pages.length).toBe(base.length);
+    pages.forEach((t, i) => expect(t).toContain(`Página ${i + 1} de ${pages.length}`));
   }, 30_000);
   it("uma página: 'Página 1 de 1'", async () => {
     const pages = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel("# Curto\n\nTexto.", META)));
