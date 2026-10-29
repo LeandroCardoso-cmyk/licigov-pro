@@ -13715,8 +13715,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-integration-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8132825,
-    "ast_hash": "6b09c739b425e94d31b5aecf830eb7f9",
+    "mtime": 1793300444.1811333,
+    "ast_hash": "9cb70532e99e8834936a8b69083d8951",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-persistence-mysql-smoke.test.ts": {
@@ -14015,8 +14015,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesE2eWorld.ts": {
-    "mtime": 1793287419.761184,
-    "ast_hash": "20143dee1f069131dd479b9e25b8667b",
+    "mtime": 1793300033.1610234,
+    "ast_hash": "b1daa0e5e25f1901083f5085151bdf7e",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/institutionalTemplatesGovernanceFakes.ts": {
@@ -14380,8 +14380,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8132825,
-    "ast_hash": "85d0c8b7b550a48edc967d0a25f34a0b",
+    "mtime": 1793300444.1797535,
+    "ast_hash": "53087343a584968deef67dd16cdf8781",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-bridge.test.ts": {
@@ -14430,8 +14430,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8092825,
-    "ast_hash": "c53bc4ea91f99e30f01fd5d74e29efbb",
+    "mtime": 1793300444.1792789,
+    "ast_hash": "4efad2472946f244cfe59b211db36538",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-structural-deviation-status.test.ts": {
@@ -14450,8 +14450,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8132825,
-    "ast_hash": "7323bd57fe1f87bcbc9686288c04d418",
+    "mtime": 1793300444.180099,
+    "ast_hash": "713d31e9c275584f2918ae1e3e149bf0",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-preparation-model.test.ts": {
@@ -14515,8 +14515,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8092825,
-    "ast_hash": "e955f4d3e493c33e500fcbf94fd99921",
+    "mtime": 1793300444.1779375,
+    "ast_hash": "88736a3d53aafbab15ab47448b81755f",
     "semantic_hash": ""
   },
   "server/__tests__/unit/context-reuse-authority-matrix.test.ts": {
@@ -14570,8 +14570,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8092825,
-    "ast_hash": "1f7b4b6efaa4d73caa71c7ac1104e6ec",
+    "mtime": 1793300444.1772606,
+    "ast_hash": "cdc3e8ba6b13c9eff57417e3bbfb0308",
     "semantic_hash": ""
   },
   "server/__tests__/unit/certame-config-authority.test.ts": {
@@ -14660,8 +14660,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8092825,
-    "ast_hash": "06ed685b1755260c7de170e4bf14d9cb",
+    "mtime": 1793300444.178759,
+    "ast_hash": "ba87982ddd3478685ff92b7d10846048",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-deferred-publication.test.ts": {
@@ -14830,8 +14830,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-governance-v2-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8132825,
-    "ast_hash": "9d479975d8bf7a112369a763c377cbcc",
+    "mtime": 1793300444.1806192,
+    "ast_hash": "2c1cf73f1b227c73dd6ccc7b87002f69",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-governance-v2-domain.test.ts": {
@@ -14905,8 +14905,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-fast-mysql-smoke.test.ts": {
-    "mtime": 1793287419.8132825,
-    "ast_hash": "db1e206ef00032043014b94248bf5b25",
+    "mtime": 1793300444.1803477,
+    "ast_hash": "6ee03a33d89d1703ed6b976bcefd53cd",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-fast-authority.test.ts": {
