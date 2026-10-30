@@ -213,3 +213,32 @@ export function editalTextOverwrites(
 export function editalTextPendingReview(persisted: Partial<EditalTextParams> | null | undefined): Array<keyof EditalTextParams> {
   return TEXT_KEYS.filter((k) => !(persisted?.[k] ?? null));
 }
+
+// ─── Pós-homologação (Frente A) — parâmetros do Edital ainda não gravados ──────────────────────
+
+/**
+ * Há escolha da pessoa no formulário do Edital que ainda NÃO está gravada (e se perderia ao sair)?
+ *  - modalidade/forma/plataforma: só com escolha explícita (hidratação nunca conta) e diferente da base gravada — parâmetros
+ *    do rascunho > minuta composta > escopo registrado. Escolha incompleta ou cujo registro falhou/não foi permitido conta.
+ *  - critério/regime (caminho legado, sem modelo vinculado): texto digitado que seria enviado na geração.
+ *  - objeto: alterado pela pessoa em relação ao último usado (do processo ou da última geração).
+ */
+export function editalUnsavedParameters<M extends string, F extends string, P extends string>(input: {
+  readonly effective: EditalParamValues<M, F, P>;
+  readonly proposed: EditalParamValues<M, F, P>;
+  readonly baseline: EditalParamValues<M, F, P> | null | undefined;
+  readonly proposedText: EditalTextParams;
+  readonly persistedText: Partial<EditalTextParams> | null | undefined;
+  readonly textEditable: boolean;
+  readonly objectEdited: boolean;
+  readonly object: string;
+  readonly objectBaseline: string;
+}): boolean {
+  const { effective: e, proposed: p, baseline: b } = input;
+  const touched = p.modality !== null || p.form !== null || p.platform !== null;
+  const coreUnsaved = touched && (!b || e.modality !== b.modality || e.form !== b.form
+    || (e.form === "eletronico" ? e.platform ?? null : null) !== (b.form === "eletronico" ? b.platform ?? null : null));
+  const textUnsaved = input.textEditable && Object.keys(editalTextProposal(input.proposedText, input.persistedText)).length > 0;
+  const objectUnsaved = input.objectEdited && input.object.trim() !== input.objectBaseline.trim();
+  return coreUnsaved || textUnsaved || objectUnsaved;
+}

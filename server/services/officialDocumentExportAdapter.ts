@@ -15,7 +15,7 @@ import { TRPCError } from "@trpc/server";
 import { getOfficialDocument } from "./documentEngineService";
 import { listVersions } from "../db/officialDocuments";
 import { exportDocument, formatBrazilianDateTime } from "./documentExportService";
-import { logActivity } from "./activityLogService";
+import { logActivity, PLATFORM_ADMIN_ACTOR_ROLE } from "./activityLogService";
 import { recordOfficialArtifact } from "./officialDocumentLifecycleService";
 import {
   institutionalIdentityFromMetadataOrLive,
@@ -113,6 +113,8 @@ export async function exportOfficialDocument(params: {
   /** "inline" para impressão (visualizar no navegador), "attachment" para baixar. */
   disposition?: "attachment" | "inline";
   correlationId?: string;
+  /** Pós-homologação (Frente C) — export sob acesso TÉCNICO da plataforma (`ctx.platformAdminAccess`): marcado na trilha, nunca ato do órgão. */
+  platformTechnicalAccess?: boolean;
 }): Promise<{
   url: string; format: OfficialFormat; fileName: string;
   /** SEM-043 — sha256 dos bytes exportados (DOCX ≠ PDF; registrado no ledger `official_document_artifacts`). */
@@ -201,7 +203,7 @@ export async function exportOfficialDocument(params: {
   const recorded = await recordOfficialArtifact({
     doc, format: params.format, artifactHash: exported.artifactHash, sizeBytes: exported.sizeBytes,
     mimeType: exported.mimeType, storageKey: exported.key, identityFingerprint,
-    actorUserId: params.userId, correlationId: params.correlationId,
+    actorUserId: params.userId, correlationId: params.correlationId, platformTechnicalAccess: params.platformTechnicalAccess,
   });
 
   // Auditoria (leitura) — sem conteúdo integral; sem nova versão/evento de lifecycle.
@@ -209,6 +211,7 @@ export async function exportOfficialDocument(params: {
     organizationId: params.organizationId,
     userId: params.userId,
     action: "exportou documento oficial",
+    ...(params.platformTechnicalAccess ? { actorRole: PLATFORM_ADMIN_ACTOR_ROLE } : {}),
     entityType: "official_document",
     correlationId: params.correlationId,
     details: {

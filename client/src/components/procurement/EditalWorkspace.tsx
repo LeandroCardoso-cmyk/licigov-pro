@@ -26,6 +26,7 @@ import {
   editalParamsComplete, editalParamsDiffer, editalScopeToRecord, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
   resolveEditalTextValues, editalTextProposal, editalTextOverwrites, editalTextPendingReview, type EditalTextParams,
+  editalUnsavedParameters,
 } from "./regenerationGuard";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -114,7 +115,6 @@ export default function EditalWorkspace({
   const [object, setObject] = useState("");
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
-  useEffect(() => { onDirtyChange?.(editorDirty); }, [editorDirty, onDirtyChange]);
   // PR-09 (SEM-009) — escolha EXPLÍCITA do usuário (null = não tocou). Sem padrão de useState: o valor
   // exibido é a escolha explícita OU o parâmetro PERSISTIDO (hidratação), nunca um default silencioso.
   const [proposed, setProposed] = useState<{ modality: Modality | null; form: Form | null; platform: Platform | null }>({
@@ -128,6 +128,12 @@ export default function EditalWorkspace({
   const processQuery = trpc.procurementProcess.loadProcess.useQuery({ processId }, { enabled: !!processId });
   const processObject = processQuery.data?.process?.object ?? "";
   useEffect(() => { if (!object && processObject) setObject(processObject); }, [processObject]);
+  // Frente A — objeto só conta como pendente depois que a PESSOA o editou (a hidratação acima nunca conta); a base passa a
+  // ser o objeto usado na última geração (o rascunho gerado já o contém).
+  const [objectEdited, setObjectEdited] = useState(false);
+  const [objectUsed, setObjectUsed] = useState<string | null>(null);
+  // Objeto da geração em curso: se a resposta se perder e a conclusão vier pelo acompanhamento, ele também vira a base.
+  const objectSent = useRef<string | null>(null);
 
   const { key: editalKey, rotate: rotateEditalKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
@@ -139,6 +145,7 @@ export default function EditalWorkspace({
   const draft = reviewable.data?.draft ?? null;
   const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
   const followUp = useGenerationFollowUp(draft, () => {
+    if (objectSent.current !== null) setObjectUsed(objectSent.current);
     rotateEditalKey();
     if (processId) {
       utils.procurementProcess.editalSourceState.invalidate();
@@ -223,6 +230,13 @@ export default function EditalWorkspace({
   );
   const resolution = (coreComplete ? resolutionQuery.data : undefined) as TemplateResolutionView | undefined;
   const bound = resolution?.status === "BOUND";
+  // Frente A — editor não salvo OU parâmetros escolhidos e ainda não gravados ⇒ a saída da etapa/tela pede confirmação.
+  const paramsUnsaved = editalUnsavedParameters<Modality, Form, Platform>({
+    effective, proposed, baseline: persisted ?? composedParams ?? recordedScope,
+    proposedText, persistedText: persisted, textEditable: !bound && coreComplete && !!resolution,
+    objectEdited, object, objectBaseline: objectUsed ?? processObject,
+  });
+  useEffect(() => { onDirtyChange?.(editorDirty || paramsUnsaved); }, [editorDirty, paramsUnsaved, onDirtyChange]);
   // PR #288: com modelo vinculado a CertameConfig é a ÚNICA autoridade do critério; o campo legado vira resumo somente leitura.
   const certameQuery = trpc.procurementProcess.certameConfig.useQuery(
     { processId, modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined },
@@ -261,8 +275,9 @@ export default function EditalWorkspace({
       if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) { setConfirmOpen(true); return; }
       if (generationFollowUp(e.data?.code, e.message) === "follow") followUp.start(draftAtRequest.current);
     },
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       setConfirmOpen(false);
+      setObjectUsed(vars.object);
       // Rascunho institucional não persiste parâmetros legados: mantém a escolha atual na tela (nada a "voltar a exibir").
       if (data.generationMode !== "INSTITUTIONAL_TEMPLATE") {
         setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
@@ -281,6 +296,7 @@ export default function EditalWorkspace({
   const recomposeHash = preparationState?.capabilities?.governedDraftRecomposition ? draft?.contentHash : undefined;
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
+    objectSent.current = object.trim();
     if (bound) {
       // Motor institucional (decidido pelo servidor): o TR oficial EXATO confirmado segue no payload; sem confirmação ⇒ nada é enviado.
       if (!trPin || regenerationBlock) return;
@@ -338,7 +354,7 @@ export default function EditalWorkspace({
           <input
             type="text"
             value={object}
-            onChange={(e) => setObject(e.target.value)}
+            onChange={(e) => { setObjectEdited(true); setObject(e.target.value); }}
             placeholder="Registro de preços para materiais de expediente"
             className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
           />

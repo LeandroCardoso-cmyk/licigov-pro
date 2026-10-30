@@ -26,7 +26,8 @@ import { processIdFromSearch, processRouteSearch, tabFromSearch } from "@shared/
 import { startTargetFor } from "@/components/procurement/startOptions";
 import DocumentJourneyBar from "@/components/procurement/DocumentJourneyBar";
 import { useJourneyExport } from "@/components/procurement/useJourneyExport";
-import { canLeaveStage, isJourneyKind, journeyStates } from "@/lib/documentJourney";
+import { canLeaveStage, isJourneyKind, journeyStates, unsavedLeaveMessage } from "@/lib/documentJourney";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 
 /**
  * PR B — Processo Licitatório (fluxo canônico, jornada única).
@@ -112,13 +113,8 @@ export default function ProcessoLicitatorio() {
     if (prev.kind === draftKind && prev.key !== undefined && probeKey !== undefined && prev.key !== probeKey) void processQuery.refetch();
   }, [draftKind, probeKey]);
 
-  // Recarregar/fechar a aba com edição não salva: o navegador pede confirmação.
-  useEffect(() => {
-    if (!stageDirty) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [stageDirty]);
+  // Edição não salva: menu lateral / Sair (shell), recarregar/fechar a aba e Voltar do navegador pedem confirmação (mesma mensagem).
+  useLeaveGuard(stageDirty && journeyKind ? unsavedLeaveMessage(journeyKind) : null);
 
   /** Sai da etapa aberta só com confirmação quando há edição não salva (cancelar mantém a etapa e o texto). */
   function confirmLeaveStage(): boolean {

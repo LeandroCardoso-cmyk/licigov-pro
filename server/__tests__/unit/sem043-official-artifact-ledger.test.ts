@@ -108,6 +108,16 @@ describe("SEM-043 — storeRenderedArtifact registra no ledger (nunca na linha d
     expect(opts).toEqual({ insertOnly: true });
   });
 
+  it("Frente C — export sob acesso TÉCNICO da plataforma: o evento diz isso (mesmo ator humano e correlationId); membro do órgão: inalterado", async () => {
+    await recordOfficialArtifact({ doc: doc(), format: "pdf", artifactHash: sha("t"), sizeBytes: 1, mimeType: "application/pdf", actorUserId: 9, correlationId: "kt", platformTechnicalAccess: true });
+    const [entry] = vi.mocked(insertDocumentTimelineEntry).mock.calls[0] as any;
+    expect(entry).toMatchObject({ actor: "user:9", correlationId: "kt" });
+    expect(entry.summary).toMatch(/Acesso técnico da plataforma \(suporte\) — não é ato do órgão\.$/);
+    vi.mocked(insertDocumentTimelineEntry).mockClear();
+    await recordOfficialArtifact({ doc: doc(), format: "pdf", artifactHash: sha("m"), sizeBytes: 1, mimeType: "application/pdf", actorUserId: 9 });
+    expect((vi.mocked(insertDocumentTimelineEntry).mock.calls[0] as any)[0].summary).not.toContain("Acesso técnico");
+  });
+
   it("bytes idênticos (created=false) ⇒ no-op: sem evento novo, mesmo id devolvido", async () => {
     state.created = false;
     const r = await storeRenderedArtifact({ doc: doc(), format: "pdf", buffer: Buffer.from("same"), actorUserId: 1 });

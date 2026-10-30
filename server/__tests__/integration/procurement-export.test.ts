@@ -34,6 +34,12 @@ vi.mock("../../services/tenantService", () => ({
   getMembership: vi.fn().mockResolvedValue({ id: 1, organizationId: 1, userId: 1, role: "owner", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() }),
   NO_ORGANIZATION_MEMBERSHIP: "NO_ORGANIZATION_MEMBERSHIP",
 }));
+// Frente C — acesso técnico do admin de plataforma (resolveTenant): auditoria cross-tenant e organização sintética, sem banco.
+vi.mock("../../db", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../db")>()),
+  createAuditLog: vi.fn(async () => undefined),
+  getOrganizationById: vi.fn(async () => ({ id: 1, nome: "Órgão Sintético" })),
+}));
 vi.mock("../../_core/sdk", () => ({
   sdk: { signSession: vi.fn().mockResolvedValue("t"), authenticateRequest: vi.fn().mockResolvedValue(null) },
 }));
@@ -168,6 +174,36 @@ describe("procurementProcess.exportDocument (adapter)", () => {
       await expect(caller.exportDocument({ processId: PID, kind: "etp", format: "pdf", disposition: "inline" })).rejects.toBeTruthy();
       expect(exportCore).not.toHaveBeenCalled();
       expect(exportOfficialDocument).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Frente C — exportação sob acesso TÉCNICO da plataforma", () => {
+    const adminCtx = () => ({
+      ...makeContext({ ...mockUser, id: 77, role: "admin" } as never),
+      req: { headers: { "x-organization-id": "1" }, ip: "127.0.0.1" } as never,
+      correlationId: "corr-frente-c",
+    });
+
+    it("o evento da linha do tempo diz que foi acesso técnico (não ato do órgão) e leva o MESMO correlationId da auditoria", async () => {
+      const db = await import("../../db");
+      await procurementProcessRouter.createCaller(adminCtx() as never).exportDocument({ processId: PID, kind: "etp", format: "pdf" });
+      const ev = vi.mocked(procDb.recordProcessEvent).mock.calls[0][0];
+      expect(ev.actor).toBe("77"); // mesmo formato de ator (usuário autenticado), sem identidade institucional fictícia
+      expect(ev.summary).toBe("Documento ETP exportado (PDF). Acesso técnico da plataforma (suporte) — não é ato do órgão.");
+      expect(ev.correlationId).toBe("corr-frente-c");
+      const audit = JSON.parse(String((vi.mocked(db.createAuditLog).mock.calls[0][0] as { details: string }).details));
+      expect(audit).toMatchObject({ event: "platform_admin_tenant_access", correlationId: "corr-frente-c", operation: "exportDocument" });
+    });
+
+    it("versão oficial emitida exportada sob acesso técnico também é marcada", async () => {
+      vi.mocked(getLatestOfficialPromotion).mockResolvedValueOnce({ officialDocumentId: "odoc_etp", lineageId: "l", version: 2, contentHash: draftContentHash("# ETP\nconteúdo"), actorUserId: 2, createdAt: "2026-10-28 10:00:00" } as never);
+      await procurementProcessRouter.createCaller(adminCtx() as never).exportDocument({ processId: PID, kind: "etp", format: "pdf" });
+      expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][0].summary).toMatch(/versão oficial emitida\. Acesso técnico da plataforma \(suporte\) — não é ato do órgão\.$/);
+    });
+
+    it("membro do órgão: resumo inalterado (sem marca técnica)", async () => {
+      await procurementProcessRouter.createCaller(makeContext(mockUser)).exportDocument({ processId: PID, kind: "etp", format: "pdf" });
+      expect(vi.mocked(procDb.recordProcessEvent).mock.calls[0][0].summary).toBe("Documento ETP exportado (PDF).");
     });
   });
 

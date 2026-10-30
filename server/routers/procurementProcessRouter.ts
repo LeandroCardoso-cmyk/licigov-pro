@@ -47,6 +47,7 @@ import {
 } from "../domain/processCreateContract";
 import { listContextFacts } from "../db/procurementContext";
 import { editalScopeSelection } from "../domain/editalScopeSelection";
+import { timelineSummaryForAccess } from "../domain/institutionalAuthority";
 import { getEditalScopeSelection, recordEditalScope } from "../services/editalScopeService";
 import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
 import { getLatestOfficialPromotion, listLatestOfficialEmissions, officialEmissionsOf, officialVersionsOf } from "../db/officialDocumentPromotions";
@@ -330,10 +331,11 @@ export const procurementProcessRouter = router({
         if (emitted && emitted.contentHash === draftContentHash(document.content)) {
           const official = await exportOfficialDocument({
             organizationId: orgId, userId: ctx.user!.id, documentId: emitted.officialDocumentId, format: input.format, disposition: input.disposition, correlationId: ctx.correlationId,
+            platformTechnicalAccess: ctx.platformAdminAccess,
           });
           await recordProcessEvent({
             organizationId: orgId, processId: input.processId, eventType: "change", actor: String(ctx.user!.id),
-            summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}) — versão oficial emitida.`,
+            summary: timelineSummaryForAccess(`Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}) — versão oficial emitida.`, ctx.platformAdminAccess),
             refId: emitted.officialDocumentId, correlationId: ctx.correlationId,
           });
           return { url: official.url, format: official.format, fileName: official.fileName };
@@ -376,7 +378,7 @@ export const procurementProcessRouter = router({
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
         actor: String(ctx.user!.id),
-        summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
+        summary: timelineSummaryForAccess(`Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`, ctx.platformAdminAccess),
         refId: document.id, correlationId: ctx.correlationId,
       });
       return { url: exported.url, format: exported.format, fileName: exported.fileName };

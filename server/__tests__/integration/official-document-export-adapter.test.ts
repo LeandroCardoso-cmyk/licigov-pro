@@ -26,7 +26,7 @@ vi.mock("../../db/organizations", () => ({
 vi.mock("../../services/officialDocumentLifecycleService", () => ({
   recordOfficialArtifact: vi.fn(),
 }));
-vi.mock("../../services/activityLogService", () => ({ logActivity: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../services/activityLogService", () => ({ logActivity: vi.fn().mockResolvedValue(undefined), PLATFORM_ADMIN_ACTOR_ROLE: "platform_admin" }));
 vi.mock("../../db/officialDocuments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/officialDocuments")>()),
   listVersions: vi.fn().mockResolvedValue([]),
@@ -122,6 +122,15 @@ describe("PR B.1 · exportOfficialDocument (adapter compartilhado)", () => {
   });
 
   // ─── SEM-043 — hash do artefato registrado no ledger, por formato ─────────────────────────────────────────
+  it("Frente C — acesso técnico da plataforma: ledger recebe a marca e o log de atividade usa o papel técnico (não do órgão)", async () => {
+    await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf", correlationId: "corr-c", platformTechnicalAccess: true });
+    expect(vi.mocked(recordOfficialArtifact).mock.calls[0][0]).toMatchObject({ actorUserId: 9, correlationId: "corr-c", platformTechnicalAccess: true });
+    expect(vi.mocked(logActivity).mock.calls[0][0]).toMatchObject({ userId: 9, actorRole: "platform_admin", correlationId: "corr-c" });
+    vi.mocked(logActivity).mockClear();
+    await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf" });
+    expect(vi.mocked(logActivity).mock.calls[0][0]).not.toHaveProperty("actorRole");
+  });
+
   it("SEM-043: registra o artefato (hash dos bytes + origem + ator humano) e o devolve no resultado e no log", async () => {
     const r = await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf", correlationId: "corr-x" });
 

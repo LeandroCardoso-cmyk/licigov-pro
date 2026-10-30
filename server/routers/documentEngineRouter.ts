@@ -191,6 +191,7 @@ export const documentEngineRouter = router({
         documentId: input.documentId, format: input.format,
         disposition: input.inline ? "inline" : "attachment",
         correlationId: ctx.correlationId,
+        platformTechnicalAccess: ctx.platformAdminAccess,
       });
     }),
 });
