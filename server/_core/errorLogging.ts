@@ -6,13 +6,13 @@
 import type { TRPCError } from "@trpc/server";
 import type { NextFunction, Request, Response } from "express";
 import { structuredLog } from "../services/observabilityService";
-import { isUnexpectedInternalError, looksLikeDriverLeak, publicInternalMessage, redactForLog } from "./errorShape";
+import { carriesInternalDetail, driverErrorInChain, isUnexpectedInternalError, publicInternalMessage, redactForLog } from "./errorShape";
 
 export function logTrpcInternalError(error: TRPCError, path: string | undefined, correlationId: string | null | undefined): void {
   // 4xx com texto de banco (catch de router que repassa `e.message`) também é registrado: a resposta foi sanitizada.
-  if (error.code !== "INTERNAL_SERVER_ERROR" && !looksLikeDriverLeak(error.message)) return;
+  if (error.code !== "INTERNAL_SERVER_ERROR" && !carriesInternalDetail(error)) return;
   const cause = error.cause instanceof Error ? error.cause : undefined;
-  const driverCode = (cause as { cause?: { code?: unknown } } | undefined)?.cause?.code;
+  const driverCode = driverErrorInChain(error)?.code;
   structuredLog({
     level: "error", service: "trpc", operation: "internal_error",
     procedure: path, correlationId: correlationId ?? undefined,

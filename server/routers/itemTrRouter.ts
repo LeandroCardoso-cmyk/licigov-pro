@@ -300,7 +300,7 @@ export const itemTrRouter = router({
         replaceItem(input.organizationId, input.processId, updated);
         return { success: true as const, item: updated };
       } catch (err) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message });
+        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message, cause: err });
       }
     }),
 
@@ -326,7 +326,7 @@ export const itemTrRouter = router({
         replaceItem(input.organizationId, input.processId, updated);
         return { success: true as const, item: updated };
       } catch (err) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message });
+        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message, cause: err });
       }
     }),
 
@@ -358,7 +358,7 @@ export const itemTrRouter = router({
         replaceItem(input.organizationId, input.processId, updated);
         return { success: true as const, item: updated };
       } catch (err) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message });
+        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message, cause: err });
       }
     }),
 
@@ -384,7 +384,7 @@ export const itemTrRouter = router({
         replaceItem(input.organizationId, input.processId, updated);
         return { success: true as const, item: updated };
       } catch (err) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message });
+        throw new TRPCError({ code: "BAD_REQUEST", message: (err as Error).message, cause: err });
       }
     }),
 

@@ -164,7 +164,7 @@ export const documentEngineRouter = router({
         return rendered;
       } catch (e) {
         if (e instanceof TRPCError) throw e;
-        throw new TRPCError({ code: "NOT_FOUND", message: e instanceof Error ? e.message : "Falha ao exportar." });
+        throw new TRPCError({ code: "NOT_FOUND", message: e instanceof Error ? e.message : "Falha ao exportar.", cause: e });
       }
     }),
 

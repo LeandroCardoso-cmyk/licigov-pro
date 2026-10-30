@@ -305,7 +305,7 @@ export const contractWorkspaceRouter = router({
           operation: "contractWorkspace.updateContract#status", correlationId: ctx.correlationId,
         });
         try { updated = transitionContractStatus(updated, status as ContractStatus); }
-        catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida." }); }
+        catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida.", cause: e }); }
       }
       const workspace = await saveGovernedContractEdit({
         before: ws, after: updated, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId,

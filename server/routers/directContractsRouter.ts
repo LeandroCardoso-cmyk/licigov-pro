@@ -235,7 +235,7 @@ export const directContractsRouter = router({
         try {
           resolved = await resolveGovernedReference(input.canonicalLocator!, asOfDate);
         } catch (err) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Referência governada indisponível" });
+          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Referência governada indisponível", cause: err });
         }
         // Versão esperada do cliente é ASSERÇÃO, nunca autoridade (a autoridade é o set ativo).
         if (input.referenceSetVersion != null && input.referenceSetVersion !== resolved.referenceSetVersion) {

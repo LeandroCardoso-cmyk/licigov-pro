@@ -131,6 +131,15 @@ describe("PR B.1 · exportOfficialDocument (adapter compartilhado)", () => {
     expect(vi.mocked(logActivity).mock.calls[0][0]).not.toHaveProperty("actorRole");
   });
 
+  it("Revisão #336 — acesso técnico sobre artefato JÁ existente: segue auditável no activity log (papel técnico, reuso, hash, correlationId) sem novo evento", async () => {
+    vi.mocked(recordOfficialArtifact).mockResolvedValueOnce({ artifact: { id: "art-1", sourceContentHash: "c".repeat(64) } as any, created: false });
+    const r = await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf", correlationId: "corr-reuso", platformTechnicalAccess: true });
+    expect(r).toMatchObject({ artifactId: "art-1", artifactReused: true });
+    const log = vi.mocked(logActivity).mock.calls[0][0];
+    expect(log).toMatchObject({ userId: 9, actorRole: "platform_admin", correlationId: "corr-reuso", action: "exportou documento oficial" });
+    expect(log.details).toMatchObject({ artifactId: "art-1", artifactReused: true, artifactHash: "b".repeat(64) });
+  });
+
   it("SEM-043: registra o artefato (hash dos bytes + origem + ator humano) e o devolve no resultado e no log", async () => {
     const r = await exportOfficialDocument({ organizationId: 1, userId: 9, documentId: "doc1", format: "pdf", correlationId: "corr-x" });
 

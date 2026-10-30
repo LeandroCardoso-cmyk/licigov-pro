@@ -118,6 +118,14 @@ describe("SEM-043 — storeRenderedArtifact registra no ledger (nunca na linha d
     expect((vi.mocked(insertDocumentTimelineEntry).mock.calls[0] as any)[0].summary).not.toContain("Acesso técnico");
   });
 
+  it("Revisão #336 — acesso técnico sobre artefato JÁ registrado (created=false): ledger idempotente, NENHUM evento artificial", async () => {
+    state.created = false;
+    const r = await recordOfficialArtifact({ doc: doc(), format: "pdf", artifactHash: sha("ja"), sizeBytes: 1, mimeType: "application/pdf", actorUserId: 9, correlationId: "kr", platformTechnicalAccess: true });
+    expect(r.created).toBe(false);
+    expect(insertOfficialDocumentArtifact).toHaveBeenCalledTimes(1); // mesma linha (id determinístico), não duplica
+    expect(insertDocumentTimelineEntry).not.toHaveBeenCalled();
+  });
+
   it("bytes idênticos (created=false) ⇒ no-op: sem evento novo, mesmo id devolvido", async () => {
     state.created = false;
     const r = await storeRenderedArtifact({ doc: doc(), format: "pdf", buffer: Buffer.from("same"), actorUserId: 1 });
