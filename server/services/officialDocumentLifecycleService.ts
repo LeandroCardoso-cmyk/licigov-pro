@@ -31,6 +31,7 @@ import {
 } from "../db/officialDocumentArtifacts";
 // Único consumidor do Storage Service no fluxo documental (Document Engine nunca toca no S3).
 import { isStorageConfigured, storageFallbackAllowed, assertStorageUsable, storagePut, storageSignedUrl } from "../storage";
+import { timelineSummaryForAccess } from "../domain/institutionalAuthority";
 
 // ─── Timeline (append-only) — responsabilidade do Lifecycle ───────────────────
 
@@ -216,6 +217,8 @@ function humanArtifactActor(actorUserId: number): string {
 export async function recordOfficialArtifact(params: {
   doc: OfficialDocument; format: OfficialFormat; artifactHash: string; sizeBytes: number; mimeType: string;
   storageKey?: string; identityFingerprint?: string; actorUserId: number; correlationId?: string;
+  /** Pós-homologação (Frente C) — export sob acesso técnico da plataforma: o evento diz isso (mesmo ator, mesmo correlationId). */
+  platformTechnicalAccess?: boolean;
 }): Promise<{ artifact: OfficialDocumentArtifact | null; created: boolean }> {
   const { doc, format } = params;
   const actor = humanArtifactActor(params.actorUserId);
@@ -246,7 +249,7 @@ export async function recordOfficialArtifact(params: {
         await insertDocumentTimelineEntry({
           tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
           eventType: "documento_exportado", actor, correlationId,
-          summary: `Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}; hash do artefato sha256:${params.artifactHash}; ${where}.`,
+          summary: timelineSummaryForAccess(`Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}; hash do artefato sha256:${params.artifactHash}; ${where}.`, params.platformTechnicalAccess),
         }, tx, { insertOnly: true });
       }
       return res;

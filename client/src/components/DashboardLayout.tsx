@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { confirmPendingLeave } from "@/lib/leaveGuard";
 import { trpc } from "@/lib/trpc";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
@@ -258,7 +259,8 @@ function DashboardLayoutContent({
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      // Pós-homologação (Frente A): sair da tela com edição não salva pede confirmação (cancelar = permanecer).
+                      onClick={() => { if (item.path !== location && !confirmPendingLeave()) return; setLocation(item.path); }}
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal`}
                     >
@@ -326,7 +328,7 @@ function DashboardLayoutContent({
                 })}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={logout}
+                  onClick={() => { if (confirmPendingLeave()) logout(); }}
                   aria-label="Sair da conta"
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >

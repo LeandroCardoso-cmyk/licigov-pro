@@ -70,3 +70,14 @@ export function evaluateInstitutionalAuthority(
 export function institutionalAuthorityRequiredMessage(minRole: OrgRole): string {
   return `Este ato institucional exige vínculo ativo com o órgão, com papel mínimo '${minRole}'. Acesso técnico da plataforma não constitui autoridade do órgão (${INSTITUTIONAL_AUTHORITY_REQUIRED}).`;
 }
+
+/** Marca do evento de linha do tempo feito sob acesso TÉCNICO da plataforma (suporte) — nunca ato do órgão. */
+export const PLATFORM_TECHNICAL_ACCESS_NOTE = "Acesso técnico da plataforma (suporte) — não é ato do órgão.";
+
+/**
+ * Pós-homologação (Frente C) — o ator do evento continua sendo o usuário autenticado (mesmo formato de `actor`); o resumo
+ * passa a dizer que foi acesso técnico, ligado à auditoria `platform_admin_tenant_access` pelo MESMO correlationId.
+ */
+export function timelineSummaryForAccess(summary: string, platformAdminAccess: boolean | undefined): string {
+  return platformAdminAccess ? `${summary} ${PLATFORM_TECHNICAL_ACCESS_NOTE}` : summary;
+}

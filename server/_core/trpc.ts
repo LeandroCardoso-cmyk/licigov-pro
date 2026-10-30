@@ -7,9 +7,16 @@ import { resolveTenantForUser } from "../services/tenantService";
 import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { structuredLog } from "../services/observabilityService";
 import * as db from "../db";
+import { IS_DEVELOPMENT } from "../config/env";
+import { formatClientErrorShape } from "./errorShape";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  // Pós-homologação (Frente B) — diagnóstico (stack) só em development, decidido por APP_ENV (o padrão do tRPC usava
+  // NODE_ENV e expunha `data.stack` em staging). Erro interno não intencional vira mensagem genérica com correlationId.
+  isDev: IS_DEVELOPMENT,
+  errorFormatter: ({ shape, error, ctx }) =>
+    formatClientErrorShape(shape, error, { correlationId: ctx?.correlationId, exposeDiagnostics: IS_DEVELOPMENT }),
 });
 
 export const router = t.router;

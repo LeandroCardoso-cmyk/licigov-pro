@@ -13,6 +13,7 @@ import { buildHelmetContentSecurityPolicy } from "../config/csp";
 import { IS_DEVELOPMENT } from "../config/env";
 import { correlationMiddleware } from "../middleware/correlationMiddleware";
 import { registerHealthRoutes } from "./health";
+import { expressErrorHandler, logTrpcInternalError } from "./errorLogging";
 import { registerIngestionUploadRoute } from "../routes/ingestionUploadRoute";
 import { recoverStuckImportSessions } from "../services/importQueueService";
 import { recoverStaleEnrichment } from "../services/itemMaterializationService";
@@ -57,9 +58,10 @@ async function startServer() {
     crossOriginEmbedderPolicy: false,
   }));
 
+  // Correlação ANTES do body-parser: um corpo inválido também é respondido/logado com o correlationId (Frente B).
+  app.use(correlationMiddleware);
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
-  app.use(correlationMiddleware);
 
   // PR D — health check HTTP (liveness/readiness). ANTES do tRPC e do catch-all do SPA,
   // rota pública e leve para o Railway/load balancer.
@@ -79,6 +81,8 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // Pós-homologação (Frente B) — o detalhe técnico de erro interno fica no LOG (com correlationId), não na resposta.
+      onError: ({ error, path, ctx }) => logTrpcInternalError(error, path, ctx?.correlationId),
     })
   );
   // development mode uses Vite, production mode uses static files
@@ -87,6 +91,8 @@ async function startServer() {
   } else {
     serveStatic(app);
   }
+  // Pós-homologação (Frente B) — último tratador: erro fora do tRPC não devolve stack/caminhos fora de development.
+  app.use(expressErrorHandler(IS_DEVELOPMENT));
 
   // PR D — binding de porta: em produção/staging a plataforma (Railway) injeta a PORT e o
   // healthcheck aponta para ela; subir em porta diferente deixaria o serviço inalcançável.
