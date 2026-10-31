@@ -71,6 +71,7 @@ Contas fora das esperadas: anotar dono/função; **não excluir** nesta rotina.
 | App — pre-deploy (`db:release:predeploy`) | mesma `DATABASE_URL` | `MIGRATION_DATABASE_URL` → `licigov_migrator` (variável nova) | `licigov_migrator` | + CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE/ALTER ROUTINE |
 | GitHub — "Backup do Banco" `target=staging` | — | `STAGING_BACKUP_DATABASE_URL` (proxy público), `STAGING_BACKUP_ENCRYPTION_KEY` (própria), `STAGING_BACKUP_DB_SSL_CA` | `licigov_backup` (REQUIRE SSL) | SELECT, SHOW VIEW, TRIGGER, EVENT + SHOW_ROUTINE |
 | GitHub — "Auditoria de Schema" `target=staging` | — | `STAGING_AUDIT_DATABASE_URL`, `STAGING_AUDIT_DB_SSL_CA` | `licigov_audit` (REQUIRE SSL) | REFERENCES |
+| GitHub — drill de restauração `target=staging` (destino descartável, §7) | — | `STAGING_RESTORE_TARGET_URL` (conta da instância do drill) e `STAGING_RESTORE_DB_SSL_CA` (CA **do destino**) | conta da instância descartável | só o banco `licigov_restore_drill*` |
 | Serviço MySQL (`MYSQL_URL`, `MYSQL_ROOT_PASSWORD`…) | root | root, senha nova pelo Regenerate | `root` | — |
 
 `MIGRATION_DATABASE_URL` no mesmo serviço: o processo da aplicação também recebe a variável; a separação limita o
@@ -78,6 +79,7 @@ que o código usa, **não isola o segredo**. `LICIGOV_STAGING_SMOKE_*` são cred
 
 **Produção intocada:** os secrets `BACKUP_DATABASE_URL`, `BACKUP_ENCRYPTION_KEY`, `BACKUP_DB_SSL_CA`,
 `AUDIT_DATABASE_URL`, `AUDIT_DB_SSL_CA`, `RESTORE_TARGET_URL` e as variáveis do ambiente `production` não mudam.
+O equivalente de produção da CA do destino (`RESTORE_DB_SSL_CA`) só será criado com autorização própria de produção.
 
 ## 4. Qual código de workflow roda (cuidado)
 
@@ -116,10 +118,16 @@ que o código usa, **não isola o segredo**. `LICIGOV_STAGING_SMOKE_*` são cred
       - destino: projeto Railway **novo e separado** `licigov-restore-drill` com um MySQL do template e o banco
         `licigov_restore_drill` criado vazio; proxy público ligado só durante o drill;
       - acesso: só o Owner no projeto do drill; secret `STAGING_RESTORE_TARGET_URL` com a conta do drill;
+      - **TLS do destino:** secret `STAGING_RESTORE_DB_SSL_CA` com o `ca.pem` **da instância descartável** (não a CA de
+        staging). Sem ele, com CA que não confere ou sem sessão TLS, o drill recusa antes de restaurar; toda conexão
+        ao destino usa `--ssl-mode=VERIFY_CA` (cadeia conferida contra essa CA; **hostname não conferido**). CA
+        idêntica à da origem é recusada pelo seletor;
       - execução: "Backup do Banco" (ref `staging`, `target = staging`, `run_restore_drill = true`) ⇒ evidência
         `restore-drill-evidence-staging` (contagens, isolamento por tenant, migrations);
-      - retenção/limpeza: apagar o projeto `licigov-restore-drill` e o secret `STAGING_RESTORE_TARGET_URL` logo
-        após conferir a evidência. Nunca restaurar sobre staging ou produção.
+      - evidência: só diz `PASS` quando todas as etapas passaram (inclui a linha "TLS no destino"); qualquer falha gera
+        evidência `FAIL` com a etapa e o job termina com erro;
+      - retenção/limpeza: apagar o projeto `licigov-restore-drill` e os secrets `STAGING_RESTORE_TARGET_URL` e
+        `STAGING_RESTORE_DB_SSL_CA` logo após conferir a evidência. Nunca restaurar sobre staging ou produção.
 - Recuperação disponível depois disto: backup cifrado de staging restaurável (comprovado), backups da Railway do
   volume (se o §2 confirmar), e a credencial antiga ainda válida até o §8.
 

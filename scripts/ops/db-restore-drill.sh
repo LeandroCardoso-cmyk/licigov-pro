@@ -4,10 +4,15 @@
 # destino ≠ origem e ≠ banco do outro ambiente, e banco de destino nomeado licigov_restore_drill[_sufixo].
 #
 # Entrada (env): DB_TARGET, BACKUP_DATABASE_URL (origem, só comparação), RESTORE_TARGET_URL (destino),
-# BACKUP_ENCRYPTION_KEY. Diretório corrente = onde o artifact cifrado foi baixado.
-# Invariantes: destino acessível e VAZIO; dump cifrado + checksum conferido antes de decifrar; nada de
-# host/URL/secret/registro no log (só contagens); arquivos decifrados removidos também em FALHA (trap);
-# o banco de destino NÃO é dropado (descarte do projeto/instância é do operador, ver CONTAINMENT_CHECKLIST.md).
+# RESTORE_DB_SSL_CA (PEM da CA do DESTINO), BACKUP_ENCRYPTION_KEY. Diretório corrente = onde o artifact cifrado
+# foi baixado.
+# Invariantes: TODA conexão ao destino usa TLS --ssl-mode=VERIFY_CA com a CA do destino (sem CA, CA que não
+# confere ou sessão sem TLS ⇒ nada é restaurado; nunca PREFERRED/DISABLED). VERIFY_CA confere a cadeia contra a
+# CA informada, NÃO o hostname (o certificado autogerado do MySQL não traz o host do proxy público).
+# Destino acessível e VAZIO; dump cifrado + checksum conferido antes de decifrar; nada de host/URL/secret/registro
+# no log (só contagens); arquivos decifrados e a CA temporária removidos também em FALHA (trap); a evidência só
+# diz PASS quando todas as etapas passaram (falha ⇒ evidência FAIL com a etapa, e exit ≠ 0).
+# O banco de destino NÃO é dropado (descarte do projeto/instância é do operador, ver CONTAINMENT_CHECKLIST.md).
 set -Eeuo pipefail
 umask 077
 
@@ -17,13 +22,44 @@ case "${DB_TARGET:-}" in
 esac
 SRC_URL="${BACKUP_DATABASE_URL:-}"
 TGT_URL="${RESTORE_TARGET_URL:-}"
+TGT_CA="${RESTORE_DB_SSL_CA:-}"
 ENC_KEY="${BACKUP_ENCRYPTION_KEY:-}"
-unset BACKUP_DATABASE_URL RESTORE_TARGET_URL
+unset BACKUP_DATABASE_URL RESTORE_TARGET_URL RESTORE_DB_SSL_CA
 export ENC_KEY
 unset BACKUP_ENCRYPTION_KEY
 
-# Limpeza também em falha: nenhum dump (decifrado ou não) sobra no runner.
-trap 'rm -f dump.sql.gz *.sql *.sql.gz.enc *.sql.gz.enc.sha256 2>/dev/null || true' EXIT
+EVIDENCE="restore-drill-evidence.md"
+rm -f "$EVIDENCE"           # nunca reaproveitar evidência de execução anterior
+STEP="início"
+OK=0
+CA_DIR=""
+TLS_MODE="não estabelecido"
+
+# Falha em qualquer etapa ⇒ evidência FAIL (sem dados/hosts/URLs/secrets), limpeza e o MESMO código de saída.
+on_exit() {
+  local rc=$?
+  rm -f dump.sql.gz *.sql *.sql.gz.enc *.sql.gz.enc.sha256 2>/dev/null || true
+  [ -z "$CA_DIR" ] || rm -rf "$CA_DIR"
+  if [ "$OK" != "1" ]; then
+    {
+      echo "# Evidência — Drill de Restauração (FALHOU)"
+      echo
+      echo "| Campo | Valor |"
+      echo "|---|---|"
+      echo "| Workflow / run | ${GITHUB_WORKFLOW:-local} #${GITHUB_RUN_NUMBER:-0} (id ${GITHUB_RUN_ID:-0}) |"
+      echo "| Data (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |"
+      echo "| Ambiente | ${DB_TARGET:-?} |"
+      echo "| Etapa que falhou | ${STEP} |"
+      echo "| TLS no destino | ${TLS_MODE} |"
+      echo "| Resultado agregado | FAIL (exit ${rc}) |"
+      echo
+      echo "> Restauração NÃO comprovada. Nenhum registro, host, URL ou secret nesta evidência."
+    } > "$EVIDENCE"
+    [ "$rc" -ne 0 ] || rc=1
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
 
 START=$SECONDS
 
@@ -31,6 +67,19 @@ START=$SECONDS
 [ -n "${SRC_URL:-}" ] || { echo "❌ BACKUP_DATABASE_URL ausente."; exit 1; }
 [ -n "${TGT_URL:-}" ] || { echo "❌ RESTORE_TARGET_URL ausente (destino obrigatório)."; exit 1; }
 [ -n "${ENC_KEY:-}" ] || { echo "❌ BACKUP_ENCRYPTION_KEY ausente (drill exige backup cifrado)."; exit 1; }
+
+# 0b) CA do DESTINO obrigatória e válida ANTES de qualquer conexão (só certificado; material privado é recusado).
+STEP="CA do destino"
+[ -n "$TGT_CA" ] || { echo "❌ RESTORE_DB_SSL_CA ausente — o destino só é acessado com TLS VERIFY_CA."; exit 1; }
+case "$TGT_CA" in *"PRIVATE KEY"*) echo "❌ RESTORE_DB_SSL_CA contém chave privada — informe só o certificado da CA (ca.pem)."; exit 1;; esac
+case "$TGT_CA" in *"-----BEGIN CERTIFICATE-----"*) : ;; *) echo "❌ RESTORE_DB_SSL_CA não é um certificado PEM."; exit 1;; esac
+CA_DIR="$(mktemp -d)"
+chmod 700 "$CA_DIR"
+TGT_CA_FILE="$CA_DIR/restore-target-ca.pem"
+printf '%s\n' "$TGT_CA" > "$TGT_CA_FILE"
+chmod 600 "$TGT_CA_FILE"
+unset TGT_CA
+openssl x509 -noout -in "$TGT_CA_FILE" 2>/dev/null || { echo "❌ RESTORE_DB_SSL_CA não é um certificado X.509 legível."; exit 1; }
 
 # Parser via URL nativa do Node (robusto a porta ausente, caracteres especiais e '@' na
 # senha percent-encoded). Emite ${P}_{USER,PASS,HOST,PORT,DB}_B64 (base64, seguro para
@@ -104,20 +153,32 @@ fi
 echo "✅ Origem e destino são distintos."
 
 # --protocol=TCP força TCP (evita fallback para socket local mesmo que o host seja "localhost").
-TGT() { MYSQL_PWD="$TGT_PASS" mysql --protocol=TCP --host="$TGT_HOST" --port="$TGT_PORT" --user="$TGT_USER" "$@"; }
+# TODA chamada ao destino (pré-checagens, importação e validações) passa por aqui: TLS VERIFY_CA com a CA do destino.
+TGT() {
+  MYSQL_PWD="$TGT_PASS" mysql --protocol=TCP --ssl-mode=VERIFY_CA --ssl-ca="$TGT_CA_FILE" \
+    --host="$TGT_HOST" --port="$TGT_PORT" --user="$TGT_USER" "$@"
+}
 
-# 2) Destino ACESSÍVEL.
-TGT -N -e "SELECT 1;" >/dev/null || { echo "❌ Destino inacessível."; exit 1; }
-echo "✅ Destino acessível."
+# 2) Destino ACESSÍVEL com TLS autenticado pela CA (CA errada ⇒ o cliente recusa o handshake).
+STEP="conexão TLS ao destino"
+TGT -N -e "SELECT 1;" >/dev/null || { echo "❌ Destino inacessível ou certificado não confere com RESTORE_DB_SSL_CA (VERIFY_CA)."; exit 1; }
+SESSION_TLS=$(TGT -N -B -e "SHOW SESSION STATUS LIKE 'Ssl_version'; SHOW SESSION STATUS LIKE 'Ssl_cipher';")
+SSL_VERSION=$(printf '%s\n' "$SESSION_TLS" | awk -F'\t' '$1=="Ssl_version"{print $2}')
+SSL_CIPHER=$(printf '%s\n' "$SESSION_TLS" | awk -F'\t' '$1=="Ssl_cipher"{print $2}')
+[ -n "$SSL_VERSION" ] || { echo "❌ Sessão com o destino sem TLS (Ssl_version vazio) — abortando antes de restaurar."; exit 1; }
+TLS_MODE="VERIFY_CA com RESTORE_DB_SSL_CA; ${SSL_VERSION} (${SSL_CIPHER:-?}); hostname NÃO conferido"
+echo "✅ Destino acessível — TLS ${TLS_MODE}."
 
 # 3) Destino VAZIO (prod/staging teriam tabelas → salvaguarda contra alvo errado).
+STEP="destino vazio"
 PRE=$(TGT -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$TGT_DB';")
 if [ "$PRE" -ne 0 ]; then
   echo "❌ Destino NÃO está vazio (${PRE} tabelas) — recusando para não sobrescrever um banco real."; exit 1
 fi
-echo "✅ Destino vazio (0 tabelas) — descartável confirmado."
+echo "✅ Destino vazio (0 tabelas). Isso NÃO prova que a instância é descartável: projeto separado e acesso restrito são pré-requisitos do operador, fora do alcance deste script."
 
 # 4) Artefato precisa estar CIFRADO (.enc) e com checksum íntegro.
+STEP="artefato cifrado e checksum"
 ENC=$(ls -1 *.sql.gz.enc 2>/dev/null | head -n1 || true)
 [ -n "$ENC" ] || { echo "❌ Nenhum dump cifrado (.enc) no artifact — drill exige backup cifrado."; exit 1; }
 if ls -1 *.sql.gz 2>/dev/null | grep -qv '\.enc$'; then
@@ -128,10 +189,12 @@ echo "✅ Checksum SHA-256 íntegro."
 CHK=$(cut -d' ' -f1 "${ENC}.sha256")
 
 # 5) Decifrar (AES-256-CBC/PBKDF2) → restaurar SOMENTE no destino, em stream (o dump em claro não toca o disco).
+STEP="restauração"
 openssl enc -d -aes-256-cbc -pbkdf2 -salt -in "$ENC" -pass env:ENC_KEY | gunzip -c | TGT "$TGT_DB"
 echo "✅ Restauração concluída no destino descartável."
 
 # 6) Validações (só contagens/aggregates — nada de registros/e-mails/conteúdo).
+STEP="validações pós-restauração"
 TABLES=$(TGT -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$TGT_DB';")
 echo "Tabelas restauradas: $TABLES"
 [ "$TABLES" -gt 0 ] || { echo "❌ Nenhuma tabela após restore."; exit 1; }
@@ -168,8 +231,10 @@ echo "✅ Smoke funcional (join documents↔document_versions) OK."
 
 DUR=$((SECONDS - START))
 
-# 7) Evidência SEGURA (sem dados/hosts/URLs/secrets) — só metadados agregados.
-cat > restore-drill-evidence.md <<EOF
+# 7) Evidência SEGURA (sem dados/hosts/URLs/secrets) — só metadados agregados. PASS só depois de TODAS as etapas;
+# o cleanup do passo 8 ainda pode reprovar (e então a evidência é regravada como FAIL pelo trap).
+STEP="evidência e limpeza"
+cat > "$EVIDENCE" <<EOF
 # Evidência — Drill de Restauração REAL (backup cifrado → destino descartável)
 
 | Campo | Valor |
@@ -178,19 +243,20 @@ cat > restore-drill-evidence.md <<EOF
 | Data (UTC) | $(date -u +%Y-%m-%dT%H:%M:%SZ) |
 | Ambiente | ${DB_TARGET} |
 | Origem | backup cifrado de ${DB_TARGET} (somente leitura; não modificada) |
-| Destino | banco descartável identificado (licigov_restore_drill*), isolado da origem e do outro ambiente; vazio antes do restore |
+| Destino | banco licigov_restore_drill* em endpoint distinto da origem e do outro ambiente; vazio antes do restore (verificados). Projeto separado e acesso restrito: pré-requisitos do operador, não verificados pelo script |
+| TLS no destino | ${TLS_MODE} |
 | Criptografia | AES-256-CBC / PBKDF2 (openssl) |
 | Checksum SHA-256 (artifact) | ${CHK} |
 | Duração do drill | ${DUR}s |
 | Tabelas restauradas | ${TABLES} |
 | Migrations (journal) | ${MIG} |
-| Testes | destino vazio+acessível, origem≠destino, checksum, schema, migrations, tabelas essenciais, isolamento tenant, órfãs, smoke join |
+| Testes | TLS VERIFY_CA no destino, destino vazio+acessível, origem≠destino, checksum, schema, migrations, tabelas essenciais, isolamento tenant, órfãs, smoke join |
 | Isolamento | versões órfãs=${ORPHANS}, mismatch tenant=${MISMATCH} (ambos 0) |
 | Resultado agregado | PASS |
 
 > Nenhum registro, e-mail, host, URL ou secret é exposto nesta evidência.
 EOF
-echo "----- EVIDÊNCIA -----"; cat restore-drill-evidence.md
+echo "----- EVIDÊNCIA -----"; cat "$EVIDENCE"
 
 # 8) Cleanup: remover TODO arquivo decifrado/temporário do runner (mantém só a evidência).
 rm -f dump.sql.gz *.sql.gz.enc *.sha256 *.sql 2>/dev/null || true
@@ -199,4 +265,5 @@ rm -f dump.sql.gz *.sql.gz.enc *.sha256 *.sql 2>/dev/null || true
 LEFT=$( { ls -1 *.sql.gz *.sql *.enc 2>/dev/null || true; } | wc -l | tr -d ' ')
 [ "$LEFT" = "0" ] || { echo "❌ Restaram arquivos sensíveis no runner ($LEFT)."; exit 1; }
 echo "✅ Cleanup: nenhum dump decifrado/cifrado remanescente no runner."
+OK=1
 echo "ℹ️ O banco de destino NÃO foi dropado: o descarte da instância (com os dados restaurados) é do operador, logo após o drill."

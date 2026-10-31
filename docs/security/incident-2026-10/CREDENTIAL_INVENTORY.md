@@ -66,6 +66,7 @@ rollback para commit anterior à remoção religaria o runner com essas flags). 
 | `AUDIT_DB_SSL_CA` (novo, obrigatório) | `schema-audit.yml` | PEM da CA do servidor; sem ele a auditoria falha antes de conectar |
 | `GEMINI_API_KEY` | `ai-models.yml` (manual) | Documentado como "a mesma chave de produção" → separar |
 | `RESTORE_TARGET_URL` | `db-backup.yml` (drill manual de produção) | Instância descartável; banco `licigov_restore_drill*` (exigido pelo seletor) |
+| `RESTORE_DB_SSL_CA` / `STAGING_RESTORE_DB_SSL_CA` (novos, **a criar**; não-segredo) | `db-backup.yml`, job `restore-drill` | PEM da CA da instância de **destino** do drill ⇒ TLS `VERIFY_CA` obrigatório no destino (sem hostname). Sem fallback entre ambientes nem para a CA da origem; CA igual à da origem é recusada |
 | `STAGING_BACKUP_DATABASE_URL`, `STAGING_BACKUP_ENCRYPTION_KEY`, `STAGING_BACKUP_DB_SSL_CA`, `STAGING_AUDIT_DATABASE_URL`, `STAGING_AUDIT_DB_SSL_CA`, `STAGING_RESTORE_TARGET_URL` (novos, **a criar**) | `db-backup.yml` / `schema-audit.yml` com `target = staging` | Só staging; sem fallback para os de produção (`scripts/ops/select-db-target.sh`). Chave de cifra própria (a de produção é recusada) |
 
 ## Dependências compartilhadas com SincroSaúde (somente mapeamento — não alterar)

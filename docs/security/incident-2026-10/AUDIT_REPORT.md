@@ -189,6 +189,7 @@ Ordem sugerida, cada uma com evidência esperada (sem valores):
 | rev. 3 — docs(security) | checklist rev. 3, runbook, inventário, relatório §11 | Nenhum |
 | rev. 4 — fix(ci): lint de não-regressão fail-closed | `scripts/ci/lint-changed.sh` (novo), `ci.yml` (passo de lint + input `lint_base` obrigatório no dispatch), teste | Baixo: PRs agora lintam de fato os arquivos alterados; disparo manual exige a base |
 | rev. 4 — docs(security) | checklist rev. 4 (IDs, canal das senhas, ordem com drill antes da troca, ref do workflow) | Nenhum |
+| fix(ops): TLS autenticado no destino do drill | `scripts/ops/db-restore-drill.sh`, `scripts/ops/select-db-target.sh`, `db-backup.yml` (job `restore-drill`), testes, checklist/runbook/inventário | Baixo: o drill passa a exigir `RESTORE_DB_SSL_CA`/`STAGING_RESTORE_DB_SSL_CA` (ainda não cadastrados) e conecta ao destino só com `VERIFY_CA`; antes o destino podia negociar TLS sem autenticar o servidor (código; não prova que alguma sessão anterior tenha sido em texto puro) |
 
 Todos os commits atualizam `graphify-out/` pelo hook do repositório (`.githooks/pre-commit`, convenção do
 projeto). O diff de `graph.json`/`GRAPH_REPORT.md`/`.graphify_labels.json` é grande porque qualquer mudança de

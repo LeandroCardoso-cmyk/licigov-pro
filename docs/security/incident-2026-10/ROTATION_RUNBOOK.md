@@ -103,7 +103,8 @@ Passo a passo com IDs, confirmação do alvo e autorização coordenada: [`CONTA
 3. Criar as quatro contas com senhas alfanuméricas geradas no cofre do operador (canal do §1; não
    `RANDOM PASSWORD`, que pode gerar pontuação incompatível com as URLs) e aplicar os GRANTs do plano — §6.
 4. Secrets `STAGING_*` (nunca reapontar os de produção); backup e auditoria pelo ref `staging` com
-   `target = staging`; **drill com os dados reais de staging** numa instância descartável separada — §7. Só
+   `target = staging`; **drill com os dados reais de staging** numa instância descartável separada, com TLS
+   `VERIFY_CA` pela CA **do destino** (`STAGING_RESTORE_DB_SSL_CA`) — §7. Só
    depois disso a recuperação está comprovada.
 5. `DATABASE_URL` → `licigov_app`, `MIGRATION_DATABASE_URL` → `licigov_migrator`; deploy e validação; então
    **Regenerate** do root — §8.
