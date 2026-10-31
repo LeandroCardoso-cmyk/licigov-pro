@@ -54,3 +54,21 @@ export function diffSchema(
 
   return { missingTables: missingTables.sort(), absentColumns, mismatchColumns };
 }
+
+/**
+ * SEC-AUD-2026-10 — opções de conexão da auditoria. AUDIT_DATABASE_URL (workflow) exige AUDIT_DB_SSL_CA:
+ * TLS obrigatório com a cadeia conferida contra a CA fixada (`rejectUnauthorized: true`) e sem conferência de
+ * hostname (`verifyIdentity: false` — o certificado autogerado do MySQL não traz o host do proxy). DATABASE_URL
+ * (uso local) segue sem TLS imposto. Nunca devolve `rejectUnauthorized: false`.
+ */
+export function auditConnectionOptions(
+  env: Record<string, string | undefined>,
+): { uri: string; ssl?: { ca: string; rejectUnauthorized: true; verifyIdentity: false } } | { error: string } | null {
+  if (env.AUDIT_DATABASE_URL) {
+    const ca = env.AUDIT_DB_SSL_CA;
+    if (!ca) return { error: "AUDIT_DATABASE_URL sem AUDIT_DB_SSL_CA — a auditoria remota exige TLS com a CA do servidor." };
+    return { uri: env.AUDIT_DATABASE_URL, ssl: { ca, rejectUnauthorized: true, verifyIdentity: false } };
+  }
+  if (env.DATABASE_URL) return { uri: env.DATABASE_URL };
+  return null;
+}
