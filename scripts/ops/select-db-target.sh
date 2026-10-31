@@ -7,7 +7,8 @@
 # deixaria o agendamento de produção apontado para staging (ou o inverso). Aqui cada ambiente tem secrets
 # com NOME próprio e não existe fallback entre eles:
 #   - produção: BACKUP_DATABASE_URL, BACKUP_ENCRYPTION_KEY, BACKUP_DB_SSL_CA, AUDIT_DATABASE_URL,
-#               AUDIT_DB_SSL_CA, RESTORE_TARGET_URL  (nomes atuais, valores intactos);
+#               AUDIT_DB_SSL_CA, RESTORE_TARGET_URL  (nomes atuais, valores intactos), RESTORE_DB_SSL_CA (CA do
+#               DESTINO do drill, nova);
 #   - staging:  STAGING_<mesmo nome>.
 # O workflow entrega os candidatos como PRODUCTION_<nome> e STAGING_<nome>; este script escolhe UM conjunto,
 # exporta-o com o nome canônico (<nome>), apaga os demais candidatos e só então executa o comando.
@@ -19,7 +20,10 @@
 #   4. secrets obrigatórios do alvo ausentes ⇒ erro (staging NUNCA cai para o secret de produção);
 #   5. staging no mesmo host:porta de produção, ou com a mesma chave de cifra ⇒ erro;
 #   6. drill: destino ≠ origem (host:porta), destino ≠ banco do outro ambiente e nome do banco de destino
-#      identificado como descartável (`licigov_restore_drill*`).
+#      identificado como descartável (`licigov_restore_drill*`);
+#   7. drill: CA do DESTINO (RESTORE_DB_SSL_CA) obrigatória nos dois ambientes, sem fallback para a CA da origem
+#      (BACKUP_DB_SSL_CA) nem para a do outro ambiente; CA do destino idêntica à da origem ⇒ erro (instâncias
+#      distintas têm CAs autogeradas distintas — igualdade indica secret trocado).
 #
 # Uso: bash scripts/ops/select-db-target.sh <backup|audit|drill> -- <comando> [args…]
 # Saída não sensível: GITHUB_OUTPUT ← target=<production|staging>; variável DB_TARGET no comando.
@@ -49,7 +53,7 @@ shift
 case "$KIND" in
   backup) REQUIRED=(BACKUP_DATABASE_URL BACKUP_ENCRYPTION_KEY); OPTIONAL=(BACKUP_DB_SSL_CA) ;;
   audit)  REQUIRED=(AUDIT_DATABASE_URL AUDIT_DB_SSL_CA); OPTIONAL=() ;;
-  drill)  REQUIRED=(BACKUP_DATABASE_URL BACKUP_ENCRYPTION_KEY RESTORE_TARGET_URL); OPTIONAL=() ;;
+  drill)  REQUIRED=(BACKUP_DATABASE_URL BACKUP_ENCRYPTION_KEY RESTORE_TARGET_URL RESTORE_DB_SSL_CA); OPTIONAL=() ;;
   *) fail "Tipo desconhecido: '$KIND' (esperado backup|audit|drill)." ;;
 esac
 
@@ -113,6 +117,10 @@ if [ "$KIND" = "drill" ]; then
     licigov_restore_drill|licigov_restore_drill_*) : ;;
     *) fail "Destino do drill não identificado como descartável: o banco precisa se chamar licigov_restore_drill[_sufixo]." ;;
   esac
+  src_ca="${PREFIX}BACKUP_DB_SSL_CA"
+  if [ -n "${!src_ca:-}" ] && [ "${CHOSEN[RESTORE_DB_SSL_CA]}" = "${!src_ca}" ]; then
+    fail "${PREFIX#PRODUCTION_}RESTORE_DB_SSL_CA igual à CA da ORIGEM — informe a CA da instância de destino."
+  fi
 fi
 
 # Remove TODOS os candidatos (dos dois ambientes) antes de executar o comando.

@@ -19,6 +19,8 @@ const STG_URL = "mysql://backup:stg-s3nha@stg.proxy.invalid:42002/railway";
 const PROD_KEY = "chave-sintetica-producao-000000000000";
 const STG_KEY = "chave-sintetica-staging-1111111111111";
 const CA = "-----BEGIN CERTIFICATE-----\nSINTETICA\n-----END CERTIFICATE-----";
+const CA_DRILL_PROD = "-----BEGIN CERTIFICATE-----\nDRILL-PROD-SINTETICA\n-----END CERTIFICATE-----";
+const CA_DRILL_STG = "-----BEGIN CERTIFICATE-----\nDRILL-STG-SINTETICA\n-----END CERTIFICATE-----";
 const SECRETS = [PROD_URL, STG_URL, PROD_KEY, STG_KEY, "prod-s3nha", "stg-s3nha", "SINTETICA"];
 
 let dir: string;
@@ -173,6 +175,9 @@ describe("select-db-target.sh — drill de restauração", () => {
     ...BACKUP_CANDIDATES,
     PRODUCTION_RESTORE_TARGET_URL: "mysql://root:d@drill-prod.proxy.invalid:43003/licigov_restore_drill",
     STAGING_RESTORE_TARGET_URL: "mysql://root:d@drill-stg.proxy.invalid:44004/licigov_restore_drill_stg",
+    PRODUCTION_RESTORE_DB_SSL_CA: CA_DRILL_PROD,
+    STAGING_RESTORE_DB_SSL_CA: CA_DRILL_STG,
+    PRODUCTION_BACKUP_DB_SSL_CA: CA,
   };
   const dispatch = (t: string, extra: Record<string, string> = {}) =>
     select("drill", { GITHUB_EVENT_NAME: "workflow_dispatch", DB_TARGET_INPUT: t, ...DRILL, ...extra });
@@ -183,6 +188,30 @@ describe("select-db-target.sh — drill de restauração", () => {
     expect(r.child.RESTORE_TARGET_URL).toBe(DRILL.STAGING_RESTORE_TARGET_URL);
     expect(r.child.BACKUP_DATABASE_URL).toBe(STG_URL);
     expect(r.child.BACKUP_ENCRYPTION_KEY).toBe(STG_KEY);
+    expect(r.child.RESTORE_DB_SSL_CA).toBe(CA_DRILL_STG);
+    expect(r.child.BACKUP_DB_SSL_CA).toBeUndefined(); // a CA da origem não chega ao drill
+  });
+
+  it("CA do DESTINO obrigatória nos dois ambientes, sem fallback para o outro ambiente nem para a CA da origem", () => {
+    for (const t of ["staging", "production"]) {
+      const r = dispatch(t, { [`${t.toUpperCase()}_RESTORE_DB_SSL_CA`]: "" });
+      expect(r.status, t).not.toBe(0);
+      expect(r.logs).toContain("RESTORE_DB_SSL_CA");
+      expect(r.logs).toMatch(/sem fallback/);
+    }
+  });
+
+  it("produção recebe a CA de destino de produção (não a de staging)", () => {
+    const r = dispatch("production");
+    expect(r.status, r.logs).toBe(0);
+    expect(r.child.RESTORE_DB_SSL_CA).toBe(CA_DRILL_PROD);
+  });
+
+  it("CA de destino idêntica à CA da origem do mesmo ambiente ⇒ recusa", () => {
+    const r = dispatch("staging", { STAGING_RESTORE_DB_SSL_CA: CA }); // STAGING_BACKUP_DB_SSL_CA = CA
+    expect(r.status).not.toBe(0);
+    expect(r.logs).toMatch(/igual à CA da ORIGEM/);
+    expect(dispatch("production", { PRODUCTION_RESTORE_DB_SSL_CA: CA }).status).not.toBe(0);
   });
 
   it("destino no host:porta da origem ⇒ recusa", () => {
@@ -245,6 +274,8 @@ describe("workflows — ligação com o seletor", () => {
     expect(backupYml).toContain("PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}");
     expect(backupYml).toContain("STAGING_BACKUP_DATABASE_URL: ${{ secrets.STAGING_BACKUP_DATABASE_URL }}");
     expect(backupYml).toContain("STAGING_RESTORE_TARGET_URL: ${{ secrets.STAGING_RESTORE_TARGET_URL }}");
+    expect(backupYml).toContain("PRODUCTION_RESTORE_DB_SSL_CA: ${{ secrets.RESTORE_DB_SSL_CA }}");
+    expect(backupYml).toContain("STAGING_RESTORE_DB_SSL_CA: ${{ secrets.STAGING_RESTORE_DB_SSL_CA }}");
     expect(auditYml).toContain("STAGING_AUDIT_DATABASE_URL: ${{ secrets.STAGING_AUDIT_DATABASE_URL }}");
   });
 

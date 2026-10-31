@@ -10595,8 +10595,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/db-backup.yml": {
-    "mtime": 1793365604.855478,
-    "ast_hash": "3f6d8e63f9c6a108adb6beea0ea0a98e",
+    "mtime": 1793416822.3067145,
+    "ast_hash": "f1019834b0c9191fbfdd4695e02df1ef",
     "semantic_hash": ""
   },
   ".github/workflows/db-restore-test.yml": {
@@ -15270,13 +15270,13 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CREDENTIAL_INVENTORY.md": {
-    "mtime": 1793365613.746017,
-    "ast_hash": "c250ecd19d20907b54b9a82acf769d27",
+    "mtime": 1793417079.6227934,
+    "ast_hash": "1925b74efabaaf722aa615cb62de035c",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROTATION_RUNBOOK.md": {
-    "mtime": 1793365613.746017,
-    "ast_hash": "93afceb46e0e990d1ae5680ba7e750fd",
+    "mtime": 1793417079.6231678,
+    "ast_hash": "44d44a241dc9b1ffc0326d9b5bacc6af",
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/ROADMAP.md": {
@@ -15295,8 +15295,8 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/AUDIT_REPORT.md": {
-    "mtime": 1793365613.745518,
-    "ast_hash": "4c188b55abca34aba960919beccf55ee",
+    "mtime": 1793417089.18643,
+    "ast_hash": "9182e71b2c37cb48326e3f64635aba82",
     "semantic_hash": ""
   },
   "scripts/ops/db-backup.sh": {
@@ -15320,23 +15320,23 @@
     "semantic_hash": ""
   },
   "docs/security/incident-2026-10/CONTAINMENT_CHECKLIST.md": {
-    "mtime": 1793365613.746017,
-    "ast_hash": "f5e7a077575fa11ae3f31f48b5e12e14",
+    "mtime": 1793417079.6222234,
+    "ast_hash": "0552f1976b6be3e213ea3feb2d699ad0",
     "semantic_hash": ""
   },
   "scripts/ops/db-restore-drill.sh": {
-    "mtime": 1793365614.385979,
-    "ast_hash": "24b00ae49fd9c43cede4f4e0cde486de",
+    "mtime": 1793416798.5289366,
+    "ast_hash": "5bfeac13dbc5db3d74b57ed93e4b943d",
     "semantic_hash": ""
   },
   "scripts/ops/select-db-target.sh": {
-    "mtime": 1793365614.385979,
-    "ast_hash": "03a0c4c7ba7a7a69507d5d261844a498",
+    "mtime": 1793416754.1765501,
+    "ast_hash": "c9963c7033fd6074b26d0e09e7eacebd",
     "semantic_hash": ""
   },
   "server/__tests__/unit/db-target-select.test.ts": {
-    "mtime": 1793365614.4674785,
-    "ast_hash": "0aec203e9dba06d8e5bbc4b75b541dee",
+    "mtime": 1793416845.2490299,
+    "ast_hash": "687467ee29791c46e7c47d4474504eaf",
     "semantic_hash": ""
   },
   "server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts": {
@@ -15712,6 +15712,11 @@
   "server/_core/errorShape.ts": {
     "mtime": 1793371972.170594,
     "ast_hash": "7dce81c30ce445144510acac9f50cdd1",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/db-restore-drill-script.test.ts": {
+    "mtime": 1793416931.033603,
+    "ast_hash": "aa20737cde39ea76fcbf7e927f8689c7",
     "semantic_hash": ""
   }
 }

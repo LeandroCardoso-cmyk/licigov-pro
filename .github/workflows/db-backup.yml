@@ -25,7 +25,7 @@ on:
           - staging
           - production
       run_restore_drill:
-        description: "Após o backup, executar o DRILL de restauração no RESTORE_TARGET_URL do ambiente (dispatch-only). Destino: instância descartável, isolada, banco licigov_restore_drill*, VAZIO — nunca produção/staging."
+        description: "Após o backup, executar o DRILL de restauração no RESTORE_TARGET_URL do ambiente (dispatch-only), com TLS VERIFY_CA pela RESTORE_DB_SSL_CA do ambiente. Destino: instância descartável, isolada, banco licigov_restore_drill*, VAZIO — nunca produção/staging."
         type: boolean
         default: false
 
@@ -84,7 +84,9 @@ jobs:
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────────────────────────────────────
-  # DRILL de restauração REAL (dispatch-only, opt-in). Lógica em scripts/ops/db-restore-drill.sh, sempre
+  # DRILL de restauração REAL (dispatch-only, opt-in). Conexão ao destino SEMPRE em TLS VERIFY_CA com a CA do
+  # destino (RESTORE_DB_SSL_CA / STAGING_RESTORE_DB_SSL_CA, obrigatória; sem fallback para a CA da origem).
+  # Lógica em scripts/ops/db-restore-drill.sh, sempre
   # atrás de select-db-target.sh: mesmo ambiente do backup; destino = RESTORE_TARGET_URL do ambiente
   # (STAGING_RESTORE_TARGET_URL em staging), ≠ origem, ≠ banco do outro ambiente, banco nomeado
   # licigov_restore_drill*, acessível e VAZIO. Banco vazio sozinho NÃO prova que a instância é descartável:
@@ -119,9 +121,15 @@ jobs:
           PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           PRODUCTION_BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
           PRODUCTION_RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
+          # CA do DESTINO do restore (TLS VERIFY_CA obrigatório); a CA da ORIGEM entra só para o seletor recusar
+          # uma CA de destino idêntica à da origem — nunca é usada para conectar ao destino.
+          PRODUCTION_RESTORE_DB_SSL_CA: ${{ secrets.RESTORE_DB_SSL_CA }}
+          PRODUCTION_BACKUP_DB_SSL_CA: ${{ secrets.BACKUP_DB_SSL_CA }}
           STAGING_BACKUP_DATABASE_URL: ${{ secrets.STAGING_BACKUP_DATABASE_URL }}
           STAGING_BACKUP_ENCRYPTION_KEY: ${{ secrets.STAGING_BACKUP_ENCRYPTION_KEY }}
           STAGING_RESTORE_TARGET_URL: ${{ secrets.STAGING_RESTORE_TARGET_URL }}
+          STAGING_RESTORE_DB_SSL_CA: ${{ secrets.STAGING_RESTORE_DB_SSL_CA }}
+          STAGING_BACKUP_DB_SSL_CA: ${{ secrets.STAGING_BACKUP_DB_SSL_CA }}
         run: |
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/scripts/ops/select-db-target.sh" drill -- bash "$GITHUB_WORKSPACE/scripts/ops/db-restore-drill.sh"
