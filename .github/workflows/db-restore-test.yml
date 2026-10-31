@@ -17,6 +17,10 @@ concurrency:
   group: db-restore-test
   cancel-in-progress: false
 
+# SEC-AUD-2026-10 — menor privilégio: o GITHUB_TOKEN só lê o repositório (nenhum job escreve no GitHub).
+permissions:
+  contents: read
+
 jobs:
   restore-test:
     name: Restauração em ambiente isolado (fixture)

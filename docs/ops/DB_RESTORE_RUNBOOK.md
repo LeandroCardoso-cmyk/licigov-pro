@@ -4,6 +4,14 @@
 > [`backups/BACKUP_POLICY.md`](../../backups/BACKUP_POLICY.md) e
 > [`backups/DISASTER_RECOVERY.md`](../../backups/DISASTER_RECOVERY.md).
 
+> **Atualização SEC-AUD-2026-10 (prevalece sobre o texto abaixo onde divergir):** a lógica saiu do YAML para
+> `scripts/ops/select-db-target.sh`, `scripts/ops/db-backup.sh` e `scripts/ops/db-restore-drill.sh`. Cifra
+> **obrigatória** (sem `BACKUP_ENCRYPTION_KEY` o backup falha; não há artifact em claro); TLS obrigatório
+> (`VERIFY_CA` com `BACKUP_DB_SSL_CA`, senão `REQUIRED`); disparo manual escolhe `target` (produção usa os nomes
+> atuais; staging só `STAGING_*`); artifacts `db-backup-<ambiente>` e `restore-drill-evidence-<ambiente>`; o drill
+> exige também `RESTORE_DB_SSL_CA` (CA do destino, `VERIFY_CA`) e banco `licigov_restore_drill*`. Sequência de
+> produção: [`PRODUCTION_DB_RUNBOOK.md`](../security/incident-2026-10/PRODUCTION_DB_RUNBOOK.md).
+
 ## Backup
 
 **Workflow:** [`.github/workflows/db-backup.yml`](../../.github/workflows/db-backup.yml)
