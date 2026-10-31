@@ -24,7 +24,7 @@ const deadlock = () => Object.assign(new Error("Deadlock found when trying to ge
 const fakeDb = {
   transaction: async (cb: (tx: any) => Promise<unknown>) => {
     txAttempts += 1;
-    const tx = { staged: [] as Row[], attempt: txAttempts };
+    const tx = { staged: [] as Row[], attempt: txAttempts, select: () => authority.txSelect() };
     const out = await cb(tx);
     if (deadlockOnAttempt.has(txAttempts)) throw deadlock(); // InnoDB desfaz a tentativa INTEIRA
     committed.push(...tx.staged);
@@ -35,6 +35,10 @@ const stage = (tx: any, table: string, row: any) => { tx.staged.push({ table, ro
 const rows = (table: string) => committed.filter((r) => r.table === table).map((r) => r.row);
 
 vi.mock("../../db/connection", () => ({ getDb: vi.fn(async () => fakeDb) }));
+// SECURITY-02 — autoridade REAL do emissor (fonte autoritativa simulada; padrão: manager real).
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+const authority = createAuthorityFixture();
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o) }));
 
 // Document Engine: ponto ÚNICO de geração oficial (espião; grava na transação recebida).
 const generateOfficialDocument = vi.fn(async (params: any, executor: any) => {
@@ -154,6 +158,7 @@ const genParams = (over: Partial<GenerateTemplatedDocumentParams> = {}): Generat
 const err = async (p: Promise<unknown>): Promise<any> => p.then(() => null, (e) => e);
 
 beforeEach(() => {
+  authority.reset();
   vi.clearAllMocks();
   committed.length = 0;
   calls.length = 0;

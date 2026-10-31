@@ -24,14 +24,16 @@ import { getGeneratedDocumentByKind, getProcess, listIntelligentItems, lockedFic
 import { listProcurementItems } from "../db/procurementItems";
 import { resolveProcurementContext } from "./canonicalContextService";
 import { demonstrativePricesAllowed, fictitiousPriceBlocker } from "./priceGovernanceService";
-import { insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { countOfficialPromotions, insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
 import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
+import { requireInstitutionalAuthority } from "./institutionalAuthorityService";
 import { draftContentHash } from "../domain/generatedDocument";
 import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
 import type { OrgRole } from "../../drizzle/schema";
 import { getLatestEmittedByOrigin } from "../db/officialDocuments";
+import { getOrganizationMemberNames } from "../db/organizations";
 import { getAuthoringSourceState, getEditalSourceState } from "./procurementProcessService";
 import { emissionBlockers, lineDiffStats, type EmissionBlocker } from "../domain/emissionPreconditions";
 import type { PromotionTemplateIssuanceHook } from "./institutionalTemplates/templateCompositionService";
@@ -178,6 +180,14 @@ export async function promoteOfficialDocument(params: {
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde a revisão — recarregue e revise a versão vigente antes de emitir." });
   }
 
+  // SECURITY-02 — `actorRole` vem do chamador (e, para o admin de plataforma, é a projeção sintética `owner`): NÃO prova vínculo.
+  // A emissão exige membership REAL, ativa e ≥ manager no órgão, relida da fonte autoritativa ANTES de qualquer escrita (nem a
+  // chave de idempotência é reservada) e revalidada sob trava dentro da transação, abaixo.
+  await requireInstitutionalAuthority({
+    userId: params.actorUserId, organizationId: params.organizationId, minRole: MIN_EMIT_ROLE,
+    operation: PROMOTE_OP, correlationId: params.correlationId,
+  });
+
   const payloadHash = payloadHashOf({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, contentHash });
 
   const check = await checkIdempotency(params.idempotencyKey, params.actorUserId, params.organizationId, PROMOTE_OP, payloadHash);
@@ -264,6 +274,12 @@ export async function promoteOfficialDocument(params: {
       // M8 (emenda de integridade) — FRONTEIRA DECISIVA da elegibilidade de preço: trava as fontes do processo (FOR SHARE,
       // ordem estável) e RECALCULA o bloqueio sob a trava. Uma cotação que se tornou fictícia depois das pré-condições
       // (ou cujo escritor ainda não commitou) é vista aqui; nenhum escritor confirma mudança até este commit.
+      // SECURITY-02 — TOCTOU: a autoridade do emissor é relida DENTRO da tentativa transacional com FOR SHARE (a membership fica
+      // travada até o commit; rebaixamento/remoção concorrente não confirma entre a checagem e a emissão).
+      const lockedEmitterAuthority = await requireInstitutionalAuthority({
+        userId: params.actorUserId, organizationId: params.organizationId, minRole: MIN_EMIT_ROLE,
+        operation: PROMOTE_OP, correlationId: params.correlationId, executor: tx,
+      });
       const lockedFictitious = await lockedFictitiousPriceItemCount(tx, params.organizationId, params.processId, demonstrativeAllowed);
       if (emissionHook) await emissionHook("after_source_locks");
       if (lockedFictitious > 0) {
@@ -290,6 +306,8 @@ export async function promoteOfficialDocument(params: {
           promotedFromDraftId: draft.id, contentHash,
           ...(officialContentHash !== contentHash ? { reviewedContentHash: contentHash, officialContentHash } : {}),
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
+          // SECURITY-02 — papel institucional EFETIVO do emissor (membership persistida), nunca o do contexto.
+          emitterInstitutionalRole: lockedEmitterAuthority.role,
           // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
           reason: params.reason ?? null,
@@ -336,7 +354,13 @@ export async function promoteOfficialDocument(params: {
 
 export interface OfficialPromotionSummary {
   draft: { exists: boolean; status: string | null; contentHash: string | null };
-  latestOfficial: { officialDocumentId: string; version: number; contentHash: string; emittedAt: string } | null;
+  latestOfficial: {
+    officialDocumentId: string; version: number; contentHash: string; emittedAt: string;
+    /** M8 P3.3 — ordinal desta emissão (1 = primeira emissão oficial). `version` é a revisão técnica da linhagem (inclui snapshots). */
+    emissionNumber: number;
+    /** Quem emitiu (registrado no ledger); nome só quando o usuário é membro desta organização. */
+    emittedBy: { userId: number; name: string | null };
+  } | null;
   /** true quando existe rascunho E já houve emissão E o conteúdo do rascunho difere da última emitida. */
   diverged: boolean;
   /** true quando existe rascunho promovível mas nenhuma versão oficial foi emitida ainda. */
@@ -361,10 +385,16 @@ export async function getOfficialPromotionSummary(params: {
   const pre = exists && draftHash
     ? await resolveEmissionPreconditions({ organizationId: params.organizationId, processId: params.processId, kind: params.kind, content: draft!.content, contentHash: draftHash })
     : null;
+  const emitterName = latest ? (await getOrganizationMemberNames(params.organizationId, [latest.actorUserId])).get(latest.actorUserId) ?? null : null;
+  // Ledger append-only: a última emissão é a de número igual ao total (nunca menor que 1 quando há emissão).
+  const emissionNumber = latest ? Math.max(1, await countOfficialPromotions(params.organizationId, params.processId, params.kind)) : 0;
   return {
     draft: { exists, status: draft?.status ?? null, contentHash: draftHash },
     latestOfficial: latest
-      ? { officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt }
+      ? {
+        officialDocumentId: latest.officialDocumentId, version: latest.version, contentHash: latest.contentHash, emittedAt: latest.createdAt, emissionNumber,
+        emittedBy: { userId: latest.actorUserId, name: emitterName },
+      }
       : null,
     diverged: !!(exists && latest && draftHash !== latest.contentHash),
     neverEmitted: exists && !latest,

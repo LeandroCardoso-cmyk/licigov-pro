@@ -9,7 +9,13 @@
  *                                    snake_case) → alinhar o SCHEMA (Drizzle), não o banco
  *
  * Uso:
- *   DATABASE_URL="mysql://user:senha@host:3306/db" pnpm db:audit
+ *   DATABASE_URL="mysql://user:senha@host:3306/db" pnpm db:audit            (local, sem TLS)
+ *   AUDIT_DATABASE_URL=… AUDIT_DB_SSL_CA="$(cat ca.pem)" pnpm db:audit      (workflow, via select-db-target.sh)
+ *
+ * SEC-AUD-2026-10 — com AUDIT_DB_SSL_CA a conexão exige TLS e o certificado do servidor precisa ser assinado
+ * por ESSA CA (fixada; equivale ao VERIFY_CA do cliente mysql). O hostname não é conferido: o certificado
+ * autogerado do MySQL não traz o host do proxy público. Não há modo `rejectUnauthorized:false` (cifra sem
+ * autenticar) nem fallback para texto puro: se a CA não confere, a auditoria falha.
  *
  * Somente leitura. Exit 1 se houver divergências, 2 em erro de execução, 0 se alinhado.
  */
@@ -18,17 +24,21 @@ import mysql, { type RowDataPacket } from "mysql2/promise";
 import { is } from "drizzle-orm";
 import { MySqlTable, getTableConfig } from "drizzle-orm/mysql-core";
 import * as schema from "../drizzle/schema";
-import { diffSchema } from "./schema-audit-util";
+import { auditConnectionOptions, diffSchema } from "./schema-audit-util";
 import { checkForeignKeyContract } from "../server/db/schemaForeignKeyGuard";
 
 async function main(): Promise<void> {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
+  const options = auditConnectionOptions(process.env);
+  if (!options) {
     console.error('❌ DATABASE_URL não definido. Ex.: DATABASE_URL="mysql://user:senha@host:3306/db" pnpm db:audit');
     process.exit(2);
   }
+  if ("error" in options) {
+    console.error(`❌ ${options.error}`);
+    process.exit(2);
+  }
 
-  const conn = await mysql.createConnection(url);
+  const conn = await mysql.createConnection(options);
   const [dbRows] = await conn.query<RowDataPacket[]>("SELECT DATABASE() AS db");
   const dbName = String(dbRows[0]?.db ?? "");
   const [colRows] = await conn.query<RowDataPacket[]>(

@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import DemonstrativePriceNotice from "./DemonstrativePriceNotice";
 import TrStructuredParamsSection from "./TrStructuredParamsSection";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { generationFollowUp, useGenerationFollowUp } from "./generationFollowUp";
+import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
 import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
@@ -27,9 +30,11 @@ export type TRWorkspaceProps = {
   processId?: string;
   /** Abre a importação expandida (processo iniciado por "Importar TR existente"). */
   startWithImport?: boolean;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function TRWorkspace({ processId = "", startWithImport = false }: TRWorkspaceProps) {
+export default function TRWorkspace({ processId = "", startWithImport = false, onDirtyChange }: TRWorkspaceProps) {
   const [object, setObject] = useState("");
   const utils = trpc.useUtils();
   // Objeto pré-preenchido com o do processo (sem reentrada de dado já existente).
@@ -39,16 +44,30 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
 
   const { key: trKey, rotate: rotateTrKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  // M8 — acompanhamento limitado da geração cuja resposta não chegou (o intervalo vem do hook, por ref: a query é declarada antes dele).
+  const followInterval = useRef<number | false>(false);
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
-    { processId, kind: "tr" }, { enabled: !!processId },
+    { processId, kind: "tr" }, { enabled: !!processId, refetchInterval: () => followInterval.current },
   );
   // PR-09 (SEM-014) — regenerar sobre conteúdo humano exige confirmação explícita (diálogo).
   const [confirmOpen, setConfirmOpen] = useState(false);
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
   const [editorDirty, setEditorDirty] = useState(false);
+  useEffect(() => { onDirtyChange?.(editorDirty); }, [editorDirty, onDirtyChange]);
+  const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
+  const followUp = useGenerationFollowUp(reviewable.data?.draft, () => {
+    rotateTrKey();
+    if (processId) utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "tr" });
+  });
+  followInterval.current = followUp.refetchInterval;
+  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]);
   const generateTR = trpc.procurementProcess.generateTR.useMutation({
     // Recusa governada do servidor (conteúdo humano sem confirmação) ⇒ abre o diálogo; nada foi gravado.
-    onError: (e) => { if (isHumanEditRefusal(e.message)) setConfirmOpen(true); },
+    // Resposta que não chegou / geração em voo ⇒ acompanha o rascunho persistido (sem reenviar).
+    onError: (e) => {
+      if (isHumanEditRefusal(e.message)) { setConfirmOpen(true); return; }
+      if (generationFollowUp(e.data?.code, e.message) === "follow") followUp.start(draftAtRequest.current);
+    },
     onSuccess: () => {
       setConfirmOpen(false);
       rotateTrKey();
@@ -70,6 +89,8 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
     const plan = planRegeneration({ confirmed: confirmReplace, needsReplace: needsReplaceConfirmation(draft), block: regenerationBlock });
     if (plan === "blocked") return;
     if (plan === "confirm") { setConfirmOpen(true); return; }
+    draftAtRequest.current = draft;
+    followUp.clear();
     generateTR.mutate({
       processId, object: object.trim(), idempotencyKey: trKey,
       // Hash do rascunho que o humano VIU: a confirmação vale só para este conteúdo (divergente ⇒ CONFLICT).
@@ -86,7 +107,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
 
       <div className="mt-5 space-y-4 rounded-xl border border-border bg-card p-5">
         <h2 className="font-medium text-foreground">Gerar TR com base no processo</h2>
-        {processId && object.trim() && <AuthoringSourcesSummary processId={processId} kind="tr" object={object} />}
+        {processId && object.trim() && <AuthoringSourcesSummary processId={processId} kind="tr" object={object} regenerationBlock={reviewable.isLoading ? "loading" : regenerationBlock} />}
         <label className="flex flex-col text-sm">
           <span className="mb-1 font-medium text-foreground">Objeto</span>
           <input
@@ -100,10 +121,10 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
         <button
           type="button"
           onClick={() => handleGenerate()}
-          disabled={!processId || !object.trim() || generateTR.isPending || !!regenerationBlock}
+          disabled={!processId || !object.trim() || generateTR.isPending || followUp.following || !!regenerationBlock}
           className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground"
         >
-          {generateTR.isPending ? "Gerando..." : "Gerar TR com base no processo"}
+          {generateTR.isPending || followUp.following ? "Gerando..." : "Gerar TR com base no processo"}
         </button>
         {!processId && (
           <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
@@ -111,8 +132,10 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
           </p>
         )}
         <RegenerationBlockedNotice documentLabel="TR" block={regenerationBlock} />
-        {generateTR.isError && !isHumanEditRefusal(generateTR.error?.message) && (
-          <p className="mt-2 text-sm text-destructive">{domainErrorMessage(generateTR.error?.message, "Falha ao gerar o TR.")}</p>
+        <GenerationFollowUpNotice status={followUp.status} documentLabel="TR" onCheckAgain={() => { followUp.restart(); void reviewable.refetch(); }} />
+        {generateTR.isError && !isHumanEditRefusal(generateTR.error?.message) && followUp.status === "idle"
+          && generationFollowUp(generateTR.error?.data?.code, generateTR.error?.message) === "error" && (
+          <p className="mt-2 text-sm text-destructive" role="alert">{domainErrorMessage(generateTR.error?.message, "Falha ao gerar o TR.")}</p>
         )}
       </div>
 
@@ -132,6 +155,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false }:
         <div className="mt-6">
           {/* A2 — explicabilidade mínima de fundamentação (estado + nº de evidências reais). */}
           <GroundingNotice grounding={reviewable.data?.draft?.grounding ?? null} content={draft.content} />
+          <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana) — gerado com base no
             processo ou importado. Edite e salve; a emissão oficial exige revisão de um terceiro (SoD).

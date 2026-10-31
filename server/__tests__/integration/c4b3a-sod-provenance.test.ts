@@ -9,7 +9,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const fakeTx = { __tx: true };
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+// SECURITY-02 — fonte autoritativa da autoridade do emissor (membership REAL); padrão: todo ator é manager real.
+const authority = createAuthorityFixture();
+const fakeTx = { __tx: true, select: () => authority.txSelect() };
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o) }));
 
 const createDocument = vi.fn(async (params: { status?: string; metadata?: any }, _e?: unknown) => ({
   id: "off-1", version: 1, status: params.status ?? "emitido", lineageId: "lin-1", __meta: params.metadata,
@@ -84,6 +88,7 @@ function base(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authority.reset();
   getGeneratedDocumentByKind.mockResolvedValue({ ...DRAFT });
   checkIdempotency.mockResolvedValue({ status: "new" });
 });

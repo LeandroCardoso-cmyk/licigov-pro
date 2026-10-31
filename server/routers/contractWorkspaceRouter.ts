@@ -16,7 +16,8 @@ import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 // NEW-006 — pisos de papel (import separado: não sobrepõe as linhas de import editadas por PR-08/PR-12).
-import { orgRoleProcedure, assertOrgRoleAtLeast } from "../_core/trpc";
+import { orgRoleProcedure, assertOrgRoleAtLeast, institutionalProcedure } from "../_core/trpc";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { router, tenantProcedure } from "../_core/trpc";
 import { updateContractFields, transitionContractStatus, ContractStatusTransitionError, type ContractStatus } from "../domain/contractWorkspace";
 import {
@@ -33,6 +34,7 @@ import {
   listContractWsDocuments, listContractAddenda, listContractApostilles, listContractOccurrences,
 } from "../db/contractWorkspace";
 import { listProcessTimeline } from "../db/procurement";
+import { getOrganizationMemberNames } from "../db/organizations";
 // NEW-022 — bloqueio da ativação genérica (import isolado: não sobrepõe as linhas de import editadas por NEW-006/PR-08/PR-12).
 import { assertNoGenericContractActivation } from "../services/contractActivationGuard";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "../services/idempotencyService";
@@ -180,7 +182,7 @@ export const contractWorkspaceRouter = router({
    * anteriores. Pede só o necessário para acompanhar e emitir instrumentos (número, contratado, objeto, vigência). Piso
    * `manager` (o registro nasce vigente). Não altera contratos existentes; não é ativação de minuta.
    */
-  registerInForceContract: orgRoleProcedure("manager")
+  registerInForceContract: institutionalProcedure("manager")
     .input(z.object({
       idempotencyKey: z.string().min(1),
       contractNumber: z.string().trim().min(1),
@@ -244,7 +246,15 @@ export const contractWorkspaceRouter = router({
         listProcessTimeline(input.contractId, orgId),
         getCurrentExpirationDate(orgId, "contrato", input.contractId), // vigência acompanhada (derivada dos eventos do Centro de Operações)
       ]);
-      return { workspace, documents, addenda, apostilles, occurrences, timeline, expiration: expirationDate ? { endDate: expirationDate, source: "centro_operacoes" as const } : null };
+      // M8 — nome do ator na linha do tempo (o ledger guarda "user:<id>"; append-only, não é reescrito): resolvido só entre
+      // membros DESTA organização; sem membro ⇒ sem nome (a tela mostra "Usuário nº …").
+      const actorIds = timeline.map((ev) => /^(?:user:)?(\d+)$/.exec(String(ev.actor ?? ""))?.[1]).filter((v): v is string => !!v).map(Number);
+      const names = await getOrganizationMemberNames(orgId, actorIds).catch(() => new Map<number, string>());
+      const namedTimeline = timeline.map((ev) => {
+        const id = /^(?:user:)?(\d+)$/.exec(String(ev.actor ?? ""))?.[1];
+        return { ...ev, actorName: id ? names.get(Number(id)) ?? null : null };
+      });
+      return { workspace, documents, addenda, apostilles, occurrences, timeline: namedTimeline, expiration: expirationDate ? { endDate: expirationDate, source: "centro_operacoes" as const } : null };
     }),
 
   listContracts: tenantProcedure
@@ -289,8 +299,13 @@ export const contractWorkspaceRouter = router({
       } catch (e) { mapContractEditError(e); }
       if (status && status !== ws.status) {
         assertOrgRoleAtLeast(ctx, "manager", "contractWorkspace.updateContract#status"); // NEW-006 — mudança de status: piso manager, antes de qualquer escrita
+        // SECURITY-02 — rescindir/encerrar/arquivar é ato institucional: exige membership REAL (não a projeção do admin de plataforma).
+        await requireInstitutionalAuthority({
+          userId: ctx.user.id, organizationId: ctx.organizationId!, minRole: "manager",
+          operation: "contractWorkspace.updateContract#status", correlationId: ctx.correlationId,
+        });
         try { updated = transitionContractStatus(updated, status as ContractStatus); }
-        catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida." }); }
+        catch (e) { throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Transição inválida.", cause: e }); }
       }
       const workspace = await saveGovernedContractEdit({
         before: ws, after: updated, expectedUpdatedAt: input.expectedUpdatedAt, actorUserId: ctx.user.id, correlationId: ctx.correlationId,
@@ -307,7 +322,7 @@ export const contractWorkspaceRouter = router({
       return generateContractDocument({ organizationId: orgId, contractId: input.contractId, kind: input.kind, refId: input.refId, actorUserId: ctx.user.id, correlationId: ctx.correlationId });
     }),
 
-  createAddendum: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
+  createAddendum: institutionalProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
     // SEM084-B — chave de idempotência OBRIGATÓRIA (uma por tentativa lógica): repetir o comando converge para o MESMO aditivo.
     .input(z.object({
       contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(),
@@ -322,7 +337,7 @@ export const contractWorkspaceRouter = router({
         .catch(mapInstrumentStatusError);
     }),
 
-  createApostille: orgRoleProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
+  createApostille: institutionalProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)
     .input(z.object({
       contractId: z.string().min(1), kind: z.enum(APOSTILLE_KINDS), description: z.string().optional(), newValue: z.number().optional(),
       // SEM-062 — `gestor` exige `newManager`; `fiscal` exige `newInspector` (o instrumento APLICA a designação ao contrato).

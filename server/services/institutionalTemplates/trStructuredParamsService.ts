@@ -16,7 +16,11 @@ import { formatValue2 } from "../../domain/institutionalTemplates/valueTypes2";
 import { authorityEntryOf, isDefaultEligible } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import type { EditalBoundaryParams } from "../../domain/institutionalTemplates/editalBridgeScope";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
-import { encodeTrParamValue, resolveTrParams, trParamPath, trParamsDigest } from "../../domain/trStructuredParams";
+import {
+  encodeTrParamValue, processObjectPendingReason, processObjectSupply, resolveTrParams, TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT, trParamPath, trParamsDigest,
+  type TrParamPendingReason, type TrParamSupply,
+} from "../../domain/trStructuredParams";
+import { getLatestEmittedByOrigin } from "../../db/officialDocuments";
 import { resolveField } from "../../domain/canonicalProcurementContext";
 import { recordContextAssertions } from "../canonicalContextService";
 import { serviceLogger } from "../observabilityService";
@@ -48,6 +52,10 @@ export interface TrParamView {
   /** Padrão institucional ELEGÍVEL (proposta; só vira fato com confirmação humana). */
   readonly proposal?: { readonly value: unknown; readonly orgProfileRevision: number };
   readonly defaultEligible: boolean;
+  /** M8 — sem valor no TR, mas SUPRIDO pela fonte autoritativa (TR oficial vigente ou objeto do processo): não é pendência. */
+  readonly suppliedBy?: TrParamSupply;
+  /** Motivo conhecido de o campo continuar pendente (ex.: TR oficial vigente emitido sem registrar o objeto). */
+  readonly pendingReason?: TrParamPendingReason;
 }
 
 export type TrStructuredState =
@@ -63,6 +71,9 @@ export type TrStructuredState =
 
 const ZERO_COND_FACTS = (values: Map<string, unknown>): Record<string, unknown> => Object.fromEntries(values);
 
+/** Mesmo domínio de negócio das emissões do Processo Licitatório (ver `editalBridgeService`). */
+const PROCUREMENT_DOMAIN = "processo_licitatorio";
+
 async function requireTenantProcess(organizationId: number, processId: string): Promise<void> {
   const p = await getProcess(processId, organizationId);
   if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
@@ -73,10 +84,14 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
   const loaded = await loadEditalCatalog(deps, organizationId, params);
   if (loaded.status !== "OK") return { status: "UNAVAILABLE", reason: loaded.reason };
   const { catalog } = loaded;
-  const [facts, orgRecord] = await Promise.all([
+  const [facts, orgRecord, process, currentTr] = await Promise.all([
     listContextFacts(organizationId, processId),
     readGovernedRecord(organizationId, "ORG", GOVERNED_ORG_SUBJECT, catalog).catch(() => null as GovernedRecord | null),
+    getProcess(processId, organizationId),
+    getLatestEmittedByOrigin(organizationId, PROCUREMENT_DOMAIN, processId, "tr"),
   ]);
+  const objectSupply = processObjectSupply(process?.object, currentTr);
+  const objectPendingReason = processObjectPendingReason(process?.object, currentTr);
   const defs = trParamDefs(catalog);
   const resolved = resolveTrParams(defs, facts);
   const proposals = trParamProposals(catalog, orgRecord);
@@ -103,6 +118,8 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
       ...(r.field.source ? { origin: { sourceType: r.field.source.type, sourceId: r.field.source.id, sourceVersion: r.field.source.version, status: r.field.status, actorUserId: r.field.actorUserId, updatedAt: r.field.updatedAt } } : {}),
       ...(prop && r.status === "UNSET" ? { proposal: { value: prop.value, orgProfileRevision: prop.revision } } : {}),
       defaultEligible: isDefaultEligible(def.name),
+      ...(r.status === "UNSET" && objectSupply && TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name) ? { suppliedBy: objectSupply } : {}),
+      ...(r.status === "UNSET" && objectPendingReason && TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name) ? { pendingReason: objectPendingReason } : {}),
     };
   });
   const activeFields = fields.filter((f) => f.active && (f.required || f.conditional));
@@ -110,7 +127,7 @@ export async function getTrStructuredState(deps: BridgeDeps, organizationId: num
     status: "READY", catalogVersion: catalog.version, fields, digest: trParamsDigest(resolved), orgProfileRevision: orgRecord?.revision ?? null,
     summary: {
       total: fields.length, active: activeFields.length, set: activeFields.filter((f) => f.status === "SET").length,
-      pending: activeFields.filter((f) => f.status !== "SET").length, proposals: fields.filter((f) => f.proposal).length,
+      pending: activeFields.filter((f) => f.status !== "SET" && !f.suppliedBy).length, proposals: fields.filter((f) => f.proposal).length,
     },
   };
 }
@@ -185,7 +202,7 @@ export async function recordTrStructuredParams(deps: BridgeDeps, input: RecordTr
  * Bloco DETERMINÍSTICO dos parâmetros confirmados, para o TEXTO do TR (mesmos fatos que o Edital consome). Gerado pelo sistema
  * (como o quadro de itens): sem IA, sem inferência; só parâmetros com valor confirmado e condição ativa; vazio ⇒ `null`.
  */
-export async function renderTrStructuredBlock(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<{ block: string; digest: string; count: number } | null> {
+export async function renderTrStructuredBlock(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<TrStructuredBlock | null> {
   const loaded = await loadEditalCatalog(deps, organizationId, params);
   if (loaded.status !== "OK") return null;
   const defs = trParamDefs(loaded.catalog);
@@ -194,16 +211,34 @@ export async function renderTrStructuredBlock(deps: BridgeDeps, organizationId: 
   const known = new Map<string, unknown>();
   for (const [name, p] of resolved) if (p.status === "SET") known.set(name, p.value);
   const lines: string[] = [];
+  const pending: string[] = [];
+  const conflicting: string[] = [];
   for (const def of defs) {
     const p = resolved.get(def.name);
-    if (!p || p.status !== "SET") continue;
+    if (!p) continue;
     if (def.requiredWhen && !evaluateCondition2(def.requiredWhen, ZERO_COND_FACTS(known)).result) continue;
     const label = (def.description ?? def.name).replace(/\s*\[[^\]]*\]\s*$/, "");
-    lines.push(`- ${label}: ${formatValue2(def, p.value)}`);
+    if (p.status === "SET") lines.push(`- ${label}: ${formatValue2(def, p.value)}`);
+    else if (p.status === "CONFLICT" || p.status === "INVALID") conflicting.push(label);
+    // O objeto completo vem do próprio processo (já está no contexto da autoria): nunca é pedido de novo como pendente.
+    else if ((def.required || def.requiredWhen) && !TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT.has(def.name)) pending.push(label);
   }
   if (lines.length === 0) return null;
   return {
     block: `PARÂMETROS ESTRUTURADOS DA CONTRATAÇÃO (confirmados neste processo; o Edital usa os mesmos dados)\n\n${lines.join("\n")}`,
-    digest: trParamsDigest(resolved), count: lines.length,
+    digest: trParamsDigest(resolved), count: lines.length, pending, conflicting,
   };
+}
+
+/**
+ * Parâmetros do TR para a AUTORIA (M8 pós-homologação): o bloco confirmado (o mesmo anexado ao texto) e, só como rótulos, o que
+ * segue pendente ou em conflito — a IA não pede de novo o que está confirmado e mantém visível o que falta. Nunca contém valor
+ * INVALID/CONFLICT. `pending`/`conflicting` derivam do mesmo snapshot do `digest` (replay determinístico).
+ */
+export interface TrStructuredBlock {
+  readonly block: string;
+  readonly digest: string;
+  readonly count: number;
+  readonly pending: readonly string[];
+  readonly conflicting: readonly string[];
 }

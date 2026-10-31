@@ -11,7 +11,7 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
-import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
+import { generateStructuredAuthoring, generateEditalAuthoring, type TrConfirmedParams } from "./authoring/structuredAuthoringService";
 import { AuthoringContractError } from "../domain/authoring/authoringSchema";
 import { authoringFailureGuidance } from "../domain/authoring/authoringGuidance";
 import { resolveEditalSources } from "./authoring/editalContext";
@@ -182,7 +182,7 @@ async function runReplaySafeGeneration<T>(
     return { result: reviveCached(check.response), replayed: true };
   }
   if (check.status === "processing") {
-    throw new TRPCError({ code: "CONFLICT", message: "Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
+    throw new TRPCError({ code: "CONFLICT", message: "GENERATION_IN_PROGRESS: Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
   }
   // status "new" ou "failed": executa (cognição fora da transação; persistência atômica dentro).
   try {
@@ -949,7 +949,7 @@ export async function generateDocument(params: {
   expectedContentHash?: string;
   invoke?: (prompt: string) => Promise<string>;
   /** CONTEXT_REUSE 2.0 — bloco determinístico dos Parâmetros estruturados do TR (os MESMOS fatos que o Edital consome). Só TR. */
-  structuredParams?: { block: string; digest: string } | null;
+  structuredParams?: TrConfirmedParams | null;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -1017,6 +1017,9 @@ export async function generateDocument(params: {
         actorUserId: params.actorUserId,
         invoke: params.invoke,
         sourceContext,
+        // M8 pós-homologação — os parâmetros CONFIRMADOS entram na autoria (antes só eram anexados depois): a IA não pede de novo
+        // o que o servidor já informou. O bloco determinístico continua anexado abaixo como autoridade; o digest já está no payloadHash.
+        confirmedParams: params.kind === "tr" ? params.structuredParams ?? null : null,
       }).catch((err: unknown) => {
         // Homologação visual M8: a recusa fail-closed continua — só o motivo vira orientação operacional
         // (o que faltou, onde complementar, próxima ação; rascunho ≠ emissão oficial). Nada é gravado.
@@ -1449,6 +1452,16 @@ export async function getAuthoringSourceState(params: {
     approvedItems: number; pendingItems: number; quoteCount: number;
     pricedItems: number; unpricedItems: number; confirmedClassifications: number; pendingClassifications: number;
     estimatedGlobalTotalCents: number;
+    /** M8 — das `quoteCount`, quantas são de fonte FICTÍCIA (importadas, mas não constituem pesquisa de preços oficial). */
+    fictitiousQuoteCount: number;
+    /** M8 — itens cujo preço de referência está SUSPENSO (fictícia, fonte alterada ou unidade divergente): não entram no total. */
+    priceSuspendedItems: number;
+    /** M8 — dos suspensos, quantos por cotação fictícia (`FICTITIOUS_SOURCE`). */
+    fictitiousPriceItems: number;
+    /** M8 — itens sem quantidade informada (fora do total; nunca "0"). */
+    unknownQuantityItems: number;
+    /** M8 — itens cujo preço no total é DEMONSTRATIVO (cotação fictícia admitida só em homologação sintética autorizada). */
+    demonstrativePriceItems: number;
   };
   /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
   changedSources: Array<{ key: SourceKey; label: string }>;
@@ -1463,6 +1476,13 @@ export async function getAuthoringSourceState(params: {
     confirmedClassifications: ctx.estimate.confirmedClassificationCount,
     pendingClassifications: ctx.estimate.pendingClassificationCount,
     estimatedGlobalTotalCents: ctx.estimate.globalTotalCents,
+    // M8 — projeção (sem cálculo novo): o MESMO `estimate` que monta o quadro do documento. Distingue "valor indisponível"
+    // (nenhum item com preço de referência) de total zero e de cotação importada que não serve de referência.
+    fictitiousQuoteCount: ctx.estimate.fictitiousQuoteCount,
+    priceSuspendedItems: ctx.estimate.rows.filter((r) => !!r.priceBlockedReason).length,
+    fictitiousPriceItems: ctx.estimate.rows.filter((r) => r.priceBlockedReason === "FICTITIOUS_SOURCE").length,
+    unknownQuantityItems: ctx.estimate.unknownQuantityItemCount,
+    demonstrativePriceItems: ctx.estimate.rows.filter((r) => (r.fictitiousQuoteCount ?? 0) > 0 && !r.priceBlockedReason && r.averagePriceCents > 0).length,
   };
   const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
   if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };

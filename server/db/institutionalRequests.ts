@@ -140,7 +140,8 @@ export async function getResponseForRequest(requestId: string, orgId: number): P
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(institutionalResponsesTable)
-    .where(and(eq(institutionalResponsesTable.requestId, requestId), eq(institutionalResponsesTable.organizationId, orgId))).limit(1);
+    .where(and(eq(institutionalResponsesTable.requestId, requestId), eq(institutionalResponsesTable.organizationId, orgId)))
+    .orderBy(asc(institutionalResponsesTable.createdAt), asc(institutionalResponsesTable.id)).limit(1); // determinístico (legado com várias respostas)
   if (rows.length === 0) return null;
   const r = rows[0];
   return { id: r.id, responder: r.responder, responseType: r.responseType, responseStatus: r.responseStatus, comments: r.comments ?? "", signed: r.signed === 1, signatureMethod: r.signatureMethod ?? null };

@@ -83,3 +83,48 @@ export function trParamsDigest(params: ReadonlyMap<string, ResolvedTrParam>): st
 
 /** Hash curto do valor codificado (base da superação consciente `basisValueHash`). */
 export const encodedValueHash = (encoded: string): string => factValueHash(encoded);
+
+/**
+ * M8 (pós-homologação visual, "uma informação, um preenchimento") — parâmetros do TR que o PROCESSO já supre. O Edital usa
+ * `processo.objetoCompleto` do TR oficial EXATO (`metadata.object`, gravado na emissão a partir de `process.object`) antes de
+ * qualquer valor digitado nos Parâmetros estruturados; só o TR VIGENTE é aceito como pin.
+ */
+export const TR_PARAMS_SUPPLIED_BY_PROCESS_OBJECT: ReadonlySet<string> = new Set(["processo.objetoCompleto"]);
+
+export type TrParamSupply =
+  | { readonly source: "tr_oficial"; readonly value: string; readonly version: number }
+  | { readonly source: "processo"; readonly value: string };
+
+/**
+ * Por que o objeto completo CONTINUA pendente no TR, quando há um motivo conhecido: o TR oficial vigente foi emitido sem registrar
+ * o objeto (emissões anteriores a 06/10/2026). O Edital então usa o parâmetro do TR — por isso ele é pedido aqui. Sem TR emitido,
+ * ou com TR que registra o objeto, não há motivo (o campo é suprido; ver `processObjectSupply`). Nunca altera o TR emitido.
+ */
+export type TrParamPendingReason = { readonly code: "LEGACY_TR_WITHOUT_OBJECT"; readonly trVersion: number };
+
+export function processObjectPendingReason(
+  processObject: string | null | undefined,
+  currentEmittedTr: { readonly version: number; readonly metadata: Readonly<Record<string, unknown>> } | null,
+): TrParamPendingReason | null {
+  if (!currentEmittedTr || processObjectSupply(processObject, currentEmittedTr)) return null;
+  return { code: "LEGACY_TR_WITHOUT_OBJECT", trVersion: currentEmittedTr.version };
+}
+
+/**
+ * Quem supre o objeto completo SEM novo preenchimento — ou null (continua pendente no TR):
+ *  - TR vigente emitido COM `metadata.object` ⇒ esse valor (é o que o Edital usa);
+ *  - TR vigente emitido SEM `metadata.object` (emissão anterior a 06/10/2026) ⇒ null: o Edital cai no parâmetro do TR;
+ *  - nenhum TR emitido e processo com objeto ⇒ o objeto do processo (a emissão o registra no TR oficial).
+ * Nunca grava nem confirma nada; é só a leitura de quem já é a fonte.
+ */
+export function processObjectSupply(
+  processObject: string | null | undefined,
+  currentEmittedTr: { readonly version: number; readonly metadata: Readonly<Record<string, unknown>> } | null,
+): TrParamSupply | null {
+  if (currentEmittedTr) {
+    const o = currentEmittedTr.metadata?.["object"];
+    return typeof o === "string" && o.trim() ? { source: "tr_oficial", value: o.trim(), version: currentEmittedTr.version } : null;
+  }
+  const p = processObject?.trim();
+  return p ? { source: "processo", value: p } : null;
+}

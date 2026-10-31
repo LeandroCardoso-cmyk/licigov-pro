@@ -13,7 +13,7 @@
 // `any` inevitável ao consumir a AST não-tipada do `marked` e as opções do PDFKit.
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Footer, PageNumber } from "docx";
 
 // Strip inline markdown (bold, italic, links, code) to plain text
 function stripInline(text: string): string {
@@ -326,14 +326,22 @@ export interface InstitutionalMeta {
   statusLabel: string; // "RASCUNHO" | "EM REVISÃO" | "APROVADO" | "REJEITADO"
   isDraft: boolean;
   version: number;
+  /** Ordinal da emissão oficial (1 = primeira). Presente só para versão EMITIDA: o cabeçalho mostra "Emissão oficial: 1ª" e a
+   *  revisão técnica da linhagem, em vez de um "Versão: 2" que parece a segunda emissão. */
+  emissionNumber?: number;
   exportedAtLabel: string; // já formatado pt-BR pela camada de apresentação
   /** Palavra usada no aviso de não-finalizado (default "RASCUNHO"). Documentos
    *  oficiais usam o status real (ex.: "GERADO"/"REVISADO"). */
   draftNoticeLabel?: string;
+  /** Marca integral de documento não emitido (ex.: "MINUTA — NÃO EMITIDA OFICIALMENTE"). Com `isDraft`, substitui o aviso padrão
+   *  na 1ª página (mantendo o status interno ao lado) e abre o rodapé de todas as páginas. Ausente ⇒ comportamento anterior. */
+  draftMarking?: string;
   /** Bloco de assinatura institucional (opcional). Presente apenas quando o ato tem
    *  assinatura registrada — ex.: Parecer Jurídico emitido/assinado. Ausente para os
    *  demais documentos/domínios, que permanecem inalterados. */
   signature?: SignatureMeta;
+  /** Pós-M8 — avisos de APRESENTAÇÃO do arquivo (ex.: valores demonstrativos), no cabeçalho; fora do conteúdo do documento. */
+  notices?: string[];
 }
 
 export interface InstitutionalModel {
@@ -459,14 +467,35 @@ function metaLines(meta: InstitutionalMeta): { label: string; value: string; str
   if (meta.processNumber) lines.push({ label: "Processo", value: meta.processNumber });
   if (meta.object) lines.push({ label: "Objeto", value: meta.object });
   lines.push({ label: "Status", value: meta.statusLabel, strong: true });
-  lines.push({ label: "Versão", value: String(meta.version) });
+  if (meta.emissionNumber && meta.emissionNumber > 0) {
+    lines.push({ label: "Emissão oficial", value: `${meta.emissionNumber}ª` });
+    lines.push({ label: "Revisão técnica", value: String(meta.version) });
+  } else {
+    lines.push({ label: "Versão", value: String(meta.version) });
+  }
   lines.push({ label: "Exportado em", value: meta.exportedAtLabel });
   return lines;
 }
 
 function draftNotice(meta: InstitutionalMeta): string {
+  if (meta.draftMarking) return `${meta.draftMarking} — situação interna: ${meta.statusLabel}. Revisão obrigatória; este arquivo não é documento oficial.`;
   const label = meta.draftNoticeLabel ?? "RASCUNHO";
   return `${label} — revisão obrigatória. Este arquivo ainda NÃO é uma versão oficial finalizada.`;
+}
+
+/**
+ * Pós-M8 — RODAPÉ de TODAS as páginas: identificação do documento, estado de rascunho (quando for rascunho) e "Página N de M".
+ * O cabeçalho completo continua só na 1ª página; documento emitido nunca recebe a marca de rascunho.
+ */
+function footerText(meta: InstitutionalMeta): string {
+  // Partes LIMITADAS (títulos/números livres podem ser longos): o rodapé cabe numa linha e nunca empurra conteúdo/páginas.
+  const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
+  // A marca de não emitido vem PRIMEIRO: título/processo longos podem ser cortados pela reticência, a marca nunca.
+  if (meta.isDraft && meta.draftMarking) {
+    return [meta.draftMarking, clip(meta.documentTitle, 70), meta.processNumber ? `Processo ${clip(meta.processNumber, 30)}` : null].filter(Boolean).join(" · ");
+  }
+  return [clip(meta.documentTitle, 70), meta.processNumber ? `Processo ${clip(meta.processNumber, 30)}` : null,
+    meta.isDraft ? `${clip(meta.draftNoticeLabel ?? "RASCUNHO", 20)} — não é versão oficial` : null].filter(Boolean).join(" · ");
 }
 
 /** Renderiza o modelo institucional para DOCX. */
@@ -486,6 +515,9 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
   }
   if (meta.isDraft) {
     paras.push(new Paragraph({ children: [new TextRun({ text: draftNotice(meta), bold: true, italics: true })], spacing: { before: 120, after: 120 } }));
+  }
+  for (const n of meta.notices ?? []) {
+    paras.push(new Paragraph({ children: [new TextRun({ text: n, bold: true, italics: true })], spacing: { after: 120 } }));
   }
   paras.push(new Paragraph({ text: "", border: { bottom: { color: "1e40af", size: 6, style: BorderStyle.SINGLE, space: 1 } } }));
 
@@ -510,7 +542,11 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
     }
   }
 
-  const doc = new Document({ sections: [{ children: paras }] });
+  const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [
+    new TextRun({ text: `${footerText(meta)} · `, size: 16 }),
+    new TextRun({ children: ["Página ", PageNumber.CURRENT, " de ", PageNumber.TOTAL_PAGES], size: 16 }),
+  ] })] });
+  const doc = new Document({ sections: [{ children: paras, footers: { default: footer } }] });
   return Packer.toBuffer(doc);
 }
 
@@ -523,7 +559,7 @@ function runsToDocx(runs: InlineRun[], forceItalic = false): TextRun[] {
 export async function renderInstitutionalPDF(model: InstitutionalModel): Promise<Buffer> {
   const { meta } = model;
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 56, size: "A4" });
+    const doc = new PDFDocument({ margin: 56, size: "A4", bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on("data", (c: Buffer) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -539,6 +575,9 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
     if (meta.isDraft) {
       doc.moveDown(0.3).fontSize(10).font("Helvetica-BoldOblique").fillColor("#b91c1c").text(draftNotice(meta)).fillColor("black");
     }
+    for (const n of meta.notices ?? []) {
+      doc.moveDown(0.3).fontSize(10).font("Helvetica-BoldOblique").fillColor("#92400e").text(n).fillColor("black");
+    }
     doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#1e40af").lineWidth(1.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.6);
 
     for (const b of model.blocks) {
@@ -549,6 +588,23 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
       else if (b.kind === "notice") { doc.moveDown(0.2).fontSize(10).font("Helvetica-Oblique").fillColor("#1e3a8a").text("⚠ ", { continued: true }); writeRunsPDF(doc, b.runs, 10, false, { paragraphGap: 4 }, true); doc.fillColor("black"); }
       else if (b.kind === "table") { writeTablePDF(doc, b.header, b.rows, pageWidth); }
     }
+    // Pós-M8 — rodapé em todas as páginas (páginas bufferizadas), escrito na margem inferior com a margem zerada só durante a escrita
+    // (nunca dispara página nova).
+    const range = doc.bufferedPageRange();
+    const label = footerText(meta);
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      const bottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      // Duas caixas de UMA linha (height + ellipsis): o texto nunca quebra/transborda (com `width`, o PDFKit quebraria linhas e,
+      // com páginas bufferizadas, criaria página nova); o número de página fica numa caixa própria e nunca é cortado.
+      const y = doc.page.height - 36;
+      doc.fontSize(8).font("Helvetica").fillColor("#555555")
+        .text(label, 56, y, { width: pageWidth - 90, height: 10, ellipsis: true, lineBreak: false })
+        .text(`Página ${i - range.start + 1} de ${range.count}`, 56 + pageWidth - 85, y, { width: 85, height: 10, align: "right", lineBreak: false });
+      doc.page.margins.bottom = bottom;
+    }
+    doc.fillColor("black");
     doc.end();
   });
 }

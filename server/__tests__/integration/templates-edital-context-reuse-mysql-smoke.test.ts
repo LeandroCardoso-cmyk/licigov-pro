@@ -28,6 +28,9 @@ import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — a autoridade institucional é lida da fonte autoritativa (getMembership): o ator do router destes cenários
+  // é MEMBRO REAL do órgão com o papel do contexto (a releitura transacional da emissão continua no MySQL real).
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: tenant.org,
     membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
@@ -290,10 +293,12 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     // ── TR estruturado (Processo A) ────────────────────────────────────────────────────────────────────────────────────────
     const trBefore = await trState(a);
     expect(trBefore.status).toBe("READY");
-    expect(trBefore.summary.pending).toBeGreaterThan(20);
+    // M8 (pós-homologação) — o objeto completo é SUPRIDO pela fonte autoritativa (objeto do processo/TR oficial): não conta como pendência.
+    expect(trBefore.summary.pending).toBeGreaterThanOrEqual(20);
+    expect((trBefore.fields as any[]).find((f) => f.name === "processo.objetoCompleto")?.suppliedBy).toBeDefined();
     const trFill = await fillTrStamped(a);   // o TR oficial emitido traz o objeto estruturado
     const trAfter = await trState(a);
-    expect(trAfter.summary.pending).toBe(1);   // só o objeto completo (vem do TR oficial exato)
+    expect(trAfter.summary.pending).toBe(0);   // antes: 1 (o objeto completo era cobrado de novo, embora o TR oficial o traga)
     const prepNoTr = await getState(a);
     expect(prepNoTr.metrics.TR_PENDING).toBe(0);
     expect(prepNoTr.metrics.UPSTREAM_TR_REUSED).toBeGreaterThan(20);
@@ -639,6 +644,45 @@ describe.skipIf(!DB)("CONTEXT_REUSE 2.0 — Perfil de Licitações + TR estrutur
     });
     expect(gen2.document.content).toContain("Almoxarifado Central — Rua Sintética, 10");
     expect(gen2.document.content).not.toContain(String(scenarioValueByName("contratacao.localEntrega")));
+  }, 600_000);
+
+  it("R5b — M8 pós-homologação: os parâmetros CONFIRMADOS chegam à AUTORIA (prompt) antes da cognição; pendentes continuam rótulos; outra organização não os enxerga; o bloco segue anexado uma vez", async () => {
+    const a = await prepareOrg("r5b");
+    const other = await prepareOrg("r5bx");
+    const deps = { ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() };
+    await fillTrStamped(a);
+    const structured = (await renderTrStructuredBlock(deps, a.org, a.w.processId, WS))!;
+    expect(structured.pending).toEqual([]);
+    expect(structured.conflicting).toEqual([]);
+    // Isolamento: os fatos do processo de A não existem para a organização B (mesmo id de processo informado).
+    expect(await renderTrStructuredBlock(deps, other.org, a.w.processId, WS)).toBeNull();
+    let prompt = "";
+    const k = key("r5b");
+    const gen = await generateDocument({
+      organizationId: a.org, processId: a.w.processId, kind: "tr", object: TR_META.object, correlationId: "r5b-1", idempotencyKey: k, actorUserId: 101,
+      invoke: async (p) => { prompt = p; return buildMockProviderAuthoring("tr"); }, structuredParams: structured,
+    });
+    const local = String(scenarioValueByName("contratacao.localEntrega"));
+    expect(prompt).toContain("=== PARÂMETROS DA CONTRATAÇÃO CONFIRMADOS NESTE PROCESSO");
+    expect(prompt).toContain(local);
+    expect(prompt).toContain("NÃO escreva '[REVISAR]' pedindo informação que consta destes parâmetros");
+    expect(gen.document.content.split("PARÂMETROS ESTRUTURADOS DA CONTRATAÇÃO").length - 1).toBe(1);
+    // Replay: mesma chave + mesmos parâmetros ⇒ mesmo documento, sem nova cognição.
+    let calls = 0;
+    const again = await generateDocument({
+      organizationId: a.org, processId: a.w.processId, kind: "tr", object: TR_META.object, correlationId: "r5b-2", idempotencyKey: k, actorUserId: 101,
+      invoke: async () => { calls++; return buildMockProviderAuthoring("tr"); }, structuredParams: structured,
+    });
+    expect(again.replayed).toBe(true);
+    expect(again.document.id).toBe(gen.document.id);
+    expect(calls).toBe(0);
+    // Um parâmetro obrigatório SEM valor aparece como pendente (rótulo), nunca como fato.
+    const p2 = await addProcess(a, "r5bpend", 1);
+    await proc(a.org).recordTrStructuredParams({ processId: p2.w.processId, ...WS, values: { "contratacao.localEntrega": local } });
+    const partial = (await renderTrStructuredBlock(deps, a.org, p2.w.processId, WS))!;
+    expect(partial.count).toBe(1);
+    expect(partial.pending.length).toBeGreaterThan(0);
+    expect(partial.block).not.toContain("undefined");
   }, 600_000);
 
   it("R6 — os parâmetros estruturados pertencem ao snapshot do TR oficial EXATO: v1+A READY; v1+B BLOCKED (zero escrita); v2+B READY; v1 com v2 nunca usa B; TR legado sem lineage falha fechado", async () => {

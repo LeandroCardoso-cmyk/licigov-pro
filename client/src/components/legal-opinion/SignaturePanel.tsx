@@ -127,7 +127,7 @@ export default function SignaturePanel({ workspaceId = "", signed = false, onSig
           {ret.isPending ? "Devolvendo…" : "Devolver à origem"}
         </button>
       </div>
-      <p className="text-[11px] text-muted-foreground">A devolução retorna o parecer automaticamente ao domínio solicitante via Institutional Request Engine.</p>
+      <p className="text-[11px] text-muted-foreground">A devolução retorna o parecer automaticamente ao setor que o solicitou.</p>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

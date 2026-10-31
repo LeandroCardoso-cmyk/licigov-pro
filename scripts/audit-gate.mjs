@@ -7,49 +7,56 @@
  * a dívida PRÉ-EXISTENTE não bloqueia o CI, mas qualquer REGRESSÃO (nova vulnerabilidade
  * high/critical) quebra o pipeline — sem `|| true`, sem mascarar.
  *
+ * SEC-AUD-2026-10 — fail-closed também no FORMATO: saída sem `advisories`/`metadata` (erro do
+ * registry, rede) falha com exit 2 em vez de aprovar como "0 advisories". Lógica em audit-gate-lib.mjs.
+ *
  * Reduzir o baseline (via upgrades de dependências) é ação operacional (OPERATOR_ACTION_REQUIRED).
  */
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
+import { auditShapeError, evaluateAudit } from "./audit-gate-lib.mjs";
 
 const BASELINE_PATH = "security/audit-baseline.json";
-const BLOCKING = new Set(["critical", "high"]);
 
 function runAudit() {
+  let out;
   try {
-    const out = execSync("pnpm audit --prod --json", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    return JSON.parse(out);
+    out = execSync("pnpm audit --prod --json", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch (err) {
     // pnpm audit sai com código != 0 quando há vulnerabilidades; o JSON ainda vem no stdout.
-    const out = err.stdout ? err.stdout.toString() : "";
+    out = err.stdout ? err.stdout.toString() : "";
     if (!out) {
       console.error("Falha ao executar `pnpm audit --prod --json`:", err.message);
       process.exit(2);
     }
+  }
+  try {
     return JSON.parse(out);
+  } catch {
+    console.error("❌ Saída do `pnpm audit --prod --json` não é JSON válido — gate falha (fail-closed).");
+    process.exit(2);
   }
 }
 
-const baseline = existsSync(BASELINE_PATH)
-  ? new Set((JSON.parse(readFileSync(BASELINE_PATH, "utf8")).allowed) || [])
-  : new Set();
+const allowed = existsSync(BASELINE_PATH)
+  ? (JSON.parse(readFileSync(BASELINE_PATH, "utf8")).allowed) || []
+  : [];
 
 const audit = runAudit();
-const advisories = Object.values(audit.advisories || {});
-const blocking = advisories
-  .filter((a) => BLOCKING.has(a.severity))
-  .map((a) => ({ ghsa: a.github_advisory_id || String(a.id), sev: a.severity, mod: a.module_name }));
+const shapeError = auditShapeError(audit);
+if (shapeError) {
+  console.error(`❌ Resultado do pnpm audit inutilizável (${shapeError}) — gate falha (fail-closed).`);
+  process.exit(2);
+}
 
-const uniqueGhsa = new Set(blocking.map((b) => b.ghsa));
-const fresh = [...uniqueGhsa].filter((g) => !baseline.has(g));
+const { found, fresh, stale } = evaluateAudit(audit, allowed);
 
-console.log(`[audit-gate] high/critical (prod): ${uniqueGhsa.size} advisories; baseline permite ${baseline.size}.`);
+console.log(`[audit-gate] high/critical (prod): ${found.size} advisories; baseline permite ${allowed.length}.`);
 
 if (fresh.length > 0) {
   console.error(`\n❌ ${fresh.length} vulnerabilidade(s) NOVA(S) high/critical fora do baseline:`);
-  for (const g of fresh) {
-    const item = blocking.find((b) => b.ghsa === g);
-    console.error(`   - ${item.sev.toUpperCase()} ${g} (${item.mod})`);
+  for (const item of fresh) {
+    console.error(`   - ${item.sev.toUpperCase()} ${item.ghsa} (${item.mod})`);
   }
   console.error("\nCorrija a dependência (upgrade) ou, com justificativa explícita, adicione o GHSA a");
   console.error(`${BASELINE_PATH}. O baseline nunca deve crescer silenciosamente.`);
@@ -57,7 +64,6 @@ if (fresh.length > 0) {
 }
 
 // Info: baseline com entradas já resolvidas (candidatas a limpeza — não bloqueante).
-const stale = [...baseline].filter((g) => !uniqueGhsa.has(g));
 if (stale.length > 0) {
   console.log(`[audit-gate] ${stale.length} entrada(s) do baseline não aparece(m) mais (candidatas a remoção).`);
 }

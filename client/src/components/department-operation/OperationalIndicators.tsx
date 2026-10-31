@@ -19,7 +19,7 @@ const CARDS: Array<{ key: string; label: string; alert?: boolean }> = [
   { key: "activeProcesses", label: "Processos ativos" },
   { key: "concludedProcesses", label: "Concluídos" },
   { key: "legalOpinionsAwaiting", label: "Pareceres aguardando" },
-  { key: "activeContracts", label: "Contratos ativos" },
+  { key: "activeContracts", label: "Contratos em andamento" },
   { key: "contractsExpiring", label: "Contratos vencendo", alert: true },
   { key: "addenda", label: "Aditivos" },
   { key: "pendingTasks", label: "Tarefas pendentes" },

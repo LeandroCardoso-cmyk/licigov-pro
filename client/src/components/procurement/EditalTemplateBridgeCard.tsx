@@ -43,7 +43,7 @@ export default function EditalTemplateBridgeCard({ resolution, candidates, selec
       <fieldset id={TR_SELECTION_ANCHOR} tabIndex={-1} className="space-y-1 scroll-mt-20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <legend className="text-xs font-medium text-foreground">TR oficial exato (confirme a versão que serve de base)</legend>
         {candidatesLoading ? <p className="text-xs text-muted-foreground">Carregando TR oficial…</p>
-          : candidates.length === 0 ? <p role="alert" className="text-xs text-destructive">TR_OFICIAL_EXATO_NECESSARIO — {TR_REQUIRED_MESSAGE}</p>
+          : candidates.length === 0 ? <p role="alert" className="text-xs text-destructive" data-code="TR_OFICIAL_EXATO_NECESSARIO">{TR_REQUIRED_MESSAGE}</p>
           : (
             <ul className="space-y-1">
               {candidates.map((c) => (

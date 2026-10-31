@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { confirmPendingLeave } from "@/lib/leaveGuard";
 import { trpc } from "@/lib/trpc";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
@@ -125,6 +126,8 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      // Tablet (< 1024 px): começa recolhido em ícones para não consumir ~1/3 da largura; o usuário pode expandir.
+      defaultOpen={typeof window === "undefined" || window.innerWidth >= 1024}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -148,7 +151,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const { canManageUsers } = useOrgRole();
+  const { canManageUsers, organizationName } = useOrgRole();
   const templatesCaps = trpc.institutionalTemplates.getCapabilities.useQuery(undefined, { retry: false, staleTime: 5 * 60_000 });
   const institutionalTemplatesEnabled = templatesCaps.data?.enabled === true;
   const { theme, setTheme } = useTheme();
@@ -256,7 +259,8 @@ function DashboardLayoutContent({
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      // Pós-homologação (Frente A): sair da tela com edição não salva pede confirmação (cancelar = permanecer).
+                      onClick={() => { if (item.path !== location && !confirmPendingLeave()) return; setLocation(item.path); }}
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal`}
                     >
@@ -292,6 +296,13 @@ function DashboardLayoutContent({
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
                       {user?.email || "-"}
                     </p>
+                    {organizationName && (
+                      <p className="text-xs text-muted-foreground truncate mt-1" title={organizationName}>
+                        <span className="sr-only">Órgão ativo: </span>
+                        <Building2 className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />
+                        {organizationName}
+                      </p>
+                    )}
                   </div>
                 </button>
               </DropdownMenuTrigger>
@@ -317,7 +328,7 @@ function DashboardLayoutContent({
                 })}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={logout}
+                  onClick={() => { if (confirmPendingLeave()) logout(); }}
                   aria-label="Sair da conta"
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >

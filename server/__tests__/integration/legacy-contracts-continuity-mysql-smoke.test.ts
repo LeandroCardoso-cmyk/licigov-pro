@@ -248,7 +248,9 @@ describe.skipIf(!DB)("Jornada integrada — legado, contratos, aditivos, monitor
     expect(await n("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND document_type LIKE '%parecer%'", [ORG])).toBe(opinionDocsBefore);
     expect(await n("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ?", [ORG])).toBe(0);
     // Tenant: o outro órgão não lê a solicitação.
-    expect(await (await caller(U.managerB, ORG_B)).contractWorkspace.getLegalOpinion({ requestId: out.requestId })).toEqual({ response: null, documents: [] });
+    expect(await (await caller(U.managerB, ORG_B)).contractWorkspace.getLegalOpinion({ requestId: out.requestId })).toEqual({
+      response: null, institutionalResponse: null, documents: [], legalOpinion: { status: "NOT_GOVERNED", reason: "REQUEST_NOT_FOUND" },
+    });
     // A jornada do contrato segue: aditivo de PRAZO (sem parecer) continua possível mesmo com um pedido de parecer em aberto.
     const ad = await mgr.contractWorkspace.createAddendum({ idempotencyKey: `lc-j7-ad-${RUN}`, contractId: contract.id, addendumType: "prazo", justification: "Nova prorrogação (sintético).", newTerm: "36 meses", newEndDate: plusDays(120) });
     expect(ad.addendum.status).toBe("finalizado");

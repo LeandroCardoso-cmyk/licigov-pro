@@ -11,6 +11,7 @@ import {
   legacyDfdRegisteredMessage,
 } from "./legacyDfdImportCopy";
 import { acceptedMessage, buildAcceptInput, isSuggestionObsolete, type JustificationSuggestionUI } from "./dfdJustificationSuggestion";
+import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { shouldProceedWithFieldAction, shouldRotateAssistKeyOnError, type DFDFieldViewUI } from "./dfdFieldSources";
 
 /**
@@ -40,9 +41,11 @@ export type DFDWorkspaceProps = {
   processId?: string;
   /** Abre a importação expandida (processo iniciado por "Importar DFD existente"). */
   startWithImport?: boolean;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-export default function DFDWorkspace({ processId = "", startWithImport = false }: DFDWorkspaceProps) {
+export default function DFDWorkspace({ processId = "", startWithImport = false, onDirtyChange }: DFDWorkspaceProps) {
   const utils = trpc.useUtils();
   const { enabled: ingestionEnabled } = useIngestionCapabilities();
   const { key: dfdKey, rotate: rotateDfdKey } = useIdempotencyKey();
@@ -107,24 +110,25 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
   const importDFD = trpc.procurementProcess.importDFD.useMutation({ onSuccess: invalidate });
   const reconcileField = trpc.procurementProcess.reconcileDFDField.useMutation({
     onSuccess: () => { rotateReconcileKey(); reloadEditor(); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateReconcileKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateReconcileKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
     onSettled: () => setReconcilingKey(null),
   });
   // SEM-058 — gerar NÃO altera o DFD: só traz a sugestão para comparar com o texto atual.
   const aiJustification = trpc.procurementProcess.generateDFDJustification.useMutation({
     onSuccess: (r) => { rotateAiKey(); setAcceptedEdited(null); setSuggestion(r as unknown as JustificationSuggestionUI); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotateAiKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateAiKey(); if (e.data?.code === "CONFLICT") reloadEditor(); },
   });
   // O único write do texto da IA: aceite humano explícito (consentimento literal + texto exibido).
   const acceptJustification = trpc.procurementProcess.acceptDFDJustification.useMutation({
     onSuccess: (r) => { rotateAcceptKey(); setSuggestion(null); setAcceptedEdited(r.edited); reloadEditor(); },
     onError: (e) => {
-      if (shouldRotateAssistKeyOnError(e.data?.code)) rotateAcceptKey();
+      if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotateAcceptKey();
       if (e.data?.code === "CONFLICT") { setSuggestion(null); reloadEditor(); }
     },
   });
 
   const dirty = !!doc && draft !== doc.content;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const assistFields = (assist?.available ? assist.fields : []) as DFDFieldViewUI[];
 
   const onFieldAction = (key: string) => {
@@ -194,7 +198,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             </button>
             {generateDFD.isError && (
               <p className="mt-2 text-sm text-destructive">
-                {generateDFD.error?.message || "Falha ao criar o DFD."}
+                {domainErrorMessage(generateDFD.error?.message, "Falha ao criar o DFD.")}
               </p>
             )}
           </div>
@@ -277,7 +281,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             </p>
           )}
           {reconcileField.isError && reconcileField.error?.data?.code !== "CONFLICT" && (
-            <p className="text-sm text-destructive">{reconcileField.error?.message || "Falha ao atualizar o campo."}</p>
+            <p className="text-sm text-destructive">{domainErrorMessage(reconcileField.error?.message, "Falha ao atualizar o campo.")}</p>
           )}
           {saveConflict && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
@@ -309,7 +313,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             )}
             {saveDFD.isError && saveDFD.error?.data?.code !== "CONFLICT" && (
               <span className="text-sm text-destructive">
-                {saveDFD.error?.message || "Falha ao salvar o rascunho."}
+                {domainErrorMessage(saveDFD.error?.message, "Falha ao salvar o rascunho.")}
               </span>
             )}
           </div>
@@ -320,7 +324,7 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
               docContentHash={doc.contentHash}
               dirty={dirty}
               pending={acceptJustification.isPending}
-              errorMessage={acceptJustification.isError && acceptJustification.error?.data?.code !== "CONFLICT" ? acceptJustification.error?.message || "Falha ao registrar a justificativa." : null}
+              errorMessage={acceptJustification.isError && acceptJustification.error?.data?.code !== "CONFLICT" ? domainErrorMessage(acceptJustification.error?.message, "Falha ao registrar a justificativa.") : null}
               onAccept={onAcceptJustification}
               onDiscard={onDiscardSuggestion}
             />
@@ -335,10 +339,10 @@ export default function DFDWorkspace({ processId = "", startWithImport = false }
             <p role="status" className="text-xs text-muted-foreground">{acceptedMessage(acceptedEdited)}</p>
           )}
           {acceptJustification.isError && acceptJustification.error?.data?.code === "CONFLICT" && !suggestion && (
-            <p role="alert" className="text-sm text-destructive">{acceptJustification.error.message}</p>
+            <p role="alert" className="text-sm text-destructive">{domainErrorMessage(acceptJustification.error.message, "Não foi possível aceitar a sugestão.")}</p>
           )}
           {aiJustification.isError && (
-            <p className="text-sm text-destructive">{aiJustification.error?.message || "Falha ao gerar a sugestão da justificativa."}</p>
+            <p className="text-sm text-destructive" role="alert">{domainErrorMessage(aiJustification.error?.message, "Falha ao gerar a sugestão da justificativa.")}</p>
           )}
         </div>
       )}

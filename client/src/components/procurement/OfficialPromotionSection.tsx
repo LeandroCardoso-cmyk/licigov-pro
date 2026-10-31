@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialDocumentPanel from "../documents/OfficialDocumentPanel";
+import DocumentMarkdownView from "../documents/DocumentMarkdownView";
+import { actorLabel, emissionOrdinalLabel, formatDateTimeBR } from "../../lib/processDocumentStatus";
 import { confirmationInvalidated, pinReviewSnapshot, type ReviewSnapshotIdentity } from "./reviewSnapshotPin";
+import { promotionErrorPlan } from "./generationFollowUp";
 
 /**
  * C.4B.1/C.4B.2 — OfficialPromotionSection (ETP/TR/Edital).
@@ -49,6 +52,8 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
   // que o hash emitido seja o hash REVISADO/CONFIRMADO — nunca o do estado mutável no clique final.
   const [confirmPin, setConfirmPin] = useState<ReviewSnapshotIdentity | null>(null);
   const [staleNotice, setStaleNotice] = useState(false);
+  // REG-A — desfecho em voo/desconhecido ("follow") ou linhagem ocupada ("busy"): nunca exibido como falha nem como "rascunho mudou".
+  const [pendingNotice, setPendingNotice] = useState<"follow" | "busy" | null>(null);
   // Rascunho mudou ENQUANTO confirmando → confirmação cancelada; exige nova revisão antes de emitir.
   const [pinInvalidated, setPinInvalidated] = useState(false);
 
@@ -65,6 +70,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
       rotateEmitKey();
       setConfirmPin(null);
       setStaleNotice(false);
+      setPendingNotice(null);
       setPinInvalidated(false);
       if (processId) {
         invalidateReview();
@@ -73,10 +79,17 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
     },
     onError: (e) => {
       setConfirmPin(null);
-      // Fail-closed: se o rascunho mudou desde a revisão (CONFLICT), NÃO auto-emite — recarrega o
+      const plan = promotionErrorPlan(e.data?.code, e.message);
+      // Fail-closed: se o rascunho mudou desde a revisão (CONFLICT de conteúdo), NÃO auto-emite — recarrega o
       // conteúdo/hash vigente e exige nova revisão/confirmação.
-      if (e.data?.code === "CONFLICT") {
+      if (plan === "stale") {
         setStaleNotice(true);
+        rotateEmitKey();   // recusa definitiva: a próxima confirmação (após nova revisão) é OUTRA tentativa lógica
+        invalidateReview();
+      }
+      // Em processamento / resposta perdida / linhagem ocupada: só RELÊ o resumo oficial (a emissão concluída aparece por ele).
+      if (plan === "follow" || plan === "busy") {
+        setPendingNotice(plan);
         invalidateReview();
       }
     },
@@ -96,6 +109,8 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
 
   const s = summary.data;
   const latest = s?.latestOfficial ?? null;
+  // M8 P3.3 — "1ª emissão oficial", não "v2": a revisão técnica (numeração da linhagem, com snapshots) fica só como detalhe.
+  const emitted = latest ? (emissionOrdinalLabel(latest.emissionNumber) ? `${emissionOrdinalLabel(latest.emissionNumber)} oficial` : `v${latest.version}`) : "";
   const diverged = s?.diverged ?? false;
   const neverEmitted = s?.neverEmitted ?? false;
 
@@ -146,25 +161,33 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
             <h2 className="font-semibold text-foreground">Documento oficial ({KIND_LABEL[kind]})</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Emitir cria uma <strong>versão oficial imutável</strong> a partir do conteúdo revisado abaixo.
-              Regenerar o rascunho depois <strong>não</strong> altera a versão emitida — uma nova emissão cria
-              uma nova versão.
+              Depois de emitida, a versão oficial <strong>não</strong> muda — alterações no rascunho só se tornam
+              oficiais por uma nova emissão, que cria uma nova versão.
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-            {latest ? `Emitida v${latest.version}` : "Nenhuma emitida"}
+          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${latest ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-muted text-muted-foreground"}`}>
+            {latest ? `Emitida — ${emitted}` : "Nenhuma emitida"}
           </span>
         </div>
+        {/* Versão oficial vigente (preservada) × nova emissão: a autoria e a data vêm do ledger de emissões. */}
+        {latest && (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="official-emission-attribution">
+            Versão oficial vigente: <strong className="text-foreground">{emitted}</strong> (revisão técnica v{latest.version}), emitida em{" "}
+            {formatDateTimeBR(latest.emittedAt)}
+            {latest.emittedBy ? <> por {actorLabel(latest.emittedBy.name, latest.emittedBy.userId)}</> : null} — preservada e imutável.
+          </p>
+        )}
 
         {/* Divergência: rascunho difere da última versão emitida (pelo hash existente). */}
         {latest && diverged && (
           <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            O rascunho atual <strong>diverge</strong> da última versão oficial emitida (v{latest.version}). Emita
+            O rascunho atual <strong>diverge</strong> da última versão oficial emitida ({emitted}). Emita
             novamente para oficializar o conteúdo vigente.
           </div>
         )}
         {latest && !diverged && (
           <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
-            O rascunho atual corresponde à última versão oficial emitida (v{latest.version}).
+            O rascunho atual corresponde à última versão oficial emitida ({emitted}).
           </div>
         )}
         {neverEmitted && (
@@ -187,7 +210,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
 
         {latest && diff && (
           <p className="mt-3 text-xs text-muted-foreground">
-            Diferença para a versão emitida v{latest.version}: +{diff.added} linha(s) / −{diff.removed} linha(s).
+            Diferença para a versão emitida ({emitted}): +{diff.added} linha(s) / −{diff.removed} linha(s).
           </p>
         )}
         {hasUnsavedEdits && (
@@ -206,7 +229,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         )}
         {blockers.length > 0 && (
           <div role="alert" className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            <strong>Emissão bloqueada:</strong>
+            <strong>{latest ? `Nova emissão bloqueada (a versão oficial — ${emitted} — continua válida):` : "Emissão bloqueada:"}</strong>
             <ul className="mt-1 list-disc pl-5">
               {blockers.map((b) => <li key={b.code}>{b.message}</li>)}
             </ul>
@@ -218,11 +241,12 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">Conteúdo a emitir — {reviewSnapshot!.title}</span>
-              <span className="text-[11px] text-muted-foreground">atualizado em {reviewSnapshot!.updatedAt}</span>
+              <span className="text-[11px] text-muted-foreground">atualizado em {formatDateTimeBR(reviewSnapshot!.updatedAt)}</span>
             </div>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 font-sans text-xs text-foreground">
-              {reviewSnapshot!.content}
-            </pre>
+            {/* Visualização formatada (somente leitura) do MESMO texto que será emitido — o hash não muda. */}
+            <div className="max-h-96 overflow-auto rounded-lg border border-border bg-muted/40 p-3">
+              <DocumentMarkdownView content={reviewSnapshot!.content} ariaLabel={`Conteúdo a emitir — ${reviewSnapshot!.title}`} />
+            </div>
           </div>
         ) : (
           <p className="mt-4 text-xs text-amber-600 dark:text-amber-400">
@@ -262,7 +286,14 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
             </div>
           )}
         </div>
-        {promote.isError && promote.error.data?.code !== "CONFLICT" && (
+        {pendingNotice && (
+          <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-300" data-testid="promotion-pending-notice">
+            {pendingNotice === "busy"
+              ? "Outra operação está gravando este documento neste momento. Nada foi emitido por esta tentativa — confirme novamente em instantes."
+              : "A emissão pode estar em processamento ou já ter sido concluída. O resultado é conferido acima, pelo registro oficial; nada foi reenviado. Se nada mudar, confirme novamente — a mesma tentativa não gera emissão duplicada."}
+          </p>
+        )}
+        {promote.isError && promotionErrorPlan(promote.error.data?.code, promote.error.message) === "error" && (
           <p className="mt-2 text-sm text-destructive">{promote.error.message || "Falha ao emitir o documento oficial."}</p>
         )}
       </div>

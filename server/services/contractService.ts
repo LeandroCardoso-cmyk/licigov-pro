@@ -15,11 +15,10 @@ import { assertKernelAccess } from "./kernelAccessService";
 import { serviceLogger } from "./observabilityService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { orchestrateMultiCopilot } from "./workspaceOrchestratorService";
-import { requestInstitutionalReview } from "./institutionalRequestService";
-import { getResponseForRequest, listDocumentReferences } from "../db/institutionalRequests";
-import { recordProcessEvent } from "../db/procurement";
+import { requestInstitutionalReview, readLegalOpinionForConsumer, type LegalOpinionReadResult } from "./institutionalRequestService";
+import { listProcessTimeline, recordProcessEvent } from "../db/procurement";
 import { registerExpiration, rescheduleExpiration, releaseRecordExpiration, linkRecordToContract } from "./operationRecordService";
-import { getOperationRecordById } from "../db/departmentOperation";
+import { getCurrentExpirationDate, getOperationRecordById, listOperationRecordIdsLinkedTo } from "../db/departmentOperation";
 import {
   buildPriorAmendmentRow, composeAddendumTerm, DECLARED_OUTSIDE_SYSTEM, LEGACY_RECORD_TYPES_FOR_CONTRACT, mergeLegacyRecordFields,
   validatePriorAmendments, type LegacyRecordTypeForContract, type PriorAmendmentInput,
@@ -302,9 +301,6 @@ export async function registerInForceLegacyContract(params: {
     if (!(LEGACY_RECORD_TYPES_FOR_CONTRACT as readonly string[]).includes(record.recordType)) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Este tipo de registro não origina um contrato (use processo/contratação legados ou contrato externo)." });
     }
-    if (record.referenceId) {
-      throw new TRPCError({ code: "CONFLICT", message: "Este registro já está vinculado a outro contrato; nada foi gravado." });
-    }
   }
   const merged = record
     ? mergeLegacyRecordFields({ object: params.object, sourceReference: params.sourceReference }, { recordType: record.recordType as LegacyRecordTypeForContract, number: record.number, object: record.object, modality: record.modality })
@@ -317,48 +313,85 @@ export async function registerInForceLegacyContract(params: {
     value: params.value, term: params.term, manager: params.manager, inspector: params.inspector,
     status: "vigente", correlationId: params.correlationId, createdBy: params.createdBy,
   });
+  // Registro já ligado: só aceito quando é a RETOMADA deste mesmo contrato (id determinístico); outro alvo ⇒ recusa sem escrita.
+  if (record?.referenceId && record.referenceId !== candidate.id) {
+    throw new TRPCError({ code: "CONFLICT", message: "Este registro já está vinculado a outro contrato; nada foi gravado." });
+  }
   const { workspace: ws, created } = await persistNewContract(candidate, (e) => new ContractAlreadyExistsError(e), params.correlationId);
-  if (!created) return { workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED, legacyRecord: null, priorAmendmentsRecorded: 0 };
-  const ref = merged.sourceReference ? ` Origem declarada: ${merged.sourceReference.slice(0, 200)}.` : "";
-  await recordProcessEvent({
-    organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`,
-    summary: `Contrato ${ws.contractNumber} registrado como VIGENTE (processo anterior, formalizado fora do sistema) — informação ${LEGACY_CONTRACT_DECLARED} pelo usuário, não verificada.${ref}`,
-    refId: ws.id, correlationId: params.correlationId,
-  });
-  log.info("legacy_contract_registered", { organizationId: params.organizationId, contractId: ws.id, actorUserId: params.createdBy, provenance: LEGACY_CONTRACT_DECLARED, correlationId: params.correlationId });
+  // Repetição CONVERGENTE (mesmo ator e mesmos dados) RETOMA os passos que uma tentativa anterior não concluiu — cada passo é
+  // idempotente (nada é duplicado): evento de criação, aditivos anteriores, vínculo do registro e vencimento. Antes de qualquer
+  // escrita, a retomada recusa o que DIVERGE do já gravado (outro registro de origem, outro término, outro histórico).
+  const resumed = !created;
+  const at = new Date().toISOString();
+  const prior = params.priorAmendments ?? [];
+  const priorRows = prior.map((input, i) => buildPriorAmendmentRow({ organizationId: params.organizationId, contractId: ws.id, sequence: i + 1, input, correlationId: params.correlationId, createdAt: at }));
+  let missingPrior = priorRows;
+  let contractExpiration: string | null = null;
+  if (resumed) {
+    if (record && record.referenceId !== ws.id) {
+      const linked = await listOperationRecordIdsLinkedTo(params.organizationId, "contract_workspace", ws.id);
+      if (linked.length > 0) throw new TRPCError({ code: "CONFLICT", message: "Este contrato já foi registrado a partir de outro registro de origem; nada foi gravado." });
+    }
+    contractExpiration = await getCurrentExpirationDate(params.organizationId, "contrato", ws.id);
+    if (contractExpiration && params.endDate && params.endDate !== contractExpiration) {
+      throw new TRPCError({ code: "CONFLICT", message: "O contrato já tem outro término de vigência registrado; use o aditivo de prazo para alterá-lo. Nada foi gravado." });
+    }
+    const existing = await listContractAddenda(ws.id, params.organizationId);
+    for (const row of priorRows) {
+      const same = existing.find((a) => a.sequence === row.sequence);
+      if (!same) continue;
+      const identical = same.id === row.id && same.addendumType === row.addendumType && same.justification === row.justification
+        && Math.round(same.newValue * 100) === Math.round(row.newValue * 100) && same.newTerm === row.newTerm && same.documentReference === row.documentReference;
+      if (!identical) throw new TRPCError({ code: "CONFLICT", message: `O contrato já tem o termo nº ${row.sequence} registrado com outro conteúdo; nada foi gravado.` });
+    }
+    missingPrior = priorRows.filter((row) => !existing.some((a) => a.sequence === row.sequence));
+  }
+
+  const timeline = resumed ? await listProcessTimeline(ws.id, params.organizationId) : [];
+  if (!timeline.some((e) => e.eventType === "workspace_created")) {
+    const ref = merged.sourceReference ? ` Origem declarada: ${merged.sourceReference.slice(0, 200)}.` : "";
+    await recordProcessEvent({
+      organizationId: params.organizationId, processId: ws.id, eventType: "workspace_created", actor: `user:${params.createdBy}`,
+      summary: `Contrato ${ws.contractNumber} registrado como VIGENTE (processo anterior, formalizado fora do sistema) — informação ${LEGACY_CONTRACT_DECLARED} pelo usuário, não verificada.${ref}`,
+      refId: ws.id, correlationId: params.correlationId,
+    });
+  }
+  log.info(resumed ? "legacy_contract_resumed" : "legacy_contract_registered", { organizationId: params.organizationId, contractId: ws.id, actorUserId: params.createdBy, provenance: LEGACY_CONTRACT_DECLARED, correlationId: params.correlationId });
 
   // Histórico de aditivos anteriores (DECLARADO): linhas finalizadas, origem documento externo, sem termo e sem efeito no contrato.
-  const prior = params.priorAmendments ?? [];
-  if (prior.length) {
-    const at = new Date().toISOString();
-    for (let i = 0; i < prior.length; i++) {
-      await insertContractAddendum(buildPriorAmendmentRow({ organizationId: params.organizationId, contractId: ws.id, sequence: i + 1, input: prior[i], correlationId: params.correlationId, createdAt: at }));
-    }
+  // Ids determinísticos (órgão + contrato + sequência): na retomada só se gravam as linhas que faltam (conteúdo já conferido acima).
+  for (const row of missingPrior) await insertContractAddendum(row);
+  if (missingPrior.length > 0) {
     await recordProcessEvent({
       organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: `user:${params.createdBy}`,
-      summary: `${prior.length} aditivo(s) anterior(es) registrado(s) como histórico — ${DECLARED_OUTSIDE_SYSTEM}. O próximo termo continua a numeração (nº ${prior.length + 1}).`,
+      summary: `${missingPrior.length} aditivo(s) anterior(es) registrado(s) como histórico — ${DECLARED_OUTSIDE_SYSTEM}. O próximo termo continua a numeração (nº ${prior.length + 1}).`,
       refId: ws.id, correlationId: params.correlationId,
     });
   }
 
   // Vigência: o término informado vence; sem ele, reaproveita o que o registro de origem já monitorava (sem duplicar alertas).
+  // Ordem segura: o vencimento do CONTRATO é gravado ANTES de retirar o do registro (falha no meio nunca perde a data).
   let adoptedExpiration: string | null = null;
   let endDate = params.endDate;
+  let recordExpiration: string | null = null;
   if (record) {
     const link = await linkRecordToContract({ organizationId: params.organizationId, recordId: record.id, contractId: ws.id, actor: `user:${params.createdBy}`, correlationId: params.correlationId });
     if (link.status === "conflict" || link.status === "not_found") {
       throw new TRPCError({ code: "CONFLICT", message: "O registro de origem mudou durante a operação; recarregue e tente novamente." });
     }
     if (record.recordType === "contrato_externo") {
-      const { releasedDate } = await releaseRecordExpiration({ organizationId: params.organizationId, recordId: record.id, actor: `user:${params.createdBy}`, correlationId: params.correlationId, toContractId: ws.id });
-      if (releasedDate) { adoptedExpiration = releasedDate; endDate = endDate ?? releasedDate; }
+      recordExpiration = await getCurrentExpirationDate(params.organizationId, "contrato", record.id);
+      if (recordExpiration) { adoptedExpiration = recordExpiration; endDate = endDate ?? recordExpiration; }
     }
   }
-  if (endDate) {
+  if (endDate && contractExpiration === null) {
     await registerExpiration({
       organizationId: params.organizationId, kind: "contrato", referenceId: ws.id, title: `Contrato ${ws.contractNumber}`,
       expirationDate: endDate, actor: `user:${params.createdBy}`, correlationId: params.correlationId,
     });
+  }
+  if (record && recordExpiration) {
+    await releaseRecordExpiration({ organizationId: params.organizationId, recordId: record.id, actor: `user:${params.createdBy}`, correlationId: params.correlationId, toContractId: ws.id });
   }
   return {
     workspace: ws, created, provenance: LEGACY_CONTRACT_DECLARED,
@@ -996,9 +1029,9 @@ export async function requestContractLegalOpinion(params: {
   return { requestId: result.request.id };
 }
 
-export async function getContractLegalOpinion(requestId: string, orgId: number): Promise<{ response: Awaited<ReturnType<typeof getResponseForRequest>>; documents: Awaited<ReturnType<typeof listDocumentReferences>> }> {
-  const [response, documents] = await Promise.all([getResponseForRequest(requestId, orgId), listDocumentReferences(requestId, orgId)]);
-  return { response, documents };
+/** NEW-007 — só exibe como parecer a resposta com origem governada (Parecer Jurídico, procurador designado) pedida por Contratos. */
+export async function getContractLegalOpinion(requestId: string, orgId: number): Promise<LegalOpinionReadResult> {
+  return readLegalOpinionForConsumer(requestId, orgId, "contratos");
 }
 
 export { listContractAddenda };

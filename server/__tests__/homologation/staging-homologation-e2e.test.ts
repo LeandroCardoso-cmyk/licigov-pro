@@ -20,8 +20,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
-  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, assertAllowedTarget, assertOrgRoleAtLeast, parseOrganizationId, assertSyntheticCredential, assertSyntheticTenant, directCallAdapter, homologSession, looksLike,
-  parseExercicio, pendingMarkers, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
+  AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, directCallAdapter, homologSession, looksLike,
+  runHomologationPreflight, type PreflightRecord,
+  pendingMarkers, priceImportMode, redundantReviewMarkers, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
 import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import { buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue, type PlannedWrite } from "../../../client/src/lib/editalPreparation";
@@ -40,7 +41,7 @@ const ITEMS = [
   { description: `${MARK} Caneta esferográfica azul`, unit: "un", planned: 400, price: "1,75" },
 ];
 const OBJ = `${MARK} Aquisição de material de expediente — execução ${RUN}`;
-const REPORT: { run: string; tenant?: unknown; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
+const REPORT: { run: string; tenant?: unknown; blocked?: string; preflight?: PreflightRecord; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
   { run: RUN, journeys: {}, metrics: {}, mode: "HTTP real (APIs oficiais); não é homologação visual" };
 
 const download = async (url: string) => new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -60,35 +61,15 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
   let k = 0;
   const key = (p: string) => `homolog-${p}-${RUN}-${++k}`;
 
-  async function login(s: ReturnType<typeof homologSession>, email: string | undefined, password: string | undefined, who: string) {
-    if (!email || !password) throw new Error("Credenciais do tenant sintético ausentes (HOMOLOG_EMAIL/HOMOLOG_PASSWORD e _2).");
-    // Usuário com várias associações: o cabeçalho X-Organization-Id precisa ir já na 1ª chamada tenant-scoped (listMine).
-    const pinned = parseOrganizationId(ENV.HOMOLOG_ORGANIZATION_ID);
-    if (pinned) s.state.orgId = pinned;
-    await s.api.auth.login.mutate({ email, password });
-    const me = await s.api.auth.me.query();
-    const mine = await s.api.organizations.listMine.query();
-    assertSyntheticCredential(me as any, mine.map((m) => m.org.id));
-    const org = mine.map((m) => m.org).find((o) => o.slug === "homologacao-sintetica");
-    assertSyntheticTenant(org);
-    if (pinned && org.id !== pinned) throw new Error(`HOMOLOG_ORGANIZATION_ID=${pinned} não é o tenant sintético (${org.id}).`);
-    s.state.orgId = org.id;
-    const current = await s.api.organizations.getCurrent.query();
-    assertSyntheticTenant(current.org);
-    assertOrgRoleAtLeast(current.role, "manager", who);
-    return { me: me as { id: number; name?: string | null }, org: current.org, role: current.role };
-  }
-
+  // Pré-flight M8 — tudo ANTES da primeira escrita, INCLUSIVE os logins: qualquer recusa (limitador 429, identidades iguais,
+  // exceção de valores demonstrativos desabilitada, credencial/tenant recusados) vai para `REPORT.blocked`/`REPORT.preflight` e
+  // o beforeAll falha (execução bloqueada, nunca PASS). Bloqueio é diagnóstico de configuração/ambiente, não falha de produto.
   beforeAll(async () => {
-    assertAllowedTarget(BASE!);
-    exercicio = parseExercicio(ENV.HOMOLOG_EXERCICIO);
-    const a = await login(author, ENV.HOMOLOG_EMAIL, ENV.HOMOLOG_PASSWORD, "usuário 1 (elabora)");
-    const b = await login(issuer, ENV.HOMOLOG_EMAIL_2, ENV.HOMOLOG_PASSWORD_2, "usuário 2 (emite)");
-    if (a.org.id !== b.org.id) throw new Error("Os dois usuários precisam ser do MESMO tenant sintético.");
-    if (a.me.id === b.me.id) throw new Error("Use dois usuários distintos (segregação de funções na emissão do TR).");
-    orgId = a.org.id;
-    decisionA = syntheticDecision(a.me, TODAY);
-    REPORT.tenant = { id: orgId, slug: a.org.slug, roles: [a.role, b.role] };
+    const pre = await runHomologationPreflight(REPORT, { run: RUN, baseUrl: BASE!, env: ENV, author, issuer });
+    exercicio = pre.exercicio;
+    orgId = pre.a.org.id;
+    decisionA = syntheticDecision(pre.a.me, TODAY);
+    REPORT.tenant = { id: orgId, slug: pre.a.org.slug, roles: [pre.a.role, pre.b.role] };
   }, 120_000);
 
   afterAll(() => {
@@ -118,15 +99,50 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     expect(prev.items[0]).toMatchObject({ quantity: 10, unit: "UN", averageCents: 400000, totalCents: 4000000 });
     expect(prev.quoteCount).toBe(3);
     expect(prev.synthetic).toBe(true);
-    let ambiguousCode = "";
-    try { await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" }); } catch (e) { ambiguousCode = trpcCode(e); }
-    expect(ambiguousCode, "importação ambígua recusada").toBe("PRECONDITION_FAILED");
+    // PR-04 (SEM-005): o modo da Pesquisa de Preços vem da capability OFICIAL do tenant (nunca presumido).
+    const mode = priceImportMode(await op.ingestion.getCapabilities.query());
+    REPORT.metrics.PRICE_IMPORT_MODE = mode;
+    let refusal = { code: "", message: "" };
+    try { await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar", text: "Fornecedor Fictício Alfa — R$ 3.900,00" }); }
+    catch (e) { refusal = { code: trpcCode(e), message: e instanceof Error ? e.message : String(e) }; }
+    expect(refusal.code, "colagem ambígua/legada recusada").toBe("PRECONDITION_FAILED");
+    if (mode === "canonical") {
+      // Ingestão canônica ligada ⇒ a recusa é do CUTOVER (servidor), não do leitor — não confundir as duas.
+      expect(refusal.message, "recusa pelo cutover canônico").toMatch(/^LEGACY_PRICE_IMPORT_DISABLED:/);
+    } else {
+      expect(refusal.message, "recusa por ambiguidade do conteúdo").toMatch(/ambígua/);
+    }
     expect((await op.procurementProcess.listItems.query({ processId: pid })).items, "recusa sem gravação").toHaveLength(0);
     REPORT.metrics.PRICE_RESEARCH_M8 = { items: prev.items.length, quotes: prev.quoteCount, averageCents: prev.items[0].averageCents, totalCents: prev.items[0].totalCents, ignoredLines: prev.ignored.length, ambiguousRefused: true };
 
     // 2) Itens: Pesquisa de preços → itens aprovados → Itens da contratação com quantidade prevista (rotas da tela).
-    await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
-      text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício A`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício B`]).join("\n") });
+    const quoteRows = (supplier: string) => ITEMS.map((r) => ({ description: r.description, planned: r.planned, unit: r.unit, price: r.price, supplier }));
+    if (mode === "canonical") {
+      // Duas SESSÕES independentes (um fornecedor cada) ⇒ duas pesquisas; as cotações se SOMAM (nunca substituição silenciosa).
+      const s1 = await runCanonicalPriceResearch({ baseUrl: BASE!, author, manager: mgr, processId: pid, csv: `${priceResearchCsv(quoteRows("Fornecedor Fictício A"))}\n`, fileName: `homolog-${RUN}-a.csv`, key });
+      const s2 = await runCanonicalPriceResearch({ baseUrl: BASE!, author, manager: mgr, processId: pid, csv: `${priceResearchCsv(quoteRows("Fornecedor Fictício B"))}\n`, fileName: `homolog-${RUN}-b.csv`, key });
+      const after = (await op.procurementProcess.listItems.query({ processId: pid })).items;
+      expect(after, "um item por descrição").toHaveLength(ITEMS.length);
+      for (const it of after) {
+        expect(it.quoteCount, `cotações acumuladas: ${it.description}`).toBe(2);
+        expect(it.fictitiousQuoteCount, `proveniência fictícia declarada: ${it.description}`).toBe(2);
+      }
+      REPORT.metrics.PRICE_RESEARCH_CANONICAL = { sessions: [s1.sessionId, s2.sessionId], quotesPerItem: 2, accumulated: true };
+    } else {
+      await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
+        text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício A`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício B`]).join("\n") });
+      // Guarda SEM-005 do legado: a mesma linha com OUTRO fornecedor exige confirmação — sem ela, CONFLICT e nada gravado.
+      let replace = { code: "", message: "" };
+      try {
+        await op.procurementProcess.importPriceResearch.mutate({ processId: pid, source: "colar",
+          text: ITEMS.flatMap((r) => [`${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício C`, `${r.description};${r.planned};${r.unit};R$ ${r.price};Fornecedor Fictício D`]).join("\n") });
+      } catch (e) { replace = { code: trpcCode(e), message: e instanceof Error ? e.message : String(e) }; }
+      expect(replace.code, "substituição sem confirmação recusada").toBe("CONFLICT");
+      expect(replace.message).toMatch(/^QUOTE_REPLACEMENT_CONFIRMATION_REQUIRED:/);
+      for (const it of (await op.procurementProcess.listItems.query({ processId: pid })).items) {
+        expect(it.suppliers.map((s: any) => s.name).sort(), `cotações originais intactas: ${it.description}`).toEqual(["Fornecedor Fictício A", "Fornecedor Fictício B"]);
+      }
+    }
     for (const it of (await op.procurementProcess.listItems.query({ processId: pid })).items) await op.procurementProcess.approveItem.mutate({ itemId: it.id });
     const cand = await op.procurementItems.candidates.query({ processId: pid, source: "price_research" });
     await op.procurementItems.confirmCandidates.mutate({ processId: pid, source: "price_research", expectedSourceDigest: cand.sourceDigest, idempotencyKey: key("items"),
@@ -157,7 +173,11 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     const trTyped = (await fillTrParams(h, {}, ["processo.objetoCompleto"])).typed;
     const { document: trDraft } = await op.procurementProcess.generateTR.mutate({ processId: pid, object: OBJ, idempotencyKey: key("tr") });
     for (const it of ITEMS) expect(trDraft.content).toContain(it.description);
+    // M8 pós-homologação — métrica: [REVISAR] que pedem parâmetro já confirmado (esperado 0; não bloqueia a jornada).
+    const trConfirmed: any = await op.procurementProcess.trStructuredParams.query({ processId: pid, ...WS });
+    const redundant = redundantReviewMarkers(trDraft.content, trConfirmed.fields.filter((f: any) => f.active && f.status === "SET").map((f: any) => String(f.description ?? "")));
     REPORT.metrics.TR = {
+      redundantReviewMarkers: redundant.length,
       structuredActive: trBefore.fields.filter((f: any) => f.active).length,
       structuredPrefilled: trBefore.fields.filter((f: any) => f.active && f.status === "SET").length,
       structuredProposed: trBefore.fields.filter((f: any) => f.active && f.proposal).length,

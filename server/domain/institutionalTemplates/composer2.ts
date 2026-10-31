@@ -40,6 +40,12 @@ import { isOrgId, type OrgId } from "./types";
 import { formatScalar, formatValue2, normalizeValue2 } from "./valueTypes2";
 import { findVariable2, isDeferredPublication, type VariableCatalog2, type VariableDef2, type VariableSource2 } from "./variableCatalog2";
 
+/** Nome institucional do tipo documental referenciado (apresentação do docRef). */
+const DOC_REF_KIND_LABEL: Readonly<Record<DocRefKind2, string>> = {
+  TR: "Termo de Referência", ETP: "Estudo Técnico Preliminar", DFD: "Documento de Formalização da Demanda", ANNEX: "Anexo",
+  EDITAL: "Edital", CONTRATO: "Contrato", PARECER: "Parecer jurídico",
+};
+
 // ─── Resolução de variáveis (catálogo v2) ───────────────────────────────────────────────────────────────────────────
 
 export interface ResolvedVariables2 {
@@ -343,7 +349,9 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
         return [];
       }
       const label: RInline[] = n.label ? expandInlines(n.label, `${path}.label`, ctx) : [inlineText(pin.title)];
-      const text: RInline[] = ["> Documento de referência: ", ...label, ` — ${n.kind}, versão ${pin.version} (${pin.documentId}, hash ${pin.contentHash.slice(0, 12)})`];
+      // Texto INSTITUCIONAL: tipo documental + condição de documento oficial emitido. A identidade técnica do pin (id, linhagem,
+      // revisão técnica e hash) NÃO é conteúdo para o leitor — fica no manifesto (`officialDocRefs`), que é a evidência de lineage.
+      const text: RInline[] = ["Documento de referência: ", ...label, ` (${DOC_REF_KIND_LABEL[n.kind]} — versão oficial emitida no processo).`];
       if (ctx.record && !ctx.refs.has(n.role)) {
         ctx.refs.set(n.role, {
           role: n.role, order: n.order, documentId: pin.documentId, lineageId: pin.lineageId,

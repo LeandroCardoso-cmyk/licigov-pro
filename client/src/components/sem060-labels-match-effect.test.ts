@@ -49,7 +49,7 @@ describe("a) publicações: rótulo = efeito (gera E avança a etapa)", () => {
 
   it("o servidor devolve a transição efetiva (publish gera E move para PUBLICATION; LEG-011 aponta publish como a transição canônica)", () => {
     const router = read("server/routers/directProcurementRouter.ts");
-    const body = router.slice(router.indexOf("publish: orgRoleProcedure"), router.indexOf("configureFlags: orgRoleProcedure"));
+    const body = router.slice(router.indexOf("publish: institutionalProcedure"), router.indexOf("configureFlags: institutionalProcedure"));
     // Integrado com SEM-064: o ponteiro/status só passa a `publicado` DEPOIS de as publicações estarem gravadas
     // (`markDirectPublished`), e a resposta continua declarando a etapa efetiva (SEM-060).
     expect(body).toMatch(/markDirectPublished\(ws\)/);

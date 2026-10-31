@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "../../lib/trpc";
 import { useIdempotencyKey } from "@/hooks/useIdempotencyKey";
 import OfficialPromotionSection from "./OfficialPromotionSection";
+import DemonstrativePriceNotice from "./DemonstrativePriceNotice";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
 import RegenerationBlockedNotice from "./RegenerationBlockedNotice";
+import { generationFollowUp, useGenerationFollowUp } from "./generationFollowUp";
+import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import EditalTemplateBridgeCard from "./EditalTemplateBridgeCard";
 import EditalPreparationPanel from "./EditalPreparationPanel";
 import EditalPreflightCard from "./EditalPreflightCard";
@@ -17,11 +21,12 @@ import { PublicationPendingNotice } from "./PublicationPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
-import { bridgeAllowsGeneration, trPinOf, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
+import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, TR_REQUIRED_MESSAGE, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
-  editalParamsComplete, editalParamsDiffer, isEditalParametersChangedRefusal, isHumanEditRefusal,
+  editalParamsComplete, editalParamsDiffer, editalScopeToRecord, isEditalParametersChangedRefusal, isHumanEditRefusal,
   needsReplaceConfirmation, resolveEditalFormValues, planRegeneration,
   resolveEditalTextValues, editalTextProposal, editalTextOverwrites, editalTextPendingReview, type EditalTextParams,
+  editalUnsavedParameters,
 } from "./regenerationGuard";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -97,12 +102,15 @@ export type EditalWorkspaceProps = {
   onOpenTr?: () => void;
   /** Abre a etapa onde um dado é resolvido na origem (Itens, Pesquisa de Preços, DFD, TR). */
   onOpenStage?: (stage: StageTarget) => void;
+  /** LICIGOV-FAST PR-1 — informa edição não salva ao processo (protege a troca de etapa). */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 export default function EditalWorkspace({
   processId = "",
   onOpenTr,
   onOpenStage,
+  onDirtyChange,
 }: EditalWorkspaceProps) {
   const [object, setObject] = useState("");
   // R9 / SEM-057 — edição não salva no DraftEditor bloqueia a emissão oficial.
@@ -120,16 +128,69 @@ export default function EditalWorkspace({
   const processQuery = trpc.procurementProcess.loadProcess.useQuery({ processId }, { enabled: !!processId });
   const processObject = processQuery.data?.process?.object ?? "";
   useEffect(() => { if (!object && processObject) setObject(processObject); }, [processObject]);
+  // Frente A — objeto só conta como pendente depois que a PESSOA o editou (a hidratação acima nunca conta); a base passa a
+  // ser o objeto usado na última geração (o rascunho gerado já o contém).
+  const [objectEdited, setObjectEdited] = useState(false);
+  const [objectUsed, setObjectUsed] = useState<string | null>(null);
+  // Objeto da geração em curso: se a resposta se perder e a conclusão vier pelo acompanhamento, ele também vira a base.
+  const objectSent = useRef<string | null>(null);
 
   const { key: editalKey, rotate: rotateEditalKey } = useIdempotencyKey();
   // C.4B.2 — leitura canônica RELOAD-SAFE do rascunho persistido (fonte única de verdade do conteúdo).
+  // M8 (REG-A) — mesmo acompanhamento do TR/ETP: resposta perdida ou geração em voo ⇒ relê o rascunho persistido (sem reenviar).
+  const followInterval = useRef<number | false>(false);
   const reviewable = trpc.procurementProcess.reviewableDraft.useQuery(
-    { processId, kind: "edital" }, { enabled: !!processId },
+    { processId, kind: "edital" }, { enabled: !!processId, refetchInterval: () => followInterval.current },
   );
   const draft = reviewable.data?.draft ?? null;
+  const draftAtRequest = useRef<{ contentHash?: string | null; updatedAt?: string | Date | null } | null>(null);
+  const followUp = useGenerationFollowUp(draft, () => {
+    if (objectSent.current !== null) setObjectUsed(objectSent.current);
+    rotateEditalKey();
+    if (processId) {
+      utils.procurementProcess.editalSourceState.invalidate();
+      utils.procurementProcess.editalTemplateReviewState.invalidate({ processId });
+      utils.procurementProcess.editalTemplatePreflight.invalidate();
+    }
+  });
+  followInterval.current = followUp.refetchInterval;
+  useEffect(() => { if (followUp.following) void reviewable.refetch(); }, [followUp.following]);
   const persisted = draft?.parameters ?? null;
-  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted);
+  // M8 — minuta INSTITUCIONAL já composta: o rascunho não grava modalidade/forma/plataforma (parâmetros legados), mas o
+  // servidor recupera, somente leitura, o escopo e o TR oficial da composição (manifest + bindings). Só HIDRATA a tela —
+  // nada é gravado; escopo ambíguo/ausente fica vazio e explicado (nenhum valor é presumido).
+  const composed = draft?.composedContext ?? null;
+  const composedParams = !persisted && composed?.scope
+    ? { modality: composed.scope.modality as Modality, form: composed.scope.form as Form, platform: (composed.scope.platform ?? null) as Platform | null }
+    : null;
+  // C2 — escopo escolhido antes da 1ª geração (registrado no servidor): reabre a tela com ele. Ordem: persistido > minuta composta
+  // > escolha registrada. Registrar é só guardar a escolha (não gera, não aprova, não publica).
+  const scopeQuery = trpc.procurementProcess.editalScopeSelection.useQuery({ processId }, { enabled: !!processId });
+  const recordedScope = (scopeQuery.data?.scope ?? null) as { modality: Modality; form: Form; platform: Platform | null } | null;
+  const { hasRole, isLoading: roleLoading } = useOrgRole();
+  const canRecordScope = !roleLoading && hasRole("operator");
+  const [scopeNotice, setScopeNotice] = useState<string | null>(null);
+  // Escolha cuja gravação falhou (ex.: CONFLICT): não é reenviada sozinha — só uma NOVA escolha explícita grava de novo.
+  const [failedScopeKey, setFailedScopeKey] = useState<string | null>(null);
+  const recordScope = trpc.procurementProcess.recordEditalScope.useMutation({
+    // O resultado traz o valor e o hash vigentes: o cache passa a ser a base do próximo CAS (sem esperar a releitura).
+    onSuccess: (r) => { utils.procurementProcess.editalScopeSelection.setData({ processId }, r.selection); setScopeNotice(null); },
+    onError: (e, vars) => {
+      setFailedScopeKey(JSON.stringify({ modality: vars.modality, form: vars.form, platform: vars.platform ?? null }));
+      setScopeNotice(domainErrorMessage(e.message, "Não foi possível guardar a escolha de modalidade, forma e plataforma."));
+      void utils.procurementProcess.editalScopeSelection.invalidate({ processId });
+    },
+  });
+  const effective = resolveEditalFormValues<Modality, Form, Platform>(proposed, persisted ?? composedParams ?? recordedScope);
   const { modality, form, platform } = effective;
+  const scopeToRecord = editalScopeToRecord<Modality, Form, Platform>({ effective, proposed, persisted, composed: composedParams, recorded: recordedScope });
+  const scopeKey = scopeToRecord ? JSON.stringify(scopeToRecord) : null;
+  useEffect(() => {
+    // Uma gravação por vez: com outra em curso, espera; ao terminar, o efeito roda de novo com o hash já atualizado.
+    // Sem nova tentativa automática em CONFLICT (outra pessoa alterou): a tela avisa e a próxima escolha registra sobre o valor relido.
+    if (!scopeToRecord || !scopeQuery.isSuccess || !canRecordScope || recordScope.isPending || scopeKey === failedScopeKey) return;
+    recordScope.mutate({ processId, ...scopeToRecord, expectedValueHash: scopeQuery.data?.valueHash ?? null });
+  }, [scopeKey, scopeQuery.isSuccess, canRecordScope, recordScope.isPending, failedScopeKey]);
   const textValues = resolveEditalTextValues(proposedText, persisted);
   const textProposal = editalTextProposal(proposedText, persisted);
   const textPending = editalTextPendingReview(persisted);
@@ -169,6 +230,13 @@ export default function EditalWorkspace({
   );
   const resolution = (coreComplete ? resolutionQuery.data : undefined) as TemplateResolutionView | undefined;
   const bound = resolution?.status === "BOUND";
+  // Frente A — editor não salvo OU parâmetros escolhidos e ainda não gravados ⇒ a saída da etapa/tela pede confirmação.
+  const paramsUnsaved = editalUnsavedParameters<Modality, Form, Platform>({
+    effective, proposed, baseline: persisted ?? composedParams ?? recordedScope,
+    proposedText, persistedText: persisted, textEditable: !bound && coreComplete && !!resolution,
+    objectEdited, object, objectBaseline: objectUsed ?? processObject,
+  });
+  useEffect(() => { onDirtyChange?.(editorDirty || paramsUnsaved); }, [editorDirty, paramsUnsaved, onDirtyChange]);
   // PR #288: com modelo vinculado a CertameConfig é a ÚNICA autoridade do critério; o campo legado vira resumo somente leitura.
   const certameQuery = trpc.procurementProcess.certameConfig.useQuery(
     { processId, modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined },
@@ -180,8 +248,12 @@ export default function EditalWorkspace({
   const trQuery = trpc.procurementProcess.editalTrCandidates.useQuery({ processId }, { enabled: !!processId && bound });
   const trCandidates = (bound ? trQuery.data ?? [] : []) as TrCandidateView[];
   const [selectedTrId, setSelectedTrId] = useState<string | null>(null);
-  const trPin = trPinOf(trCandidates.find((c) => c.documentId === selectedTrId));
-  const bridgeGate = bridgeAllowsGeneration(resolution, trPin);
+  // M8 — sem escolha explícita, reabre com o TR oficial EXATO usado na composição, só se ele ainda for o vigente
+  // (mesmo documento, versão e hash). Versão superada ⇒ nada é escolhido automaticamente (aviso abaixo).
+  const composedTrId = composedTrCandidateId(trCandidates, composed?.trPin ?? null);
+  const effectiveTrId = selectedTrId ?? composedTrId;
+  const trPin = trPinOf(trCandidates.find((c) => c.documentId === effectiveTrId));
+  const bridgeGate = bridgeAllowsGeneration(resolution, trPin, trCandidates.some((c) => c.current));
   const boundParams = { modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined };
   // Preflight SOMENTE LEITURA (mesma revisão/fontes/composer da geração): o botão só é operacional com READY (o backend segue fail-closed).
   const preflightQuery = trpc.procurementProcess.editalTemplatePreflight.useQuery(
@@ -200,10 +272,12 @@ export default function EditalWorkspace({
   const generateNotice = trpc.procurementProcess.generateNotice.useMutation({
     // Recusas governadas (conteúdo humano / troca de parâmetros sem confirmação) ⇒ diálogo; nada gravado.
     onError: (e) => {
-      if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) setConfirmOpen(true);
+      if (isHumanEditRefusal(e.message) || isEditalParametersChangedRefusal(e.message)) { setConfirmOpen(true); return; }
+      if (generationFollowUp(e.data?.code, e.message) === "follow") followUp.start(draftAtRequest.current);
     },
-    onSuccess: (data) => {
+    onSuccess: (data, vars) => {
       setConfirmOpen(false);
+      setObjectUsed(vars.object);
       // Rascunho institucional não persiste parâmetros legados: mantém a escolha atual na tela (nada a "voltar a exibir").
       if (data.generationMode !== "INSTITUTIONAL_TEMPLATE") {
         setProposed({ modality: null, form: null, platform: null }); // volta a exibir o persistido
@@ -222,9 +296,12 @@ export default function EditalWorkspace({
   const recomposeHash = preparationState?.capabilities?.governedDraftRecomposition ? draft?.contentHash : undefined;
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
+    objectSent.current = object.trim();
     if (bound) {
       // Motor institucional (decidido pelo servidor): o TR oficial EXATO confirmado segue no payload; sem confirmação ⇒ nada é enviado.
       if (!trPin || regenerationBlock) return;
+      draftAtRequest.current = draft;
+      followUp.clear();
       generateNotice.mutate({
         processId, object: object.trim(),
         modality: modality ?? undefined, form: form ?? undefined, platform: form === "eletronico" ? platform ?? undefined : undefined,
@@ -243,6 +320,8 @@ export default function EditalWorkspace({
     });
     if (plan === "blocked") return;
     if (plan === "confirm") { setConfirmOpen(true); return; }
+    draftAtRequest.current = draft;
+    followUp.clear();
     generateNotice.mutate({
       processId,
       object: object.trim(),
@@ -275,7 +354,7 @@ export default function EditalWorkspace({
           <input
             type="text"
             value={object}
-            onChange={(e) => setObject(e.target.value)}
+            onChange={(e) => { setObjectEdited(true); setObject(e.target.value); }}
             placeholder="Registro de preços para materiais de expediente"
             className="rounded-lg border border-input px-3 py-2 focus:border-blue-500 focus:outline-none"
           />
@@ -417,7 +496,25 @@ export default function EditalWorkspace({
             </button>
           </div>
         )}
-        {!persisted && !paramsComplete && (
+        {composedParams && proposed.modality === null && proposed.form === null && proposed.platform === null && (
+          <p className="text-xs text-muted-foreground" data-testid="edital-composed-context">
+            Modalidade, forma e plataforma recuperadas da minuta já composta pelo modelo institucional.
+          </p>
+        )}
+        {!persisted && composed && !composed.scope && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            {composed.scopeStatus === "AMBIGUOUS"
+              ? "A revisão do modelo usada nesta minuta está vinculada a mais de um escopo: selecione modalidade, forma e plataforma — nenhuma é presumida."
+              : "Não foi possível identificar o escopo usado nesta minuta: selecione modalidade, forma e plataforma — nenhuma é presumida."}
+          </p>
+        )}
+        {scopeNotice && <p role="alert" className="text-xs text-destructive" data-testid="edital-scope-notice">{scopeNotice}</p>}
+        {!persisted && !composedParams && recordedScope && proposed.modality === null && proposed.form === null && proposed.platform === null && (
+          <p className="text-xs text-muted-foreground" data-testid="edital-recorded-scope">
+            Modalidade, forma e plataforma escolhidas anteriormente para este processo (o Edital ainda não foi gerado).
+          </p>
+        )}
+        {!persisted && !composedParams && !paramsComplete && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Defina modalidade, forma{form === "eletronico" ? " e plataforma" : ""} para gerar — nenhum padrão é assumido.
           </p>
@@ -425,11 +522,16 @@ export default function EditalWorkspace({
 
         {coreComplete && (
           <EditalTemplateBridgeCard
-            resolution={resolution} candidates={trCandidates} selectedTrId={selectedTrId} onSelectTr={setSelectedTrId}
+            resolution={resolution} candidates={trCandidates} selectedTrId={effectiveTrId} onSelectTr={setSelectedTrId}
             candidatesLoading={bound && trQuery.isLoading}
           />
         )}
-        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {!bridgeGate.allowed && bridgeGate.reason && resolution?.status === "BOUND" && !(coreComplete && trCandidates.length === 0 && bridgeGate.reason === TR_REQUIRED_MESSAGE) && <p className="text-xs text-amber-600 dark:text-amber-400">{bridgeGate.reason}</p>}
+        {bound && !selectedTrId && composed?.trPin && !composedTrId && trCandidates.length > 0 && (
+          <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
+            Esta minuta foi composta sobre o TR oficial v{composed.trPin.version}, que não é mais a versão vigente. Selecione o TR oficial exato para a nova composição — nenhuma versão é escolhida automaticamente.
+          </p>
+        )}
         {bound && selectedTrId && trCandidates.some((c) => c.documentId === selectedTrId && !c.current) && (
           <p role="alert" className="text-xs text-destructive">O TR oficial selecionado foi substituído por uma versão mais recente. Selecione o TR oficial exato novamente — nenhuma versão é escolhida automaticamente.</p>
         )}
@@ -444,7 +546,7 @@ export default function EditalWorkspace({
         {/* CTA: com pendências, o protagonismo é "Resolver pendências"; a geração existe, desabilitada, com o motivo visível. */}
         <EditalGenerateCta
           cta={cta} bound={bound} pending={generateNotice.isPending} reason={generateBlockedReason} onGenerate={() => handleGenerate()}
-          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
+          disabled={!processId || !object.trim() || !paramsComplete || generateNotice.isPending || followUp.following || !bridgeGate.allowed || !genReady.ready || !!regenerationBlock}
         />
         {!processId && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -452,7 +554,9 @@ export default function EditalWorkspace({
           </p>
         )}
         <RegenerationBlockedNotice documentLabel="Edital" block={regenerationBlock} />
-        {generateNotice.isError && !isHumanEditRefusal(generateNotice.error.message) && !isEditalParametersChangedRefusal(generateNotice.error.message) && (
+        <GenerationFollowUpNotice status={followUp.status} documentLabel="Edital" onCheckAgain={() => { followUp.restart(); void reviewable.refetch(); }} />
+        {generateNotice.isError && !isHumanEditRefusal(generateNotice.error.message) && !isEditalParametersChangedRefusal(generateNotice.error.message)
+          && followUp.status === "idle" && generationFollowUp(generateNotice.error.data?.code, generateNotice.error.message) === "error" && (
           <p className="text-sm text-destructive">
             {domainErrorMessage(generateNotice.error.message, "Falha ao gerar o edital.")}
           </p>
@@ -467,13 +571,15 @@ export default function EditalWorkspace({
             {sourceState.data && sourceState.data.usedSources.length > 0 && (
               <span> Fontes reaproveitadas: {sourceState.data.usedSources.map(labelSource).join(", ")}.</span>
             )}
-            {sourceState.data && sourceState.data.missing.length > 0 && (
+            {/* Minuta institucional: critério/regime vêm da Configuração do certame (outra autoridade) — a lista legada não se aplica. */}
+            {sourceState.data && sourceState.data.state !== "template_governed" && sourceState.data.missing.length > 0 && (
               <span className="block text-xs opacity-90">
                 Pendências para revisar: {sourceState.data.missing.map(labelSource).join(", ")}.
               </span>
             )}
             <span className="block text-xs opacity-80">
-              Gerada em {new Date(draft.updatedAt).toLocaleString("pt-BR")} · situação: {draft.status}.
+              Gerada em {new Date(draft.updatedAt).toLocaleString("pt-BR")} · situação: {draft.status}
+              {composed ? " · composta pelo modelo institucional" : ""}.
             </span>
           </div>
 
@@ -493,6 +599,7 @@ export default function EditalWorkspace({
           )}
 
           <PublicationPendingNotice pending={publicationPendingView} variant="drafting" />
+          <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
             emissão oficial exige revisão de um terceiro (SoD).

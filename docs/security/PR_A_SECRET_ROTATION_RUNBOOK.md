@@ -49,6 +49,10 @@ Verificar adicionalmente (rotacionar **se** estiveram versionados em algum momen
 
 ## Rollback operacional
 
+> **Não se aplica a segredos potencialmente expostos no incidente Railway de out/2026:** nunca restaurar o
+> valor anterior. Recuperação com credencial nova — ver
+> [`incident-2026-10/ROTATION_RUNBOOK.md`](./incident-2026-10/ROTATION_RUNBOOK.md) §2.5.
+
 - Manter os valores antigos acessíveis apenas no cofre (nunca no repo) até a nova configuração ser validada em produção.
 - Se a rotação de um segredo quebrar o serviço, restaurar temporariamente o valor anterior **no cofre/Railway** (não no Git), diagnosticar e repetir.
 - Nenhum rollback envolve reescrever histórico do Git.

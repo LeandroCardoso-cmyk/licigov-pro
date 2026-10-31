@@ -13,7 +13,12 @@ import { recommendStep } from "../domain/adaptiveRecommendationEngine";
 import {
   computeIndicators, situationColor, type OperationalIndicators, type MonitoringRow,
 } from "../domain/operationalDashboard";
-import { listProcesses } from "../db/procurement";
+import { listActiveProcessRefsByIds, listProcesses } from "../db/procurement";
+import { listCurrentDecisionsBySubjectType } from "../db/institutionalDecisions";
+import { decodeGovernedPayload, GOVERNED_FIELDS_SCHEMA } from "../domain/institutionalTemplates/governedSources";
+import { GOVERNED_SUBJECT_TYPE } from "./institutionalTemplates/governedFieldsStore";
+import { deriveSessionEvents, sessionScheduleOf, type DerivedSessionEvent } from "../domain/operationalCalendarSources";
+import { serviceLogger } from "./observabilityService";
 import { listDirectProcurementWorkspaces } from "../db/directProcurement";
 import { listContractWorkspaces, countContractAddendaByOrg } from "../db/contractWorkspace";
 import { listLegalOpinionWorkspaces } from "../db/legalOpinionWorkspace";
@@ -53,6 +58,36 @@ function recordCalendarEvent(record: OperationRecordListRow) {
   };
 }
 
+const log = serviceLogger("DepartmentOperation");
+
+/**
+ * C3 — sessões declaradas na Configuração do certame (registro governado do processo), como eventos de calendário DERIVADOS
+ * (somente leitura, nada é gravado). Registro com integridade inválida é ignorado (e contado no log); nunca presumido.
+ */
+async function certameSessionEvents(
+  organizationId: number, window: { from?: string; to?: string },
+  existing: readonly { eventType: string; referenceId: string | null; eventDate: string }[],
+): Promise<DerivedSessionEvent[]> {
+  try {
+    const decisions = await listCurrentDecisionsBySubjectType(organizationId, GOVERNED_SUBJECT_TYPE.PROCESS);
+    let corrupt = 0;
+    const records: Array<{ subjectId: string; payload: unknown }> = [];
+    for (const d of decisions) {
+      let decoded: ReturnType<typeof decodeGovernedPayload> = null;
+      try { decoded = decodeGovernedPayload(d.evidence, GOVERNED_FIELDS_SCHEMA); } catch { decoded = null; }
+      if (!decoded) { corrupt++; continue; }
+      if (sessionScheduleOf(decoded.payload)) records.push({ subjectId: d.subjectId, payload: decoded.payload });
+    }
+    if (corrupt > 0) log.warn("calendar_certame_record_skipped", { organizationId, corrupt });
+    const activeProcesses = await listActiveProcessRefsByIds(organizationId, records.map((r) => r.subjectId));
+    return deriveSessionEvents({ records, activeProcesses, ...window, existing });
+  } catch (error) {
+    // Fonte DERIVADA: falha aqui nunca derruba o calendário/painel (eventos cadastrados continuam); fica registrada.
+    log.error("calendar_certame_sessions_unavailable", { organizationId, error: error instanceof Error ? error.message : String(error) });
+    return [];
+  }
+}
+
 function lastEventDate(event: { eventDate: string; eventEndDate: string }): string {
   return event.eventEndDate || event.eventDate;
 }
@@ -88,7 +123,8 @@ export async function getDashboard(params: { organizationId: number; today: stri
   const { processes, directs, contracts, legalPending, requestsPending, addendaCount, records, completedRecords } = await collect(params.organizationId);
   const events = await listOperationalEvents(params.organizationId, { from: params.today, limit: 500 });
   const scheduled = records.filter(r => r.eventDate).map(recordCalendarEvent);
-  const allEvents = [...events.map(e => ({ ...e, eventEndDate: "" })), ...scheduled]
+  const sessions = await certameSessionEvents(params.organizationId, { from: params.today }, events);
+  const allEvents = [...events.map(e => ({ ...e, eventEndDate: "" })), ...scheduled, ...sessions]
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.eventTime.localeCompare(b.eventTime));
 
   const contractsExpiringSoon = expiringContractRefs(events, params.today).size;
@@ -135,7 +171,8 @@ export async function getCalendar(params: { organizationId: number; from: string
     listOperationalEvents(params.organizationId, { from: params.from, to: params.to, limit: 500 }),
     listScheduledOperationRecords(params.organizationId, params.from, params.to),
   ]);
-  return [...events.map(e => ({ ...e, eventEndDate: "" })), ...records.map(recordCalendarEvent)]
+  const sessions = await certameSessionEvents(params.organizationId, { from: params.from, to: params.to }, events);
+  return [...events.map(e => ({ ...e, eventEndDate: "" })), ...records.map(recordCalendarEvent), ...sessions]
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate) || a.eventTime.localeCompare(b.eventTime));
 }
 
@@ -229,7 +266,7 @@ export async function generateOperationalReport(params: { organizationId: number
     `- Processos ativos: ${i.activeProcesses}`,
     `- Processos concluídos: ${i.concludedProcesses}`,
     `- Pareceres aguardando: ${i.legalOpinionsAwaiting}`,
-    `- Contratos ativos: ${i.activeContracts}`,
+    `- Contratos em andamento (inclui minutas): ${i.activeContracts}`,
     `- Contratos vencendo: ${i.contractsExpiring}`,
     `- Solicitações pendentes: ${i.pendingRequests}`,
     "",

@@ -22,7 +22,7 @@ import {
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
 } from "../domain/officialDocument";
 import {
-  insertOfficialDocument, getLatestByLineage, countVersions, lockLatestVersionForUpdate,
+  insertOfficialDocument, getLatestByLineage, countVersions, lockLatestVersionForUpdate, lineageHasEmittedVersionForUpdate,
   countDocumentTimeline, insertDocumentTimelineEntry,
   type OfficialDocsExecutor,
 } from "../db/officialDocuments";
@@ -31,6 +31,7 @@ import {
 } from "../db/officialDocumentArtifacts";
 // Único consumidor do Storage Service no fluxo documental (Document Engine nunca toca no S3).
 import { isStorageConfigured, storageFallbackAllowed, assertStorageUsable, storagePut, storageSignedUrl } from "../storage";
+import { timelineSummaryForAccess } from "../domain/institutionalAuthority";
 
 // ─── Timeline (append-only) — responsabilidade do Lifecycle ───────────────────
 
@@ -79,7 +80,14 @@ export interface CreateDocumentParams {
   correlationId: string;
   /** Instante (ISO) do ato: vira createdAt/updatedAt do documento e o instante do evento de timeline de criação/emissão. Ausente ⇒ agora. */
   createdAt?: string;
+  /**
+   * Recusa a escrita se a linhagem JÁ tem versão emitida — conferido SOB o lock da linhagem (mesmo lock da emissão), no ponto
+   * da escrita: uma checagem anterior ao lock não basta (a emissão pode ser concluída no intervalo). Usado pelo gerador genérico.
+   */
+  refuseIfLineageHasEmitted?: boolean;
 }
+
+export const LINEAGE_HAS_EMITTED_VERSION = "LINEAGE_HAS_EMITTED_VERSION";
 
 /**
  * Cria (ou versiona) um documento oficial. Nunca sobrescreve: cada chamada cria uma
@@ -141,6 +149,9 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
     }
     try {
       const version = (await lockLatestVersionForUpdate(lineageId, params.organizationId, tx)) + 1;
+      if (params.refuseIfLineageHasEmitted && await lineageHasEmittedVersionForUpdate(lineageId, params.organizationId, tx)) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${LINEAGE_HAS_EMITTED_VERSION}: a linhagem já tem versão oficial emitida; versões oficiais são imutáveis. Nada foi gravado.` });
+      }
       const doc = makeDoc(version);
       await insertOfficialDocument(doc, tx);
       // O evento de criação/emissão representa o MESMO ato do documento: createdAt do evento = createdAt da versão.
@@ -206,6 +217,8 @@ function humanArtifactActor(actorUserId: number): string {
 export async function recordOfficialArtifact(params: {
   doc: OfficialDocument; format: OfficialFormat; artifactHash: string; sizeBytes: number; mimeType: string;
   storageKey?: string; identityFingerprint?: string; actorUserId: number; correlationId?: string;
+  /** Pós-homologação (Frente C) — export sob acesso técnico da plataforma: o evento diz isso (mesmo ator, mesmo correlationId). */
+  platformTechnicalAccess?: boolean;
 }): Promise<{ artifact: OfficialDocumentArtifact | null; created: boolean }> {
   const { doc, format } = params;
   const actor = humanArtifactActor(params.actorUserId);
@@ -236,7 +249,7 @@ export async function recordOfficialArtifact(params: {
         await insertDocumentTimelineEntry({
           tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
           eventType: "documento_exportado", actor, correlationId,
-          summary: `Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}; hash do artefato sha256:${params.artifactHash}; ${where}.`,
+          summary: timelineSummaryForAccess(`Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}; hash do artefato sha256:${params.artifactHash}; ${where}.`, params.platformTechnicalAccess),
         }, tx, { insertOnly: true });
       }
       return res;

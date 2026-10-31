@@ -24,6 +24,8 @@ import {
 import type { DocumentStatusValue } from "../domain/documentTypes";
 import type { TrpcAuditCtx } from "./activityLogService";
 import type { OrgRole } from "../../drizzle/schema";
+import { requireInstitutionalAuthority } from "./institutionalAuthorityService";
+import { roleRankAtLeast } from "../domain/institutionalAuthority";
 
 const log = serviceLogger("DocumentWorkflowService");
 
@@ -124,6 +126,13 @@ async function applyTransition(
     throw new TRPCError({
       code: "FORBIDDEN",
       message: `Papel insuficiente para esta transição. Requer: ${requiredRole}.`,
+    });
+  }
+  // SECURITY-02 — decisão institucional (piso ≥ manager) exige membership REAL do ator; o papel do contexto não basta.
+  if (requiredRole && roleRankAtLeast(requiredRole, "manager")) {
+    await requireInstitutionalAuthority({
+      userId: ctx.user.id, organizationId: orgId, minRole: requiredRole,
+      operation: `document.workflow.${toState}`, correlationId: ctx.correlationId,
     });
   }
 

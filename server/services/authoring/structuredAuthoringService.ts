@@ -60,6 +60,19 @@ export interface StructuredAuthoringInput {
    * montado por authoringContext.ts. Ausente ⇒ comportamento anterior (só objeto), por compatibilidade.
    */
   readonly sourceContext?: DocumentAuthoringContext;
+  /**
+   * M8 pós-homologação — parâmetros estruturados do TR CONFIRMADOS no processo (bloco do sistema + rótulos pendentes/em conflito).
+   * Só TR. Ausente ⇒ prompt idêntico ao anterior.
+   */
+  readonly confirmedParams?: TrConfirmedParams | null;
+}
+
+/** Parâmetros confirmados do TR para a autoria: o MESMO bloco determinístico anexado ao texto e o que ainda falta (só rótulos). */
+export interface TrConfirmedParams {
+  readonly block: string;
+  readonly digest: string;
+  readonly pending?: readonly string[];
+  readonly conflicting?: readonly string[];
 }
 
 export interface StructuredAuthoringResult {
@@ -205,20 +218,22 @@ function sanitizeProse(prose: string, rejected: readonly { raw: string }[]): str
   return out;
 }
 
-/** Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM). */
+/**
+ * Renderiza o markdown revisável a partir da ESTRUTURA já validada (não do texto livre do LLM).
+ *
+ * O texto é CONTEÚDO DO DOCUMENTO (é o que a emissão congela): leva o dispositivo legal de cada seção e a "Base legal" validada, nunca
+ * metadado técnico (homologação M8, P2.2/P3.2). O estado de fundamentação, o status de grounding por seção e o aviso de rascunho
+ * continuam no resultado estruturado (`groundingState`, `sections[].grounded`, `reviewNotice`), nos marcadores de lineage do rascunho e
+ * na tela/exportação do RASCUNHO — um documento emitido não carrega "rascunho … não constitui documento aprovado" no próprio texto.
+ */
 function renderMarkdown(doc: StructuredAuthoring): string {
   const heading = doc.kind === "tr" ? "Termo de Referência" : doc.kind === "edital" ? "Edital de Licitação" : "Estudo Técnico Preliminar";
-  const stateLabel: Record<GroundingState, string> = {
-    grounded: "Fundamentado", partially_grounded: "Parcialmente fundamentado", ungrounded: "Sem fundamentação recuperada",
-    not_applicable: "Não aplicável", legacy_unclassified: "Não classificado",
-  };
   const lines: string[] = [`# ${heading} — ${doc.object}`, ""];
-  lines.push(`> Estado de fundamentação normativa: **${stateLabel[doc.groundingState]}** — ${doc.evidenceCount} evidência(s) normativa(s) utilizada(s). A suficiência factual depende das lacunas marcadas para revisão no texto.`, "");
   for (const s of doc.sections) {
-    const statusTag = s.contentMode !== "provided"
-      ? (s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)")
-      : (s.grounded ? "fundamentada" : "fundamentação pendente");
-    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel} · ${statusTag}_`, "");
+    // Omissão justificada é conteúdo jurídico (o leitor precisa saber que o elemento não se aplica); "fundamentada/pendente" é grounding.
+    const omission = s.contentMode === "provided" ? null
+      : s.contentMode === "not_applicable_with_justification" ? "não aplicável (justificada)" : "não contemplada (justificada)";
+    lines.push(`## ${s.title}`, `_${s.legalAnchorLabel}${omission ? ` · ${omission}` : ""}_`, "");
     lines.push(s.contentMode === "provided" ? s.prose : `**Justificativa:** ${s.omissionJustification}`, "");
     if (s.legalReferences.length > 0) {
       lines.push("**Base legal:**");
@@ -231,12 +246,11 @@ function renderMarkdown(doc: StructuredAuthoring): string {
     for (const l of doc.limitations) lines.push(`- ${l}`);
     lines.push("");
   }
-  lines.push("---", `> ${doc.reviewNotice}`);
-  return lines.join("\n");
+  return lines.join("\n").replace(/\n+$/, "\n");
 }
 
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
-function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext): string {
+function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext, confirmedParams?: TrConfirmedParams | null): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
   const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
   const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
@@ -248,38 +262,75 @@ function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: Docu
     `Distinga fato do processo, fundamentação normativa e conclusão: NÃO afirme como conclusão (ex.: parcelamento ou lote único, economicidade, ` +
     `vantajosidade, benefícios) o que não estiver demonstrado no contexto; quando depender de análise ou decisão humana, escreva ` +
     `'[REVISAR: decisão/análise necessária — <qual>]'.`;
-  if (!sourceContext) return base;
+  const params = kind === "tr" ? confirmedParams ?? null : null;
+  if (!sourceContext && !params) return base;
   // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
-  return [
-    base,
-    "",
-    "Reaproveite o CONTEXTO do processo abaixo (DFD" + (kind === "tr" ? ", ETP, Itens Inteligentes aprovados e Pesquisa de Preços" : " e, se houver, a pesquisa de preços") + ").",
-    "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
-    kind === "tr"
-      ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
-      : "Não fixe valores monetários: a seção de estimativa do valor é redigida pelo sistema a partir da Pesquisa de Preços (valores citados fora do quadro serão marcados para revisão).",
-    "",
-    "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
-    sourceContext.promptContext,
-  ].join("\n");
+  const lines = [base, ""];
+  if (sourceContext) {
+    lines.push(
+      "Reaproveite o CONTEXTO do processo abaixo (DFD" + (kind === "tr" ? ", ETP, Itens Inteligentes aprovados e Pesquisa de Preços" : " e, se houver, a pesquisa de preços") + ").",
+      params
+        ? "Onde o contexto e os parâmetros confirmados NÃO fornecerem a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais."
+        : "Onde o contexto NÃO fornecer a informação, escreva '[REVISAR: <o que falta>]' — JAMAIS invente dados institucionais.",
+      kind === "tr"
+        ? "NÃO redija quantidades, preços, valores estimados nem totais: o sistema insere o quadro autoritativo de itens e valores. Refira-se a ele como \"conforme o quadro de itens deste Termo\"."
+        : "Não fixe valores monetários: a seção de estimativa do valor é redigida pelo sistema a partir da Pesquisa de Preços (valores citados fora do quadro serão marcados para revisão).",
+      "",
+      "=== CONTEXTO DO PROCESSO (reaproveitado) ===",
+      sourceContext.promptContext,
+    );
+  }
+  if (params) lines.push(...confirmedParamsPrompt(params));
+  return lines.join("\n");
 }
 
 /**
- * Insere o bloco AUTORITATIVO de itens (TR) e a nota de fontes ANTES do aviso final de revisão. O bloco é
- * texto do servidor (determinístico), nunca prosa do provider.
+ * M8 pós-homologação (LICIGOV-FAST "uma informação, um preenchimento") — os parâmetros que o servidor do órgão JÁ CONFIRMOU entram na
+ * cognição como fatos: a IA os usa literalmente e não pede de novo. O que segue pendente/em conflito continua [REVISAR] (nada presumido);
+ * divergência com DFD/ETP não é resolvida em silêncio — o parâmetro do TR prevalece no TR (autoridade exclusiva do fluxo do TR,
+ * `AUTHORITY_POLICY`) e a divergência vai para as limitações, para a revisão humana. O bloco do sistema continua anexado ao texto.
+ */
+function confirmedParamsPrompt(p: TrConfirmedParams): string[] {
+  const pending = p.pending ?? [];
+  const conflicting = p.conflicting ?? [];
+  return [
+    "",
+    "=== PARÂMETROS DA CONTRATAÇÃO CONFIRMADOS NESTE PROCESSO (fatos informados pelo servidor do órgão) ===",
+    p.block,
+    "",
+    "Use estes valores LITERALMENTE nas seções correspondentes (objeto e vigência; requisitos; modelo de execução — local, prazos, " +
+      "recebimento, substituição; modelo de gestão — gestor e fiscal; medição e pagamento — forma, prazo, marco, reajuste; seleção — " +
+      "qualificação). NÃO escreva '[REVISAR]' pedindo informação que consta destes parâmetros e NÃO os altere nem os complete com suposição.",
+    "Se o DFD ou o ETP divergirem de um parâmetro confirmado, use o parâmetro no TR e registre a divergência em 'limitations' (a revisão humana decide).",
+    ...(pending.length > 0 ? [`Parâmetros ainda NÃO confirmados (mantenha '[REVISAR: <parâmetro>]' onde forem necessários; não presuma): ${pending.join("; ")}.`] : []),
+    ...(conflicting.length > 0 ? [`Parâmetros com registro divergente ou inválido (NÃO use valor; marque '[REVISAR: conflito em <parâmetro>]'): ${conflicting.join("; ")}.`] : []),
+  ];
+}
+
+/**
+ * Anexa o bloco AUTORITATIVO de itens (TR) ao texto. O bloco é texto do servidor (determinístico), nunca prosa do provider.
+ * As chaves técnicas das fontes usadas/ausentes (`dfd, etp, itens, pesquisa_precos`, `fonte_alterada:N`…) NÃO entram no documento
+ * (P3.2): são proveniência (marcadores de lineage do rascunho). As AUSENTES continuam visíveis ao revisor como ressalva, em "Limitações e
+ * ressalvas", com rótulo humano (`missingSourceLabel`).
  */
 function withSourceContext(rendered: string, ctx: DocumentAuthoringContext): string {
-  const usedLabel = ctx.usedSources.length > 0 ? ctx.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
-  const extra = [
-    ...(ctx.authoritativeBlock ? [ctx.authoritativeBlock, ""] : []),
-    `> **Fontes do processo utilizadas:** ${usedLabel}.`,
-    ...(ctx.missing.length > 0 ? [`> **Pendências (revisar):** ${ctx.missing.join(", ")}.`] : []),
-    "",
-  ].join("\n");
-  const marker = "\n---\n> ";
-  const at = rendered.lastIndexOf(marker);
-  return at < 0 ? `${rendered}\n\n${extra}` : `${rendered.slice(0, at)}\n${extra}${rendered.slice(at)}`;
+  return ctx.authoritativeBlock ? `${rendered.replace(/\s+$/, "")}\n\n${ctx.authoritativeBlock}\n` : rendered;
 }
+
+/**
+ * M8 P3.2 — rótulo HUMANO de uma fonte ausente (`DocumentAuthoringContext.missing`): a ressalva do documento nunca expõe a chave técnica
+ * (`dfd`, `pesquisa_precos`, `fonte_alterada:3`…). Chave desconhecida ⇒ rótulo genérico (nunca a chave crua).
+ */
+export function missingSourceLabel(key: string): string {
+  const LABELS: Readonly<Record<string, string>> = {
+    objeto: "objeto da contratação", dfd: "Documento de Formalização da Demanda (DFD)", etp: "Estudo Técnico Preliminar (ETP)",
+    itens: "Itens da contratação", pesquisa_precos: "Pesquisa de preços", quantidade_prevista: "quantidade prevista dos itens",
+  };
+  const changed = /^fonte_alterada:(\d+)$/.exec(key);
+  if (changed) return `pesquisa de preços do item ${changed[1]} alterada após a decisão`;
+  return LABELS[key] ?? "informação do processo";
+}
+const missingSourcesText = (keys: readonly string[]): string => [...new Set(keys.map(missingSourceLabel))].join("; ");
 
 /** Registra proveniência FAILED de contrato de autoria (structured output inválido) — best-effort. */
 async function recordAuthoringContractFailure(input: StructuredAuthoringInput, err: unknown): Promise<void> {
@@ -328,12 +379,12 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   let execution: CognitiveExecution | undefined;
   try {
     if (input.invoke) {
-      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext));
+      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams));
     } else {
       execution = await executeCognitiveTask({
         task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
         userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
-        query: authoringQuery(input.kind, input.object, input.sourceContext), businessDomain: DOMAIN,
+        query: authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams), businessDomain: DOMAIN,
         contextPackage,
         documentRefs: contextPackage.documents.map((d) => d.documentId),
         lawRefs: contextPackage.citations.map((c) => c.reference),
@@ -431,7 +482,8 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   const evidenceComplete = finalCoverage.evidenceComplete;
 
   // Limitações honestas (fundamentação parcial/ausente, citações rejeitadas, seções não contempladas).
-  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o rascunho não está fundamentado e exige elaboração pelo servidor.");
+  // M8 P2.2/P3.2 — as ressalvas entram no TEXTO (que a emissão congela): linguagem do documento, sem "rascunho" nem chaves técnicas.
+  if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada para este documento — a fundamentação exige elaboração pelo servidor competente.");
   else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: nem todas as seções que exigem grounding contam com evidência normativa compatível.");
   // Gap 6 — a limitação registra a CATEGORIA da rejeição, sem reproduzir a citação falsa (não vira nota de
   // rodapé que ecoa o dispositivo inexistente). O texto exato fica só em `rejectedReferences` (dado, não render).
@@ -441,10 +493,9 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   if (omittedSections.length > 0) limitations.push(`Seções não contempladas (com justificativa): ${omittedSections.join("; ")}.`);
   const pendingGrounding = sections.filter((s) => s.contentMode === "provided" && !s.grounded).map((s) => s.title);
   if (pendingGrounding.length > 0 && groundingState !== "ungrounded") limitations.push(`Seções produzidas com fundamentação pendente: ${pendingGrounding.join("; ")}.`);
-  limitations.push("Estimativa do valor da contratação redigida pelo sistema a partir do quadro autoritativo (não pela IA).");
   if (unverifiedAmounts > 0) limitations.push(`${unverifiedAmounts} valor(es) monetário(s) citado(s) pela IA não coincidem com o quadro do sistema — marcados [REVISAR].`);
   if (input.sourceContext && input.sourceContext.missing.length > 0) {
-    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+    limitations.push(`Informações ausentes no processo (marcadas para revisão): ${missingSourcesText(input.sourceContext.missing)}.`);
   }
 
   // 8) Contrato Zod bounded → fail-closed (mínimos legais, representação de todas as seções, justificativas).
@@ -620,7 +671,7 @@ export async function generateEditalAuthoring(input: EditalAuthoringInput): Prom
   if (groundingState === "ungrounded") limitations.unshift("Nenhuma evidência normativa vigente foi recuperada — o Edital exige elaboração/validação pelo servidor.");
   else if (groundingState === "partially_grounded") limitations.unshift("Fundamentação parcial: uma ou mais citações não puderam ser verificadas e foram removidas.");
   if (input.sourceContext.missing.length > 0) {
-    limitations.push(`Fontes ausentes no processo (marcadas para revisão): ${input.sourceContext.missing.join(", ")}.`);
+    limitations.push(`Informações ausentes no processo (marcadas para revisão): ${missingSourcesText(input.sourceContext.missing)}.`);
   }
   const rejectionCategories = new Set(rejectedAll.map((r) => rejectionCategory(r.reason)));
   for (const cat of rejectionCategories) limitations.push(`Referências jurídicas não verificadas foram removidas da fundamentação (${cat}).`);
@@ -641,17 +692,12 @@ export async function generateEditalAuthoring(input: EditalAuthoringInput): Prom
     throw err;
   }
 
-  // 7) Render markdown + nota de fontes reaproveitadas (explicabilidade mínima na própria minuta).
-  const usedLabel = input.sourceContext.usedSources.length > 0 ? input.sourceContext.usedSources.join(", ") : "nenhuma fonte estruturada localizada";
+  // 7) Render markdown + quadro autoritativo. As fontes reaproveitadas são proveniência (lineage + tela), não texto do Edital (P3.2).
   const content = [
     renderMarkdown(structured),
     "",
     // P0 piloto — quadro AUTORITATIVO de itens/valores (servidor), idêntico ao do TR. Não é prosa da IA.
     input.sourceContext.authoritativeBlock ?? "",
-    "",
-    "---",
-    `> **Fontes reaproveitadas do processo:** ${usedLabel}.`,
-    input.sourceContext.missing.length > 0 ? `> **Pendências (revisar):** ${input.sourceContext.missing.join(", ")}.` : "",
   ].filter(Boolean).join("\n");
 
   return {

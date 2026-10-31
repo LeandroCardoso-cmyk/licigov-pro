@@ -23,6 +23,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const role = vi.hoisted(() => ({ value: "viewer" as string, org: 1 }));
 
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: o fixture é um MEMBRO REAL com o mesmo papel do contexto.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: role.value, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: role.org,
     membership: { id: 1, organizationId: role.org, userId: 1, role: role.value, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },

@@ -9,7 +9,7 @@ import { displayLateBoundForDraft } from "../domain/institutionalTemplates/lifec
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   createProcurementWorkspace,
   setStage,
@@ -30,22 +30,28 @@ import { getLicitacoesProfileState } from "../services/institutionalTemplates/li
 import { getBudgetDisclosureState, getCertameConfigState, getItemsParticipationState } from "../services/institutionalTemplates/certameConfigService";
 import { getTrStructuredState, recordTrStructuredParams, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
-import { generateEditalRouted, listEditalTrCandidates, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
+import { generateEditalRouted, listEditalTrCandidates, recoverComposedEditalContext, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
 import {
   importManualPriceResearch, applyItemSourceUpdate, previewItemSourceUpdate, resolveItemIdentity,
 } from "../services/itemMaterializationService";
 import { findPriceOutliers } from "@shared/itemApprovalGate";
+import { UNISSUED_DRAFT_MARKING } from "@shared/documentMarkers";
 import { reaisToCents } from "../domain/money";
 import { missingOfficialKinds, processIssueRefusalMessage } from "../domain/processIssuance";
 import { serviceLogger } from "../services/observabilityService";
+import { demonstrativePriceNotice } from "../services/priceGovernanceService";
 import { exportDocument as exportDocumentCore, formatBrazilianDateTime } from "../services/documentExportService";
 import {
   PROCESS_ALREADY_EXISTS, ProcessAlreadyExistsError, PROCUREMENT_PROCESS_ALREADY_EXISTS_MESSAGE, procurementCreateMismatches,
 } from "../domain/processCreateContract";
 import { listContextFacts } from "../db/procurementContext";
-import { getOrganizationById } from "../db/organizations";
-import { getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
+import { editalScopeSelection } from "../domain/editalScopeSelection";
+import { timelineSummaryForAccess } from "../domain/institutionalAuthority";
+import { getEditalScopeSelection, recordEditalScope } from "../services/editalScopeService";
+import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
+import { getLatestOfficialPromotion, listLatestOfficialEmissions, officialEmissionsOf, officialVersionsOf } from "../db/officialDocumentPromotions";
+import { exportOfficialDocument } from "../services/officialDocumentExportAdapter";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
 import { isFeatureEnabled } from "../services/featureFlagService";
@@ -149,13 +155,18 @@ const STATUS_SLUGS: Record<string, string> = {
 /** Bridge Edital → Modelos Institucionais: ports de composição quando integrados (senão, feature OFF) e relógio do servidor. */
 const bridgeDeps = (): BridgeDeps => ({ ports: templateCompositionPortsConfigured() ? getTemplateCompositionPorts() : null, now: () => new Date().toISOString() });
 
-/** Parâmetros efetivos da fronteira: proposta explícita sobre os persistidos pelo fluxo legado (campo a campo). */
+/**
+ * Parâmetros efetivos da fronteira: proposta explícita, campo a campo, sobre a BASE = parâmetros persistidos do Edital gerado
+ * (fluxo legado) ou, antes da 1ª geração, o escopo escolhido pela pessoa (`edital.scope`). A base é um conjunto inteiro
+ * (nunca mistura campos de fontes diferentes).
+ */
 async function editalBoundaryParams(orgId: number, processId: string, proposal: { modality?: string; form?: string; platform?: string }) {
   const persisted = persistedEditalParameters(await getGeneratedDocumentByKind(processId, orgId, "edital"));
+  const base = persisted ?? editalScopeSelection(await listContextFacts(orgId, processId)).scope;
   return {
-    modality: proposal.modality ?? persisted?.modality ?? null,
-    form: proposal.form ?? persisted?.form ?? null,
-    platform: proposal.platform ?? persisted?.platform ?? null,
+    modality: proposal.modality ?? base?.modality ?? null,
+    form: proposal.form ?? base?.form ?? null,
+    platform: proposal.platform ?? base?.platform ?? null,
   };
 }
 
@@ -233,20 +244,33 @@ export const procurementProcessRouter = router({
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const process = await getProcess(input.processId, orgId);
-      if (!process) return { process: null, items: [], timeline: [], documents: [] };
-      const [items, timeline, documents] = await Promise.all([
+      if (!process) return { process: null, items: [], timeline: [], documents: [], officialVersions: {} };
+      const [items, timeline, documents, official] = await Promise.all([
         listIntelligentItems(input.processId, orgId),
         listProcessTimeline(input.processId, orgId),
         listGeneratedDocuments(input.processId, orgId),
+        listLatestOfficialEmissions(orgId, [input.processId]),
       ]);
-      return { process, items, timeline, documents };
+      // Autoria registrada nos eventos é o id do usuário (texto): resolve o nome só entre membros DESTA organização.
+      // Formatos registrados: "5" e "user:5" (serviços diferentes); "sistema"/outros ficam sem nome.
+      const actorId = (a: string): number | null => { const m = /^(?:user:)?(\d+)$/.exec(a); return m ? Number(m[1]) : null; };
+      const names = await getOrganizationMemberNames(orgId, timeline.map((e) => actorId(e.actor)).filter((n): n is number => n !== null));
+      const timelineNamed = timeline.map((e) => { const id = actorId(e.actor); return { ...e, actorName: id !== null ? names.get(id) ?? null : null }; });
+      // Rascunho ≠ versão oficial: a última versão EMITIDA por tipo vem do ledger de promoções (leitura pura).
+      // `officialEmissions` (M8 P3.3): ordinal da emissão vigente ("1ª emissão"), sem renumerar a revisão técnica.
+      return {
+        process, items, timeline: timelineNamed, documents,
+        officialVersions: officialVersionsOf(official.get(input.processId)), officialEmissions: officialEmissionsOf(official.get(input.processId)),
+      };
     }),
 
   listProcesses: tenantProcedure
     .input(z.object({ limit: z.number().min(1).max(100).optional() }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const processes = await listProcesses(orgId, input.limit ?? 50);
+      const rows = await listProcesses(orgId, input.limit ?? 50);
+      const official = await listLatestOfficialEmissions(orgId, rows.map((p) => p.id));
+      const processes = rows.map((p) => ({ ...p, officialVersions: officialVersionsOf(official.get(p.id)), officialEmissions: officialEmissionsOf(official.get(p.id)) }));
       return { processes, total: processes.length };
     }),
 
@@ -288,6 +312,9 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1),
       kind: z.enum(["dfd", "etp", "tr", "edital"]),
       format: z.enum(["docx", "pdf"]),
+      // LICIGOV-FAST PR-1 — "inline" abre o PDF no navegador (Visualizar/Imprimir na etapa); default: baixar. Só o
+      // Content-Disposition da URL assinada muda — conteúdo, marcação, RBAC e evento são os mesmos.
+      disposition: z.enum(["attachment", "inline"]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -295,6 +322,24 @@ export const procurementProcessRouter = router({
       const document = await getGeneratedDocumentByKind(input.processId, orgId, input.kind);
       if (!document || !document.content.trim()) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado ou vazio para exportar." });
+      }
+      // M8 P2.2 — o rascunho cujo conteúdo é EXATAMENTE a versão oficial emitida mais recente não sai como "RASCUNHO … não é versão
+      // oficial": exporta-se a própria versão emitida (conteúdo congelado, status EMITIDO, sem afirmar aprovação/assinatura), pelo
+      // adaptador oficial (mesmo RBAC: tenantProcedure). Rascunho alterado depois da emissão continua exportado como RASCUNHO.
+      if (input.kind !== "dfd") {
+        const emitted = await getLatestOfficialPromotion(orgId, input.processId, input.kind);
+        if (emitted && emitted.contentHash === draftContentHash(document.content)) {
+          const official = await exportOfficialDocument({
+            organizationId: orgId, userId: ctx.user!.id, documentId: emitted.officialDocumentId, format: input.format, disposition: input.disposition, correlationId: ctx.correlationId,
+            platformTechnicalAccess: ctx.platformAdminAccess,
+          });
+          await recordProcessEvent({
+            organizationId: orgId, processId: input.processId, eventType: "change", actor: String(ctx.user!.id),
+            summary: timelineSummaryForAccess(`Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}) — versão oficial emitida.`, ctx.platformAdminAccess),
+            refId: emitted.officialDocumentId, correlationId: ctx.correlationId,
+          });
+          return { url: official.url, format: official.format, fileName: official.fileName };
+        }
       }
       const org = await getOrganizationById(orgId);
       const statusLabel = STATUS_LABELS[document.status] ?? document.status.toUpperCase();
@@ -311,6 +356,7 @@ export const procurementProcessRouter = router({
         // Nome de download determinístico e legível: DFD_100-2026_rascunho_v1
         downloadBaseName: `${input.kind.toUpperCase()}_${procNumberFile}_${statusSlug}_v${version}`,
         format: input.format,
+        disposition: input.disposition,
         scope: "processo",
         meta: {
           organizationName: org?.nome || undefined,
@@ -318,7 +364,13 @@ export const procurementProcessRouter = router({
           processNumber: process.processNumber,
           object: process.object,
           statusLabel,
-          isDraft: document.status === "rascunho",
+          // Decisão do Owner (PR #334): chegar aqui significa que o ledger NÃO tem esta versão como emitida (a emitida idêntica saiu
+          // acima, pelo adaptador oficial). Logo, todo arquivo deste caminho é MINUTA não emitida — qualquer status interno, que segue
+          // no cabeçalho. Só a apresentação muda: conteúdo, hash, lineage e regras de emissão intactos.
+          isDraft: true,
+          draftMarking: UNISSUED_DRAFT_MARKING,
+          // Pós-M8 — o MESMO aviso da prévia (fonte única), no cabeçalho do arquivo exportado do rascunho.
+          notices: input.kind === "dfd" ? [] : [demonstrativePriceNotice(await listIntelligentItems(input.processId, orgId))].filter((n): n is string => !!n),
           version,
           exportedAtLabel: formatBrazilianDateTime(new Date()),
         },
@@ -326,7 +378,7 @@ export const procurementProcessRouter = router({
       await recordProcessEvent({
         organizationId: orgId, processId: input.processId, eventType: "change",
         actor: String(ctx.user!.id),
-        summary: `Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`,
+        summary: timelineSummaryForAccess(`Documento ${input.kind.toUpperCase()} exportado (${input.format.toUpperCase()}).`, ctx.platformAdminAccess),
         refId: document.id, correlationId: ctx.correlationId,
       });
       return { url: exported.url, format: exported.format, fileName: exported.fileName };
@@ -649,12 +701,17 @@ export const procurementProcessRouter = router({
       const orgId = ctx.organizationId!;
       await requireProcess(input.processId, orgId);
       // CONTEXT_REUSE 2.0: o TEXTO do TR consome os MESMOS parâmetros estruturados que o Edital (bloco do sistema; sem IA).
-      const structured = await renderTrStructuredBlock(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {})).catch(() => null);
+      // Falha ao montar o bloco não impede a geração (TR sem parâmetros, como antes), mas não fica silenciosa.
+      const structured = await renderTrStructuredBlock(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {}))
+        .catch((err: unknown) => {
+          log.warn("tr_structured_block_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
+          return null;
+        });
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
         confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
-        structuredParams: structured ? { block: structured.block, digest: structured.digest } : null,
+        structuredParams: structured,
       });
       return { document };
     }),
@@ -789,6 +846,25 @@ export const procurementProcessRouter = router({
       await requireProcess(input.processId, orgId);
       return getBudgetDisclosureState(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, input));
     }),
+
+  /** Escopo do Edital (modalidade/forma/plataforma) escolhido antes da 1ª geração — somente leitura. */
+  editalScopeSelection: tenantProcedure
+    .input(z.object({ processId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => getEditalScopeSelection(ctx.organizationId!, input.processId)),
+
+  /**
+   * Registra (humano) o escopo do Edital escolhido antes da 1ª geração, para sobreviver ao recarregamento. Só a escolha: não
+   * gera, não aprova, não publica. CAS por `expectedValueHash`; mesmo valor ⇒ idempotente.
+   */
+  recordEditalScope: orgRoleProcedure("operator")
+    .input(z.object({
+      processId: z.string().min(1), modality: z.enum(MODALITIES), form: z.enum(FORMS), platform: z.enum(PLATFORMS).nullable().optional(),
+      expectedValueHash: z.string().length(16).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => recordEditalScope({
+      organizationId: ctx.organizationId!, processId: input.processId, actorUserId: ctx.user!.id, correlationId: ctx.correlationId,
+      scope: { modality: input.modality, form: input.form, platform: input.platform ?? null }, expectedValueHash: input.expectedValueHash,
+    })),
 
   /** Confirma (humano) parâmetros estruturados do TR no Contexto Canônico: append-only, tenant-scoped, sem IA. */
   recordTrStructuredParams: orgRoleProcedure("operator")
@@ -944,8 +1020,28 @@ export const procurementProcessRouter = router({
           // PR-09 — aditivo: proveniência humana do conteúdo vigente + parâmetros persistidos do Edital.
           humanEdit,
           parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
+          // M8 — aditivo, somente leitura: escopo e TR oficial com que a minuta INSTITUCIONAL foi composta (manifest M1 +
+          // bindings que fixam a revisão). A UI reabre com esse contexto sem gravar nada; ambíguo/ausente ⇒ explícito.
+          // Falha na recuperação NUNCA derruba a leitura do rascunho: degrada para null (a tela pede a escolha explícita).
+          composedContext: input.kind === "edital"
+            ? await recoverComposedEditalContext(orgId, { id: doc.id, processId: input.processId, sources: doc.sources }).catch((err: unknown) => {
+                log.warn("edital_composed_context_recovery_failed", {
+                  organizationId: orgId, processId: input.processId, documentId: doc.id, correlationId: ctx.correlationId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                return null;
+              })
+            : null,
           // R5 — aditivo: bloqueio de regeneração direta (aprovado/oficial) ou null.
           regenerationBlock,
+          // Pós-M8 — aditivo, somente leitura: aviso de valores demonstrativos (cotação fictícia/sintética no processo) ou null.
+          // Falha na leitura dos itens NUNCA derruba a leitura do rascunho: degrada para null (como `composedContext`).
+          priceNotice: await listIntelligentItems(input.processId, orgId).then(demonstrativePriceNotice).catch((err: unknown) => {
+            log.warn("draft_price_notice_unavailable", {
+              organizationId: orgId, processId: input.processId, correlationId: ctx.correlationId, error: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+          }),
         },
       };
     }),
@@ -1021,7 +1117,7 @@ export const procurementProcessRouter = router({
    * qualquer uma → PRECONDITION_FAILED listando o que falta, sem nenhuma escrita.
    * Papel mínimo alinhado à emissão (manager).
    */
-  issueProcess: orgRoleProcedure("manager")
+  issueProcess: institutionalProcedure("manager")
     .input(z.object({ processId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

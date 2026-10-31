@@ -35,7 +35,7 @@ export const institutionalConsultationRouter = router({
         });
         return { answer };
       } catch (e) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha na consulta." });
+        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha na consulta.", cause: e });
       }
     }),
 

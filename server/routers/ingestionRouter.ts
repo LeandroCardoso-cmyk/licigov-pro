@@ -15,7 +15,7 @@
 import { z } from "zod";
 import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import type { TrpcContext } from "../_core/context";
 import type { TrpcAuditCtx } from "../services/activityLogService";
 import { logActivity } from "../services/activityLogService";
@@ -24,6 +24,7 @@ import {
   getImportSession,
   findActiveSessionByChecksum,
   findResumableSessionForProcess,
+  listProcessImportSessionHistory,
   updateSessionStatus,
 } from "../services/fileIngestionService";
 import {
@@ -513,6 +514,26 @@ export const ingestionRouter = router({
     }),
 
   /**
+   * M8 (homologação visual) — HISTÓRICO somente leitura das sessões de ingestão de um processo canônico (todas, não só a
+   * retomável), paginado. Mostra apenas o que está registrado: envio (sessão), aprovação (trilha de auditoria) e promoção
+   * (sessão → Pesquisa de Preços gerada). Qualquer membro ativo do órgão pode consultar (mesmo nível das demais leituras).
+   *
+   * NÃO exige `FF_CANONICAL_INGESTION`: a flag controla o uso da ingestão (enviar/revisar/promover); a evidência já
+   * registrada continua consultável depois que a funcionalidade é desligada (precedente: `getCapabilities`). Isolamento:
+   * organização do contexto + processo do próprio tenant (NOT_FOUND caso contrário).
+   */
+  listSessionHistory: tenantProcedure
+    .input(z.object({
+      procurementProcessId: z.string().min(1).max(20),
+      limit: z.number().int().min(1).max(50).default(20),
+      offset: z.number().int().min(0).max(10_000).default(0),
+    }))
+    .query(async ({ ctx, input }) => {
+      const orgId = ctx.organizationId!;
+      return listProcessImportSessionHistory(orgId, input.procurementProcessId, { limit: input.limit, offset: input.offset });
+    }),
+
+  /**
    * Enfileira o processamento (parse → staging). Replay-safe/idempotente por status:
    * já em andamento/processado → retorna estado corrente sem re-enfileirar; terminal → conflito.
    * Lê os bytes do storage durável (não recebe binário por tRPC).
@@ -593,12 +614,12 @@ export const ingestionRouter = router({
       });
       const jobId = enqueueImport(session.id, orgId, session.sourceFileId, {
         correlationId: ctx.correlationId,
-        reextract: { actorUserId: ctx.user!.id, reason: input.reason, previousStage: reserved.previousStage },
+        reextract: { actorUserId: ctx.user!.id, reason: input.reason, previousStage: reserved.previousStage, leaseToken: reserved.leaseToken },
       });
       if (jobId === null) {
         // Já há processamento em voo neste processo: devolve a reserva (nada muda) e informa.
         await releaseReextraction({
-          sessionId: session.id, organizationId: orgId, previousStage: reserved.previousStage, actorUserId: ctx.user!.id,
+          sessionId: session.id, organizationId: orgId, previousStage: reserved.previousStage, leaseToken: reserved.leaseToken, actorUserId: ctx.user!.id,
           correlationId: ctx.correlationId ?? null, code: "ALREADY_IN_FLIGHT", message: "Processamento já em andamento.",
         });
         throw new TRPCError({ code: "CONFLICT", message: "REPROCESS_FORBIDDEN: Já existe um processamento em andamento para esta sessão." });
@@ -974,7 +995,7 @@ export const ingestionRouter = router({
       });
     }),
 
-  promoteSession: orgRoleProcedure("manager")
+  promoteSession: institutionalProcedure("manager")
     .input(z.object({
       sessionId:            z.number().int().positive(),
       procurementProcessId: z.string().min(1).max(20),

@@ -20,3 +20,9 @@
 | `tmp` | HIGH | 1 | GHSA-ph9p-34f9-6g65 | Upgrade to version 0.2.6 or later |
 | `form-data` | HIGH | 1 | GHSA-hmw2-7cc7-3qxx | Upgrade to version 4.0.6 or later |
 | `ws` | HIGH | 1 | GHSA-96hv-2xvq-fx4p | Upgrade to version 8.21.0 or later |
+
+## Adendo SEC-AUD-2026-10 (25/10/2026)
+
+Gate estava vermelho na `main` (zod, body-parser). `axios`, `jspdf` e `openai` removidos (sem uso);
+`express` 4.22.3 e `zod` 4.6.7. Baseline 40 → 14 GHSA. Triagem atual e aplicabilidade em
+[`../security/incident-2026-10/AUDIT_REPORT.md`](../security/incident-2026-10/AUDIT_REPORT.md) §2.6.

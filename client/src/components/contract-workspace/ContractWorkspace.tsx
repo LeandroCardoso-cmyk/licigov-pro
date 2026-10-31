@@ -72,7 +72,7 @@ export default function ContractWorkspace({ contractId, onBack }: ContractWorksp
           <ContractEditor contract={ws} />
           <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="mb-2 text-sm font-semibold text-foreground">Parecer Jurídico</h3>
-            <p className="mb-2 text-xs text-muted-foreground">Solicitado ao Business Domain Parecer Jurídico — sem duplicação.</p>
+            <p className="mb-2 text-xs text-muted-foreground">Enviado ao setor jurídico (Parecer Jurídico) — uma única solicitação, sem duplicação.</p>
             <button type="button" onClick={() => requestOpinion.mutate({ contractId })} disabled={requestOpinion.isPending}
               className="w-full rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
               {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer jurídico"}
