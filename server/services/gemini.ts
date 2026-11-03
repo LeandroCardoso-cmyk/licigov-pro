@@ -18,7 +18,7 @@ import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generati
 import { retrieveRelevantLaw, formatRetrievedContext } from "./rag";
 import { getPlatformInstructions } from "./platformTemplates";
 import { AI_CONFIG } from "../config/ai";
-import { shouldDisableThinking } from "../_core/ai/gemini";
+import { shouldDisableThinking, supportsCustomSampling } from "../_core/ai/gemini";
 
 // Config de geração COMUM a todos os documentos institucionais (DFD/ETP/TR/Edital/
 // Contrato/Ata/Parecer) — fonte única, sem duplicação. Usa o modelo VIVO configurado
@@ -26,13 +26,15 @@ import { shouldDisableThinking } from "../_core/ai/gemini";
 // "gemini-2.0-flash-exp" foi descontinuado e fazia toda geração falhar. Desliga o "thinking" nos Flash 2.5
 // (senão consome o orçamento de saída e trunca o documento — ver #175). Cada tipo
 // documental mantém seu próprio teto de saída (maxOutputTokens), o resto é idêntico.
-function buildDocGenerationConfig(maxOutputTokens: number) {
+// SEC-AUD-2026-10 — temperature/topP/topK só nos modelos 1.x/2.x (ignorados desde o Gemini 3.6 e
+// recusados pelos próximos modelos); thinkingBudget só nos Flash 2.5 do allowlist.
+export function buildDocGenerationConfig(maxOutputTokens: number, modelId: string = AI_CONFIG.model) {
   return {
-    temperature: 0.3, // Baixo para respostas determinísticas
-    topP: 0.8,
-    topK: 40,
+    ...(supportsCustomSampling(modelId)
+      ? { temperature: 0.3, topP: 0.8, topK: 40 } // Baixo para respostas determinísticas
+      : {}),
     maxOutputTokens,
-    ...(shouldDisableThinking(AI_CONFIG.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    ...(shouldDisableThinking(modelId) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
   } as const;
 }
 

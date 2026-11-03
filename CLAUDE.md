@@ -112,7 +112,7 @@ Requer **pnpm** e um MySQL acessível via `DATABASE_URL`.
 
 ```bash
 pnpm install            # instala deps + configura git hooks (script `prepare`)
-cp .env.example .env    # preencher DATABASE_URL, JWT_SECRET, ADMIN_PASSWORD, GEMINI_API_KEY…
+cp .env.example .env    # preencher DATABASE_URL, JWT_SECRET, GEMINI_API_KEY…
 
 # Desenvolvimento (tsx watch, APP_ENV=development)
 pnpm dev
@@ -189,7 +189,6 @@ DATABASE_URL=mysql://usuario:senha@host:3306/licigov
 JWT_SECRET=string-longa-minimo-32-chars
 SESSION_TTL_HOURS=24          # 1..720 (default 24)
 ALLOW_PUBLIC_REGISTRATION=false  # fail-closed; NUNCA true em produção
-ADMIN_PASSWORD=senha-forte    # obrigatória em staging/produção (mín. 8 chars)
 # Bootstrap do admin de plataforma NÃO roda mais no boot do servidor — é um comando
 # explícito (`pnpm admin:bootstrap`, ver ADMIN_BOOTSTRAP_* em .env.example).
 
