@@ -10584,11 +10584,6 @@
     "ast_hash": "4632a889a25ade2f8bc0f08d3e0aa71c",
     "semantic_hash": ""
   },
-  ".github/workflows/ai-models.yml": {
-    "mtime": 1793469891.8116744,
-    "ast_hash": "aca0b1fb7fb398996b5a1c0864d1ba85",
-    "semantic_hash": ""
-  },
   ".github/workflows/ci.yml": {
     "mtime": 1793469898.0716748,
     "ast_hash": "4e690a9e11b7868a6d2bdb73c1be1274",
@@ -10635,8 +10630,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793667247.7853541,
-    "ast_hash": "d8c5e21d90110deba9515a2c0a7b0fe6",
+    "mtime": 1793668684.4257257,
+    "ast_hash": "caea09ac78f093b72618e64ad9686677",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {

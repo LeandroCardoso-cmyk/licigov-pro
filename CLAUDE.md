@@ -143,7 +143,7 @@ pnpm ai:models          # inspeciona modelos de IA disponíveis
 ```
 
 **Ambiente:** `APP_ENV` (development | staging | production) tem **precedência sobre `NODE_ENV`**.
-**CI (GitHub Actions):** `ci.yml`, `schema-audit.yml`, `db-backup.yml`, `ai-models.yml`.
+**CI (GitHub Actions):** `ci.yml`, `schema-audit.yml`, `db-backup.yml` (o antigo `ai-models.yml` foi aposentado — use `pnpm ai:models` localmente com uma chave própria).
 **Git hooks:** `.githooks/pre-commit` mantém o grafo Graphify sincronizado (não bloqueia o commit se ausente).
 
 ## Módulos oficiais (arquitetura funcional)
