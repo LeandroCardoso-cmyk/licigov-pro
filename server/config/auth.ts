@@ -49,26 +49,12 @@ function resolveSessionTtlHours(): number {
 export const SESSION_TTL_HOURS = resolveSessionTtlHours();
 export const SESSION_TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
 
-// ─── RC-SEC-PR-A (CONFIG-005) — Senha administrativa sem default em produção ──
-// Em produção/staging, ADMIN_PASSWORD é OBRIGATÓRIA: o boot falha se ausente.
-// Nenhum valor default inseguro é utilizável em produção. Em
-// desenvolvimento/testes usa-se um valor explícito de fixture (nunca produção).
-const DEV_ONLY_ADMIN_PASSWORD = "dev-only-admin-change-me";
-
-function resolveAdminPassword(): string {
-  const pwd = process.env.ADMIN_PASSWORD;
-  if (pwd && pwd.length >= 8) return pwd;
-
-  if (APP_ENV === "production" || APP_ENV === "staging") {
-    throw new Error(
-      `[BOOT][${APP_ENV}] ADMIN_PASSWORD é obrigatória (mínimo 8 caracteres): ` +
-        `o sistema não inicia com senha administrativa default em produção.`
-    );
-  }
-  return DEV_ONLY_ADMIN_PASSWORD;
-}
-
-export const ADMIN_PASSWORD = resolveAdminPassword();
+// ─── SEC-AUD-2026-10 — ADMIN_PASSWORD removida ───────────────────────────────
+// CONFIG-005 exigia ADMIN_PASSWORD no boot de produção/staging porque o bootstrap antigo criava o
+// admin com ela. Desde o PR 0 o boot não cria nem promove ninguém (bootstrap explícito via
+// `pnpm admin:bootstrap` com ADMIN_BOOTSTRAP_*), e nenhum código lê mais a variável — exigi-la só
+// mantinha um segredo sem consumidor no Railway (exposto no incidente de out/2026). A variável pode
+// ser excluída dos ambientes; a senha da conta admin troca-se pelo fluxo de recuperação de senha.
 
 // ─── RC-SEC-PR-A (SEC-017) — Registro público fail-closed ────────────────────
 // Registro público desabilitado por padrão. Só é permitido quando

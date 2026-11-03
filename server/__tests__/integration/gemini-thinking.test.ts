@@ -10,11 +10,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock do SDK legado: captura os args de getGenerativeModel e devolve um generateContent stub.
-const captured: any[] = [];
+type CapturedModelConfig = { generationConfig?: Record<string, unknown> };
+const captured: CapturedModelConfig[] = [];
 vi.mock("@google/generative-ai", () => {
   return {
     GoogleGenerativeAI: class {
-      getGenerativeModel(cfg: any) {
+      getGenerativeModel(cfg: CapturedModelConfig) {
         captured.push(cfg);
         return {
           generateContent: async () => ({
@@ -38,6 +39,8 @@ vi.mock("@google/generative-ai", () => {
 });
 
 import { shouldDisableThinking, THINKING_DISABLE_COMPATIBLE_MODELS, GeminiProvider } from "../../_core/ai/gemini";
+
+type GenerateOptions = Parameters<GeminiProvider["generate"]>[0];
 
 describe("Gemini · thinking budget — apenas em IDs concretos compatíveis", () => {
   it("NÃO desliga thinking para aliases móveis (evita 400 INVALID_ARGUMENT)", () => {
@@ -70,7 +73,7 @@ describe("Gemini · payload de generateContent (thinkingConfig)", () => {
     await provider.generate({
       messages: [{ role: "user", content: "Responda apenas: OK" }],
       maxTokens: 1500,
-    } as any);
+    } as GenerateOptions);
     // o último getGenerativeModel com generationConfig é o da chamada .generate()
     return captured[captured.length - 1];
   }
@@ -85,5 +88,43 @@ describe("Gemini · payload de generateContent (thinkingConfig)", () => {
   it("payload para o ID concreto gemini-2.5-flash CONTÉM thinkingConfig:{thinkingBudget:0}", async () => {
     const cfg = await generateWith("gemini-2.5-flash");
     expect(cfg.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+});
+
+// SEC-AUD-2026-10 — aviso do Google AI Studio (07/10/2026): `thinking_budget`, `temperature`, `top_p` e
+// `top_k` são depreciados e os próximos modelos recusam a requisição (400) quando presentes. O modelo
+// canônico (gemini-3.8-flash) não pode recebê-los; os modelos 2.x continuam com o comportamento anterior.
+import { supportsCustomSampling } from "../../_core/ai/gemini";
+import { buildDocGenerationConfig } from "../../services/gemini";
+import { CANONICAL_GEMINI_MODEL } from "../../config/ai";
+
+describe("Gemini · parâmetros de amostragem depreciados (temperature/topP/topK)", () => {
+  it("só IDs concretos 1.x/2.x aceitam amostragem customizada", () => {
+    expect(supportsCustomSampling("gemini-2.5-flash")).toBe(true);
+    expect(supportsCustomSampling("gemini-2.0-flash")).toBe(true);
+    expect(supportsCustomSampling("gemini-1.5-pro")).toBe(true);
+    expect(supportsCustomSampling(CANONICAL_GEMINI_MODEL)).toBe(false);
+    expect(supportsCustomSampling("gemini-3.8-flash")).toBe(false);
+    expect(supportsCustomSampling("gemini-4-argon")).toBe(false);
+    expect(supportsCustomSampling("gemini-flash-latest")).toBe(false);
+    expect(supportsCustomSampling("gemini-2.5-flash-latest")).toBe(false);
+  });
+
+  it("geração documental no modelo canônico NÃO envia temperature/topP/topK nem thinkingConfig", () => {
+    const cfg = buildDocGenerationConfig(8192, CANONICAL_GEMINI_MODEL) as Record<string, unknown>;
+    expect(cfg).toEqual({ maxOutputTokens: 8192 });
+  });
+
+  it("geração documental em gemini-2.5-flash mantém amostragem + thinkingBudget:0 (comportamento anterior)", () => {
+    const cfg = buildDocGenerationConfig(4096, "gemini-2.5-flash") as Record<string, unknown>;
+    expect(cfg).toEqual({ temperature: 0.3, topP: 0.8, topK: 40, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } });
+  });
+
+  it("GeminiProvider.generate no modelo canônico não envia parâmetros depreciados", async () => {
+    captured.length = 0;
+    const provider = new GeminiProvider("test-key", CANONICAL_GEMINI_MODEL);
+    await provider.generate({ messages: [{ role: "user", content: "OK" }], maxTokens: 100 } as GenerateOptions);
+    const gc = captured[captured.length - 1].generationConfig ?? {};
+    for (const k of ["temperature", "topP", "topK", "thinkingConfig"]) expect(gc).not.toHaveProperty(k);
   });
 });
