@@ -33,7 +33,7 @@ import { canonicalDocumentItems, loadApprovedContextItems } from "../../authorin
 import { resolveProcurementContext } from "../../canonicalContextService";
 import { snapshotInstitutionalIdentity } from "../../institutionalIdentityService";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "../governedFieldsStore";
-import { TemplateSourceUnavailableError } from "../ports";
+import { TemplateSourceIncompleteError, TemplateSourceUnavailableError } from "../ports";
 import { resolveEditalProjections, type ProjectedValue } from "../editalProjections";
 import {
   TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, currentTrDigest, hasStructuredTrParams, loadContextReuse, profileFingerprint, setNestedIfAbsent, type ContextReuse,
@@ -44,6 +44,8 @@ import { PROJECTION_BY_VARIABLE, canonicalProjectedPaths } from "../../../domain
 import { ALWAYS_DERIVED } from "../../../domain/institutionalTemplates/certameAuthority";
 
 const unavailable = (source: string, reason: string, message: string) => new TemplateSourceUnavailableError(source, reason, message);
+/** LICIGOV-FAST S3 — falta informação de negócio na origem (mesma recusa; só a natureza/orientação difere). */
+const incomplete = (source: string, reason: string, message: string) => new TemplateSourceIncompleteError(source, reason, message);
 export const sha256Of = (s: string): string => createHash("sha256").update(s).digest("hex");
 
 /** Divulgação CORRENTE do orçamento do processo; `null` = nenhuma decisão (valores permanecem ocultos). */
@@ -185,11 +187,12 @@ async function itemRows(rc: SourceReadContext, disclosure: BudgetDisclosure | nu
   const ctx = await resolveProcurementContext({ organizationId: rc.organizationId, processId: rc.processId }).catch(() => {
     throw unavailable("ITEMS", "PROCESS_NOT_FOUND", "processo inexistente nesta organização");
   });
-  if (ctx.items.length === 0) throw unavailable("ITEMS", "CANONICAL_ITEMS_REQUIRED", "o processo não possui Itens da contratação canônicos (HD-01)");
+  // HD-01 inalterado: sem Itens da contratação a fonte RECUSA (o Edital por modelo depende SÓ desta recusa). Muda apenas a orientação.
+  if (ctx.items.length === 0) throw incomplete("ITEMS", "CANONICAL_ITEMS_REQUIRED", "Ainda não existem itens cadastrados para esta contratação. Cadastre-os em Itens da contratação.");
   const { approvedItems } = await loadApprovedContextItems({ organizationId: rc.organizationId, processId: rc.processId });
   const { items, state } = canonicalDocumentItems(ctx, approvedItems);
   if (state.missingPlannedQuantity.length > 0) {
-    throw unavailable("ITEMS", "PLANNED_QUANTITY_MISSING", `${state.missingPlannedQuantity.length} item(ns) sem quantidade prevista canônica (ou em conflito) — a quantidade nunca vem de cotação/IA`);
+    throw incomplete("ITEMS", "PLANNED_QUANTITY_MISSING", `A quantidade prevista precisa ser informada em Itens da contratação (${state.missingPlannedQuantity.length} item(ns) sem quantidade prevista ou com registros divergentes). A quantidade da cotação não é usada no lugar dela.`);
   }
   const showValues = disclosure === "publico";
   return items.map((it, i): ItemRow => {

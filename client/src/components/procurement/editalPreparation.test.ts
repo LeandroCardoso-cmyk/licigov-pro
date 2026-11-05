@@ -258,6 +258,23 @@ describe("SSR dos controles e painéis apresentacionais", () => {
     expect(render(Preflight, { preflight: { status: "BLOCKED", issues: [] }, hasTrPin: false, onRecheck() {} })).toContain("Confirme o TR oficial exato");
     expect(render(Preflight, { preflight: { status: "NOT_APPLICABLE" }, hasTrPin: false, onRecheck() {} })).toBe("");
   });
+  it("LICIGOV-FAST S3: falta de informação nos Itens aparece como orientação; falha técnica continua genérica; bloqueio igual", () => {
+    const missing = { code: "CANONICAL_ITEMS_REQUIRED", source: "ITEMS", kind: "INCOMPLETE" as const, message: "Ainda não existem itens cadastrados para esta contratação. Cadastre-os em Itens da contratação." };
+    const only = render(Preflight, { preflight: { status: "BLOCKED", issues: [missing] }, hasTrPin: true, onRecheck() {} });
+    expect(only).toContain("Pendente: faltam informações para compor o Edital.");
+    expect(only).toContain("Ainda não existem itens cadastrados para esta contratação.");
+    expect(only).toContain('role="alert"');
+    const mixed = render(Preflight, { preflight: { status: "BLOCKED", issues: [missing, { code: "EVIDENCE_CORRUPT", source: "PROCESS", message: "registro corrompido" }] }, hasTrPin: true, onRecheck() {} });
+    expect(mixed).toContain("Composição bloqueada: há pendências nas fontes do Edital.");
+    // Revisão: a mesma distinção, mantendo o código SOURCE_UNAVAILABLE como bloqueio.
+    const r = (message: string): ReviewStateView => ({ composedByTemplate: true, generationManifestId: "m", unresolvedMarkers: { count: 0, slots: [], samples: [] }, structuralDeviations: [], aiNarratives: [], revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: "ITEMS", message }] } });
+    const inc = reviewReadiness(r("ITEMS — PLANNED_QUANTITY_MISSING: A quantidade prevista precisa ser informada em Itens da contratação (1 item(ns) sem quantidade prevista ou com registros divergentes)."));
+    expect(inc.ready).toBe(false);
+    expect(inc.blockers[0]).toMatch(/^A quantidade prevista precisa ser informada em Itens da contratação/);
+    const tech = reviewReadiness(r("NORMATIVE — REFERENCE_SET_UNAVAILABLE"));
+    expect(tech.ready).toBe(false);
+    expect(tech.blockers[0]).toBe("Pendência na revalidação do modelo institucional (veja os detalhes técnicos).");
+  });
 });
 
 describe("SSR da preparação orientada por exceções", () => {

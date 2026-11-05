@@ -4,7 +4,7 @@
  * Um documento a jusante consome a versão AUTORITATIVA do documento a montante:
  *   1. a última versão `emitido` em `official_documents` (ETP/TR/Edital promovidos pela emissão governada);
  *   2. sem emissão, o rascunho operacional — rotulado como `aprovado` (revisão humana concluída) ou `rascunho`.
- * O rótulo vai para o prompt ("estado: emitido v2" / "RASCUNHO não emitido") e para a lineage (`autoridade:tr=…`),
+ * O rótulo vai para o prompt ("estado: emitido v2" / "documento anterior em rascunho") e para a lineage (`autoridade:tr=…`),
  * em vez do antigo marcador fixo `"tr_aprovado"` (que afirmava uma aprovação que nunca foi verificada).
  * Tenant-scoped: documento de outro órgão não é encontrado (ausente).
  */
@@ -49,7 +49,10 @@ export function authorityMarker(kind: UpstreamKind, up: { authority?: UpstreamAu
 export function authorityLabel(up: { authority?: UpstreamAuthority; version?: number | null; status?: string | null }): string {
   if (up.authority === "emitido") return `emitido${up.version ? ` v${up.version}` : ""} — versão oficial`;
   if (up.authority === "aprovado") return "aprovado (revisado; ainda NÃO emitido)";
-  if (up.authority === "rascunho") return "RASCUNHO não emitido — [REVISAR: confirmar o conteúdo antes de emitir este documento]";
+  // LICIGOV-FAST S2 — nota CONTEXTUAL do documento anterior (vai só para o prompt; nunca para o conteúdo nem para hash/lineage).
+  // Sem marcador `[REVISAR…]` (a IA o copiava para o documento NOVO, onde ele bloqueia a emissão) e sem verbo de emissão: o estado
+  // continua explícito — rascunho NÃO emitido, nunca apresentado como aprovado/oficial. Marcas do PRÓPRIO conteúdo não são tocadas.
+  if (up.authority === "rascunho") return "documento anterior em rascunho — não emitido oficialmente; conferir seu conteúdo antes de reutilizar";
   return up.status ?? "?";
 }
 

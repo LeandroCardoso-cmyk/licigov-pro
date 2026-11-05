@@ -243,11 +243,33 @@ export interface CanonicalReferencePort {
 
 export const TEMPLATE_SOURCE_UNAVAILABLE = "TEMPLATE_SOURCE_UNAVAILABLE";
 
+/**
+ * Natureza da recusa da fonte (LICIGOV-FAST S3): `UNAVAILABLE` = falha técnica/de integridade/de escopo (registro corrompido, pin
+ * divergente, processo de outro órgão, fonte fora do contrato); `INCOMPLETE` = dado de negócio que a pessoa AINDA NÃO informou na
+ * origem (ex.: Itens da contratação, quantidade prevista). Só muda a APRESENTAÇÃO: as duas recusam igualmente (fail-closed).
+ */
+export type TemplateSourceFailureKind = "INCOMPLETE" | "UNAVAILABLE";
+
 /** Fonte canônica indisponível/fora do contrato (ex.: ITEMS sem Itens da contratação; NORMATIVE sem reference set ativo). */
 export class TemplateSourceUnavailableError extends Error {
+  readonly kind: TemplateSourceFailureKind = "UNAVAILABLE";
   constructor(readonly source: string, readonly reason: string, readonly detail: string) {
     super(`${TEMPLATE_SOURCE_UNAVAILABLE}: ${source} — ${reason}: ${detail}`);
     this.name = "TemplateSourceUnavailableError";
+  }
+}
+
+/**
+ * LICIGOV-FAST S3 — a fonte está ÍNTEGRA, mas falta informação de negócio que a pessoa resolve na origem (o `detail` é a orientação
+ * operacional). SUBCLASSE de propósito: todo `instanceof TemplateSourceUnavailableError` continua recusando do mesmo jeito (preflight
+ * BLOCKED, geração PRECONDITION_FAILED, emissão TEMPLATE_ISSUANCE_BLOCKED); mesmos `source`/`reason` e mesmo formato de mensagem.
+ * Nunca usada para processo inexistente/de outro órgão, registro corrompido ou divergência de pin (essas seguem `UNAVAILABLE`).
+ */
+export class TemplateSourceIncompleteError extends TemplateSourceUnavailableError {
+  override readonly kind: TemplateSourceFailureKind = "INCOMPLETE";
+  constructor(source: string, reason: string, detail: string) {
+    super(source, reason, detail);
+    this.name = "TemplateSourceIncompleteError";
   }
 }
 

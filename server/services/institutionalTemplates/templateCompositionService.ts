@@ -296,6 +296,8 @@ export interface PreflightIssue {
   /** Variável/caminho envolvido (quando identificável). */
   readonly path?: string;
   readonly message: string;
+  /** LICIGOV-FAST S3 — `INCOMPLETE` = falta informação na origem (orientação em `message`); ausente/`UNAVAILABLE` = falha técnica. Só apresentação. */
+  readonly kind?: "INCOMPLETE" | "UNAVAILABLE";
 }
 export type PreflightResult =
   | { readonly status: "READY_FOR_COMPOSITION"; readonly templateRevisionId: string; readonly templateSemanticHash: string }
@@ -325,7 +327,7 @@ export async function preflightTemplatedDocument(params: GenerateTemplatedDocume
       return { code: i.code, ...(def ? { source: def.source } : {}), path: i.path, message: i.message };
     }));
   } catch (err) {
-    if (err instanceof TemplateSourceUnavailableError) return blocked([{ code: err.reason, source: err.source, message: err.detail }]);
+    if (err instanceof TemplateSourceUnavailableError) return blocked([{ code: err.reason, source: err.source, message: err.detail, kind: err.kind }]);
     if (err instanceof TRPCError) return blocked([trpcIssue(err)]);
     throw err;
   }
@@ -501,7 +503,8 @@ export async function inspectTemplateReview(
     if (err instanceof TemplateSourceUnavailableError) {
       return { composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations: [], aiNarratives,
         lateBound: lateBoundView(m1.lateBound),
-        revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: err.source, message: `${err.source} — ${err.reason}` }] } };
+        // S3: o código continua SOURCE_UNAVAILABLE (bloqueio idêntico); falta de informação na origem leva também a orientação.
+        revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: err.source, message: err.kind === "INCOMPLETE" ? `${err.source} — ${err.reason}: ${err.detail}` : `${err.source} — ${err.reason}` }] } };
     }
     throw err;
   }
@@ -561,7 +564,7 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
       const [recomposition, humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
         // Fonte que deixou de estar disponível/íntegra (ex.: configuração corrompida, set normativo desativado) BLOQUEIA a emissão.
         recompose(ports, input.organizationId, input.processId, m1, t, outputs).catch((err: unknown) => {
-          if (err instanceof TemplateSourceUnavailableError) throw blocked("SOURCE_UNAVAILABLE", `${err.source} — ${err.reason}`);
+          if (err instanceof TemplateSourceUnavailableError) throw blocked("SOURCE_UNAVAILABLE", err.kind === "INCOMPLETE" ? `${err.source} — ${err.reason}: ${err.detail}` : `${err.source} — ${err.reason}`);
           throw err;
         }),
         ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
