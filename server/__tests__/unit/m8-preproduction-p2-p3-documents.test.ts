@@ -183,14 +183,14 @@ describe("P2.2/P3.3 — exportação: versão EMITIDA × RASCUNHO (preview × DO
   });
 });
 
-describe("P3.4 — dotação orçamentária: orientação de apresentação, sem nova autoridade nem valor presumido", () => {
+describe("P3.4 → LICIGOV-FAST PR-2 — dotação orçamentária: informação do PROCESSO, declarada uma vez, sem valor presumido", () => {
   const def = bllCatalog.vars.find((v) => v.name === "julgamento.dotacaoOrcamentaria")!;
-  it("o descritor pergunta pela MESMA dotação da 'Adequação orçamentária' do TR; a autoridade continua a da CertameConfig", () => {
+  it("o descritor orienta o registro ÚNICO nos Dados orçamentários do processo; a autoridade é o processo (não a CertameConfig)", () => {
     const d = describeVariable(def);
     expect(d.description).toBe("Dotação orçamentária");
-    expect(d.question).toMatch(/mesma indicada na seção "Adequação orçamentária" do TR/);
-    expect(d.question).toMatch(/uma única vez/);
-    expect(authorityEntryOf(def.name)).toMatchObject({ entry: "CERTAME_CONFIG" });   // nenhuma projeção do TR foi criada
+    expect(d.question).toMatch(/uma única vez, nos Dados orçamentários do processo/);
+    expect(d.question).toMatch(/o TR e o Edital usam o mesmo registro/);
+    expect(authorityEntryOf(def.name)).toMatchObject({ cls: "UPSTREAM_PROCESS", entry: "PROCESS_BUDGET", defaultEligible: false });
     expect(d).not.toHaveProperty("currentValue");                                     // nada é pré-preenchido/presumido
   });
 });

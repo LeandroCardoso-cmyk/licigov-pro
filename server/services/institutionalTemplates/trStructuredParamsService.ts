@@ -27,6 +27,7 @@ import { serviceLogger } from "../observabilityService";
 import type { BridgeDeps } from "./editalBridgeService";
 import { loadEditalCatalog } from "./editalCatalogLoader";
 import { trParamDefs, trParamProposals } from "./editalContextReuse";
+import { budgetAllocationView, renderBudgetAllocationBlock, type BudgetAllocationBlock } from "../../domain/institutionalTemplates/budgetAllocation";
 
 const log = serviceLogger("TrStructuredParams");
 
@@ -228,6 +229,18 @@ export async function renderTrStructuredBlock(deps: BridgeDeps, organizationId: 
     block: `PARÂMETROS ESTRUTURADOS DA CONTRATAÇÃO (confirmados neste processo; o Edital usa os mesmos dados)\n\n${lines.join("\n")}`,
     digest: trParamsDigest(resolved), count: lines.length, pending, conflicting,
   };
+}
+
+/**
+ * LICIGOV-FAST PR-2 — bloco determinístico dos Dados orçamentários do processo para o TR (o MESMO registro que o Edital consome).
+ * `null` quando o modelo vinculado não usa dotação/fonte (nada muda no TR). Leitura tenant-scoped; nunca grava.
+ */
+export async function renderBudgetAllocationForTr(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<BudgetAllocationBlock | null> {
+  const loaded = await loadEditalCatalog(deps, organizationId, params);
+  if (loaded.status !== "OK") return null;
+  const rec = await readGovernedRecord(organizationId, "PROCESS", processId, loaded.catalog);
+  const view = budgetAllocationView(loaded.catalog, rec?.payload.sections);
+  return view ? renderBudgetAllocationBlock(view) : null;
 }
 
 /**

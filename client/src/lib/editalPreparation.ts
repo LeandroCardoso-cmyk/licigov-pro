@@ -41,12 +41,16 @@ export type FieldStatus =
   | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
   | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD"
   /** Dado de PUBLICAÇÃO diferido ainda sem valor: nunca decisão pendente nem bloqueio da composição. */
-  | "DEFERRED";
+  | "DEFERRED"
+  /** LICIGOV-FAST PR-2: informação do processo ainda não registrada (ex.: dotação) — pendência INFORMATIVA, nunca bloqueio. */
+  | "CONTENT_PENDING"
+  /** LICIGOV-FAST PR-2: dispensável nesta configuração (ex.: dotação em registro de preços), com o fundamento na origem. */
+  | "NOT_APPLICABLE";
 export type AuthorityClass =
   | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
   | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
 /** Onde a pessoa resolve um dado que falta (a ORIGEM da autoridade — nunca o Edital). */
-export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "PROCESS_BUDGET" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
@@ -84,6 +88,8 @@ export interface UpstreamView {
   profilePending: { name: string; description: string; reason: string; role?: string }[];
   /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços, cadastro): cada uma com o `fix` (onde resolver). */
   sourcePending: { name: string; description: string; reason: string; fix: EntryPoint }[];
+  /** LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam a geração nem a emissão; o documento traz o marcador governado). */
+  contentPending?: { name: string; description: string; reason: string; fix: EntryPoint; providedBy: string }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -270,6 +276,7 @@ export function fixAction(entry: EntryPoint | undefined): FixAction | null {
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
     case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };
     case "PRICE_RESEARCH": return { label: "Corrigir na Pesquisa de Preços", stage: "price" };
+    case "PROCESS_BUDGET": return { label: "Informar nos Dados orçamentários do processo", stage: "price" };
     case "TR_SECTION": return { label: "Abrir o TR", stage: "tr" };
     default: return null;
   }
@@ -609,7 +616,7 @@ export function variableOriginLabel(path: string): string {
 export function revalidationIssueMessage(i: { code: string; path: string; message: string }): string {
   switch (i.code) {
     case "SOURCE_CHANGED":
-      return "Os dados do processo mudaram depois da composição desta minuta: ela precisa ser composta novamente pelo modelo institucional antes da emissão.";
+      return "Os dados do processo mudaram depois da composição desta minuta: use \"Gerar novamente\" para recompô-la com os dados atuais (o texto anterior fica no histórico) e revise antes da emissão.";
     case "COMPOSITION_DRIFT":
       // Inclui a atualização da APRESENTAÇÃO do modelo (ex.: M8 P2.1 — referência do Anexo I sem id/hash): minutas compostas antes dela.
       return "O texto não corresponde mais ao que o modelo institucional compõe hoje (os dados ou a apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir.";
@@ -630,6 +637,16 @@ export function revalidationIssueMessage(i: { code: string; path: string; messag
     default:
       return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
   }
+}
+
+/**
+ * Recomposição governada disponível para ESTA minuta? (o servidor é a autoridade e reaplica a regra; aqui só decide se o hash visto é enviado)
+ *  - a revisão vinculada tem a capability de dados de publicação diferidos (Revisão 2); ou
+ *  - R3: a revalidação acusa `SOURCE_CHANGED` — os dados do processo mudaram depois da composição (vale para a Revisão 1).
+ */
+export function canRecomposeDraft(prep: Pick<PreparationStateView, "capabilities"> | null | undefined, review: ReviewStateView | null | undefined): boolean {
+  if (prep?.capabilities?.governedDraftRecomposition) return true;
+  return !!review?.composedByTemplate && review.revalidation.status === "BLOCKED" && review.revalidation.issues.some((i) => i.code === "SOURCE_CHANGED");
 }
 
 /** Resumo de prontidão para emitir: nada além de informar — a autoridade final é a revalidação do backend na emissão. */

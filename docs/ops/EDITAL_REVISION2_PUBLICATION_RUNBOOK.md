@@ -114,7 +114,8 @@ UI → Vínculos → "Novo vínculo": selecionar a candidata + o **mesmo escopo 
 
 ## 9. Retorno à Revisão 1 (D6) — a qualquer momento
 UI → Vínculos → selecionar a **Revisão 1** + mesmo escopo → troca atômica (mesma tela). **Verificar:** 1 vínculo ativo fixando `REV1_ID`; `resolve` → Revisão 1; `capabilities.governedDraftRecomposition = false`.
-A Revisão 1 **nunca** é depreciada nem editada neste rollout (permanece publicada e disponível para replay; provado em teste: M1 da Revisão 1 revalida `PASSED` com a Revisão 2 vinculada e após o retorno). A Revisão 2 permanece publicada (sem vínculo) para replay dos M1 que ela compôs.
+Com a Revisão 1 vinculada, a recomposição governada continua indisponível em geral; a única exceção (PR #342, R3) é a minuta desatualizada pelas
+fontes do processo (`SOURCE_CHANGED`), que pode ser recomposta com as mesmas garantias. A Revisão 1 **nunca** é depreciada nem editada neste rollout (permanece publicada e disponível para replay; provado em teste: M1 da Revisão 1 revalida `PASSED` com a Revisão 2 vinculada e após o retorno). A Revisão 2 permanece publicada (sem vínculo) para replay dos M1 que ela compôs.
 Dados: nenhum rollback de dados (sem schema/migration; registros do ledger são append-only).
 
 ## 10. Critérios de PARE (gerais)

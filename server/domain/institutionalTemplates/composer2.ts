@@ -33,6 +33,7 @@ import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
 import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, DeferredPublicationRef, OfficialDocumentReference } from "./manifest";
 import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
+import { CONTENT_PENDING_VARIABLES, isContentPendingVariable } from "./contentPending";
 import { validateTemplateRevision } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
@@ -60,7 +61,8 @@ export interface ResolvedVariables2 {
 
 /**
  * Resolve as variáveis referenciadas pelo AST (e as exigidas por `requiredWhen`) a partir dos snapshots canônicos.
- * Ausente + obrigatória ⇒ MISSING_REQUIRED; ausente + `requiredWhen` verdadeira ⇒ MISSING_REQUIRED; valor fora do
+ * Ausente + obrigatória ⇒ MISSING_REQUIRED; ausente + `requiredWhen` verdadeira ⇒ MISSING_REQUIRED (exceto pendência INFORMATIVA de
+ * conteúdo — `contentPending.ts`: nunca bloqueia nem é inventada; o texto traz o marcador governado); valor fora do
  * contrato do tipo ⇒ VALUE_TYPE_INVALID (linhas de tabela: TABLE_ROWS_INVALID); snapshot de outro tenant ⇒ CROSS_TENANT_REFERENCE.
  */
 export function resolveTemplateVariables2(
@@ -120,6 +122,8 @@ export function resolveTemplateVariables2(
   // Validação: obrigatória sempre, ou obrigatória quando a condição (sobre valores canônicos) é verdadeira.
   for (const def of ordered) {
     if (!absent.has(def.name)) continue;
+    // Completude documental ≠ autorização de ato: a ausência de dado informativo não bloqueia a composição (regra do Owner, FAST PR-2).
+    if (isContentPendingVariable(def)) continue;
     if (def.required) {
       issues.push({ code: "MISSING_REQUIRED", path: `vars.${def.name}`, message: `valor canônico obrigatório ausente (${def.source}.${def.path})` });
     } else if (def.requiredWhen && evaluateCondition2(def.requiredWhen, values, `vars.${def.name}.requiredWhen`).result) {
@@ -213,7 +217,14 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
           pushStr(out, marker);
           break;
         }
-        if (v === undefined) { pushStr(out, def.absentText ?? MISSING_VALUE_MARK(x.name)); break; }
+        if (v === undefined) {
+          // Texto do catálogo publicado prevalece; senão o marcador governado da pendência informativa; senão [REVISAR] (regra comum).
+          // R1 (gate do PR #342): a pendência NÃO é campo do manifesto (formato M1/M2 inalterado ⇒ leitores anteriores compatíveis); o
+          // registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2).
+          const pending = isContentPendingVariable(def) ? CONTENT_PENDING_VARIABLES[def.name]!.absentText : undefined;
+          pushStr(out, def.absentText ?? pending ?? MISSING_VALUE_MARK(x.name));
+          break;
+        }
         const text = formatValue2(def, v);
         if (ctx.record && text.trim()) ctx.fragments.push({ nodeId: p, text, fragmentHash: sha256Hex(text) });
         pushStr(out, text);

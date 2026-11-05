@@ -12,6 +12,7 @@ import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
 import { generateStructuredAuthoring, generateEditalAuthoring, type TrConfirmedParams } from "./authoring/structuredAuthoringService";
+import type { BudgetAllocationBlock } from "../domain/institutionalTemplates/budgetAllocation";
 import { AuthoringContractError } from "../domain/authoring/authoringSchema";
 import { authoringFailureGuidance } from "../domain/authoring/authoringGuidance";
 import { resolveEditalSources } from "./authoring/editalContext";
@@ -123,6 +124,8 @@ export function generatePayloadHash(p: {
   sourcesDigest?: string;
   /** CONTEXT_REUSE 2.0 — digest dos Parâmetros estruturados do TR (só entra no hash quando existe; sem eles o hash é o anterior). */
   trParams?: string;
+  /** LICIGOV-FAST PR-2 — digest dos Dados orçamentários do processo (só entra no hash quando o modelo os usa; sem eles o hash é o anterior). */
+  budget?: string;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -137,6 +140,7 @@ export function generatePayloadHash(p: {
       pl: p.platform ?? null,
       src: p.sourcesDigest ?? null,
       ...(p.trParams ? { trp: p.trParams } : {}),
+      ...(p.budget ? { bud: p.budget } : {}),
     }))
     .digest("hex");
 }
@@ -950,6 +954,11 @@ export async function generateDocument(params: {
   invoke?: (prompt: string) => Promise<string>;
   /** CONTEXT_REUSE 2.0 — bloco determinístico dos Parâmetros estruturados do TR (os MESMOS fatos que o Edital consome). Só TR. */
   structuredParams?: TrConfirmedParams | null;
+  /**
+   * LICIGOV-FAST PR-2 — Dados orçamentários do processo (dotação/fonte DECLARADAS uma vez; os MESMOS que o Edital consome). Só TR. Ausentes
+   * ⇒ pendência INFORMATIVA: o bloco traz o marcador governado (nunca `[REVISAR]`), o TR é gerado e a emissão não é bloqueada por isso.
+   */
+  budgetAllocation?: BudgetAllocationBlock | null;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -988,6 +997,7 @@ export async function generateDocument(params: {
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
     // Só entra no hash quando EXISTE parâmetro estruturado (processos sem eles mantêm exatamente o hash anterior).
     ...(params.kind === "tr" && params.structuredParams ? { trParams: params.structuredParams.digest } : {}),
+    ...(params.kind === "tr" && params.budgetAllocation ? { budget: params.budgetAllocation.digest } : {}),
   });
 
   // C.4B.3A + PR-09 — estado de PARTIDA capturado ANTES da idempotência e da cognição (sentinel de ausência
@@ -1020,6 +1030,7 @@ export async function generateDocument(params: {
         // M8 pós-homologação — os parâmetros CONFIRMADOS entram na autoria (antes só eram anexados depois): a IA não pede de novo
         // o que o servidor já informou. O bloco determinístico continua anexado abaixo como autoridade; o digest já está no payloadHash.
         confirmedParams: params.kind === "tr" ? params.structuredParams ?? null : null,
+        budgetAllocation: params.kind === "tr" ? params.budgetAllocation ?? null : null,
       }).catch((err: unknown) => {
         // Homologação visual M8: a recusa fail-closed continua — só o motivo vira orientação operacional
         // (o que faltou, onde complementar, próxima ação; rascunho ≠ emissão oficial). Nada é gravado.
@@ -1028,9 +1039,13 @@ export async function generateDocument(params: {
         }
         throw err;
       });
-      const content = params.kind === "tr" && params.structuredParams
+      const withParams = params.kind === "tr" && params.structuredParams
         ? `${authoring.content.replace(/\s+$/, "")}\n\n${params.structuredParams.block}\n`
         : authoring.content;
+      // LICIGOV-FAST PR-2 — bloco determinístico dos Dados orçamentários do processo (declarado × pendente × não aplicável).
+      const content = params.kind === "tr" && params.budgetAllocation
+        ? `${withParams.replace(/\s+$/, "")}\n\n${params.budgetAllocation.block}\n`
+        : withParams;
 
       const doc = createGeneratedDocument({
         organizationId: params.organizationId,
@@ -1044,6 +1059,7 @@ export async function generateDocument(params: {
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
           ...(params.kind === "tr" && params.structuredParams ? [`trparams:${params.structuredParams.digest}`] : []),
+          ...(params.kind === "tr" && params.budgetAllocation ? [`orcamento:${params.budgetAllocation.digest}`] : []),
         ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,

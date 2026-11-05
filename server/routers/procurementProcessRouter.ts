@@ -28,7 +28,7 @@ import { generateTemplatedDocument, inspectTemplateReview, preflightTemplatedDoc
 import { getEditalPreparationState } from "../services/institutionalTemplates/editalPreparationService";
 import { getLicitacoesProfileState } from "../services/institutionalTemplates/licitacoesProfileService";
 import { getBudgetDisclosureState, getCertameConfigState, getItemsParticipationState } from "../services/institutionalTemplates/certameConfigService";
-import { getTrStructuredState, recordTrStructuredParams, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
+import { getTrStructuredState, recordTrStructuredParams, renderBudgetAllocationForTr, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
 import { generateEditalRouted, listEditalTrCandidates, recoverComposedEditalContext, resolveEditalTemplate, type BridgeDeps } from "../services/institutionalTemplates/editalBridgeService";
 import { applyGovernedItemTransition } from "../services/itemIntelligenceService";
@@ -707,11 +707,18 @@ export const procurementProcessRouter = router({
           log.warn("tr_structured_block_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
           return null;
         });
+      // LICIGOV-FAST PR-2: dotação/fonte declaradas uma vez no processo (as MESMAS do Edital). Ausentes ⇒ pendência informativa no bloco,
+      // nunca bloqueio. Falha de leitura não impede a geração (TR sem o bloco, como antes), mas não fica silenciosa.
+      const budget = await renderBudgetAllocationForTr(bridgeDeps(), orgId, input.processId, await editalBoundaryParams(orgId, input.processId, {}))
+        .catch((err: unknown) => {
+          log.warn("tr_budget_allocation_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
+          return null;
+        });
       const { document } = await generateDocument({
         organizationId: orgId, processId: input.processId, kind: "tr", object: input.object, correlationId: ctx.correlationId,
         idempotencyKey: input.idempotencyKey, actorUserId: ctx.user!.id,
         confirmReplace: input.confirmReplace, expectedContentHash: input.expectedContentHash,
-        structuredParams: structured,
+        structuredParams: structured, budgetAllocation: budget,
       });
       return { document };
     }),
@@ -1020,6 +1027,9 @@ export const procurementProcessRouter = router({
           // PR-09 — aditivo: proveniência humana do conteúdo vigente + parâmetros persistidos do Edital.
           humanEdit,
           parameters: input.kind === "edital" ? persistedEditalParameters(doc) : null,
+          // LICIGOV-FAST PR-2 — aditivo: digest dos Dados orçamentários do processo usados na geração do TR (marcador `orcamento:`);
+          // a tela compara com o atual e AVISA (nunca bloqueia) quando a dotação/fonte mudou depois da geração.
+          budgetDigest: input.kind === "tr" ? (sources.filter((s) => s.startsWith("orcamento:")).pop()?.slice("orcamento:".length) ?? null) : null,
           // M8 — aditivo, somente leitura: escopo e TR oficial com que a minuta INSTITUCIONAL foi composta (manifest M1 +
           // bindings que fixam a revisão). A UI reabre com esse contexto sem gravar nada; ambíguo/ausente ⇒ explícito.
           // Falha na recuperação NUNCA derruba a leitura do rascunho: degrada para null (a tela pede a escolha explícita).

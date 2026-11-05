@@ -206,3 +206,49 @@ decimais). Nada é ocultado para atingir meta: o inventário fecha em 185 e cada
 - O TR continua sendo texto revisável; os parâmetros são uma camada **adicional** confirmada por pessoa (não há extração por IA).
 - Modelos fora da Authority Matrix mantêm a classificação anterior (derivada de `PreparationClass`).
 - Definir padrão exige papel `manager`+ (mesmo piso das demais decisões institucionais governadas).
+
+## 10. Addendum — LICIGOV-FAST PR-2: dotação e fonte de recursos do processo (pendência informativa)
+
+Decisão do Owner (05/11/2026): a ausência de informação documental — inclusive dotação orçamentária e fonte de recursos — **não bloqueia,
+por si só,** a geração nem a emissão institucional do documento; o sistema indica a pendência, orienta e reaproveita o dado quando ele surgir.
+Completude documental ≠ autorização de ato: a formalização da contratação continua exigindo a indicação dos créditos (Lei 14.133/2021, art. 150).
+
+- **Autoridade única (processo):** `julgamento.dotacaoOrcamentaria` e `julgamento.fonteRecursos` passam de condicional da CertameConfig a
+  `UPSTREAM_PROCESS` / entrada `PROCESS_BUDGET` (derivação `BUDGET_ALLOCATION`). Escritor único: `institutionalTemplates.governed.recordBudgetAllocation`
+  (mesmo registro governado do processo e **mesmo caminho** que a CertameConfig gravava — valores anteriores continuam válidos, sem migração;
+  CAS, idempotência, confirmação humana; substituir valor registrado diferente exige `confirmReplace`). A escrita genérica e a CertameConfig recusam.
+- **Um preenchimento:** "Dados orçamentários do processo" no card da Pesquisa de Preços e embutido no TR e no Edital (nenhuma etapa é obrigatória
+  nem proprietária). Status visível: **Declarado** (nunca "verificado") · **Pendente** · **Não aplicável** (registro de preços: indicada na
+  formalização de cada contratação, conforme o regulamento de SRP aplicável ao órgão — o regulamento federal não é presumido).
+- **Pendência informativa em código** (`contentPending.ts`, sem alterar catálogo/AST publicados nem o hash semântico): ausente ⇒ a composição
+  segue, o texto traz o marcador governado ("A INDICAR PELO SETOR RESPONSÁVEL PELA EXECUÇÃO ORÇAMENTÁRIA" / "A INDICAR COM A DOTAÇÃO
+  ORÇAMENTÁRIA"; nunca `[REVISAR]`). **O formato do manifesto M1/M2 não muda** (gate R1 do PR #342): a pendência não é campo persistido;
+  o registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2). Leitores de
+  versões anteriores leem e validam esses manifests (teste de contrato com as chaves do leitor da staging `9226e4b`). Num rollback de código,
+  a versão anterior volta à regra antiga e recusa a emissão do rascunho pendente (bloqueio seguro, sem emitir nada). A recuperação NA versão
+  anterior depende da revisão do modelo: com recomposição governada (Revisão 2), registra-se a dotação, recompõe-se e emite-se; sem ela
+  (Revisão 1), o rascunho só volta a ser emitível reaplicando a versão nova (a recomposição é recusada e o reset do processo é bloqueado
+  depois da emissão do TR).
+- **R3 — recuperação governada da minuta (corrigido):** registrar a dotação/fonte (ou outro dado do processo) DEPOIS de compor o Edital e
+  ANTES de emiti-lo torna a minuta divergente das fontes (`SOURCE_CHANGED`). A recomposição governada existente passa a valer também para
+  revisões SEM a capability de dados de publicação (Revisão 1), **somente** nesse caso: mesma revisão exata do modelo, mesmo órgão e alguma
+  fonte/autoridade mudou desde o M1 (`sourceRefreshRecompositionAllowed`, mesma regra `changedAuthorities` da revalidação). Mantém todas as
+  garantias da recomposição: só rascunho de origem modelo, nunca documento aprovado/emitido, CAS do conteúdo visto, confirmação explícita
+  quando há edição humana, conteúdo anterior no histórico append-only, novo M1, idempotência. Sem mudança de fonte, o comportamento legado
+  permanece. Não exige reset do processo, não toca no TR emitido nem em outro documento oficial; a emissão segue a revisão humana e a SoD.
+  (Num rollback para versão anterior a esta correção, a recuperação da Revisão 1 volta a depender de reaplicar a versão nova.)
+  **X → Y → X (corrigido, Revisões 1 e 2):** quando uma fonte VOLTA a um valor já usado, a composição reproduz um M1 que já existe. Conteúdo
+  idêntico não é estado idêntico: o M1 VIGENTE da minuta é o do vínculo explícito `tpl-m1:` (não o gravado por último), o rascunho é
+  ressincronizado a esse M1 pelas mesmas regras governadas (já vinculado ⇒ replay puro; texto idêntico ⇒ só o vínculo; recomposição governada
+  ⇒ conteúdo, com CAS, confirmação de edição humana e histórico; sem ela ⇒ CONFLICT), sem criar M1 nem versão técnica nova, e a cadeia de
+  edições humanas da emissão parte da ocorrência MAIS RECENTE do texto composto. A chave de idempotência da recomposição é única por recomposição (M1 + última linha do histórico de edições, lida sob lock), sem colisão em X → Y → X → Y.
+- **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
+  `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
+  atualizar a seção, sem bloqueio. Documentos emitidos não mudam.
+- **Preservado:** RBAC (`govern` = manager + membership real), isolamento, SoD na emissão, `[REVISAR]` continua bloqueando a emissão,
+  as demais variáveis obrigatórias continuam `MISSING_REQUIRED`.
+- **Limitação conhecida (R2 — provisória; NÃO atende ao requisito geral do LICIGOV-FAST):** dotação e fonte pertencem ao processo, e esta
+  implementação reutiliza o registro governado existente do processo. Hoje, porém, registrar e ler esses dados depende de um catálogo de
+  Edital resolvível (módulo de modelos institucionais habilitado e modelo de Edital vinculado; sem escopo do Edital definido, só quando há um
+  único catálogo vigente). Órgãos sem modelo vinculado não conseguem usar integralmente o recurso (o TR deles segue o comportamento anterior).
+  A evolução prevista é um fato canônico do processo, independente de modalidade, plataforma e modelo (proposta em deliberação do Owner).

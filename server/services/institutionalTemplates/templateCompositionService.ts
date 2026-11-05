@@ -34,7 +34,7 @@ import { manifestRevisionIssues, validateManifest, type GenerationManifest, type
 import { issuanceDateOf } from "./compositionDate";
 import { LATE_BOUND_VARIABLES, bindLifecycleVariables, type LifecycleBinding } from "../../domain/institutionalTemplates/lifecycleLateBound";
 import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTemplates/astVersions";
-import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
+import { buildIssuanceManifest, changedAuthorities, revalidateForIssuance, sourceRefreshRecompositionAllowed, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
 import { supportsGovernedDraftRecomposition, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -348,12 +348,22 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
   const { composed, generatedDocumentId } = prep;
   if (!composed.ok) throw preconditionFailed(TEMPLATE_COMPOSITION_FAILED, codesOf(composed.issues));
   const m1 = composed.value.manifest;
-  // CAPABILITY-GATE (servidor é a autoridade): a recomposição governada só existe se a revisão EXATA que acabou de ser composta declara a
-  // capability no próprio catálogo (DEFERRED_PUBLICATION). Sem ela (ex.: Revisão 1), `expectedContentHash`/`confirmReplace` são IGNORADOS e o
-  // comportamento legado permanece: rascunho existente com outro conteúdo ⇒ CONFLICT, nada sobrescrito.
-  const recompose = params.recompose && supportsGovernedDraftRecomposition(prep.template.catalog) ? params.recompose : undefined;
+  // CAPABILITY-GATE (servidor é a autoridade): a recomposição governada existe se a revisão EXATA que acabou de ser composta declara a
+  // capability no próprio catálogo (DEFERRED_PUBLICATION) OU — R3, para revisões sem ela (ex.: Revisão 1) — se a minuta ficou desatualizada pelas
+  // FONTES do processo (mesma revisão exata; `sourceRefreshRecompositionAllowed`). Fora disso, `expectedContentHash`/`confirmReplace` são
+  // IGNORADOS e o comportamento legado permanece: rascunho existente com outro conteúdo ⇒ CONFLICT, nada sobrescrito.
+  let recompose = params.recompose && supportsGovernedDraftRecomposition(prep.template.catalog) ? params.recompose : undefined;
   if (params.recompose && !recompose) {
-    log.warn("template_recomposition_capability_absent", { organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, correlationId: params.correlationId });
+    const previous = await ports.manifests.findGenerationManifestForDraft(params.organizationId, generatedDocumentId);
+    if (sourceRefreshRecompositionAllowed(previous, m1)) {
+      recompose = params.recompose;
+      log.info("template_recomposition_source_refresh", {
+        organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, previousManifestId: previous!.id,
+        changed: changedAuthorities(previous!, m1), correlationId: params.correlationId,
+      });
+    } else {
+      log.warn("template_recomposition_capability_absent", { organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, correlationId: params.correlationId });
+    }
   }
 
   // 5. Escrita atômica (rascunho + versão `gerado` + M1), repetida inteira em deadlock.
@@ -363,7 +373,17 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
       if (existing.stage !== "GENERATION" || existing.manifestHash !== m1.manifestHash || existing.organizationId !== params.organizationId) {
         throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_COMPOSITION_FAILED}: manifest ${m1.id} já existe com outro conteúdo (MANIFEST_HASH_MISMATCH)` });
       }
-      return { official: null, replayed: true, manifest: existing as GenerationManifest };
+      // X → Y → X (gate do PR #342): conteúdo idêntico a uma composição anterior NÃO significa que a minuta está nela. O rascunho é
+      // ressincronizado ao M1 reproduzido pelas MESMAS regras governadas (no-op se já vinculado; texto idêntico ⇒ vínculo; recomposição
+      // governada ⇒ conteúdo, com CAS/confirmação/histórico; sem ela ⇒ CONFLICT). Nenhum M1 nem versão técnica nova.
+      const changed = await ports.drafts.writeDraft({
+        id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,
+        title: params.title, content: composed.value.content.text, actorUserId: params.actorUserId, correlationId: params.correlationId,
+        generationManifestId: m1.id, reuseExistingManifest: true,
+        ...(recompose ? { replace: recompose } : {}),
+      }, tx);
+      // `replayed` = nada mudou; rascunho ressincronizado ao M1 existente ⇒ não é replay (nenhum M1/versão nova, mas a minuta mudou).
+      return { official: null, replayed: changed !== true, manifest: existing as GenerationManifest };
     }
     await ports.drafts.writeDraft({
       id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,

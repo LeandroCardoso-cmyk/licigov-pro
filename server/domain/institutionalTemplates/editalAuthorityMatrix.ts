@@ -21,7 +21,7 @@
  *
  * `entry` diz ONDE a pessoa informa o dado quando ele ainda não existe: TR_SECTION (Parâmetros estruturados do TR), ORG_PROFILE
  * (Perfil institucional de Licitações), PLATFORM_PROFILE (Perfil da plataforma), ITEMS (Itens da contratação), PRICE_RESEARCH
- * (Pesquisa de Preços / orçamento), CERTAME_CONFIG (Configuração do certame) ou NONE (o sistema já sabe / pós-homologação).
+ * (Pesquisa de Preços / orçamento), PROCESS_BUDGET (Dados orçamentários do processo: dotação e fonte), CERTAME_CONFIG (Configuração do certame) ou NONE (o sistema já sabe / pós-homologação).
  * `defaultEligible` = pode virar PADRÃO INSTITUCIONAL por ação humana explícita (nunca data do certame, objeto, quantidade, valor
  * nem decisão jurídica casuística). Puro, sem I/O.
  */
@@ -37,7 +37,7 @@ export const AUTHORITY_CLASSES: readonly AuthorityClass[] = [
   "UPSTREAM_ITEMS", "UPSTREAM_PRICE_RESEARCH", "UPSTREAM_TR", "CERTAME_CONFIG", "CERTAME_SCHEDULE", "LIFECYCLE_SYSTEM", "CONDITIONAL", "POST_AWARD",
 ];
 
-export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "PROCESS_BUDGET" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 
 export interface AuthorityEntry {
   readonly cls: AuthorityClass;
@@ -103,6 +103,11 @@ put("processo.enderecoEletronicoBll processo.regulamentoBllVersao",
 // ── Derivados da estrutura canônica dos Itens e da Pesquisa de Preços ─────────────────────────────────────────────
 put("decisao.formaJulgamento julgamento.regimeParticipacao",
   E("UPSTREAM_ITEMS", "ITEMS", "Derivado da estrutura canônica dos Itens (item × lote; regime de participação por item/lote): o Edital não cria segunda decisão"));
+// LICIGOV-FAST PR-2 (decisão do Owner, 05/11/2026): informação orçamentária do PROCESSO — registrada UMA vez nos "Dados orçamentários do
+// processo" (oferecidos na Pesquisa de Preços, no TR e no Edital; nenhuma etapa é obrigatória nem proprietária exclusiva) e apenas consumida
+// pelos documentos. Ausente ⇒ pendência INFORMATIVA (não bloqueia; `contentPending.ts`). Declarada ≠ verificada na contabilidade.
+put("julgamento.dotacaoOrcamentaria julgamento.fonteRecursos",
+  E("UPSTREAM_PROCESS", "PROCESS_BUDGET", "Informação orçamentária do processo, declarada uma vez por pessoa autorizada (Dados orçamentários do processo); o TR e o Edital só consomem; ausente não bloqueia"));
 put("julgamento.dataOrcamentoEstimado",
   E("UPSTREAM_PRICE_RESEARCH", "PRICE_RESEARCH", "Data-base do orçamento registrada UMA vez na Pesquisa de Preços (ledger governado, BUDGET): o Edital só consome; timestamp técnico não é autoridade"));
 
@@ -137,7 +142,7 @@ COND(`contratacao.prazoComunicacaoIncidenteDados contratacao.prazoPrestacaoGaran
   habilitacao.registroCadastralAceito srp.marcoInicialVigenciaAta srp.prazoAssinaturaAta`,
   "ORG_PROFILE", "Condicional de política do órgão: informado no Perfil de Licitações quando ativo");
 COND(`decisao.modalidadeTratamentoRegional instituicao.decretoMunicipalRegulamentador julgamento.baseDoLance julgamento.casasDecimaisDesconto
-  julgamento.casasDecimaisPreco julgamento.dotacaoOrcamentaria julgamento.duracaoEtapaLances julgamento.fonteRecursos julgamento.intervaloMinimoLances
+  julgamento.casasDecimaisPreco julgamento.duracaoEtapaLances julgamento.intervaloMinimoLances
   julgamento.momentoDivulgacaoOrcamento julgamento.regraProrrogacaoAutomatica julgamento.regrasEtapaAbertaFechada participacao.abrangenciaExclusividadeMeEpp
   participacao.abrangenciaExclusividadeRegional participacao.baseLegalTratamentoRegional participacao.criterioDelimitacaoRegiao
   julgamento.baseIncidenciaDesconto srp.regraQuantidadeMinimaCotacaoSrp participacao.percentualCotaReservada participacao.percentualPrioridadeRegional processo.listaAnexosAdicionais

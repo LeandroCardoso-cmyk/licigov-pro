@@ -288,7 +288,13 @@ export interface TemplateDraftPort {
      * com outro conteúdo ⇒ CONFLICT (nunca sobrescreve).
      */
     readonly replace?: { readonly expectedContentHash: string; readonly confirmReplace?: boolean };
-  }, executor: TemplateTxExecutor): Promise<void>;
+    /**
+     * X → Y → X (gate do PR #342): a composição reproduziu um M1 que JÁ EXISTE. Rascunho já vinculado a ele ⇒ replay puro (nada muda);
+     * vinculado a OUTRO M1 ⇒ o rascunho é ressincronizado pelas MESMAS regras (texto idêntico ⇒ só o vínculo; recomposição governada ⇒
+     * conteúdo; sem ela ⇒ CONFLICT). Nunca cria M1 nem versão técnica nova.
+     */
+    readonly reuseExistingManifest?: boolean;
+  }, executor: TemplateTxExecutor): Promise<boolean | void>;   // `true` = o rascunho foi criado/alterado (conteúdo ou vínculo)
 }
 
 /** Saídas de IA auditáveis (por `executionId`) e decisões humanas de revisão vinculadas ao M1. */

@@ -74,7 +74,11 @@ export function createTemplateReviewAdapter(): TemplateReviewPort {
         .orderBy(asc(generatedDocumentEditsTable.id));
       const chain: HumanEditLink[] = [];
       let cursor = fromContentHash;
-      for (const r of rows) {
+      // A cadeia parte da ocorrência MAIS RECENTE do texto composto (X → Y → X: o mesmo texto composto pode reaparecer no histórico);
+      // sem nenhuma ocorrência registrada, parte do início (comportamento anterior).
+      let start = 0;
+      for (let i = rows.length - 1; i >= 0; i--) if (rows[i].newContentHash === fromContentHash) { start = i + 1; break; }
+      for (const r of rows.slice(start)) {
         if (r.previousContentHash !== cursor) continue;
         if (r.operation !== "human_edit") break; // alteração não humana quebra a cadeia: a revalidação recusa
         chain.push({ editRef: `edit:${r.id}`, previousContentHash: r.previousContentHash, resultingContentHash: r.newContentHash, editorUserId: r.actorUserId });

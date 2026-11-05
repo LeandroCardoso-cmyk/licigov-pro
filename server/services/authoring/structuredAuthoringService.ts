@@ -18,6 +18,7 @@
  *   - structured output inválido → FAIL-CLOSED, proveniência `failed`, nenhum artifact válido.
  */
 
+import type { BudgetAllocationBlock } from "../../domain/institutionalTemplates/budgetAllocation";
 import { createHash } from "crypto";
 import { authoritativeAmounts, flagUnverifiedAmounts, serverEstimateProse, ESTIMATE_SECTION_KEY, type EstimateAuthorityInput } from "../../domain/aiNumericAuthority";
 import type { OfficialCorpusBuildResult } from "../officialCorpus/officialCorpusBuilder";
@@ -65,6 +66,11 @@ export interface StructuredAuthoringInput {
    * Só TR. Ausente ⇒ prompt idêntico ao anterior.
    */
   readonly confirmedParams?: TrConfirmedParams | null;
+  /**
+   * LICIGOV-FAST PR-2 — Dados orçamentários do processo (dotação/fonte). Só TR. Declarados ⇒ usados literalmente na "Adequação orçamentária";
+   * pendentes ⇒ pendência INFORMATIVA (sem `[REVISAR]`: o bloco do sistema já traz o marcador governado). Ausente ⇒ prompt idêntico ao anterior.
+   */
+  readonly budgetAllocation?: Pick<BudgetAllocationBlock, "declared" | "pending"> | null;
 }
 
 /** Parâmetros confirmados do TR para a autoria: o MESMO bloco determinístico anexado ao texto e o que ainda falta (só rótulos). */
@@ -250,7 +256,10 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 }
 
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
-function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext, confirmedParams?: TrConfirmedParams | null): string {
+function authoringQuery(
+  kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext, confirmedParams?: TrConfirmedParams | null,
+  budget?: Pick<BudgetAllocationBlock, "declared" | "pending"> | null,
+): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
   const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
   const base = `${retrievalQuery(kind, object)}\n\nPreencha, em JSON estruturado, a prosa de cada seção canônica (NÃO invente seções): ${canon}. ` +
@@ -263,7 +272,8 @@ function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: Docu
     `vantajosidade, benefícios) o que não estiver demonstrado no contexto; quando depender de análise ou decisão humana, escreva ` +
     `'[REVISAR: decisão/análise necessária — <qual>]'.`;
   const params = kind === "tr" ? confirmedParams ?? null : null;
-  if (!sourceContext && !params) return base;
+  const budgetLines = kind === "tr" && budget ? budgetAllocationPrompt(budget) : [];
+  if (!sourceContext && !params) return budgetLines.length ? [base, ...budgetLines].join("\n") : base;
   // P0 piloto — o CONTEXTO do processo entra na cognição. Números NÃO são da IA (bloco autoritativo do servidor).
   const lines = [base, ""];
   if (sourceContext) {
@@ -281,7 +291,26 @@ function authoringQuery(kind: "etp" | "tr", object: string, sourceContext?: Docu
     );
   }
   if (params) lines.push(...confirmedParamsPrompt(params));
+  lines.push(...budgetLines);
   return lines.join("\n");
+}
+
+/**
+ * LICIGOV-FAST PR-2 — dotação/fonte DECLARADAS no processo entram como fatos (a IA não pede de novo); as pendentes são INFORMATIVAS:
+ * a falta não vira `[REVISAR]` (que bloquearia a emissão) — o bloco do sistema anexado ao TR já traz o marcador governado.
+ */
+export function budgetAllocationPrompt(b: Pick<BudgetAllocationBlock, "declared" | "pending">): string[] {
+  if (b.declared.length === 0 && b.pending.length === 0) return [];
+  return [
+    "",
+    "=== DADOS ORÇAMENTÁRIOS DO PROCESSO (informados uma vez pelo servidor do órgão; declarados, não verificados pelo sistema) ===",
+    ...b.declared.map(([label, value]) => `- ${label}: ${value}`),
+    ...(b.declared.length ? ["Na seção 'adequacao_orcamentaria', use estes dados LITERALMENTE; não os altere nem afirme que foram conferidos pela contabilidade."] : []),
+    ...(b.pending.length
+      ? [`Ainda não informados no processo (pendência INFORMATIVA, não impede a emissão): ${b.pending.join("; ")}. NÃO use '[REVISAR]' para eles e NÃO invente valores: ` +
+          "registre que serão indicados pelo setor responsável pela execução orçamentária (o sistema anexa o quadro com a pendência)."]
+      : []),
+  ];
 }
 
 /**
@@ -379,12 +408,12 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   let execution: CognitiveExecution | undefined;
   try {
     if (input.invoke) {
-      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams));
+      rawProviderText = await input.invoke(authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams, input.budgetAllocation));
     } else {
       execution = await executeCognitiveTask({
         task: "GENERATE_DOCUMENT", tenantId: input.organizationId,
         userId: String(input.actorUserId ?? "system"), correlationId: input.correlationId,
-        query: authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams), businessDomain: DOMAIN,
+        query: authoringQuery(input.kind, input.object, input.sourceContext, input.confirmedParams, input.budgetAllocation), businessDomain: DOMAIN,
         contextPackage,
         documentRefs: contextPackage.documents.map((d) => d.documentId),
         lawRefs: contextPackage.citations.map((c) => c.reference),
