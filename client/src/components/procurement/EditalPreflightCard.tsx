@@ -11,6 +11,11 @@ export interface EditalPreflightCardProps {
 /** Resultado do preflight (somente leitura no servidor: não grava rascunho/M1, não reserva geração, não chama IA). */
 export default function EditalPreflightCard({ preflight, loading = false, hasTrPin, onRecheck }: EditalPreflightCardProps) {
   if (preflight?.status === "NOT_APPLICABLE") return null;
+  // LICIGOV-FAST S3 — falta de informação na origem (Itens da contratação) é mostrada como orientação, fora dos detalhes técnicos.
+  // A composição continua bloqueada exatamente como antes; só a mensagem muda.
+  const incompleteIssues = preflight?.status === "BLOCKED" ? preflight.issues.filter((i) => i.kind === "INCOMPLETE") : [];
+  const onlyMissingInfo = incompleteIssues.length > 0 && preflight?.status === "BLOCKED" && incompleteIssues.length === preflight.issues.length;
+  const missingInfo = [...new Set(incompleteIssues.map((i) => i.message))];
   return (
     <div className="space-y-2 rounded-lg border border-border px-4 py-3 text-sm" aria-label="Preflight do Edital institucional">
       <div className="flex items-center justify-between gap-2">
@@ -24,8 +29,11 @@ export default function EditalPreflightCard({ preflight, loading = false, hasTrP
           <p className="text-xs text-destructive">
             {(preflight.pendingDecisions ?? 0) > 0
               ? `Pendente: ${preflight.pendingDecisions} ${preflight.pendingDecisions === 1 ? "decisão humana" : "decisões humanas"}.`
-              : "Composição bloqueada: há pendências nas fontes do Edital."}
+              : onlyMissingInfo
+                ? "Pendente: faltam informações para compor o Edital."
+                : "Composição bloqueada: há pendências nas fontes do Edital."}
           </p>
+          {missingInfo.map((m) => <p key={m} className="text-xs text-foreground">{m}</p>)}
           <details>
             <summary className="cursor-pointer text-xs text-muted-foreground">Ver detalhes técnicos ({preflight.issues.length})</summary>
             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-destructive">

@@ -554,7 +554,8 @@ export const STALE_NOTICE = "Outra pessoa alterou estes dados antes do seu regis
 
 // ─── preflight / revisão ────────────────────────────────────────────────────────
 
-export interface PreflightIssueView { code: string; source?: string; path?: string; message: string }
+/** `kind: "INCOMPLETE"` (LICIGOV-FAST S3) = falta informação na origem; a `message` já é a orientação. Ausente = falha técnica/pendência comum. */
+export interface PreflightIssueView { code: string; source?: string; path?: string; message: string; kind?: "INCOMPLETE" | "UNAVAILABLE" }
 export type PreflightView =
   | { status: "NOT_APPLICABLE" }
   | { status: "READY_FOR_COMPOSITION"; templateRevisionId: string; templateSemanticHash: string }
@@ -627,6 +628,12 @@ export function revalidationIssueMessage(i: { code: string; path: string; messag
       return "A minuta não está vinculada à versão exata do TR oficial: selecione o TR oficial e componha novamente.";
     case "CROSS_TENANT_REFERENCE":
       return "A minuta referencia um documento que não pertence a este órgão: componha novamente.";
+    case "SOURCE_UNAVAILABLE": {
+      // LICIGOV-FAST S3 — só a falta de informação nos Itens recebe orientação; outras indisponibilidades seguem genéricas (detalhe técnico à parte).
+      const m = /—\s*(?:CANONICAL_ITEMS_REQUIRED|PLANNED_QUANTITY_MISSING):\s*([\s\S]+)$/.exec(i.message);
+      if (m) return m[1].trim();
+      return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
+    }
     default:
       return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
   }

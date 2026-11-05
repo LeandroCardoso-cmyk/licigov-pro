@@ -57,6 +57,12 @@ const reasonOf = async (p: Promise<unknown>): Promise<string> => {
   expect(e, "esperava falha fechada").toBeInstanceOf(TemplateSourceUnavailableError);
   return (e as TemplateSourceUnavailableError).reason;
 };
+/** LICIGOV-FAST S3 — natureza da recusa (a recusa em si é a mesma): falta de informação × falha técnica/escopo. */
+const kindOf = async (p: Promise<unknown>): Promise<string> => {
+  const e = await err(p);
+  expect(e, "esperava falha fechada").toBeInstanceOf(TemplateSourceUnavailableError);
+  return (e as TemplateSourceUnavailableError).kind;
+};
 
 const at = (o: unknown, path: string): unknown => path.split(".").reduce<any>((a, k) => (a == null ? a : a[k]), o);
 const ORGS: number[] = [];
@@ -123,6 +129,10 @@ describe.skipIf(!DB)("Lane A multi-modelo — fontes canônicas e escopo (MySQL 
     const A = await seedOrg("itens-a"), B = await seedOrg("itens-b");
     // sem Itens canônicos: nada é montado a partir de cotação/manual/IA
     expect(await reasonOf(adapter.resolveSources(A.org, A.processId, ["ITEMS"], BLL_CATALOG))).toBe("CANONICAL_ITEMS_REQUIRED");
+    // S3: a recusa é a MESMA (HD-01), mas é falta de informação, com orientação operacional (não "fonte indisponível").
+    const missing = await err(adapter.resolveSources(A.org, A.processId, ["ITEMS"], BLL_CATALOG));
+    expect(missing.kind).toBe("INCOMPLETE");
+    expect(missing.detail).toMatch(/^Ainda não existem itens cadastrados para esta contratação/);
 
     await createCanonicalManualItem({ organizationId: A.org, processId: A.processId, actorUserId: U_MANAGER, description: "Papel A4 75g", unit: "resma", plannedQuantity: "120" });
     const first = (await adapter.resolveSources(A.org, A.processId, ["ITEMS"], BLL_CATALOG)).ITEMS!;
@@ -142,6 +152,8 @@ describe.skipIf(!DB)("Lane A multi-modelo — fontes canônicas e escopo (MySQL 
     // cross-tenant: o processo de A não existe para B (sem oráculo) e vice-versa
     expect(await reasonOf(adapter.resolveSources(B.org, A.processId, ["ITEMS"], BLL_CATALOG))).toBe("PROCESS_NOT_FOUND");
     expect(await reasonOf(adapter.resolveSources(A.org, B.processId, ["ITEMS"], BLL_CATALOG))).toBe("PROCESS_NOT_FOUND");
+    // S3: processo de outro órgão continua indisponibilidade opaca — nunca vira "falta informação".
+    expect(await kindOf(adapter.resolveSources(B.org, A.processId, ["ITEMS"], BLL_CATALOG))).toBe("UNAVAILABLE");
     // determinismo: a mesma leitura repetida produz o mesmo digest
     const again = (await adapter.resolveSources(A.org, A.processId, ["ITEMS"], BLL_CATALOG)).ITEMS!;
     expect(templateHash(again.data)).toBe(templateHash(first.data));

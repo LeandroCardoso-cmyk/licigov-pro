@@ -54,11 +54,16 @@ describe("SEM-039 — documentos a jusante consomem a fonte AUTORITATIVA, rotula
     expect(draftAuthority("rascunho")).toBe("rascunho");
     expect(authorityMarker("tr", { authority: "emitido", version: 3 })).toBe("autoridade:tr=emitido:v3");
     expect(authorityMarker("dfd", null)).toBe("autoridade:dfd=ausente");
-    expect(authorityLabel({ authority: "rascunho" })).toContain("[REVISAR");
+    // LICIGOV-FAST S2 — a nota contextual não carrega marcador de revisão (a IA o reproduzia no documento novo).
+    expect(authorityLabel({ authority: "rascunho" })).toBe("documento anterior em rascunho — não emitido oficialmente; conferir seu conteúdo antes de reutilizar");
+    for (const authority of ["emitido", "aprovado", "rascunho"] as const) expect(authorityLabel({ authority, version: 1 })).not.toMatch(/\[REVISAR/);
+    // Rascunho nunca é apresentado como aprovado/emitido/oficial.
+    expect(authorityLabel({ authority: "rascunho" })).not.toMatch(/\baprovad|\bemitido\b(?! oficialmente)|versão oficial/);
   });
   it("TR: o prompt diz se o ETP é emitido ou rascunho; a lineage registra a autoridade", () => {
     const draftBased = tr();
-    expect(draftBased.promptContext).toContain("RASCUNHO não emitido — [REVISAR");
+    expect(draftBased.promptContext).toContain("documento anterior em rascunho — não emitido oficialmente");
+    expect(draftBased.promptContext).not.toContain("confirmar o conteúdo antes de emitir este documento");
     expect(draftBased.lineageMarkers).toContain("autoridade:etp=rascunho");
     const emitted = tr({ etp: up("ETP conteúdo", { status: "emitido", authority: "emitido", version: 2 }) });
     expect(emitted.promptContext).toContain("estado: emitido v2 — versão oficial");
