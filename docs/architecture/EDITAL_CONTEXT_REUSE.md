@@ -206,3 +206,27 @@ decimais). Nada é ocultado para atingir meta: o inventário fecha em 185 e cada
 - O TR continua sendo texto revisável; os parâmetros são uma camada **adicional** confirmada por pessoa (não há extração por IA).
 - Modelos fora da Authority Matrix mantêm a classificação anterior (derivada de `PreparationClass`).
 - Definir padrão exige papel `manager`+ (mesmo piso das demais decisões institucionais governadas).
+
+## 10. Addendum — LICIGOV-FAST PR-2: dotação e fonte de recursos do processo (pendência informativa)
+
+Decisão do Owner (05/11/2026): a ausência de informação documental — inclusive dotação orçamentária e fonte de recursos — **não bloqueia,
+por si só,** a geração nem a emissão institucional do documento; o sistema indica a pendência, orienta e reaproveita o dado quando ele surgir.
+Completude documental ≠ autorização de ato: a formalização da contratação continua exigindo a indicação dos créditos (Lei 14.133/2021, art. 150).
+
+- **Autoridade única (processo):** `julgamento.dotacaoOrcamentaria` e `julgamento.fonteRecursos` passam de condicional da CertameConfig a
+  `UPSTREAM_PROCESS` / entrada `PROCESS_BUDGET` (derivação `BUDGET_ALLOCATION`). Escritor único: `institutionalTemplates.governed.recordBudgetAllocation`
+  (mesmo registro governado do processo e **mesmo caminho** que a CertameConfig gravava — valores anteriores continuam válidos, sem migração;
+  CAS, idempotência, confirmação humana; substituir valor registrado diferente exige `confirmReplace`). A escrita genérica e a CertameConfig recusam.
+- **Um preenchimento:** "Dados orçamentários do processo" no card da Pesquisa de Preços e embutido no TR e no Edital (nenhuma etapa é obrigatória
+  nem proprietária). Status visível: **Declarado** (nunca "verificado") · **Pendente** · **Não aplicável** (registro de preços: indicada na
+  formalização de cada contratação, conforme o regulamento de SRP aplicável ao órgão — o regulamento federal não é presumido).
+- **Pendência informativa em código** (`contentPending.ts`, sem alterar catálogo/AST publicados nem o hash semântico): ausente ⇒ a composição
+  segue, o texto traz o marcador governado ("A INDICAR PELO SETOR RESPONSÁVEL PELA EXECUÇÃO ORÇAMENTÁRIA" / "A INDICAR COM A DOTAÇÃO
+  ORÇAMENTÁRIA"; nunca `[REVISAR]`) e o M1 registra `contentPending: PENDING` só quando o marcador é renderizado. Manifests sem pendência
+  mantêm o hash anterior (chave ausente). Persistência é **forward-only** (como `lateBound`/`deferredPublication`): rollback de código para
+  versão anterior não lê manifests com `contentPending`.
+- **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
+  `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
+  atualizar a seção, sem bloqueio. Documentos emitidos não mudam.
+- **Preservado:** RBAC (`govern` = manager + membership real), isolamento, SoD na emissão, `[REVISAR]` continua bloqueando a emissão,
+  as demais variáveis obrigatórias continuam `MISSING_REQUIRED`.

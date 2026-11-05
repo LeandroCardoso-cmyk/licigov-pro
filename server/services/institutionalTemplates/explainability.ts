@@ -18,6 +18,8 @@ export interface CompositionExplanation {
   readonly annexes: readonly { readonly id: string }[];
   /** Dados de publicação diferidos: quais estavam DEFERRED (texto "A DEFINIR PARA PUBLICAÇÃO") e quais RESOLVED (valor real). Vazio quando o catálogo não declara nenhum. */
   readonly deferredPublication: readonly { readonly variable: string; readonly status: "DEFERRED" | "RESOLVED" }[];
+  /** LICIGOV-FAST PR-2 — pendências INFORMATIVAS registradas no M1 (o documento traz o marcador governado). Vazio quando não há nenhuma. */
+  readonly contentPending: readonly { readonly variable: string; readonly status: "PENDING" }[];
   readonly manifest: { readonly stage: string; readonly persisted: boolean; readonly id: string | null; readonly manifestHash: string; readonly composedOutputHash: string };
   readonly notices: readonly string[];
 }
@@ -60,6 +62,7 @@ export function explainComposition(args: {
     officialDocRefs: manifest.officialDocRefs.map((r) => ({ role: r.role, order: r.order, documentId: r.documentId, version: r.version, title: r.title })),
     annexes: manifest.annexes.map((a) => ({ id: a.id })),
     deferredPublication: (manifest.deferredPublication ?? []).map((d) => ({ variable: d.variable, status: d.status })),
+    contentPending: (manifest.contentPending ?? []).map((c) => ({ variable: c.variable, status: c.status })),
     manifest: { stage: manifest.stage, persisted: !preview && persistedId !== null, id: preview ? null : persistedId, manifestHash: manifest.manifestHash, composedOutputHash: manifest.composedOutputHash },
     notices,
   };

@@ -45,11 +45,11 @@ describe("Auditoria dos campos do piloto real (CURRENT → CORRECT)", () => {
       const derivedFromOther = v.name in DERIVED_VARIABLES;
       if (classes.includes(cls) || derivedFromOther) expect(names, v.name).toContain(v.name);
     }
-    expect(names).toHaveLength(27);
+    expect(names).toHaveLength(29);   // LICIGOV-FAST PR-2: + dotação e fonte de recursos (informação orçamentária do processo)
   });
 
   it("Perfil da plataforma, orçamento, itens e ciclo de vida NÃO são digitados no Edital; padrão institucional nunca para essas autoridades", () => {
-    for (const n of ["processo.enderecoEletronicoBll", "processo.regulamentoBllVersao", "julgamento.dataOrcamentoEstimado", "decisao.formaJulgamento", "julgamento.regimeParticipacao", "processo.dataEmissaoEdital"]) {
+    for (const n of ["processo.enderecoEletronicoBll", "processo.regulamentoBllVersao", "julgamento.dataOrcamentoEstimado", "decisao.formaJulgamento", "julgamento.regimeParticipacao", "processo.dataEmissaoEdital", "julgamento.dotacaoOrcamentaria", "julgamento.fonteRecursos"]) {
       expect(ALWAYS_DERIVED(n), n).toBe(true);
       const c = classifyVariable(def(n));
       expect(c.rule === "PLATFORM" || c.rule === "DERIVED", n).toBe(true);

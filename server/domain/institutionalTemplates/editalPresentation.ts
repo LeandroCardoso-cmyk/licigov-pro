@@ -17,11 +17,15 @@ export const VARIABLE_PRESENTATION: Readonly<Record<string, VariablePresentation
     label: "Sistema de Registro de Preços (SRP)",
     question: "Esta contratação utilizará Sistema de Registro de Preços?",
   }),
-  // P3.4 (M8): o TR traz a "Adequação orçamentária" como TEXTO (art. 6º, XXIII, j); aqui é o valor ESTRUTURADO consumido pelo Edital.
-  // Não há fonte estruturada anterior para reaproveitar: a pergunta orienta a conferir com o TR em vez de pedir um dado "novo".
+  // LICIGOV-FAST PR-2 (substitui a orientação P3.4 da M8): dotação e fonte são informação orçamentária do PROCESSO, declaradas uma única vez
+  // nos "Dados orçamentários do processo" e consumidas pelo TR e pelo Edital (o Edital não pergunta de novo). Ausentes não bloqueiam.
   "julgamento.dotacaoOrcamentaria": Object.freeze({
     label: "Dotação orçamentária",
-    question: "Informe a dotação orçamentária que custeará a contratação — a mesma indicada na seção \"Adequação orçamentária\" do TR. Registrada aqui uma única vez, ela passa a ser o valor estruturado usado pelo Edital.",
+    question: "Informe a dotação orçamentária uma única vez, nos Dados orçamentários do processo: o TR e o Edital usam o mesmo registro. Enquanto não for informada, os documentos podem ser gerados e emitidos com a pendência indicada.",
+  }),
+  "julgamento.fonteRecursos": Object.freeze({
+    label: "Fonte de recursos",
+    question: "Informe a fonte de recursos junto da dotação, nos Dados orçamentários do processo (registro único para o TR e o Edital).",
   }),
 });
 

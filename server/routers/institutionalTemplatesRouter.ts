@@ -180,6 +180,12 @@ const profileInput = z.object({ catalogVersion: z.string().min(3).max(120), role
 const baseDateInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), baseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), ...actBase }).strict();
 const participationInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), participation: z.unknown(), ...actBase }).strict();
 const budgetInput = z.object({ processId: z.string().min(1).max(20), disclosure: z.enum(["publico", "sigiloso"]), ...actBase }).strict();
+/** LICIGOV-FAST PR-2 — dados orçamentários do processo (texto livre declarado; `null` remove; ausente = não altera). */
+const budgetAllocationText = z.string().trim().min(1).max(500).nullable().optional();
+const budgetAllocationInput = z.object({
+  processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120),
+  dotacaoOrcamentaria: budgetAllocationText, fonteRecursos: budgetAllocationText, confirmReplace: z.boolean().optional(), ...actBase,
+}).strict();
 
 const generateInput = z.object({
   processId: z.string().min(1).max(20), documentKind: z.enum(KINDS), documentType: z.enum(["dfd", "etp", "tr", "edital"]),
@@ -452,6 +458,15 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
         await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
         return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetBaseDate(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro da data-base do orçamento", decision, note) });
+      })),
+    /**
+     * LICIGOV-FAST PR-2 — dotação orçamentária e fonte de recursos do PROCESSO: declaradas UMA vez (Pesquisa de Preços, TR ou Edital oferecem
+     * o mesmo registro), consumidas pelo TR e pelo Edital. Mesmo piso e mesmo ledger das demais gravações orçamentárias; tenant-scoped.
+     */
+    recordBudgetAllocation: templatesProcedure("govern").input(budgetAllocationInput)
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetAllocation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro dos dados orçamentários do processo", decision, note) });
       })),
     recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {

@@ -41,12 +41,16 @@ export type FieldStatus =
   | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
   | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD"
   /** Dado de PUBLICAÇÃO diferido ainda sem valor: nunca decisão pendente nem bloqueio da composição. */
-  | "DEFERRED";
+  | "DEFERRED"
+  /** LICIGOV-FAST PR-2: informação do processo ainda não registrada (ex.: dotação) — pendência INFORMATIVA, nunca bloqueio. */
+  | "CONTENT_PENDING"
+  /** LICIGOV-FAST PR-2: dispensável nesta configuração (ex.: dotação em registro de preços), com o fundamento na origem. */
+  | "NOT_APPLICABLE";
 export type AuthorityClass =
   | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
   | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
 /** Onde a pessoa resolve um dado que falta (a ORIGEM da autoridade — nunca o Edital). */
-export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "PROCESS_BUDGET" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
@@ -84,6 +88,8 @@ export interface UpstreamView {
   profilePending: { name: string; description: string; reason: string; role?: string }[];
   /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços, cadastro): cada uma com o `fix` (onde resolver). */
   sourcePending: { name: string; description: string; reason: string; fix: EntryPoint }[];
+  /** LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam a geração nem a emissão; o documento traz o marcador governado). */
+  contentPending?: { name: string; description: string; reason: string; fix: EntryPoint; providedBy: string }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -270,6 +276,7 @@ export function fixAction(entry: EntryPoint | undefined): FixAction | null {
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
     case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };
     case "PRICE_RESEARCH": return { label: "Corrigir na Pesquisa de Preços", stage: "price" };
+    case "PROCESS_BUDGET": return { label: "Informar nos Dados orçamentários do processo", stage: "price" };
     case "TR_SECTION": return { label: "Abrir o TR", stage: "tr" };
     default: return null;
   }

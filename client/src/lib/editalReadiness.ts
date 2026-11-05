@@ -46,6 +46,7 @@ export const ORIGIN_LABEL: Record<EntryPoint, string> = {
   PLATFORM_PROFILE: "Perfil da plataforma",
   ITEMS: "Itens da contratação",
   PRICE_RESEARCH: "Pesquisa de Preços",
+  PROCESS_BUDGET: "Dados orçamentários do processo",
   ORG_REGISTRY: "Cadastro do órgão",
   REQUESTING_UNIT: "Contexto do processo (unidade requisitante)",
   CERTAME_CONFIG: "Configuração do certame",

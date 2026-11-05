@@ -18,6 +18,7 @@ import { useEditalPreparationState } from "./useEditalPreparationState";
 import EditalGenerateCta from "./EditalGenerateCta";
 import { buildEditalReadiness, generationCta, publicationPending } from "@/lib/editalReadiness";
 import { PublicationPendingNotice } from "./PublicationPendingNotice";
+import { BudgetPendingNotice } from "./BudgetPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
 import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
@@ -538,6 +539,8 @@ export default function EditalWorkspace({
         {bound && (
           <div className="pt-2">
             <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onOpenStage={onOpenStage} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+            {/* LICIGOV-FAST PR-2 — dotação/fonte: pendência informativa (não bloqueia a geração) com registro único do processo. */}
+            <div className="pt-2"><BudgetPendingNotice processId={processId} documentLabel="Edital" variant="drafting" /></div>
           </div>
         )}
         {bound && (
@@ -622,6 +625,7 @@ export default function EditalWorkspace({
       />
 
       {draft && <div className="mt-6"><PublicationPendingNotice pending={publicationPendingView} variant="finalizing" /></div>}
+      {draft && <BudgetPendingNotice processId={processId} documentLabel="Edital" variant="finalizing" />}
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} templateReviewBlockers={templateReviewBlockers} />
     </div>

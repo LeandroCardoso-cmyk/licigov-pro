@@ -24,6 +24,7 @@ import {
   AUTHORITY_OWNED_PATHS, ORG_SCOPE_SOURCES, PROCESS_SCOPE_SOURCES, type GovernedParticipation, type GovernedScope,
 } from "../../domain/institutionalTemplates/governedSources";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
+import { CONTENT_PENDING_VARIABLES, isContentPendingVariable } from "../../domain/institutionalTemplates/contentPending";
 import { isDeferredPublication, supportsGovernedDraftRecomposition, type VariableDef2, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { PUBLICATION_VARIABLES, projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { presentationOf } from "../../domain/institutionalTemplates/editalPresentation";
@@ -34,7 +35,7 @@ import { resolveEditalTemplate, type BridgeDeps, type EditalTemplateResolution }
 import { resolveEditalProjections, type ProjectedValue } from "./editalProjections";
 import { TR_STRUCTURED_LINEAGE_MESSAGE, checkTrStructuredLineage, loadContextReuse, type ContextReuse } from "./editalContextReuse";
 import { AUTHORITY_CLASSES, ROLE_LABEL, isDefaultEligible, type AuthorityClass, type EntryPoint } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
-import { ALWAYS_DERIVED } from "../../domain/institutionalTemplates/certameAuthority";
+import { ALWAYS_DERIVED, DERIVED_VARIABLES } from "../../domain/institutionalTemplates/certameAuthority";
 import { LATE_BOUND_VARIABLES, isLateBoundVariable } from "../../domain/institutionalTemplates/lifecycleLateBound";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord, type GovernedRecord } from "./governedFieldsStore";
 import { TemplateSourceUnavailableError, type RequestedOfficialPin } from "./ports";
@@ -53,6 +54,8 @@ export type FieldStatus =
   | "PENDING_TR"           // depende de parâmetro estruturado do TR ainda não confirmado (informe no TR)
   | "PROFILE_INCOMPLETE"   // depende do Perfil institucional de Licitações (papel/política ausente ou vencido)
   | "PENDING_SOURCE"       // autoridade DERIVADA ainda sem dado na ORIGEM (plataforma, itens, orçamento): resolva LÁ (`fix`), nunca no Edital
+  | "CONTENT_PENDING"      // LICIGOV-FAST PR-2: informação do processo ainda não registrada (ex.: dotação) — pendência INFORMATIVA, NÃO bloqueia
+  | "NOT_APPLICABLE"       // LICIGOV-FAST PR-2: dispensável nesta configuração (ex.: dotação em registro de preços), com o fundamento na origem
   | "CANONICAL_UNRESOLVED" // a autoridade canônica existe mas está incompleta (resolva na própria autoridade)
   | "HIDDEN_CONDITIONAL"   // condição inativa
   | "HIDDEN_POST_AWARD";   // pós-homologação
@@ -213,6 +216,11 @@ export type EditalPreparationState =
       readonly profilePending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly role?: string }[];
       /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços): cada uma com o `fix` (onde resolver). */
       readonly sourcePending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly fix: EntryPoint }[];
+      /**
+       * LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam composição nem emissão): o documento traz o marcador governado até o
+       * dado ser registrado; `providedBy` orienta quem costuma fornecê-lo; `fix` = onde registrar (uma vez, para todos os documentos).
+       */
+      readonly contentPending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly fix: EntryPoint; readonly providedBy: string }[];
     };
     readonly summary: { readonly groups: readonly SummaryGroup[]; readonly reusedAutomatically: number; readonly pendingDecisions: number };
     readonly metrics: PreparationMetrics;
@@ -263,9 +271,12 @@ const GROUP_ORDER: readonly SummaryGroupId[] = ["institucional", "processo", "tr
 
 const ORIGIN_LABEL: Readonly<Partial<Record<EntryPoint, string>>> = {
   PLATFORM_PROFILE: "Configure no Perfil da plataforma", ITEMS: "Defina em Itens da contratação", PRICE_RESEARCH: "Registre na Pesquisa de Preços",
+  PROCESS_BUDGET: "Informe nos Dados orçamentários do processo",
   ORG_REGISTRY: "Corrija o cadastro do órgão", REQUESTING_UNIT: "Corrija a unidade requisitante",
 };
 const originLabelOf = (entry: EntryPoint): string => ORIGIN_LABEL[entry] ?? "Resolva na origem do dado";
+/** Fundamento exibido quando a dotação não se aplica ao Edital (registro de preços). Não presume o regulamento federal para o município. */
+export const NOT_APPLICABLE_SRP_LABEL = "Não aplicável no Edital: em registro de preços, a dotação é indicada na formalização de cada contratação, conforme o regulamento de SRP aplicável ao órgão.";
 
 function storedValue(source: VariableSource2, path: string, process: GovernedRecord | null, org: GovernedRecord | null): unknown {
   const rec = scopeOf(source) === "ORG" ? org : process;
@@ -408,6 +419,7 @@ export async function getEditalPreparationState(
   };
   const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0, PLAT: 0, PRICE: 0, ITEMS: 0, CFG: 0, SCHED: 0, LIFE: 0, SRC_PEND: 0, DEFER: 0 };
   const sourcePending: Array<{ name: string; description: string; reason: string; fix: EntryPoint }> = [];
+  const contentPending: Array<{ name: string; description: string; reason: string; fix: EntryPoint; providedBy: string }> = [];
   const byAuthority = Object.fromEntries(AUTHORITY_CLASSES.map((k) => [k, 0])) as Record<AuthorityClass, number>;
   const trPending: Array<{ name: string; description: string; reason?: string }> = [];
   const profilePending: Array<{ name: string; description: string; reason: string; role?: string }> = [];
@@ -454,7 +466,19 @@ export async function getEditalPreparationState(
       } else if (ru) {
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "AUTO", displayValue: ru.value, origin: { label: ru.origin.label, ref: ru.origin.ref }, authority: c.authority, entry: c.entry });
         m.AUTO++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused");
-        if (ru.kind === "PLATFORM") m.PLAT++; else if (ru.kind === "BUDGET") m.PRICE++; else if (ru.kind === "ITEMS") m.ITEMS++; else if (ru.kind === "LIFECYCLE") m.LIFE++;
+        // LICIGOV-FAST PR-2: dotação/fonte são do PROCESSO (não creditadas à Pesquisa de Preços).
+        if (ru.kind === "PLATFORM") m.PLAT++; else if (ru.kind === "BUDGET" && DERIVED_VARIABLES[v.name] !== "BUDGET_ALLOCATION") m.PRICE++; else if (ru.kind === "ITEMS") m.ITEMS++; else if (ru.kind === "LIFECYCLE") m.LIFE++;
+      } else if (isContentPendingVariable(v) && inactive.has(v.name)) {
+        // Registro de preços (condição inativa): a dotação não é exigida no Edital; é indicada na formalização de cada contratação,
+        // conforme o regulamento de SRP aplicável ao órgão (o regulamento federal não é presumido para o município).
+        canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "NOT_APPLICABLE", origin: { label: NOT_APPLICABLE_SRP_LABEL }, authority: c.authority, entry: c.entry });
+        m.CH++;
+      } else if (isContentPendingVariable(v)) {
+        // LICIGOV-FAST PR-2: pendência INFORMATIVA — não bloqueia a composição nem a emissão; o documento traz o marcador governado.
+        const spec = CONTENT_PENDING_VARIABLES[v.name]!;
+        const reason = pb?.reason ?? "Ainda não informada — pendência informativa (não impede gerar nem emitir o documento).";
+        canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "CONTENT_PENDING", origin: { label: originLabelOf(c.entry) }, authority: c.authority, entry: pb?.fix ?? c.entry, reason });
+        contentPending.push({ name: v.name, description: descriptor.description, reason, fix: pb?.fix ?? c.entry, providedBy: spec.providedBy });
       } else {
         const reason = pb?.reason ?? "dado ainda não disponível na origem";
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "PENDING_SOURCE", origin: { label: originLabelOf(c.entry) }, authority: c.authority, entry: pb?.fix ?? c.entry, reason });
@@ -621,7 +645,7 @@ export async function getEditalPreparationState(
     revisions: { process: processRec?.revision ?? 0, organization: orgRec?.revision ?? 0, budget: budget?.revision ?? 0 },
     budgetDisclosure: disclosure, participation: part, participationPending, trPin: trPinState,
     sections, facts, canonicalFields: canonicalFields.sort((a, b) => (a.name < b.name ? -1 : 1)), orgProfile: orgLineage,
-    upstream: { trDigest: reuse.trDigest, trPending, profilePending, sourcePending },
+    upstream: { trDigest: reuse.trDigest, trPending, profilePending, sourcePending, contentPending },
     summary: { groups, reusedAutomatically, pendingDecisions },
     capabilities: { governedDraftRecomposition: supportsGovernedDraftRecomposition(catalog) },
     ...(hasPublicationVars ? (() => { const p = projectPublicationSchedule(publicationValues); return { publication: { deferredPolicy, schedule: p.schedule, readiness: p.readiness } }; })() : {}),

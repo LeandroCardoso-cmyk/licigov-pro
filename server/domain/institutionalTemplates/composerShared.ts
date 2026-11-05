@@ -17,6 +17,7 @@ import {
   type ManifestSourceRef, type OfficialDocumentReference,
 } from "./manifest";
 import type { LateBoundRef } from "./lifecycleLateBound";
+import type { ContentPendingRef } from "./contentPending";
 import { TEMPLATE_ID_RE } from "./revision";
 import { templateHash } from "./semanticHash";
 import { TEMPLATE_HASH_VERSION, isSha256, type OrgId, type Sha256 } from "./types";
@@ -174,6 +175,8 @@ export interface ManifestParts {
   readonly lateBound?: readonly LateBoundRef[];
   /** Dados de publicação diferidos consultados (vazio ⇒ chave ausente do manifest: hashes antigos intactos). */
   readonly deferredPublication?: readonly DeferredPublicationRef[];
+  /** LICIGOV-FAST PR-2 — pendências informativas de conteúdo (vazio ⇒ chave ausente do manifest: hashes antigos intactos). */
+  readonly contentPending?: readonly ContentPendingRef[];
 }
 
 /** M1 selado (id derivado do conteúdo semântico; `createdAt` fora do hash) + consistência manifest × revisão. */
@@ -197,6 +200,7 @@ export function sealComposedManifest(
     annexes: parts.annexes,
     ...(parts.lateBound && parts.lateBound.length > 0 ? { lateBound: parts.lateBound } : {}),
     ...(parts.deferredPublication && parts.deferredPublication.length > 0 ? { deferredPublication: parts.deferredPublication } : {}),
+    ...(parts.contentPending && parts.contentPending.length > 0 ? { contentPending: parts.contentPending } : {}),
     identityFingerprint: req.identityFingerprint,
     composedOutputHash: parts.composedOutputHash,
     createdAt: req.createdAt,

@@ -87,6 +87,8 @@ export interface CanonicalRevalidationRecord {
 
 import type { LateBoundRef, LifecycleBinding } from "./lifecycleLateBound";
 import { LATE_BOUND_PENDING, LATE_BOUND_VARIABLES } from "./lifecycleLateBound";
+import type { ContentPendingRef } from "./contentPending";
+import { CONTENT_PENDING_STATUS, CONTENT_PENDING_VARIABLES } from "./contentPending";
 
 /**
  * Dado de PUBLICAÇÃO diferido (catálogo: `completionPolicy = DEFERRED_PUBLICATION`) consultado pela composição.
@@ -122,6 +124,11 @@ interface ManifestCore {
   readonly lateBound?: readonly LateBoundRef[];
   /** Registro explícito dos dados de publicação (DEFERRED × RESOLVED), em ordem determinística por variável. Ausente quando não há nenhum. */
   readonly deferredPublication?: readonly DeferredPublicationRef[];
+  /**
+   * LICIGOV-FAST PR-2 — pendências INFORMATIVAS de conteúdo (política em código, `contentPending.ts`): a variável estava ausente e o
+   * documento traz o marcador governado (nunca valor inventado). Ausente quando não há nenhuma (hashes de manifests anteriores intactos).
+   */
+  readonly contentPending?: readonly ContentPendingRef[];
   /** = `official_document_artifacts.identity_fingerprint`. */
   readonly identityFingerprint: string;
   readonly composedOutputHash: Sha256;
@@ -253,6 +260,11 @@ export function validateManifest(m: CompositionManifest): TemplateResult<Composi
       issues.push(issue("MANIFEST_INVALID", p, "dado diferido: RESOLVED exige valueHash; DEFERRED não tem valor (nada é inventado)"));
     }
     if (i > 0 && (m.deferredPublication![i - 1].variable >= r.variable)) issues.push(issue("MANIFEST_INVALID", p, "dados diferidos devem estar em ordem determinística por variável"));
+  });
+  (m.contentPending ?? []).forEach((r, i) => {
+    const p = `contentPending[${i}]`;
+    if (!CONTENT_PENDING_VARIABLES[r.variable] || r.status !== CONTENT_PENDING_STATUS) issues.push(issue("MANIFEST_INVALID", p, "pendência informativa só para variável da política de conteúdo, com status PENDING"));
+    if (i > 0 && (m.contentPending![i - 1].variable >= r.variable)) issues.push(issue("MANIFEST_INVALID", p, "pendências informativas devem estar em ordem determinística por variável, sem repetição"));
   });
   (m.lateBound ?? []).forEach((r, i) => {
     if (!LATE_BOUND_VARIABLES[r.variable] || r.authority !== "LIFECYCLE_SYSTEM" || r.status !== LATE_BOUND_PENDING) {
