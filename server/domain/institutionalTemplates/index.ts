@@ -21,6 +21,5 @@ export * from "./astVersions";
 export * from "./modelRules";
 
 export * from "./lifecycleLateBound";
-export * from "./contentPending";
 export * from "./publicationSchedule";
 export * from "./editalPresentation";

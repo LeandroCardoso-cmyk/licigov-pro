@@ -222,11 +222,23 @@ Completude documental ≠ autorização de ato: a formalização da contrataçã
   formalização de cada contratação, conforme o regulamento de SRP aplicável ao órgão — o regulamento federal não é presumido).
 - **Pendência informativa em código** (`contentPending.ts`, sem alterar catálogo/AST publicados nem o hash semântico): ausente ⇒ a composição
   segue, o texto traz o marcador governado ("A INDICAR PELO SETOR RESPONSÁVEL PELA EXECUÇÃO ORÇAMENTÁRIA" / "A INDICAR COM A DOTAÇÃO
-  ORÇAMENTÁRIA"; nunca `[REVISAR]`) e o M1 registra `contentPending: PENDING` só quando o marcador é renderizado. Manifests sem pendência
-  mantêm o hash anterior (chave ausente). Persistência é **forward-only** (como `lateBound`/`deferredPublication`): rollback de código para
-  versão anterior não lê manifests com `contentPending`.
+  ORÇAMENTÁRIA"; nunca `[REVISAR]`). **O formato do manifesto M1/M2 não muda** (gate R1 do PR #342): a pendência não é campo persistido;
+  o registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2). Leitores de
+  versões anteriores leem e validam esses manifests (teste de contrato com as chaves do leitor da staging `9226e4b`). Num rollback de código,
+  a versão anterior volta à regra antiga e recusa a emissão do rascunho pendente (bloqueio seguro, sem emitir nada). A recuperação NA versão
+  anterior depende da revisão do modelo: com recomposição governada (Revisão 2), registra-se a dotação, recompõe-se e emite-se; sem ela
+  (Revisão 1), o rascunho só volta a ser emitível reaplicando a versão nova (a recomposição é recusada e o reset do processo é bloqueado
+  depois da emissão do TR).
+- **Limitação conhecida (R3 — decisão do Owner):** com a **Revisão 1** do modelo (sem recomposição governada), registrar a dotação/fonte
+  DEPOIS de compor o Edital e ANTES de emiti-lo torna a minuta divergente das fontes (`SOURCE_CHANGED`) sem caminho de recomposição; a
+  minuta deixa de ser emitível. Com a Revisão 2, a recomposição governada resolve.
 - **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
   `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
   atualizar a seção, sem bloqueio. Documentos emitidos não mudam.
 - **Preservado:** RBAC (`govern` = manager + membership real), isolamento, SoD na emissão, `[REVISAR]` continua bloqueando a emissão,
   as demais variáveis obrigatórias continuam `MISSING_REQUIRED`.
+- **Limitação conhecida (R2 — provisória; NÃO atende ao requisito geral do LICIGOV-FAST):** dotação e fonte pertencem ao processo, e esta
+  implementação reutiliza o registro governado existente do processo. Hoje, porém, registrar e ler esses dados depende de um catálogo de
+  Edital resolvível (módulo de modelos institucionais habilitado e modelo de Edital vinculado; sem escopo do Edital definido, só quando há um
+  único catálogo vigente). Órgãos sem modelo vinculado não conseguem usar integralmente o recurso (o TR deles segue o comportamento anterior).
+  A evolução prevista é um fato canônico do processo, independente de modalidade, plataforma e modelo (proposta em deliberação do Owner).

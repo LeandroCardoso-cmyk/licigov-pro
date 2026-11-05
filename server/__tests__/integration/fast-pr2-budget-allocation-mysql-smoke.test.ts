@@ -4,7 +4,7 @@
  * MESMAS rotas e planos da tela (órgãos sintéticos numa faixa própria; nunca a organização 1; nenhum modelo de produção).
  *
  *  F1  sem dotação/fonte: preparação mostra pendência INFORMATIVA (fora das decisões e das pendências na origem); preflight pronto;
- *      Edital gerado com o marcador governado (sem [REVISAR]); M1 registra PENDING; emissão oficial permitida (autoridade/SoD intactas)
+ *      Edital gerado com o marcador governado (sem [REVISAR]); M1 no formato anterior (sem campo novo); emissão oficial permitida (autoridade/SoD intactas)
  *  F2  registro ÚNICO no processo → Edital e TR reaproveitam (declarado); M1 sem pendência; nada é perguntado de novo no Edital
  *  F3  governança: substituição exige confirmação explícita (CONFLICT sem ela, valor preservado); histórico; replay idempotente; CAS;
  *      escrita genérica e CertameConfig recusam (escritor único)
@@ -239,7 +239,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
 
   let emitted: { p: P; officialId: string; content: string } | null = null;
 
-  it("F1 — sem dotação/fonte: pendência INFORMATIVA; preflight pronto; Edital gerado com o marcador (sem [REVISAR]); M1 PENDING; emissão permitida", async () => {
+  it("F1 — sem dotação/fonte: pendência INFORMATIVA; preflight pronto; Edital gerado com o marcador (sem [REVISAR]); M1 sem campo novo; emissão permitida", async () => {
     const p = await readyTenant("fp2-sem-dotacao");
     const st: any = await getState(p);
     for (const n of [DOT, FON]) expect(fieldOf(st, n), n).toMatchObject({ status: "CONTENT_PENDING", entry: "PROCESS_BUDGET" });
@@ -260,10 +260,16 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     const draft = (await draftText(p))!;
     expect(draft).toContain(`dotação orçamentária: ${DOT_TEXT} — Fonte de recursos: ${FON_TEXT}.`);
     expect(draft).not.toMatch(/\[REVISAR: julgamento\.(dotacaoOrcamentaria|fonteRecursos)/);
-    expect((await m1Of(p, ra.generationManifestId)).contentPending).toEqual([{ variable: DOT, status: "PENDING" }, { variable: FON, status: "PENDING" }]);
+    // gate R1: formato do M1 persistido inalterado (sem campo novo); a pendência fica no texto selado pelo hash
+    expect((await m1Of(p, ra.generationManifestId)).contentPending).toBeUndefined();
 
     // emissão oficial pelo caminho governado (revisão de outro usuário + gestor; SoD intacta): a pendência NÃO bloqueia
     const { officialId } = await reviewAndIssue(p);
+    // gate R1 — contrato com o leitor da staging 9226e4b: o body_json PERSISTIDO de M1 e M2 só tem chaves que ele reconstrói
+    const BODY_KEYS_9226E4B = new Set(["sources", "conditionalDecisions", "aiNarratives", "annexes", "lateBound", "deferredPublication", "humanEditRefs", "canonicalRevalidation", "lifecycleBindings"]);
+    const bodies = await rows("SELECT stage, body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org]);
+    expect(new Set(bodies.map((x: any) => x.stage))).toEqual(new Set(["GENERATION", "ISSUANCE"]));
+    for (const x of bodies) expect(Object.keys(JSON.parse(x.b)).filter((k) => !BODY_KEYS_9226E4B.has(k)), x.stage).toEqual([]);
     const official = (await rows("SELECT content FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, officialId]))[0];
     expect(official.content).toContain(DOT_TEXT);
     emitted = { p, officialId, content: official.content };

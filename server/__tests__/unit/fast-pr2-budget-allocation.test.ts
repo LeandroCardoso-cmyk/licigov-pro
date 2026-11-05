@@ -4,7 +4,8 @@
  * Regra do Owner (05/11/2026): a ausência de dotação/fonte NÃO bloqueia, por si só, a geração nem a emissão institucional do documento;
  * o sistema indica a pendência, orienta e reaproveita o dado quando registrado. Controles de autoridade/integridade permanecem.
  *
- *  A  composição do Edital BLL (composer v2): ausente ⇒ segue, marcador governado (nunca [REVISAR]), M1 registra PENDING; presente ⇒
+ *  A  composição do Edital BLL (composer v2): ausente ⇒ segue, marcador governado (nunca [REVISAR]), manifesto no formato ANTERIOR
+ *     (gate R1: nenhum campo novo persistido — contrato com o leitor da staging 9226e4b); presente ⇒
  *     valor declarado; determinismo/replay; SRP; outras variáveis obrigatórias CONTINUAM bloqueando (nenhum afrouxamento geral).
  *  B  autoridade única: derivada do processo; escrita genérica/CertameConfig recusada (sem segunda fonte de verdade).
  *  C  reuso no Edital: valor declarado (inclusive o gravado antes pela CertameConfig, mesmo caminho) × pendência informativa.
@@ -19,7 +20,7 @@ import { composeTemplate } from "../../domain/institutionalTemplates/composer";
 import type { TemplateAST2 } from "../../domain/institutionalTemplates";
 import { BASE_SCENARIO, BLL_MODEL_DIR, bllCatalog, bllComposeRequest } from "../helpers/institutionalTemplatesBllHarness";
 import { CONTENT_PENDING_VARIABLES, CONTENT_PENDING_TEXTS, isContentPendingVariable } from "../../domain/institutionalTemplates/contentPending";
-import { validateManifest } from "../../domain/institutionalTemplates/manifest";
+import { computeManifestHash, validateManifest } from "../../domain/institutionalTemplates/manifest";
 import { ALWAYS_DERIVED, DERIVED_VARIABLES } from "../../domain/institutionalTemplates/certameAuthority";
 import { authorityEntryOf } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { classifyVariable } from "../../domain/institutionalTemplates/editalPreparationModel";
@@ -42,7 +43,7 @@ const compose = (scenario: Record<string, unknown>, omit: readonly string[] = []
   composeTemplate(bllComposeRequest(ast, scenario, { aiNarratives: NARR }, omit));
 
 describe("A — composição do Edital BLL: dotação/fonte ausentes são pendência INFORMATIVA, não bloqueio", () => {
-  it("A1 sem SRP e sem dotação/fonte: compõe; texto com o marcador governado; nenhum [REVISAR]; M1 registra PENDING", () => {
+  it("A1 sem SRP e sem dotação/fonte: compõe; texto com o marcador governado; nenhum [REVISAR]; nenhum campo novo no M1", () => {
     const r = compose(BASE_SCENARIO, [DOT, FON]);
     expect(r.ok, r.ok ? "" : JSON.stringify(r.issues).slice(0, 400)).toBe(true);
     if (!r.ok) return;
@@ -50,10 +51,9 @@ describe("A — composição do Edital BLL: dotação/fonte ausentes são pendê
     expect(text).toContain(`dotação orçamentária: ${DOT_TEXT} — Fonte de recursos: ${FON_TEXT}.`);
     expect(text).not.toMatch(/\[REVISAR: julgamento\.(dotacaoOrcamentaria|fonteRecursos)/);
     expect(countReviewMarkers(text)).toBe(0);
-    expect(r.value.manifest.contentPending).toEqual([
-      { variable: DOT, status: "PENDING" },
-      { variable: FON, status: "PENDING" },
-    ]);
+    // gate R1: a pendência NÃO é persistida no manifesto; o registro é o texto, selado pelo composedOutputHash do M1
+    expect(Object.prototype.hasOwnProperty.call(r.value.manifest, "contentPending")).toBe(false);
+    expect(r.value.manifest.composedOutputHash).toBe(r.value.composedOutputHash);
   });
 
   it("A2 dotação/fonte declaradas: valores literais no texto (corpo e minuta de contrato); M1 SEM a chave contentPending (hashes antigos intactos)", () => {
@@ -97,15 +97,24 @@ describe("A — composição do Edital BLL: dotação/fonte ausentes são pendê
     expect(r.issues.some((i) => i.path === `vars.${DOT}` || i.path === `vars.${FON}`)).toBe(false);
   });
 
-  it("A6 o M1 recusa pendência informativa fora da política, com status inválido ou fora de ordem", () => {
-    const r = compose(BASE_SCENARIO, [DOT, FON]);
-    if (!r.ok) throw new Error("composição esperada");
-    const m = r.value.manifest;
-    const bad = (contentPending: unknown) => validateManifest({ ...m, contentPending } as never);
-    expect(bad([{ variable: "processo.numeroPregao", status: "PENDING" }]).ok).toBe(false);
-    expect(bad([{ variable: DOT, status: "RESOLVED" }]).ok).toBe(false);
-    expect(bad([{ variable: FON, status: "PENDING" }, { variable: DOT, status: "PENDING" }]).ok).toBe(false);
-    expect(validateManifest(m).ok).toBe(true);
+  // Contrato com o LEITOR ANTERIOR (staging 9226e4b, `db/institutionalTemplates/manifests.ts#rowsToManifest`): ele reconstrói o manifest
+  // SOMENTE com estas chaves e recalcula o hash; qualquer chave nova persistida ⇒ MANIFEST_HASH_MISMATCH num rollback (gate R1 do PR #342).
+  const READER_9226E4B_KEYS = new Set([
+    "stage", "id", "organizationId", "generatedDocumentId", "templateIdentityId", "templateRevisionId", "templateSemanticHash", "hashVersion",
+    "catalogVersion", "sources", "officialDocRefs", "conditionalDecisions", "aiNarratives", "annexes", "lateBound", "deferredPublication",
+    "identityFingerprint", "composedOutputHash", "manifestHash", "createdAt",
+  ]);
+  it("A6 contrato de rollback: M1 pendente, declarado e com SRP só usam chaves do leitor anterior; hash e validação íntegros", () => {
+    for (const [scenario, omit] of [[BASE_SCENARIO, [DOT, FON]], [{ ...BASE_SCENARIO, [DOT]: "02.001", [FON]: "Livre" }, []], [{ ...BASE_SCENARIO, "controle.utilizaSrp": true }, [DOT, FON]]] as const) {
+      const r = compose(scenario, omit);
+      if (!r.ok) throw new Error("composição esperada");
+      const m = r.value.manifest;
+      expect(Object.keys(m).filter((k) => !READER_9226E4B_KEYS.has(k))).toEqual([]);
+      // referências oficiais: o leitor anterior as reconstrói das COLUNAS com exatamente estes 7 campos
+      for (const ref of m.officialDocRefs) expect(Object.keys(ref).sort()).toEqual(["contentHash", "documentId", "lineageId", "order", "role", "title", "version"]);
+      expect(computeManifestHash(m)).toBe(m.manifestHash);
+      expect(validateManifest(m).ok).toBe(true);
+    }
   });
 });
 

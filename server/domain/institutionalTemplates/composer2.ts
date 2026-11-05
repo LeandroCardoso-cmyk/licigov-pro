@@ -33,7 +33,7 @@ import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
 import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, DeferredPublicationRef, OfficialDocumentReference } from "./manifest";
 import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
-import { CONTENT_PENDING_STATUS, CONTENT_PENDING_VARIABLES, isContentPendingVariable, type ContentPendingRef } from "./contentPending";
+import { CONTENT_PENDING_VARIABLES, isContentPendingVariable } from "./contentPending";
 import { validateTemplateRevision } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
@@ -62,7 +62,7 @@ export interface ResolvedVariables2 {
 /**
  * Resolve as variáveis referenciadas pelo AST (e as exigidas por `requiredWhen`) a partir dos snapshots canônicos.
  * Ausente + obrigatória ⇒ MISSING_REQUIRED; ausente + `requiredWhen` verdadeira ⇒ MISSING_REQUIRED (exceto pendência INFORMATIVA de
- * conteúdo — `contentPending.ts`: registrada como PENDING, nunca bloqueia nem é inventada); valor fora do
+ * conteúdo — `contentPending.ts`: nunca bloqueia nem é inventada; o texto traz o marcador governado); valor fora do
  * contrato do tipo ⇒ VALUE_TYPE_INVALID (linhas de tabela: TABLE_ROWS_INVALID); snapshot de outro tenant ⇒ CROSS_TENANT_REFERENCE.
  */
 export function resolveTemplateVariables2(
@@ -169,12 +169,10 @@ interface ECtx {
   /** Variáveis de sistema late-bound deste catálogo/AST e o registro (M1) das efetivamente renderizadas como marcador. */
   readonly lateBound: ReadonlySet<string>;
   readonly lateBoundRefs: Map<string, LateBoundRef>;
-  /** LICIGOV-FAST PR-2 — pendências informativas EFETIVAMENTE renderizadas como marcador governado (registro do M1). */
-  readonly contentPendingRefs: Map<string, ContentPendingRef>;
 }
 
 function scratch(ctx: ECtx): ECtx {
-  return { ...ctx, record: false, issues: [], decisions: [], refs: new Map(ctx.refs), ai: [], fragments: [], blocks: [], annexes: [], lateBoundRefs: new Map(), contentPendingRefs: new Map() };
+  return { ...ctx, record: false, issues: [], decisions: [], refs: new Map(ctx.refs), ai: [], fragments: [], blocks: [], annexes: [], lateBoundRefs: new Map() };
 }
 
 function pushStr(out: RInline[], s: string): void {
@@ -221,9 +219,9 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
         }
         if (v === undefined) {
           // Texto do catálogo publicado prevalece; senão o marcador governado da pendência informativa; senão [REVISAR] (regra comum).
+          // R1 (gate do PR #342): a pendência NÃO é campo do manifesto (formato M1/M2 inalterado ⇒ leitores anteriores compatíveis); o
+          // registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2).
           const pending = isContentPendingVariable(def) ? CONTENT_PENDING_VARIABLES[def.name]!.absentText : undefined;
-          // M1 registra a pendência SÓ quando o marcador do sistema foi de fato renderizado (texto e manifesto sempre coincidem).
-          if (pending && def.absentText === undefined && ctx.record) ctx.contentPendingRefs.set(x.name, { variable: x.name, status: CONTENT_PENDING_STATUS });
           pushStr(out, def.absentText ?? pending ?? MISSING_VALUE_MARK(x.name));
           break;
         }
@@ -612,7 +610,7 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
     catalog, values: resolved.value.values, allowedCents: canonicalCents2(catalog, resolved.value.values),
     docPins: req.officialDocuments, narratives: pins.narratives, record: true,
     issues: [], decisions: [], refs: new Map(), ai: [], fragments: [], blocks: [], annexes: [],
-    lateBound: new Set(resolved.value.lateBound), lateBoundRefs: new Map(), contentPendingRefs: new Map(),
+    lateBound: new Set(resolved.value.lateBound), lateBoundRefs: new Map(),
   };
   const tree = expandNodes(ast.root, "root", ectx);
   if (ectx.issues.length) return { ok: false, issues: ectx.issues };
@@ -654,7 +652,6 @@ function compose2(req: TemplateComposeRequest, ast: TemplateAST2, catalog: Varia
     annexes: annexRefs,
     lateBound: [...ectx.lateBoundRefs.values()].sort((a, b) => (a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0)),
     deferredPublication: resolved.value.deferredPublication,
-    contentPending: [...ectx.contentPendingRefs.values()].sort((a, b) => (a.variable < b.variable ? -1 : a.variable > b.variable ? 1 : 0)),
   }, purpose);
   if (!sealed.ok) return sealed;
 

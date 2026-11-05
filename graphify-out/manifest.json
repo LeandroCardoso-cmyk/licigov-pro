@@ -13580,13 +13580,13 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/index.ts": {
-    "mtime": 1793890256.6258478,
-    "ast_hash": "c3e62b1048dcdc96e425630bb7fb3e22",
+    "mtime": 1793900291.4194095,
+    "ast_hash": "5d6c1c513dddfedb652660f638b20b0d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/manifest.ts": {
-    "mtime": 1793888762.5742428,
-    "ast_hash": "80f4a7f15882cbf06afa581332161134",
+    "mtime": 1793900291.4194095,
+    "ast_hash": "9b8124ac7e2bc9127c2334b3e03d4db0",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revision.ts": {
@@ -13800,8 +13800,8 @@
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/manifests.ts": {
-    "mtime": 1793890256.6266603,
-    "ast_hash": "90fa7be9b02d9daec1ae573f01b89f12",
+    "mtime": 1793900291.4194095,
+    "ast_hash": "85e69c9127b6dc10ebd55309a01d725b",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/revisions.ts": {
@@ -13890,8 +13890,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/explainability.ts": {
-    "mtime": 1793889856.940882,
-    "ast_hash": "7f10e85c95bd6decf11934abbed01f7e",
+    "mtime": 1793900291.4234095,
+    "ast_hash": "0c8e2f93078b0aa48c9a2e1f7c7132a1",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/importPipeline.ts": {
@@ -14135,8 +14135,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composer2.ts": {
-    "mtime": 1793890360.4621704,
-    "ast_hash": "aab6d0a93a07c0b03cd0b69286712a41",
+    "mtime": 1793900310.0605283,
+    "ast_hash": "7b2cdda913adbf7e9d7b770632363b9d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composerRequirements.ts": {
@@ -14145,8 +14145,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composerShared.ts": {
-    "mtime": 1793888762.57454,
-    "ast_hash": "d10928460122c9a11ddca7713cb134e8",
+    "mtime": 1793900291.4194095,
+    "ast_hash": "c9ea503ea89c52ead213e3282154adb0",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/conditionalDsl2.ts": {
@@ -14555,8 +14555,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1793890451.6706884,
-    "ast_hash": "d19d0320baf220329c5d80bd4a54d13d",
+    "mtime": 1793901298.9246736,
+    "ast_hash": "4b4192d725fed6d265ada2fe1e07cbb6",
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
@@ -15735,13 +15735,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/fast-pr2-budget-allocation-mysql-smoke.test.ts": {
-    "mtime": 1793890134.679529,
-    "ast_hash": "bc4634244a87630f91198aab7f12a349",
+    "mtime": 1793901298.925763,
+    "ast_hash": "e15c136e19173b18073b1c03367e20eb",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-budget-allocation.test.ts": {
-    "mtime": 1793889585.9565232,
-    "ast_hash": "809af04b40be4deb03681c0cfd0527ad",
+    "mtime": 1793901298.9254155,
+    "ast_hash": "07ffc3e46bbd961bdd1c8b894a408a0e",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/budgetAllocation.ts": {
@@ -15750,8 +15750,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/contentPending.ts": {
-    "mtime": 1793890360.4626138,
-    "ast_hash": "6147bc423d4da20e96efdf8637fea970",
+    "mtime": 1793901298.9251611,
+    "ast_hash": "e2754f4cde756645f31c49d27575d92b",
     "semantic_hash": ""
   }
 }

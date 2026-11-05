@@ -20,7 +20,7 @@ import {
 } from "../../../drizzle/schema";
 import {
   TEMPLATE_HASH_VERSION, TEMPLATE_ID_RE, manifestRevisionIssues, templateCanonicalJson, validateManifest,
-  type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef, type ContentPendingRef,
+  type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef,
   type DeferredPublicationRef, type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
@@ -39,8 +39,6 @@ interface ManifestBody {
   readonly canonicalRevalidation?: CanonicalRevalidationRecord;
   readonly lateBound?: readonly LateBoundRef[];
   readonly deferredPublication?: readonly DeferredPublicationRef[];
-  /** LICIGOV-FAST PR-2 — pendências informativas de conteúdo (ausente quando vazio: corpos anteriores intactos). */
-  readonly contentPending?: readonly ContentPendingRef[];
   readonly lifecycleBindings?: readonly LifecycleBinding[];
 }
 
@@ -60,7 +58,6 @@ function bodyOf(m: CompositionManifest): ManifestBody {
     sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
     ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
-    ...(m.contentPending && m.contentPending.length > 0 ? { contentPending: m.contentPending } : {}),
   };
   return m.stage === "ISSUANCE"
     ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation, ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}) }
@@ -82,7 +79,6 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
     conditionalDecisions: body.conditionalDecisions, aiNarratives: body.aiNarratives, annexes: body.annexes,
     ...(body.lateBound && body.lateBound.length > 0 ? { lateBound: body.lateBound } : {}),
     ...(body.deferredPublication && body.deferredPublication.length > 0 ? { deferredPublication: body.deferredPublication } : {}),
-    ...(body.contentPending && body.contentPending.length > 0 ? { contentPending: body.contentPending } : {}),
     identityFingerprint: row.identityFingerprint, composedOutputHash: row.composedOutputHash, manifestHash: row.manifestHash,
     createdAt: row.manifestCreatedAtIso,
   };
@@ -184,7 +180,6 @@ function inheritedPart(m: CompositionManifest): string {
     annexes: m.annexes, identityFingerprint: m.identityFingerprint, composedOutputHash: m.composedOutputHash,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
     ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
-    ...(m.contentPending && m.contentPending.length > 0 ? { contentPending: m.contentPending } : {}),
   });
 }
 
