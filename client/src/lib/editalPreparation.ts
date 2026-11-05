@@ -615,7 +615,7 @@ export function variableOriginLabel(path: string): string {
 export function revalidationIssueMessage(i: { code: string; path: string; message: string }): string {
   switch (i.code) {
     case "SOURCE_CHANGED":
-      return "Os dados do processo mudaram depois da composição desta minuta: ela precisa ser composta novamente pelo modelo institucional antes da emissão.";
+      return "Os dados do processo mudaram depois da composição desta minuta: use \"Gerar novamente\" para recompô-la com os dados atuais (o texto anterior fica no histórico) e revise antes da emissão.";
     case "COMPOSITION_DRIFT":
       // Inclui a atualização da APRESENTAÇÃO do modelo (ex.: M8 P2.1 — referência do Anexo I sem id/hash): minutas compostas antes dela.
       return "O texto não corresponde mais ao que o modelo institucional compõe hoje (os dados ou a apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir.";
@@ -630,6 +630,16 @@ export function revalidationIssueMessage(i: { code: string; path: string; messag
     default:
       return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
   }
+}
+
+/**
+ * Recomposição governada disponível para ESTA minuta? (o servidor é a autoridade e reaplica a regra; aqui só decide se o hash visto é enviado)
+ *  - a revisão vinculada tem a capability de dados de publicação diferidos (Revisão 2); ou
+ *  - R3: a revalidação acusa `SOURCE_CHANGED` — os dados do processo mudaram depois da composição (vale para a Revisão 1).
+ */
+export function canRecomposeDraft(prep: Pick<PreparationStateView, "capabilities"> | null | undefined, review: ReviewStateView | null | undefined): boolean {
+  if (prep?.capabilities?.governedDraftRecomposition) return true;
+  return !!review?.composedByTemplate && review.revalidation.status === "BLOCKED" && review.revalidation.issues.some((i) => i.code === "SOURCE_CHANGED");
 }
 
 /** Resumo de prontidão para emitir: nada além de informar — a autoridade final é a revalidação do backend na emissão. */

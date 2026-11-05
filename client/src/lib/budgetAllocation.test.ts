@@ -72,3 +72,18 @@ describe("TR gerado com dados orçamentários anteriores: aviso informativo (nun
     expect(budgetOutdatedInDraft(null, "d1")).toBe(false);
   });
 });
+
+describe("R3 — recomposição governada oferecida pela tela (o servidor reaplica a regra)", () => {
+  it("Revisão 2 (capability) ou minuta desatualizada pelas fontes (SOURCE_CHANGED); nunca em outros bloqueios", async () => {
+    const { canRecomposeDraft } = await import("./editalPreparation");
+    const review = (codes: string[], composedByTemplate = true) => ({
+      composedByTemplate, unresolvedMarkers: { count: 0, slots: [], samples: [] }, structuralDeviations: [], aiNarratives: [],
+      revalidation: { status: codes.length ? "BLOCKED" as const : "PASSED" as const, issues: codes.map((code) => ({ code, path: "x", message: "m" })) },
+    });
+    expect(canRecomposeDraft({ capabilities: { governedDraftRecomposition: true } }, null)).toBe(true);
+    expect(canRecomposeDraft({ capabilities: { governedDraftRecomposition: false } }, review(["SOURCE_CHANGED"]))).toBe(true);
+    expect(canRecomposeDraft({ capabilities: { governedDraftRecomposition: false } }, review(["MISSING_REQUIRED"]))).toBe(false);
+    expect(canRecomposeDraft({ capabilities: { governedDraftRecomposition: false } }, review([]))).toBe(false);
+    expect(canRecomposeDraft(null, review(["SOURCE_CHANGED"], false))).toBe(false);
+  });
+});

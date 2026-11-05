@@ -196,6 +196,7 @@ import { getTemplateCompositionPorts } from "../../services/institutionalTemplat
 const bridgeDeps = () => ({ ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() });
 
 const DOT = "julgamento.dotacaoOrcamentaria";
+const U_AUTHOR_R3 = 101;
 const FON = "julgamento.fonteRecursos";
 const DOT_TEXT = CONTENT_PENDING_VARIABLES[DOT]!.absentText;
 const FON_TEXT = CONTENT_PENDING_VARIABLES[FON]!.absentText;
@@ -350,5 +351,111 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(after.content).toBe(content);
     expect(after.content).not.toContain(DOT_VALUE);
     expect((await getState(p)).canonicalFields.find((f: any) => f.name === DOT)).toMatchObject({ status: "AUTO", displayValue: DOT_VALUE });
+  }, 600_000);
+
+  // ── R3 (gate do PR #342): minuta presa na Revisão 1 quando a dotação é registrada DEPOIS da composição ──────────────────
+  const recompose = (p: P, expectedContentHash: string, opts: { confirmReplace?: boolean; idempotencyKey?: string; org?: number; role?: string } = {}) =>
+    proc(opts.org ?? p.org, opts.role ?? "operator", U_AUTHOR_R3).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr),
+      idempotencyKey: opts.idempotencyKey ?? key("recompose"), expectedContentHash, ...(opts.confirmReplace ? { confirmReplace: true } : {}) } as any) as Promise<any>;
+  const reviewCurrent = async (p: P, editKey: string): Promise<string> => {
+    const draft = (await draftText(p))!;
+    const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
+    if (human !== draft) await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key(editKey) });
+    const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    for (const d of rs.structuralDeviations) await tpl(p.org, "operator", U_MANAGER).reviews.acknowledgeDeviation({ manifestId: rs.generationManifestId, blockId: d.blockId, kind: d.kind, confirm: true, idempotencyKey: key("ack"), decision: decision({ basisReference: "Revisão" }) });
+    return human;
+  };
+  const promoteR3 = (p: P, human: string) => proc(p.org, "manager", U_MANAGER).promoteOfficial({ processId: p.w.processId, kind: "edital", idempotencyKey: key("promo-r3"), expectedContentHash: draftContentHash(human), reason: "Revisado e conferido pelo gestor." } as any) as Promise<any>;
+  const officialsOf = (p: P) => rows("SELECT id, document_type t, status, version, content_hash h, content FROM official_documents WHERE tenant_id = ? AND origin = ? ORDER BY id", [p.org, p.w.processId]);
+  const BODY_KEYS_9226E4B = new Set(["sources", "conditionalDecisions", "aiNarratives", "annexes", "lateBound", "deferredPublication", "humanEditRefs", "canonicalRevalidation", "lifecycleBindings"]);
+
+  it("F6 — R3 Revisão 1: minuta sem dotação → dotação registrada depois → RECOMPOSIÇÃO governada → revisão → emissão; TR emitido intacto", async () => {
+    const p = await readyTenant("fp2-r3-rev1");
+    const st0: any = await getState(p);
+    expect(st0.capabilities.governedDraftRecomposition).toBe(false);          // Revisão 1: sem a capability de dados de publicação
+    const trBefore = (await officialsOf(p)).filter((o: any) => o.t === "tr");
+    expect(trBefore.length).toBeGreaterThan(0);
+
+    const ra1 = await gen(p);
+    const human1 = await reviewCurrent(p, "e1");
+    expect(human1).toContain(DOT_TEXT);
+    await recordAllocation(p, { dotacaoOrcamentaria: DOT_VALUE, fonteRecursos: FON_VALUE });
+    const blocked = await err(() => promoteR3(p, human1));
+    expect(String(blocked.message)).toMatch(/SOURCE_CHANGED/);                // a minuta não corresponde mais às fontes
+
+    // usuário SEM autoridade e OUTRO órgão: recusados, nada muda
+    const viewer = await err(() => recompose(p, draftContentHash(human1), { role: "viewer", confirmReplace: true }));
+    expect(viewer.data?.code ?? viewer.code).toBe("FORBIDDEN");
+    const other = await prepareOrg("fp2-r3-outro");
+    const cross = await err(() => recompose(p, draftContentHash(human1), { org: other.org, confirmReplace: true }));
+    expect(["NOT_FOUND", "FORBIDDEN", "PRECONDITION_FAILED"]).toContain(cross.data?.code ?? cross.code);
+    expect(await draftText(p)).toBe(human1);
+
+    // edição humana existente ⇒ a recomposição pede confirmação explícita (nada sobrescrito sem ela)
+    const needConfirm = await err(() => recompose(p, draftContentHash(human1)));
+    expect(String(needConfirm.message)).toMatch(/HUMAN_EDIT_WOULD_BE_OVERWRITTEN/);
+    expect(await draftText(p)).toBe(human1);
+
+    const k = key("recompose-ok");
+    const ra2 = await recompose(p, draftContentHash(human1), { confirmReplace: true, idempotencyKey: k });
+    expect(ra2.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    const draft2 = (await draftText(p))!;
+    expect(draft2).toContain(`dotação orçamentária: ${DOT_VALUE} — Fonte de recursos: ${FON_VALUE}.`);
+    expect(draft2).not.toContain(DOT_TEXT);
+    expect(ra2.generationManifestId).not.toBe(ra1.generationManifestId);
+    // histórico preservado: o conteúdo anterior fica no ledger de edições (operação template_compose)
+    expect(await count("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND kind = 'edital' AND operation = 'template_compose'", [p.org, p.w.processId])).toBeGreaterThanOrEqual(1);
+
+    // replay: o MESMO pedido não duplica versão, M1 nem histórico
+    const m1Count = await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org]);
+    const geradoCount = (await officialsOf(p)).filter((o: any) => o.t === "edital").length;
+    const replay = await recompose(p, draftContentHash(human1), { confirmReplace: true, idempotencyKey: k });
+    expect(replay.generationManifestId).toBe(ra2.generationManifestId);
+    expect(await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org])).toBe(m1Count);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "edital").length).toBe(geradoCount);
+    expect(await draftText(p)).toBe(draft2);
+
+    // CAS: depois de nova revisão humana e nova mudança de fonte, um hash OBSOLETO é recusado
+    const human2 = await reviewCurrent(p, "e2");
+    await recordAllocation(p, { dotacaoOrcamentaria: `${DOT_VALUE} (ajustada)` }, { confirmReplace: true });
+    const stale = await err(() => recompose(p, draftContentHash(draft2), { confirmReplace: true }));
+    expect(stale.data?.code ?? stale.code).toBe("CONFLICT");
+    expect(await draftText(p)).toBe(human2);
+
+    // fluxo legítimo até a emissão (revisão de outro usuário; emissão pelo gestor; SoD intacta)
+    await recompose(p, draftContentHash(human2), { confirmReplace: true });
+    const human3 = await reviewCurrent(p, "e3");
+    expect(human3).toContain(`${DOT_VALUE} (ajustada)`);
+    const promoted = await promoteR3(p, human3);
+    expect(promoted.promoted).toBe(true);
+    const officials = await officialsOf(p);
+    const issued = officials.filter((o: any) => o.t === "edital" && o.status === "emitido");
+    expect(issued).toHaveLength(1);
+    expect(issued[0].content).toContain(`${DOT_VALUE} (ajustada)`);
+    // TR oficial: idêntico (id, versão, hash e conteúdo)
+    expect(officials.filter((o: any) => o.t === "tr")).toEqual(trBefore);
+    // contrato de rollback: nenhum manifest com chave desconhecida do leitor da staging 9226e4b
+    for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
+      expect(Object.keys(JSON.parse(m.b)).filter((x) => !BODY_KEYS_9226E4B.has(x))).toEqual([]);
+    }
+  }, 900_000);
+
+  it("F7 — R3 elegibilidade: Revisão 1 SEM mudança de fonte mantém o comportamento legado (replay; rascunho humano intacto; nenhuma recomposição)", async () => {
+    const p = await readyTenant("fp2-r3-semfonte");
+    await gen(p);
+    await reviewCurrent(p, "f7");
+    // edição humana EXPLÍCITA (sem nenhuma mudança de fonte): o rascunho difere do que o modelo compõe
+    const before = (await draftText(p))!;
+    const human = `${before.replace(/\s+$/, "")}\n\nObservação acrescentada pela equipe.\n`;
+    await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(before), idempotencyKey: key("f7-edit") });
+    const m1Before = await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org]);
+    const composeEdits = () => count("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND kind = 'edital' AND operation = 'template_compose'", [p.org, p.w.processId]);
+    const editsBefore = await composeEdits();
+    // sem mudança de fonte a recomposição NÃO é elegível: a composição atual é a MESMA do M1 ⇒ replay legado, sem tocar no rascunho
+    const r: any = await recompose(p, draftContentHash(human), { confirmReplace: true });
+    expect(r.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    expect(await draftText(p)).toBe(human);                                   // edição humana preservada (nada sobrescrito)
+    expect(await composeEdits()).toBe(editsBefore);                           // nenhuma recomposição registrada
+    expect(await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org])).toBe(m1Before);
   }, 600_000);
 });

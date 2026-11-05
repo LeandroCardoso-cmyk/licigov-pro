@@ -130,6 +130,22 @@ export function changedAuthorities(m1: GenerationManifest, current: GenerationMa
   return out;
 }
 
+/**
+ * R3 (gate do PR #342) — RECOMPOSIÇÃO POR ATUALIZAÇÃO DAS FONTES. Para revisões SEM a capability de dados de publicação diferidos (ex.: Revisão 1),
+ * a recomposição governada do rascunho só é permitida quando a minuta ficou DESATUALIZADA pelas fontes do próprio processo — exatamente a
+ * condição que a revalidação da emissão recusa como `SOURCE_CHANGED`:
+ *  - existe M1 anterior do rascunho, do MESMO órgão, da MESMA revisão exata do modelo (id + hash semântico) — troca de revisão não entra aqui;
+ *  - alguma fonte/autoridade mudou entre o M1 anterior e a composição atual (`changedAuthorities`, a mesma regra da revalidação).
+ * Sem mudança de fonte o comportamento legado permanece (rascunho diferente ⇒ CONFLICT). As demais garantias são as da recomposição existente
+ * (origem modelo, nada emitido/aprovado, CAS do conteúdo visto, confirmação de edição humana, histórico append-only). Pura e determinística.
+ */
+export function sourceRefreshRecompositionAllowed(previous: GenerationManifest | null | undefined, next: GenerationManifest): boolean {
+  if (!previous || previous.stage !== "GENERATION") return false;
+  if (previous.organizationId !== next.organizationId) return false;
+  if (previous.templateRevisionId !== next.templateRevisionId || previous.templateSemanticHash !== next.templateSemanticHash) return false;
+  return changedAuthorities(previous, next).length > 0;
+}
+
 /** Cadeia de edições: começa no texto composto, é contígua e termina exatamente no conteúdo emitido. */
 export function humanEditLineageIssues(composedOutputHash: Sha256, documentContentHash: Sha256, edits: readonly HumanEditLink[]): RevalidationIssue[] {
   if (edits.length === 0) {

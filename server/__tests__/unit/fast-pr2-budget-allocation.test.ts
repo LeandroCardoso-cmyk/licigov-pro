@@ -21,6 +21,7 @@ import type { TemplateAST2 } from "../../domain/institutionalTemplates";
 import { BASE_SCENARIO, BLL_MODEL_DIR, bllCatalog, bllComposeRequest } from "../helpers/institutionalTemplatesBllHarness";
 import { CONTENT_PENDING_VARIABLES, CONTENT_PENDING_TEXTS, isContentPendingVariable } from "../../domain/institutionalTemplates/contentPending";
 import { computeManifestHash, validateManifest } from "../../domain/institutionalTemplates/manifest";
+import { sourceRefreshRecompositionAllowed } from "../../domain/institutionalTemplates/revalidation";
 import { ALWAYS_DERIVED, DERIVED_VARIABLES } from "../../domain/institutionalTemplates/certameAuthority";
 import { authorityEntryOf } from "../../domain/institutionalTemplates/editalAuthorityMatrix";
 import { classifyVariable } from "../../domain/institutionalTemplates/editalPreparationModel";
@@ -236,5 +237,27 @@ describe("F — autoria do TR: fatos declarados × pendência informativa", () =
     const lines = budgetAllocationPrompt({ declared: [], pending: ["Dotação orçamentária"] }).join("\n");
     expect(lines).toMatch(/NÃO use '\[REVISAR\]' para eles e NÃO invente valores/);
     expect(budgetAllocationPrompt({ declared: [], pending: [] })).toEqual([]);
+  });
+});
+
+describe("R3 — recomposição por atualização das fontes (revisões sem a capability, ex.: Revisão 1)", () => {
+  const m1Of = (scenario: Record<string, unknown>, omit: readonly string[] = []) => {
+    const r = compose(scenario, omit);
+    if (!r.ok) throw new Error("composição esperada");
+    return r.value.manifest;
+  };
+  it("R3-1 elegível SÓ quando uma fonte mudou depois da composição (mesma revisão exata, mesmo órgão)", () => {
+    const pending = m1Of(BASE_SCENARIO, [DOT, FON]);
+    const declared = m1Of({ ...BASE_SCENARIO, [DOT]: "02.001", [FON]: "Livre" });
+    expect(sourceRefreshRecompositionAllowed(pending, declared)).toBe(true);           // dotação registrada depois ⇒ fonte PROCESS mudou
+    expect(sourceRefreshRecompositionAllowed(pending, m1Of(BASE_SCENARIO, [DOT, FON]))).toBe(false);   // nada mudou ⇒ legado (CONFLICT)
+  });
+  it("R3-2 nunca elegível sem M1 anterior, com outra revisão do modelo ou outro órgão", () => {
+    const pending = m1Of(BASE_SCENARIO, [DOT, FON]);
+    const declared = m1Of({ ...BASE_SCENARIO, [DOT]: "02.001", [FON]: "Livre" });
+    expect(sourceRefreshRecompositionAllowed(null, declared)).toBe(false);
+    expect(sourceRefreshRecompositionAllowed({ ...pending, templateRevisionId: "tplrev_outra" }, declared)).toBe(false);
+    expect(sourceRefreshRecompositionAllowed({ ...pending, templateSemanticHash: "f".repeat(64) }, declared)).toBe(false);
+    expect(sourceRefreshRecompositionAllowed({ ...pending, organizationId: 975002 } as never, declared)).toBe(false);
   });
 });

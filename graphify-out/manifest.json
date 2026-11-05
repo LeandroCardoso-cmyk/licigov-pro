@@ -1805,8 +1805,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalWorkspace.tsx": {
-    "mtime": 1793889378.279411,
-    "ast_hash": "9d064defe5b1a07734de587bc1c4a90b",
+    "mtime": 1793903834.8600004,
+    "ast_hash": "29692eccd2a88a1c4b5039b0a76f2ce6",
     "semantic_hash": ""
   },
   "client/src/components/procurement/GroundingNotice.tsx": {
@@ -13825,8 +13825,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/revalidation.ts": {
-    "mtime": 1793881994.8626835,
-    "ast_hash": "26ebe9e646db44225dfab67b97fe7135",
+    "mtime": 1793903821.887944,
+    "ast_hash": "0a06d75548cf3372d37cb44c08b909bd",
     "semantic_hash": ""
   },
   "server/routers/institutionalTemplatesRouter.ts": {
@@ -13920,8 +13920,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1793881994.920892,
-    "ast_hash": "499499ab8de317a5c1a62293db07f405",
+    "mtime": 1793903831.7203631,
+    "ast_hash": "47c9ada74e4fd33fd50341bac47a1cec",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14425,8 +14425,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1793889378.2817016,
-    "ast_hash": "69ed1e057080db810cbcabc0386e20f8",
+    "mtime": 1793903831.7323105,
+    "ast_hash": "fe0abfc6f3fb9f2e0ed741f273828ac0",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14555,8 +14555,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1793901298.9246736,
-    "ast_hash": "4b4192d725fed6d265ada2fe1e07cbb6",
+    "mtime": 1793904996.4345915,
+    "ast_hash": "6e46c0efd89b42eff50d251eb48aad4c",
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
@@ -14655,13 +14655,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalDeferredPublication.test.ts": {
-    "mtime": 1793881994.2227342,
-    "ast_hash": "5662517dc5434ab95ec3c5ba0887b058",
+    "mtime": 1793904888.934267,
+    "ast_hash": "212566f898fa31f969ce4a98a33b7c35",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts": {
-    "mtime": 1793881994.832489,
-    "ast_hash": "ba87982ddd3478685ff92b7d10846048",
+    "mtime": 1793904888.9359562,
+    "ast_hash": "04b549dd0b89a62a096d67282550de7a",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-deferred-publication.test.ts": {
@@ -14700,8 +14700,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_DEFERRED_PUBLICATION_DATA.md": {
-    "mtime": 1793881994.6227818,
-    "ast_hash": "9c80db01ef093d410ca9b461e745a11e",
+    "mtime": 1793904067.9114075,
+    "ast_hash": "1f31301cacad48af58335b4bcff44714",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll-1.0.2/README.md": {
@@ -14750,8 +14750,8 @@
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_PUBLICATION_RUNBOOK.md": {
-    "mtime": 1793881994.6325393,
-    "ast_hash": "9c6c0f3f8767c7db53a01d8f0c7c1ffc",
+    "mtime": 1793904067.9121127,
+    "ast_hash": "83f5049cb4bda6a600611cb651a202ee",
     "semantic_hash": ""
   },
   "docs/ops/EDITAL_REVISION2_READINESS_DOSSIER.md": {
@@ -15725,8 +15725,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/budgetAllocation.test.ts": {
-    "mtime": 1793890421.0709186,
-    "ast_hash": "4ac9bc53c651e6718d810fd914eb70e8",
+    "mtime": 1793903880.488536,
+    "ast_hash": "8459f500d0d73953b577d956a1417a47",
     "semantic_hash": ""
   },
   "client/src/lib/budgetAllocation.ts": {
@@ -15735,13 +15735,13 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/fast-pr2-budget-allocation-mysql-smoke.test.ts": {
-    "mtime": 1793901298.925763,
-    "ast_hash": "e15c136e19173b18073b1c03367e20eb",
+    "mtime": 1793903943.8910644,
+    "ast_hash": "5c8f6807488cbc8fe72cce0308c87368",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-budget-allocation.test.ts": {
-    "mtime": 1793901298.9254155,
-    "ast_hash": "07ffc3e46bbd961bdd1c8b894a408a0e",
+    "mtime": 1793903880.488145,
+    "ast_hash": "c98a74890d0d83aaeb6356dccbb59868",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/budgetAllocation.ts": {

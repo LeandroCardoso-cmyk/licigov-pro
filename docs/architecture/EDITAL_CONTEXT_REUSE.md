@@ -229,9 +229,17 @@ Completude documental ≠ autorização de ato: a formalização da contrataçã
   anterior depende da revisão do modelo: com recomposição governada (Revisão 2), registra-se a dotação, recompõe-se e emite-se; sem ela
   (Revisão 1), o rascunho só volta a ser emitível reaplicando a versão nova (a recomposição é recusada e o reset do processo é bloqueado
   depois da emissão do TR).
-- **Limitação conhecida (R3 — decisão do Owner):** com a **Revisão 1** do modelo (sem recomposição governada), registrar a dotação/fonte
-  DEPOIS de compor o Edital e ANTES de emiti-lo torna a minuta divergente das fontes (`SOURCE_CHANGED`) sem caminho de recomposição; a
-  minuta deixa de ser emitível. Com a Revisão 2, a recomposição governada resolve.
+- **R3 — recuperação governada da minuta (corrigido):** registrar a dotação/fonte (ou outro dado do processo) DEPOIS de compor o Edital e
+  ANTES de emiti-lo torna a minuta divergente das fontes (`SOURCE_CHANGED`). A recomposição governada existente passa a valer também para
+  revisões SEM a capability de dados de publicação (Revisão 1), **somente** nesse caso: mesma revisão exata do modelo, mesmo órgão e alguma
+  fonte/autoridade mudou desde o M1 (`sourceRefreshRecompositionAllowed`, mesma regra `changedAuthorities` da revalidação). Mantém todas as
+  garantias da recomposição: só rascunho de origem modelo, nunca documento aprovado/emitido, CAS do conteúdo visto, confirmação explícita
+  quando há edição humana, conteúdo anterior no histórico append-only, novo M1, idempotência. Sem mudança de fonte, o comportamento legado
+  permanece. Não exige reset do processo, não toca no TR emitido nem em outro documento oficial; a emissão segue a revisão humana e a SoD.
+  (Num rollback para versão anterior a esta correção, a recuperação da Revisão 1 volta a depender de reaplicar a versão nova.)
+  **Residual preexistente (também na Revisão 2, não coberto pelo R3):** se uma fonte VOLTA a um valor já usado numa composição anterior
+  (ex.: dotação X → Y → X), a recomposição reproduz um M1 que já existe e o pedido converge como replay sem regravar o rascunho; a emissão
+  continua acusando `SOURCE_CHANGED`. Correção proposta para frente: na recomposição solicitada, revincular o rascunho ao M1 reproduzido.
 - **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
   `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
   atualizar a seção, sem bloqueio. Documentos emitidos não mudam.

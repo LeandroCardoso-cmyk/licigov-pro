@@ -34,7 +34,7 @@ import { manifestRevisionIssues, validateManifest, type GenerationManifest, type
 import { issuanceDateOf } from "./compositionDate";
 import { LATE_BOUND_VARIABLES, bindLifecycleVariables, type LifecycleBinding } from "../../domain/institutionalTemplates/lifecycleLateBound";
 import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTemplates/astVersions";
-import { buildIssuanceManifest, revalidateForIssuance, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
+import { buildIssuanceManifest, changedAuthorities, revalidateForIssuance, sourceRefreshRecompositionAllowed, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
 import { supportsGovernedDraftRecomposition, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -346,12 +346,22 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
   const { composed, generatedDocumentId } = prep;
   if (!composed.ok) throw preconditionFailed(TEMPLATE_COMPOSITION_FAILED, codesOf(composed.issues));
   const m1 = composed.value.manifest;
-  // CAPABILITY-GATE (servidor é a autoridade): a recomposição governada só existe se a revisão EXATA que acabou de ser composta declara a
-  // capability no próprio catálogo (DEFERRED_PUBLICATION). Sem ela (ex.: Revisão 1), `expectedContentHash`/`confirmReplace` são IGNORADOS e o
-  // comportamento legado permanece: rascunho existente com outro conteúdo ⇒ CONFLICT, nada sobrescrito.
-  const recompose = params.recompose && supportsGovernedDraftRecomposition(prep.template.catalog) ? params.recompose : undefined;
+  // CAPABILITY-GATE (servidor é a autoridade): a recomposição governada existe se a revisão EXATA que acabou de ser composta declara a
+  // capability no próprio catálogo (DEFERRED_PUBLICATION) OU — R3, para revisões sem ela (ex.: Revisão 1) — se a minuta ficou desatualizada pelas
+  // FONTES do processo (mesma revisão exata; `sourceRefreshRecompositionAllowed`). Fora disso, `expectedContentHash`/`confirmReplace` são
+  // IGNORADOS e o comportamento legado permanece: rascunho existente com outro conteúdo ⇒ CONFLICT, nada sobrescrito.
+  let recompose = params.recompose && supportsGovernedDraftRecomposition(prep.template.catalog) ? params.recompose : undefined;
   if (params.recompose && !recompose) {
-    log.warn("template_recomposition_capability_absent", { organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, correlationId: params.correlationId });
+    const previous = await ports.manifests.findGenerationManifestForDraft(params.organizationId, generatedDocumentId);
+    if (sourceRefreshRecompositionAllowed(previous, m1)) {
+      recompose = params.recompose;
+      log.info("template_recomposition_source_refresh", {
+        organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, previousManifestId: previous!.id,
+        changed: changedAuthorities(previous!, m1), correlationId: params.correlationId,
+      });
+    } else {
+      log.warn("template_recomposition_capability_absent", { organizationId: params.organizationId, templateRevisionId: m1.templateRevisionId, correlationId: params.correlationId });
+    }
   }
 
   // 5. Escrita atômica (rascunho + versão `gerado` + M1), repetida inteira em deadlock.

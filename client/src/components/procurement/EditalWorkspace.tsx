@@ -20,7 +20,7 @@ import { buildEditalReadiness, generationCta, publicationPending } from "@/lib/e
 import { PublicationPendingNotice } from "./PublicationPendingNotice";
 import { BudgetPendingNotice } from "./BudgetPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
-import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
+import { canRecomposeDraft, generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
 import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, TR_REQUIRED_MESSAGE, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
@@ -294,7 +294,8 @@ export default function EditalWorkspace({
     },
   });
 
-  const recomposeHash = preparationState?.capabilities?.governedDraftRecomposition ? draft?.contentHash : undefined;
+  // Recomposição governada: Revisão 2 (capability) ou, na Revisão 1, minuta desatualizada pelas fontes (R3). O servidor reaplica a regra.
+  const recomposeHash = canRecomposeDraft(preparationState, reviewQuery.data as ReviewStateView | undefined) ? draft?.contentHash : undefined;
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
     objectSent.current = object.trim();

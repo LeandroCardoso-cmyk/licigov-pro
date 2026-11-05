@@ -143,8 +143,8 @@ describe("SSR — bloco 'Dados para publicação' e SRP", () => {
 
 describe("CAP — a tela só envia o hash de recomposição quando a revisão vinculada declara a capability (o servidor reaplica o gate)", () => {
   const SRC = readFileSync(path.resolve("client/src/components/procurement/EditalWorkspace.tsx"), "utf8");
-  it("expectedContentHash/confirmReplace do ramo institucional dependem de preparationState.capabilities.governedDraftRecomposition", () => {
-    expect(SRC).toContain("preparationState?.capabilities?.governedDraftRecomposition");
+  it("expectedContentHash/confirmReplace do ramo institucional dependem da capability OU (R3) da minuta desatualizada pelas fontes — `canRecomposeDraft`", () => {
+    expect(SRC).toContain("canRecomposeDraft(preparationState, reviewQuery.data as ReviewStateView | undefined) ? draft?.contentHash : undefined");
     const branch = SRC.slice(SRC.indexOf("if (bound) {"), SRC.indexOf("// Decisão PURA antes de qualquer chamada"));
     expect(branch).toContain("recomposeHash");
     expect(branch).not.toMatch(/expectedContentHash:\s*draft\?\.contentHash/);
