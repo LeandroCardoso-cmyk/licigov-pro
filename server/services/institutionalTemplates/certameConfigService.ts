@@ -19,6 +19,7 @@ import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore"
 import { loadContextReuse } from "./editalContextReuse";
 import { describeVariable } from "./editalPreparationService";
 import { isDeferredPublication } from "../../domain/institutionalTemplates/variableCatalog2";
+import { budgetAllocationView, renderBudgetAllocationBlock, type BudgetAllocationView } from "../../domain/institutionalTemplates/budgetAllocation";
 import { projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { resolveProcurementContext } from "../canonicalContextService";
 
@@ -148,11 +149,16 @@ export interface BudgetDisclosureState {
   readonly catalogVersion: string | null;
   /** SUGESTÃO de UX (data de registro da pesquisa): nunca é usada sem confirmação humana explícita. */
   readonly suggestedBaseDate: string | null;
+  /**
+   * LICIGOV-FAST PR-2 — dotação e fonte de recursos DECLARADAS no processo (mesmo registro/CAS `baseDateRevision`); `null` quando o modelo
+   * vinculado não usa esses dados. Status: DECLARED | PENDING (informativo, não bloqueia) | NOT_APPLICABLE (registro de preços).
+   */
+  readonly allocation: (BudgetAllocationView & { readonly catalogVersion: string; readonly digest: string }) | null;
 }
 
 export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<BudgetDisclosureState> {
   const enabled = !!deps.ports && (await deps.ports.enablement.isEnabled(organizationId));
-  if (!enabled) return { enabled: false, disclosure: null, revision: 0, baseDate: null, baseDateRevision: 0, catalogVersion: null, suggestedBaseDate: null };
+  if (!enabled) return { enabled: false, disclosure: null, revision: 0, baseDate: null, baseDateRevision: 0, catalogVersion: null, suggestedBaseDate: null, allocation: null };
   const loaded = await loadEditalCatalog(deps, organizationId, params);
   const [d, suggested, rec] = await Promise.all([
     getCurrentDecision(null, organizationId, "procurement.budget_disclosure", processId),
@@ -162,8 +168,10 @@ export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId:
   const disclosure = d?.outcome === "publico" || d?.outcome === "sigiloso" ? d.outcome : null;
   const budgetDef = loaded.status === "OK" ? loaded.catalog.vars.find((v) => DERIVED_VARIABLES[v.name] === "BUDGET_DATE") : undefined;
   const stored = budgetDef ? (rec?.payload.sections[budgetDef.source] as Record<string, unknown> | undefined)?.[budgetDef.path] : undefined;
+  const allocation = loaded.status === "OK" ? budgetAllocationView(loaded.catalog, rec?.payload.sections) : null;
   return {
     enabled: true, disclosure, revision: d?.revision ?? 0, baseDate: typeof stored === "string" ? stored : null, baseDateRevision: rec?.revision ?? 0,
     catalogVersion: loaded.status === "OK" && budgetDef ? loaded.catalog.version : null, suggestedBaseDate: suggested,
+    allocation: allocation ? { ...allocation, catalogVersion: loaded.status === "OK" ? loaded.catalog.version : "", digest: renderBudgetAllocationBlock(allocation).digest } : null,
   };
 }

@@ -5,6 +5,7 @@ import { DocumentImportPanel } from "@/components/ingestion/DocumentImportPanel"
 import OfficialPromotionSection from "./OfficialPromotionSection";
 import DemonstrativePriceNotice from "./DemonstrativePriceNotice";
 import TrStructuredParamsSection from "./TrStructuredParamsSection";
+import { BudgetPendingNotice } from "./BudgetPendingNotice";
 import DraftEditor from "./DraftEditor";
 import GroundingNotice from "./GroundingNotice";
 import RegenerationConfirmDialog from "./RegenerationConfirmDialog";
@@ -141,6 +142,8 @@ export default function TRWorkspace({ processId = "", startWithImport = false, o
 
       {/* CONTEXT_REUSE 2.0 — camada estruturada do MESMO fluxo do TR: o Edital e o texto do TR consomem estes fatos. */}
       {processId && <TrStructuredParamsSection processId={processId} onChanged={() => utils.procurementProcess.authoringSourceState.invalidate({ processId, kind: "tr" })} />}
+      {/* LICIGOV-FAST PR-2 — dotação/fonte: pendência informativa (não bloqueia) com registro único do processo. */}
+      {processId && <BudgetPendingNotice processId={processId} documentLabel="TR" variant="drafting" />}
 
       {processId && (
         <div className="mt-5">
@@ -175,6 +178,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false, o
       />
 
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
+      {processId && reviewable.data?.draft && <BudgetPendingNotice processId={processId} documentLabel="TR" variant="finalizing" draftBudgetDigest={reviewable.data.draft.budgetDigest} />}
       <OfficialPromotionSection processId={processId} kind="tr" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} />
     </div>
   );

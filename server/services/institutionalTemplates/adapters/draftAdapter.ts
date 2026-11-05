@@ -54,15 +54,16 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
         .limit(1).for("update");
       if (rows.length === 1) {
         const existing = rows[0];
+        // M1 reproduzido já existente e rascunho JÁ vinculado a ele ⇒ replay puro (o conteúdo vigente — inclusive edição humana — fica intacto).
+        if (draft.reuseExistingManifest && parseSources(existing.sources).includes(`tpl-m1:${draft.generationManifestId}`)) return false;
         if (existing.id === draft.id && draftContentHash(existing.content ?? "") === draftContentHash(draft.content)) {
-          await relinkIdenticalDraft(tx, existing, draft, kind);   // replay (mesmo M1) ou só o vínculo do M1 novo
-          return;
+          return relinkIdenticalDraft(tx, existing, draft, kind);   // replay (mesmo M1) ou só o vínculo do M1 novo
         }
         if (!draft.replace) {
           throw new TemplatePersistenceError("CONFLICT", "já existe rascunho para este processo e tipo com outro conteúdo; descarte-o (reset governado) antes de compor por modelo — nada foi sobrescrito");
         }
         await recomposeExisting(tx, existing, draft, kind);
-        return;
+        return true;
       }
       const now = new Date().toISOString();
       const doc: GeneratedDocument = {
@@ -76,6 +77,7 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
         expectedState: { type: "absent" }, idempotencyKey: `tplc_${draft.generationManifestId}`.slice(0, 64), correlationId: draft.correlationId,
         reason: `Composição governada por modelo institucional (${draft.generationManifestId}).`, ledgerOnCreate: true,
       });
+      return true;
     },
   };
 }
@@ -91,10 +93,10 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
 async function relinkIdenticalDraft(
   tx: ProcurementExecutor, existing: typeof generatedDocumentsTable.$inferSelect,
   draft: Parameters<TemplateDraftPort["writeDraft"]>[0], kind: DocumentKind,
-): Promise<void> {
+): Promise<boolean> {
   const sources = parseSources(existing.sources);
   const link = `tpl-m1:${draft.generationManifestId}`;
-  if (!sources.includes("origem:template") || sources.includes(link)) return;
+  if (!sources.includes("origem:template") || sources.includes(link)) return false;
   const block = officialRegenerationBlock(existing, await getLatestOfficialPromotion(draft.organizationId, draft.subjectId, kind, tx as unknown as PromotionExecutor));
   if (block) throw new TRPCError({ code: "PRECONDITION_FAILED", message: officialRegenerationRefusalMessage(kind as "etp" | "tr" | "edital", block) });
   const previous = sources.find((x) => x.startsWith("tpl-m1:"))?.slice("tpl-m1:".length) ?? "—";
@@ -105,8 +107,10 @@ async function relinkIdenticalDraft(
   await recordProcessEvent({
     organizationId: draft.organizationId, processId: draft.subjectId, eventType: "change", actor: String(draft.actorUserId),
     summary: `Minuta ${kind.toUpperCase()} recomposta pelo modelo com texto idêntico; passa a se apoiar na composição vigente (${previous} → ${draft.generationManifestId}): fontes ou documentos oficiais referenciados mudaram — revise antes de emitir.`,
-    refId: existing.id, correlationId: draft.correlationId, idempotencyKey: `tpl-relink:${draft.generationManifestId}`,
+    // único POR REVINCULAÇÃO (X → Y → X → Y pode revincular ao MESMO M1 mais de uma vez); o retry da mesma transação converge.
+    refId: existing.id, correlationId: draft.correlationId, idempotencyKey: `tpl-relink:${previous}>${draft.generationManifestId}@${String(existing.updatedAt)}`,
   }, tx);
+  return true;
 }
 
 /** RECOMPOSIÇÃO governada do rascunho `origem:template` existente (já bloqueado FOR UPDATE pelo chamador). */
@@ -128,7 +132,7 @@ async function recomposeExisting(
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de recompor." });
   }
   const last = (await tx.select({
-    operation: generatedDocumentEditsTable.operation, actorUserId: generatedDocumentEditsTable.actorUserId,
+    id: generatedDocumentEditsTable.id, operation: generatedDocumentEditsTable.operation, actorUserId: generatedDocumentEditsTable.actorUserId,
     newContentHash: generatedDocumentEditsTable.newContentHash, createdAt: generatedDocumentEditsTable.createdAt,
   }).from(generatedDocumentEditsTable).where(and(
     eq(generatedDocumentEditsTable.organizationId, draft.organizationId), eq(generatedDocumentEditsTable.processId, draft.subjectId), eq(generatedDocumentEditsTable.kind, kind)))
@@ -147,7 +151,9 @@ async function recomposeExisting(
   };
   await applyDraftContentMutationTx(tx, {
     organizationId: draft.organizationId, processId: draft.subjectId, kind, actorUserId: draft.actorUserId, doc, operation: "template_compose",
-    expectedState: { type: "present", contentHash: replace.expectedContentHash }, idempotencyKey: `tplc_${draft.generationManifestId}`.slice(0, 64),
+    // A chave é única POR RECOMPOSIÇÃO (M1 + última linha do ledger do rascunho, lida sob lock): voltar ao MESMO M1 (X → Y → X → Y…) é uma
+    // mutação nova e legítima e nunca colide; o retry do mesmo pedido converge antes daqui (rascunho já vinculado ⇒ no-op).
+    expectedState: { type: "present", contentHash: replace.expectedContentHash }, idempotencyKey: `tplc_${draft.generationManifestId}_e${last?.id ?? 0}`.slice(0, 64),
     correlationId: draft.correlationId, reason: `Recomposição governada por modelo institucional (${draft.generationManifestId}); o conteúdo anterior permanece no histórico.`,
   });
 }

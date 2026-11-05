@@ -18,8 +18,9 @@ import { useEditalPreparationState } from "./useEditalPreparationState";
 import EditalGenerateCta from "./EditalGenerateCta";
 import { buildEditalReadiness, generationCta, publicationPending } from "@/lib/editalReadiness";
 import { PublicationPendingNotice } from "./PublicationPendingNotice";
+import { BudgetPendingNotice } from "./BudgetPendingNotice";
 import EditalTemplateReviewPanel from "./EditalTemplateReviewPanel";
-import { generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
+import { canRecomposeDraft, generateReady, reviewReadiness, type PreflightView, type ReviewStateView } from "@/lib/editalPreparation";
 import type { StageTarget } from "@/lib/editalPreparation";
 import { bridgeAllowsGeneration, composedTrCandidateId, trPinOf, TR_REQUIRED_MESSAGE, type TemplateResolutionView, type TrCandidateView } from "@/lib/editalTemplateBridge";
 import {
@@ -293,7 +294,8 @@ export default function EditalWorkspace({
     },
   });
 
-  const recomposeHash = preparationState?.capabilities?.governedDraftRecomposition ? draft?.contentHash : undefined;
+  // Recomposição governada: Revisão 2 (capability) ou, na Revisão 1, minuta desatualizada pelas fontes (R3). O servidor reaplica a regra.
+  const recomposeHash = canRecomposeDraft(preparationState, reviewQuery.data as ReviewStateView | undefined) ? draft?.contentHash : undefined;
   const handleGenerate = (confirmed = false) => {
     if (!processId || !object.trim() || !paramsComplete) return;
     objectSent.current = object.trim();
@@ -538,6 +540,8 @@ export default function EditalWorkspace({
         {bound && (
           <div className="pt-2">
             <EditalPreparationPanel processId={processId} params={boundParams} trPin={trPin} onOpenTr={onOpenTr} onOpenStage={onOpenStage} onChanged={() => { void utils.procurementProcess.editalTemplatePreflight.invalidate(); }} />
+            {/* LICIGOV-FAST PR-2 — dotação/fonte: pendência informativa (não bloqueia a geração) com registro único do processo. */}
+            <div className="pt-2"><BudgetPendingNotice processId={processId} documentLabel="Edital" variant="drafting" /></div>
           </div>
         )}
         {bound && (
@@ -622,6 +626,7 @@ export default function EditalWorkspace({
       />
 
       {draft && <div className="mt-6"><PublicationPendingNotice pending={publicationPendingView} variant="finalizing" /></div>}
+      {draft && <BudgetPendingNotice processId={processId} documentLabel="Edital" variant="finalizing" />}
       {/* C.4B.1/C.4B.2 — autoridade oficial: revisão pré-emissão do conteúdo exato + emissão governada. */}
       <OfficialPromotionSection processId={processId} kind="edital" reviewSnapshot={reviewable.data?.draft ?? null} hasUnsavedEdits={editorDirty} templateReviewBlockers={templateReviewBlockers} />
     </div>

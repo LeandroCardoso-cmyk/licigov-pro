@@ -191,7 +191,12 @@ export function deriveRegimeParticipacao(p: ParticipationConfig | null | undefin
 
 // ─── Derivações (tipo) por variável ──────────────────────────────────────────────────────────────────────────────────
 
-export type DerivationKind = "PLATFORM" | "FORMA_JULGAMENTO" | "REGIME_PARTICIPACAO" | "BUDGET_DATE" | "EMISSION_DATE" | "SCHEDULE";
+/**
+ * `BUDGET_ALLOCATION` (LICIGOV-FAST PR-2): dotação orçamentária e fonte de recursos são INFORMAÇÃO ORÇAMENTÁRIA DO PROCESSO, registrada UMA
+ * vez (escritor único `recordBudgetAllocation`, no mesmo registro governado do processo e no MESMO caminho em que a CertameConfig as
+ * gravava — valores anteriores continuam válidos, sem migração) e apenas consumida pelo TR e pelo Edital.
+ */
+export type DerivationKind = "PLATFORM" | "FORMA_JULGAMENTO" | "REGIME_PARTICIPACAO" | "BUDGET_DATE" | "BUDGET_ALLOCATION" | "EMISSION_DATE" | "SCHEDULE";
 
 /** Variáveis cujo valor NUNCA é digitado no Edital (autoridade é derivada). `SCHEDULE` só quando a regra da plataforma o declara. */
 export const DERIVED_VARIABLES: Readonly<Record<string, DerivationKind>> = Object.freeze({
@@ -200,6 +205,8 @@ export const DERIVED_VARIABLES: Readonly<Record<string, DerivationKind>> = Objec
   "decisao.formaJulgamento": "FORMA_JULGAMENTO",
   "julgamento.regimeParticipacao": "REGIME_PARTICIPACAO",
   "julgamento.dataOrcamentoEstimado": "BUDGET_DATE",
+  "julgamento.dotacaoOrcamentaria": "BUDGET_ALLOCATION",
+  "julgamento.fonteRecursos": "BUDGET_ALLOCATION",
   "processo.dataEmissaoEdital": "EMISSION_DATE",
   [SCHEDULE.fim]: "SCHEDULE",
   [SCHEDULE.horarioFim]: "SCHEDULE",
@@ -240,6 +247,8 @@ export const CERTAME_AUDIT: readonly CertameAuditRow[] = Object.freeze([
   row("processo.enderecoEletronicoBll", "PLATFORM_PROFILE", "Perfil da plataforma", PF, "Fato estável da plataforma BLL; igual para todo pregão do órgão na plataforma."),
   row("processo.regulamentoBllVersao", "PLATFORM_PROFILE", "Perfil da plataforma", PF, "Versão/data do regulamento vigente da plataforma; muda raramente e com revisão auditável, não por processo."),
   row("julgamento.dataOrcamentoEstimado", "UPSTREAM_PRICE_RESEARCH", "Pesquisa de Preços", DV, "Data-base do orçamento: decisão registrada UMA vez na Pesquisa de Preços (ledger governado, BUDGET); timestamp técnico de criação não é autoridade."),
+  row("julgamento.dotacaoOrcamentaria", "UPSTREAM_PROCESS", "Dados orçamentários do processo", DV, "LICIGOV-FAST PR-2: informação orçamentária do processo declarada UMA vez e consumida pelo TR e pelo Edital; ausente é pendência informativa, não bloqueio."),
+  row("julgamento.fonteRecursos", "UPSTREAM_PROCESS", "Dados orçamentários do processo", DV, "LICIGOV-FAST PR-2: fonte de recursos declarada junto da dotação no processo; o Edital não pergunta de novo; ausente não bloqueia."),
   row("decisao.formaJulgamento", "UPSTREAM_ITEMS", "Itens da contratação", DV, "Item × lote decorre da estrutura canônica dos Itens (lotes); misto ⇒ ambiguidade, decide-se em Itens."),
   row("julgamento.regimeParticipacao", "UPSTREAM_ITEMS", "Itens da contratação", DV, "Regime efetivo decorre da configuração de participação por item/lote; era duplicado pelo 'padrão dos itens' do Edital."),
   row("processo.dataEmissaoEdital", "LIFECYCLE_SYSTEM", "Sistema", DV, "Data do ATO REAL de emissão oficial: late-bound, materializada pelo ciclo de vida na emissão (M2); nunca digitada nem a data do M1."),

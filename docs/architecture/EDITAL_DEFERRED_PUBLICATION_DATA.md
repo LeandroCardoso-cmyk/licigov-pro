@@ -30,6 +30,9 @@ Bloco recolhido **"Dados para publicação"** na preparação. A gravação usa 
   (`supportsGovernedDraftRecomposition(catalog)`, derivada da semântica — nunca de número/versão de revisão). Sem a capability (Revisão 1),
   `expectedContentHash`/`confirmReplace` são **ignorados** e o comportamento legado permanece (rascunho diferente ⇒ CONFLICT, nada sobrescrito, nenhum
   `template_compose` novo). A preparação expõe `capabilities.governedDraftRecomposition` (informativo; a tela só envia o hash quando verdadeiro).
+- **Exceção R3 (PR #342 — recuperação governada):** sem a capability, a recomposição é aceita SOMENTE quando a minuta ficou desatualizada pelas fontes
+  do processo (mesma revisão exata e mesmo órgão; alguma fonte mudou desde o M1 — a condição `SOURCE_CHANGED` da revalidação). A tela envia o hash
+  quando a revisão acusa `SOURCE_CHANGED`. Todas as garantias acima continuam valendo; a capability exposta pela preparação não muda.
 - **O texto do rascunho nunca é autoridade:** "A DEFINIR PARA PUBLICAÇÃO" (ou uma data digitada no lugar) não altera `PublicationReadiness`, a projeção,
   a CertameConfig nem o `deferredPublication` do manifest. Só a fonte estruturada governada resolve o campo; a próxima composição a usa.
 
