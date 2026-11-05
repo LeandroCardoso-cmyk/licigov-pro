@@ -131,7 +131,12 @@ function makePorts(): TemplatePorts {
     },
     drafts: {
       reserveDraftId: async () => "gdoc_lb_1",
-      writeDraft: async (d, tx) => { calls.push("writeDraft"); stage(tx, "draft", d); },
+      writeDraft: async (d, tx) => {
+        // X → Y → X: M1 reproduzido já existente e rascunho JÁ vinculado a ele ⇒ replay puro (mesma regra do adapter real)
+        const last = (rows("draft") as Array<{ generationManifestId?: string }>).at(-1);
+        if (d.reuseExistingManifest && last?.generationManifestId === d.generationManifestId) return false;
+        calls.push("writeDraft"); stage(tx, "draft", d); return true;
+      },
     },
     manifests: {
       getManifest: async (org, id) => m1s().find((m) => m.organizationId === org && m.id === id) ?? null,

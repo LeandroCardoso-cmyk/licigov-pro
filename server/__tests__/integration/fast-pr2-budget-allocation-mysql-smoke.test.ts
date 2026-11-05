@@ -51,7 +51,7 @@ import {
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
+  BLL, U_EDITOR, U_MANAGER, publishBllModel, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const DB = process.env.DATABASE_URL;
@@ -458,4 +458,98 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(await composeEdits()).toBe(editsBefore);                           // nenhuma recomposição registrada
     expect(await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org])).toBe(m1Before);
   }, 600_000);
+
+  // ── X → Y → X (gate do PR #342): a fonte volta a um valor já usado; a composição reproduz um M1 EXISTENTE ─────────────────
+  async function readyRev2(label: string): Promise<P> {
+    const org = newOrg();
+    const w = await seedWorld(conn, org, label, { flagOn: true });
+    const tr = await seedOfficialTr(conn, w, 1, "TERMO DE REFERÊNCIA — conteúdo sintético v1", TR_META);
+    const p: P = { org, w, tr, model: await publishBllModel(org, 2, key) };
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p)); await fillTrueDecisions(p);
+    return p;
+  }
+  const composeEdits = (p: P) => count("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND kind = 'edital' AND operation = 'template_compose'", [p.org, p.w.processId]);
+  async function runXYX(p: P, rev: 1 | 2): Promise<void> {
+    const X = `${DOT_VALUE} [X]`, Y = `${DOT_VALUE} [Y]`;
+    expect((await getState(p)).capabilities.governedDraftRecomposition).toBe(rev === 2);
+    await gen(p);
+    let human = await reviewCurrent(p, `xyx-a-${rev}`);
+    // X
+    await recordAllocation(p, { dotacaoOrcamentaria: X, fonteRecursos: FON_VALUE });
+    const rB = await recompose(p, draftContentHash(human), { confirmReplace: true });
+    human = await reviewCurrent(p, `xyx-b-${rev}`);
+    expect(human).toContain(X);
+    // Y
+    await recordAllocation(p, { dotacaoOrcamentaria: Y }, { confirmReplace: true });
+    const rC = await recompose(p, draftContentHash(human), { confirmReplace: true });
+    expect(rC.generationManifestId).not.toBe(rB.generationManifestId);
+    human = await reviewCurrent(p, `xyx-c-${rev}`);
+    expect(human).toContain(Y);
+    const m1Before = await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org]);
+    const geradoBefore = (await officialsOf(p)).filter((o: any) => o.t === "edital").length;
+    // VOLTA a X: a composição reproduz o M1 de B (já existente); o rascunho precisa ser ressincronizado — nada pode ficar preso
+    await recordAllocation(p, { dotacaoOrcamentaria: X }, { confirmReplace: true });
+    const blocked = await err(() => promoteR3(p, human));
+    expect(String(blocked.message)).toMatch(/SOURCE_CHANGED/);
+    const editsBefore = await composeEdits(p);
+    // concorrência: dois pedidos com o MESMO hash visto ⇒ uma única recomposição efetiva, sem duplicidade nem corrupção
+    const [c1, c2] = await Promise.allSettled([
+      recompose(p, draftContentHash(human), { confirmReplace: true, idempotencyKey: key("xyx-k1") }),
+      recompose(p, draftContentHash(human), { confirmReplace: true, idempotencyKey: key("xyx-k2") }),
+    ]);
+    expect([c1, c2].some((x) => x.status === "fulfilled")).toBe(true);
+    for (const x of [c1, c2]) if (x.status === "rejected") expect(String((x.reason as Error).message)).toMatch(/O rascunho mudou desde o carregamento|CONFLICT/);
+    const back = [c1, c2].find((x) => x.status === "fulfilled") as PromiseFulfilledResult<any>;
+    expect(back.value.generationManifestId).toBe(rB.generationManifestId);                   // M1 de B reutilizado (sem M1 novo)
+    expect(await composeEdits(p)).toBe(editsBefore + 1);                                      // uma recomposição no histórico
+    expect(await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org])).toBe(m1Before);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "edital").length).toBe(geradoBefore);   // nenhuma versão técnica nova
+    const draftX = (await draftText(p))!;
+    expect(draftX).toContain(X);
+    expect(draftX).not.toContain(Y);
+    const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    expect(rs.generationManifestId).toBe(rB.generationManifestId);                           // a revisão usa o vínculo vigente da minuta
+    // replay do MESMO pedido: idempotente
+    const again: any = await recompose(p, draftContentHash(human), { confirmReplace: true, idempotencyKey: (c1.status === "fulfilled" ? key("xyx-k1-r") : key("xyx-k2-r")) });
+    expect(again.generationManifestId).toBe(rB.generationManifestId);
+    expect(again.replayed).toBe(true);                                                         // já vinculado ⇒ replay puro
+    expect(await composeEdits(p)).toBe(editsBefore + 1);
+    // X → Y → X → Y → X: ciclos repetidos ao MESMO M1 (o hash visto pode se repetir) — sem colisão de idempotência, sem M1/versão novos
+    await recordAllocation(p, { dotacaoOrcamentaria: Y }, { confirmReplace: true });
+    const toY: any = await recompose(p, draftContentHash(draftX), { confirmReplace: true });
+    expect(toY.generationManifestId).toBe(rC.generationManifestId);
+    expect(toY.replayed).toBe(false);
+    expect((await draftText(p))!).toContain(Y);
+    await recordAllocation(p, { dotacaoOrcamentaria: X }, { confirmReplace: true });
+    const toX: any = await recompose(p, draftContentHash((await draftText(p))!), { confirmReplace: true });
+    expect(toX.generationManifestId).toBe(rB.generationManifestId);
+    expect(await draftText(p)).toBe(draftX);
+    expect(await composeEdits(p)).toBe(editsBefore + 3);
+    expect(await count("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org])).toBe(m1Before);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "edital").length).toBe(geradoBefore);
+    // revisão e emissão com SoD
+    const finalHuman = await reviewCurrent(p, `xyx-d-${rev}`);
+    const promoted = await promoteR3(p, finalHuman);
+    expect(promoted.promoted).toBe(true);
+    const issued = (await officialsOf(p)).filter((o: any) => o.t === "edital" && o.status === "emitido");
+    expect(issued).toHaveLength(1);
+    expect(issued[0].content).toContain(X);
+    for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
+      expect(Object.keys(JSON.parse(m.b)).filter((x) => !BODY_KEYS_9226E4B.has(x))).toEqual([]);
+    }
+  }
+
+  it("F8 — X → Y → X (→ Y → X) na Revisão 1: a minuta volta ao M1 de X, é revisada e emitida; sem M1/versão duplicados; concorrência segura", async () => {
+    const p = await readyTenant("fp2-xyx-rev1");
+    const trBefore = (await officialsOf(p)).filter((o: any) => o.t === "tr");
+    await runXYX(p, 1);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "tr")).toEqual(trBefore);
+  }, 900_000);
+
+  it("F9 — X → Y → X na Revisão 2 (capability): mesmo comportamento", async () => {
+    const p = await readyRev2("fp2-xyx-rev2");
+    const trBefore = (await officialsOf(p)).filter((o: any) => o.t === "tr");
+    await runXYX(p, 2);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "tr")).toEqual(trBefore);
+  }, 900_000);
 });

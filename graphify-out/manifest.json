@@ -13705,8 +13705,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/institutional-templates-lane-b-service.test.ts": {
-    "mtime": 1793881994.8124888,
-    "ast_hash": "33d79bbbac4d50796ef043b1e666dbfb",
+    "mtime": 1793909262.0358863,
+    "ast_hash": "ea2b1347b22df06362f39b77d168469a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
@@ -13840,8 +13840,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/draftAdapter.ts": {
-    "mtime": 1793881994.9188356,
-    "ast_hash": "24e034f853646ec306f5cc2fad77d61e",
+    "mtime": 1793909262.034832,
+    "ast_hash": "59b3d9023970e6f8ce2ed532101fdd30",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/errors.ts": {
@@ -13850,8 +13850,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/manifestAdapter.ts": {
-    "mtime": 1793881994.9188356,
-    "ast_hash": "97c54e37b479831d6d86549bfe9ef4fb",
+    "mtime": 1793908504.214999,
+    "ast_hash": "8218a12b81274bd7129a5a89506f68d2",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/previewAdapter.ts": {
@@ -13865,8 +13865,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/adapters/reviewAdapter.ts": {
-    "mtime": 1793881994.9188356,
-    "ast_hash": "cbcf04847ed92baf5f6bd88a91134bf7",
+    "mtime": 1793908490.5120237,
+    "ast_hash": "28ae6e193f6a230f604e51b1f8c258cd",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/astSummary.ts": {
@@ -13905,8 +13905,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/ports.ts": {
-    "mtime": 1793881994.920892,
-    "ast_hash": "57cbc54c3d0be191f161026c61de65c1",
+    "mtime": 1793909262.0342531,
+    "ast_hash": "74900a15e964410c11727bf940e8ec91",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/portsRegistry.ts": {
@@ -13920,8 +13920,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1793903831.7203631,
-    "ast_hash": "47c9ada74e4fd33fd50341bac47a1cec",
+    "mtime": 1793909262.0354364,
+    "ast_hash": "193d6daf3705e45832868f9396c8140c",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14555,8 +14555,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1793904996.4345915,
-    "ast_hash": "6e46c0efd89b42eff50d251eb48aad4c",
+    "mtime": 1793910679.2948906,
+    "ast_hash": "aa2ff5b743493ccdcae1a464b4320595",
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
@@ -15735,8 +15735,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/fast-pr2-budget-allocation-mysql-smoke.test.ts": {
-    "mtime": 1793903943.8910644,
-    "ast_hash": "5c8f6807488cbc8fe72cce0308c87368",
+    "mtime": 1793909262.0364292,
+    "ast_hash": "fcca337a6054e39ea0a8812254b9c648",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-budget-allocation.test.ts": {

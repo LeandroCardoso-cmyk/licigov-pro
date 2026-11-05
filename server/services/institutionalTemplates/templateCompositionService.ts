@@ -371,7 +371,17 @@ export async function generateTemplatedDocument(params: GenerateTemplatedDocumen
       if (existing.stage !== "GENERATION" || existing.manifestHash !== m1.manifestHash || existing.organizationId !== params.organizationId) {
         throw new TRPCError({ code: "CONFLICT", message: `${TEMPLATE_COMPOSITION_FAILED}: manifest ${m1.id} já existe com outro conteúdo (MANIFEST_HASH_MISMATCH)` });
       }
-      return { official: null, replayed: true, manifest: existing as GenerationManifest };
+      // X → Y → X (gate do PR #342): conteúdo idêntico a uma composição anterior NÃO significa que a minuta está nela. O rascunho é
+      // ressincronizado ao M1 reproduzido pelas MESMAS regras governadas (no-op se já vinculado; texto idêntico ⇒ vínculo; recomposição
+      // governada ⇒ conteúdo, com CAS/confirmação/histórico; sem ela ⇒ CONFLICT). Nenhum M1 nem versão técnica nova.
+      const changed = await ports.drafts.writeDraft({
+        id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,
+        title: params.title, content: composed.value.content.text, actorUserId: params.actorUserId, correlationId: params.correlationId,
+        generationManifestId: m1.id, reuseExistingManifest: true,
+        ...(recompose ? { replace: recompose } : {}),
+      }, tx);
+      // `replayed` = nada mudou; rascunho ressincronizado ao M1 existente ⇒ não é replay (nenhum M1/versão nova, mas a minuta mudou).
+      return { official: null, replayed: changed !== true, manifest: existing as GenerationManifest };
     }
     await ports.drafts.writeDraft({
       id: generatedDocumentId, organizationId: params.organizationId, subjectId: params.subjectId, documentType: params.documentType,

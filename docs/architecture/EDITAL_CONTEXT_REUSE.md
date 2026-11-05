@@ -237,9 +237,11 @@ Completude documental ≠ autorização de ato: a formalização da contrataçã
   quando há edição humana, conteúdo anterior no histórico append-only, novo M1, idempotência. Sem mudança de fonte, o comportamento legado
   permanece. Não exige reset do processo, não toca no TR emitido nem em outro documento oficial; a emissão segue a revisão humana e a SoD.
   (Num rollback para versão anterior a esta correção, a recuperação da Revisão 1 volta a depender de reaplicar a versão nova.)
-  **Residual preexistente (também na Revisão 2, não coberto pelo R3):** se uma fonte VOLTA a um valor já usado numa composição anterior
-  (ex.: dotação X → Y → X), a recomposição reproduz um M1 que já existe e o pedido converge como replay sem regravar o rascunho; a emissão
-  continua acusando `SOURCE_CHANGED`. Correção proposta para frente: na recomposição solicitada, revincular o rascunho ao M1 reproduzido.
+  **X → Y → X (corrigido, Revisões 1 e 2):** quando uma fonte VOLTA a um valor já usado, a composição reproduz um M1 que já existe. Conteúdo
+  idêntico não é estado idêntico: o M1 VIGENTE da minuta é o do vínculo explícito `tpl-m1:` (não o gravado por último), o rascunho é
+  ressincronizado a esse M1 pelas mesmas regras governadas (já vinculado ⇒ replay puro; texto idêntico ⇒ só o vínculo; recomposição governada
+  ⇒ conteúdo, com CAS, confirmação de edição humana e histórico; sem ela ⇒ CONFLICT), sem criar M1 nem versão técnica nova, e a cadeia de
+  edições humanas da emissão parte da ocorrência MAIS RECENTE do texto composto. A chave de idempotência da recomposição é única por recomposição (M1 + última linha do histórico de edições, lida sob lock), sem colisão em X → Y → X → Y.
 - **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
   `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
   atualizar a seção, sem bloqueio. Documentos emitidos não mudam.
