@@ -288,7 +288,7 @@ describe("SSR da preparação orientada por exceções", () => {
     // UX final: UM card de perfil incompleto (não despeja campos) + cartões por autoridade
     expect(out).toContain("Complete a configuração única do órgão");
     expect(out).toContain("Configurar agora");
-    expect(out).toContain('href="/configuracoes#perfil-licitacoes"');
+    expect(out).toContain('href="/perfil-licitacoes"');
     expect(out).toContain("Canal de esclarecimentos");            // listado só em "O que falta"
     expect(out).not.toContain('id="prep-POLICY-o1"');             // sem input do perfil na preparação
     expect(out).toContain('data-card="perfil"');

@@ -34,3 +34,16 @@ export function hasOrgRole(role: OrgRole | null | undefined, minRole: OrgRole): 
 export function canManageOrgUsers(role: OrgRole | null | undefined): boolean {
   return hasOrgRole(role, "admin");
 }
+
+/**
+ * F1 (homologação H5) — Perfil institucional de Licitações (papéis, políticas, perfil da plataforma e padrões do órgão). ESPELHA o piso da
+ * ação `govern` do backend (`TEMPLATE_ACTION_MIN_ROLE.govern = "manager"`, que grava pelo `institutionalTemplates.governed.*` e exige ainda a
+ * membership REAL do órgão — SECURITY-02). Ou seja: `manager`, `admin` e `owner`. NÃO concede gestão de usuários nem a identidade
+ * institucional/documental (`canManageOrgUsers`, admin+), que continuam separadas. Só experiência: o backend reautoriza cada escrita.
+ */
+export function canGovernLicitacoesProfile(role: OrgRole | null | undefined): boolean {
+  return hasOrgRole(role, "manager");
+}
+
+/** Rota dedicada do Perfil de Licitações (a mesma tela de Configurações, sem exigir papel administrativo). */
+export const LICITACOES_PROFILE_PATH = "/perfil-licitacoes";

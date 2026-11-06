@@ -7,6 +7,8 @@
  * servidor substitui a seção declarada) e planeja o "Salvar preparação": uma confirmação de UX, várias escritas SEQUENCIAIS pelas
  * autoridades existentes, cada uma com idempotência própria e CAS encadeado. A validação final é sempre do servidor.
  */
+import { LICITACOES_PROFILE_PATH } from "@/utils/orgPermissions";
+
 /** Espelho da DSL de condições do servidor (`Cond2`). Só para mostrar/ocultar AO VIVO; a autoridade final é o composer. */
 export type Cond =
   | { op: "eq" | "ne"; var: string; value: string | number | boolean }
@@ -270,8 +272,8 @@ export interface FixAction { label: string; href?: string; stage?: StageTarget }
 /** Ação (deep-link) para resolver um dado NA ORIGEM da autoridade — o Edital nunca recebe a digitação. */
 export function fixAction(entry: EntryPoint | undefined): FixAction | null {
   switch (entry) {
-    case "PLATFORM_PROFILE": return { label: "Configurar Perfil da plataforma", href: "/configuracoes#perfil-licitacoes" };
-    case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: "/configuracoes#perfil-licitacoes" };
+    case "PLATFORM_PROFILE": return { label: "Configurar Perfil da plataforma", href: LICITACOES_PROFILE_PATH };
+    case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: LICITACOES_PROFILE_PATH };
     case "ORG_REGISTRY": return { label: "Corrigir cadastro do órgão", href: "/configuracoes" };
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
     case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };

@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1793918967.2410178,
-    "ast_hash": "450e95e29b4c6a6ea7e6642b1d7948e2",
+    "mtime": 1793997811.1617234,
+    "ast_hash": "867d79b3d4dee67a76f6469226b289a4",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayout.tsx": {
-    "mtime": 1793918967.245492,
-    "ast_hash": "842d5478fdc21076b24d64dc9ac8848c",
+    "mtime": 1793997814.7593987,
+    "ast_hash": "0284a60361661441199ef181628eb473",
     "semantic_hash": ""
   },
   "client/src/components/DashboardLayoutSkeleton.tsx": {
@@ -2800,8 +2800,8 @@
     "semantic_hash": ""
   },
   "client/src/hooks/useNavigationHistory.ts": {
-    "mtime": 1793918967.2639015,
-    "ast_hash": "d91c8140d9e7f71a6bbd932806e64be4",
+    "mtime": 1793997811.1633444,
+    "ast_hash": "f7941438cf205a8b01751e935d0c588a",
     "semantic_hash": ""
   },
   "client/src/hooks/usePersistFn.ts": {
@@ -3325,8 +3325,8 @@
     "semantic_hash": ""
   },
   "client/src/utils/orgPermissions.ts": {
-    "mtime": 1793918967.2687342,
-    "ast_hash": "149f1daaac2ff6432015d97b0751c037",
+    "mtime": 1793997705.725934,
+    "ast_hash": "ff686e3eb494490e51e3d175502916d5",
     "semantic_hash": ""
   },
   "client/src/utils/orgRoleLabels.test.ts": {
@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1793978057.5503802,
-    "ast_hash": "fceef9ce641da1c9da131ec985883724",
+    "mtime": 1793998641.5389764,
+    "ast_hash": "fb69c4b14f6a0e69248a04ef792527de",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -14420,13 +14420,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalPreparation.test.ts": {
-    "mtime": 1793978255.863908,
-    "ast_hash": "64905d9c00a0bc1120b62a9a1049384d",
+    "mtime": 1793997824.5107121,
+    "ast_hash": "df770bc75c93e5a74d892d1854c0d55d",
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1793979145.82096,
-    "ast_hash": "4cc5e458b850f5c6abab0c9596fe7c64",
+    "mtime": 1793997820.4151905,
+    "ast_hash": "3dd1ced12212d3732b698d4833292248",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14445,8 +14445,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationView.tsx": {
-    "mtime": 1793979241.6657789,
-    "ast_hash": "4ed38005123ec7158510bc6470452307",
+    "mtime": 1793997814.75974,
+    "ast_hash": "d404ab2a0265124ddd2d08c532bc8c58",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
@@ -14555,8 +14555,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1793979241.6669648,
-    "ast_hash": "5633627ddc9f78586fa5ef684a1ff855",
+    "mtime": 1793998746.3811796,
+    "ast_hash": "6e433104e56e8e51e4ac9e7bae0ac2b3",
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
@@ -14635,8 +14635,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalReadiness.test.ts": {
-    "mtime": 1793918967.2561889,
-    "ast_hash": "97b203f11cf0b37a7a2dfe19faaaca0f",
+    "mtime": 1793997824.512964,
+    "ast_hash": "d625b226f1a61004bedcf20bcb77a4df",
     "semantic_hash": ""
   },
   "client/src/components/procurement/useEditalPreparationState.ts": {
@@ -14670,8 +14670,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/editalPresentation.ts": {
-    "mtime": 1793918967.699405,
-    "ast_hash": "e2699981c1d51965895e0d7efcd1575a",
+    "mtime": 1793997688.6782665,
+    "ast_hash": "edb6243322539809a0063df04794ad6d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/models/edital-pregao-eletronico-bll-1.0.2/catalog.v2.json": {
@@ -15755,13 +15755,23 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-a1-a4-corrections.test.ts": {
-    "mtime": 1793924243.3708932,
-    "ast_hash": "2a5de89d8b99a402059f28e8f831eab6",
+    "mtime": 1793998641.5392642,
+    "ast_hash": "7d0a489355e812de94b7025c4759c328",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-srp-content-pending.test.ts": {
     "mtime": 1793979264.0405333,
     "ast_hash": "789af251856f8db4257e0c9f00e97aec",
+    "semantic_hash": ""
+  },
+  "client/src/pages/LicitacoesProfile.tsx": {
+    "mtime": 1793997705.7290697,
+    "ast_hash": "41159d71abd9e8153574c30e934da59a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/fast-f1-f2-profile-access.test.ts": {
+    "mtime": 1793997960.2662957,
+    "ast_hash": "e068edf8240e2865eb5079fce8c564cb",
     "semantic_hash": ""
   }
 }

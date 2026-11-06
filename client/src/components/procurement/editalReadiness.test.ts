@@ -154,7 +154,7 @@ describe("UX — view-model de prontidão (puro)", () => {
       ["PRICE_RESEARCH", "Corrigir na Pesquisa de Preços", { stage: "price" }],
       ["ORG_REGISTRY", "Corrigir cadastro do órgão", { href: "/configuracoes" }],
       ["ITEMS", "Abrir Itens da contratação", { stage: "contract_items" }],
-      ["PLATFORM_PROFILE", "Configurar Perfil da plataforma", { href: "/configuracoes#perfil-licitacoes" }],
+      ["PLATFORM_PROFILE", "Configurar Perfil da plataforma", { href: "/perfil-licitacoes" }],
       ["REQUESTING_UNIT", "Corrigir unidade requisitante", { stage: "dfd" }],
       ["TR_SECTION", "Abrir o TR", { stage: "tr" }],
     ];

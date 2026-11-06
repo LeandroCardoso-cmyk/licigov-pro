@@ -176,7 +176,8 @@ describe("A4 — 'exigido quando…' e resumo do Perfil sem falso 'completo'", (
 
   it("preflight: o MESMO código, mas a mensagem nomeia os campos (até 5, depois 'e mais N') e onde informá-los", () => {
     const three = profileIncompleteMessage([{ name: "a", description: "Adesão à ata" }, { name: "b", description: "Marco inicial da vigência da ata" }, { name: "c", description: "" }]);
-    expect(three).toBe("Perfil institucional de Licitações incompleto para este processo (3 campo(s): Adesão à ata; Marco inicial da vigência da ata; c): informe uma única vez em Configurações → Perfil de Licitações");
+    expect(three).toBe("Perfil institucional de Licitações incompleto para este processo (3 campo(s): Adesão à ata; Marco inicial da vigência da ata; c): informe uma única vez no Perfil de Licitações (menu lateral)");
+    expect(three).not.toContain("Configurações");   // F1 (H5): manager não acessa Configurações
     const many = profileIncompleteMessage(Array.from({ length: 8 }, (_, i) => ({ name: `n${i}`, description: `Campo ${i}` })));
     expect(many).toContain("(8 campo(s): Campo 0; Campo 1; Campo 2; Campo 3; Campo 4; e mais 3)");
   });

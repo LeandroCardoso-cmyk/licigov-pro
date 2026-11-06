@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import PrepFieldControl from "./PrepFieldControl";
 import Disclosure from "./Disclosure";
 import { type FixAction, type StageTarget } from "@/lib/editalPreparation";
+import { LICITACOES_PROFILE_PATH } from "@/utils/orgPermissions";
 import {
   BLOCKING_LEVEL_LABEL, READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, isLargeOriginGroup, readinessHeadline,
   type OriginGroup, type ReadinessStep,
@@ -234,7 +235,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           )}
         </StepRow>
         <StepRow step={cfgStep} next={readiness.nextStep === "ONE_TIME_CONFIG"}>
-          {!cfgStep.done && <a href="/configuracoes#perfil-licitacoes" className={BTN}>Configurar agora</a>}
+          {!cfgStep.done && <a href={LICITACOES_PROFILE_PATH} className={BTN}>Configurar agora</a>}
         </StepRow>
         <StepRow step={originStep} next={readiness.nextStep === "ORIGIN"} />
         <StepRow step={decStep} next={readiness.nextStep === "PROCESS_DECISIONS"}>
@@ -263,7 +264,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             {details.profileRoles > 0 ? ` (${details.profileRoles} ${details.profileRoles === 1 ? "papel institucional" : "papéis institucionais"} · ${details.profilePolicies} ${details.profilePolicies === 1 ? "política" : "políticas"})` : ""}.
             Configure uma vez; nenhum Edital pede estes dados de novo.
           </p>
-          <a href="/configuracoes#perfil-licitacoes" className={BTN}>Configurar agora</a>
+          <a href={LICITACOES_PROFILE_PATH} className={BTN}>Configurar agora</a>
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground">O que falta para este Edital — {profile.required.length}</summary>
             <ul className="mt-1 list-disc pl-5" data-profile-list="required">{profile.required.map((i) => <li key={i.name}>{i.description} — {i.reason}</li>)}</ul>
@@ -275,7 +276,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
         <div role="status" className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm" aria-label="Pendências informativas do órgão" data-org-content-pending={orgContentPending.length}>
           <p className="font-medium text-foreground">Pendências informativas — não impedem gerar a minuta</p>
           <ul className="list-disc space-y-1 pl-5 text-xs">{orgContentPending.map((i) => <li key={i.name}><strong>{i.description}</strong> — {i.reason} <span className="text-muted-foreground">({i.providedBy})</span></li>)}</ul>
-          <a href="/configuracoes#perfil-licitacoes" className="text-xs text-primary underline">Informar no Perfil de Licitações</a>
+          <a href={LICITACOES_PROFILE_PATH} className="text-xs text-primary underline">Informar no Perfil de Licitações</a>
         </div>
       )}
       {profile.additional.length > 0 && (
