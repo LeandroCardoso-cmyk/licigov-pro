@@ -14,7 +14,9 @@ import { CONTENT_PENDING_VARIABLES } from "./contentPending";
 import type { VariableCatalog2 } from "./variableCatalog2";
 
 export const BUDGET_ALLOCATION_VARIABLES = Object.freeze({ dotacao: "julgamento.dotacaoOrcamentaria", fonte: "julgamento.fonteRecursos" } as const);
-const SRP_VARIABLE = "controle.utilizaSrp";
+/** Decisão do processo sobre Registro de Preços (CertameConfig). `true` ⇒ dotação/fonte não aplicáveis no Edital; ausente ⇒ nada presumido. */
+export const BUDGET_SRP_VARIABLE = "controle.utilizaSrp";
+const SRP_VARIABLE = BUDGET_SRP_VARIABLE;
 
 export type BudgetFieldStatus = "DECLARED" | "PENDING" | "NOT_APPLICABLE";
 export interface BudgetFieldView { readonly value: string | null; readonly status: BudgetFieldStatus }
@@ -61,6 +63,31 @@ export interface BudgetAllocationBlock {
   readonly pending: readonly string[];
   /** Fatos declarados (rótulo → valor) para a autoria usar literalmente. */
   readonly declared: readonly (readonly [string, string])[];
+  /**
+   * A3 (pós-homologação H5) — rótulos NÃO APLICÁVEIS no momento (registro de preços declarado no processo): a autoria recebe o contexto para
+   * não tratar a ausência como pendência nem gerar `[REVISAR]` por isso. Não entra no digest além do que o status já representa.
+   */
+  readonly notApplicable: readonly string[];
+}
+
+/**
+ * Digest do snapshot lógico (formato v1, INALTERADO: entra no hash do pedido de geração do TR e no marcador `orcamento:` da linhagem — replay
+ * e rascunhos existentes continuam válidos).
+ */
+export function budgetAllocationDigest(view: Pick<BudgetAllocationView, "dotacao" | "fonte" | "srp">): string {
+  return sha256Hex(JSON.stringify({ v: 1, dotacao: view.dotacao, fonte: view.fonte, srp: view.srp }));
+}
+
+/**
+ * A2 (pós-homologação H1) — digests MATERIALMENTE equivalentes ao estado atual. O texto do bloco (e o contexto da autoria) depende só do
+ * status/valor de dotação e fonte; o SRP influencia apenas por meio do status (`NOT_APPLICABLE`). Logo, um rascunho gerado com os MESMOS
+ * status/valores e outro SRP (ex.: indefinido → "não") não está desatualizado. Mudança real (valor, ou status — inclusive passar a SRP com
+ * dotação ausente) continua fora do conjunto. O primeiro elemento é sempre o digest atual. Puro.
+ */
+export function equivalentBudgetDigests(view: BudgetAllocationView): readonly string[] {
+  const current = budgetAllocationDigest(view);
+  const variants = ([null, false, true] as const).map((srp) => budgetAllocationDigest({ dotacao: view.dotacao, fonte: view.fonte, srp }));
+  return [current, ...variants.filter((d) => d !== current)].filter((d, i, a) => a.indexOf(d) === i);
 }
 
 export function renderBudgetAllocationBlock(view: BudgetAllocationView): BudgetAllocationBlock {
@@ -68,15 +95,16 @@ export function renderBudgetAllocationBlock(view: BudgetAllocationView): BudgetA
   const lines: string[] = [];
   const pending: string[] = [];
   const declared: Array<[string, string]> = [];
+  const notApplicable: string[] = [];
   for (const [key, f] of rows) {
     const spec = CONTENT_PENDING_VARIABLES[BUDGET_ALLOCATION_VARIABLES[key]]!;
     if (f.status === "DECLARED") { lines.push(`- ${spec.label}: ${f.value}`); declared.push([spec.label, f.value!]); }
-    else if (f.status === "NOT_APPLICABLE") lines.push(`- ${spec.label}: ${NOT_APPLICABLE_SRP_TEXT[key]}.`);
+    else if (f.status === "NOT_APPLICABLE") { lines.push(`- ${spec.label}: ${NOT_APPLICABLE_SRP_TEXT[key]}.`); notApplicable.push(spec.label); }
     else { lines.push(`- ${spec.label}: ${spec.absentText}`); pending.push(spec.label); }
   }
-  const digest = sha256Hex(JSON.stringify({ v: 1, dotacao: view.dotacao, fonte: view.fonte, srp: view.srp }));
+  const digest = budgetAllocationDigest(view);
   return {
     block: `DADOS ORÇAMENTÁRIOS DO PROCESSO (o Edital usa os mesmos dados)\n\n${lines.join("\n")}`,
-    digest, pending, declared,
+    digest, pending, declared, notApplicable,
   };
 }

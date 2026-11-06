@@ -252,3 +252,35 @@ Completude documental ≠ autorização de ato: a formalização da contrataçã
   Edital resolvível (módulo de modelos institucionais habilitado e modelo de Edital vinculado; sem escopo do Edital definido, só quando há um
   único catálogo vigente). Órgãos sem modelo vinculado não conseguem usar integralmente o recurso (o TR deles segue o comportamento anterior).
   A evolução prevista é um fato canônico do processo, independente de modalidade, plataforma e modelo (proposta em deliberação do Owner).
+
+### 10.1 Correções A1–A4 (homologação funcional H1–H5 em staging, 05/11/2026)
+
+- **A1 — SRP indefinido não é presumido.** A preparação do Edital só mostra dotação/fonte como "Não aplicável (registro de preços)" quando o
+  processo DECLAROU `controle.utilizaSrp = true`. Antes, a condição `requiredWhen` (`utilizaSrp == false`) avaliada com o SRP ainda não decidido
+  dava `false` e o campo caía no ramo de SRP. Indefinido ⇒ pendência informativa (igual a `budgetAllocationView`: `srp null ⇒ PENDING`).
+- **A2 — aviso "TR desatualizado" só para mudança material.** O digest gravado (hash do pedido de geração do TR e marcador `orcamento:`) mantém o
+  formato v1 — replay e rascunhos existentes intactos. A leitura `budgetDisclosure.allocation` passa a expor `equivalentDigests`: os digests com os
+  MESMOS status/valores de dotação e fonte e outro SRP (o texto do bloco e o contexto da autoria dependem só desses status/valores). A tela compara
+  com esse conjunto; mudança de valor ou de status (inclusive SRP com dotação ausente ⇒ não aplicável) continua acusando o aviso (informativo).
+- **A3 — autoria do TR com registro de preços declarado.** O bloco orçamentário expõe `notApplicable` e o prompt recebe o contexto: indicação na
+  formalização de cada contratação decorrente da ata, conforme o regulamento de SRP aplicável ao órgão (nenhum regulamento presumido), sem inventar
+  valores, sem afirmar dotação indicada/conferida, sem `[REVISAR]` só pela ausência — e sem dispensar a indicação dos créditos na formalização.
+  `[REVISAR]` legítimos continuam. Nenhuma chamada de IA nova; o prompt não entra em hash (o digest do pedido não muda).
+- **A4 — Perfil de Licitações: prontidão geral × contextual.** Sem processo, o Perfil continua contando só as políticas incondicionais, mas não diz
+  mais "Perfil completo" quando há políticas condicionais sem valor: lista "exigida(s) só quando: …" (rótulo operacional da condição) e mostra o
+  motivo em cada campo. Com `processId`, as políticas que ESTE processo exige vêm da MESMA fonte do preflight (`upstream.profilePending` da preparação)
+  e aparecem como pendentes (`summary.contextPending`, incluídas no `pendingCount`). O preflight mantém o código `LICITACOES_PROFILE_INCOMPLETE` e o
+  bloqueio, e passa a nomear os campos e onde informá-los. Nenhum valor é atribuído; nenhuma política é alterada; o requisito vinculante não muda.
+- **Ajustes da auditoria independente:** (C1) política condicional cuja condição depende SÓ de dados do próprio órgão e está ativa (ex.:
+  `habilitacao.registroCadastralAceito` quando o órgão registrou que aceita registro cadastral) é pendência GERAL do Perfil, não "condicional";
+  (C2) `licitacoesProfile({ contextual: false })` dispensa a leitura contextual quando a tela só usa padrões/revisão (`UseAsDefaultButton`);
+  (P1) o prompt veda tratar regulamento federal presente no contexto como aplicável ao órgão, salvo indicação de adoção; (P3) a ressalva de políticas
+  condicionais usa tom neutro (governança discreta); (P4) a mensagem do preflight cita até 5 campos ("e mais N").
+  Risco residual: a leitura contextual do Perfil não recebe o pin do TR; com pin inválido, condições derivadas do TR podem diferir do preflight
+  (a tela de preparação do Edital continua sendo a referência contextual completa).
+- **Para deliberação (não alterado nesta correção):** em registro de preços, `decisao.adesaoAta`, `srp.marcoInicialVigenciaAta` e
+  `srp.prazoAssinaturaAta` são `requiredWhen` no catálogo publicado e, ausentes, impedem a COMPOSIÇÃO da minuta (`MISSING_REQUIRED`), não só a
+  emissão. São conteúdo legítimo do edital de SRP (Lei 14.133/2021, arts. 82 a 86), mas pela regra LICIGOV-FAST ("informação ausente é pendência,
+  não bloqueio automático de geração") a minuta poderia ser composta com pendência governada e a exigência aplicada na emissão — como já ocorre
+  com a dotação. Mudar isso exige política em código análoga a `contentPending.ts` e decisão do Owner/Jurídico; fica para a revisão abrangente
+  dos bloqueios de geração.
