@@ -225,7 +225,29 @@ export function defaultConsentText(description: string, valueText: string, exist
 export interface ProfileStateView {
   status: "READY"; catalogVersion: string; revision: number; hash: string | null; asOf: string; sections: PrepSection[];
   roles: RoleViewModel[]; defaults: DefaultViewModel[]; platforms: PlatformViewModel[];
-  summary: { policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; platformsPending: number; pendingCount: number };
+  summary: {
+    policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; platformsPending: number; pendingCount: number;
+    /** A4 — políticas condicionais sem valor (exigidas só em situações específicas) e, com processo, as que ESTE processo exige. */
+    conditionalUnset?: number; contextPending?: number;
+  };
+  /** A4 — políticas condicionais sem valor: quando são exigidas e se o processo da leitura as exige. Ausente em servidor anterior. */
+  conditional?: { name: string; description: string; condition: string; requiredNow: boolean }[];
+  contextual?: boolean;
+}
+
+/**
+ * A4 (pós-homologação H5) — resumo do Perfil SEM "falso pronto": campos gerais pendentes; senão, se faltam políticas condicionais, diz que o
+ * perfil está completo só para os campos gerais e quais situações ainda exigirão dados (ex.: registro de preços). Puro.
+ */
+export function profileCompletenessSummary(p: Pick<ProfileStateView, "summary" | "revision" | "conditional">): { tone: "pending" | "partial" | "complete"; text: string } {
+  const n = p.summary.pendingCount;
+  if (n > 0) return { tone: "pending", text: `${n} ${n === 1 ? "campo pendente" : "campos pendentes"}` };
+  const cond = p.conditional ?? [];
+  if (cond.length > 0) {
+    const situations = [...new Set(cond.map((c) => c.condition))].join("; ");
+    return { tone: "partial", text: `Campos gerais completos (revisão ${p.revision}). ${cond.length} ${cond.length === 1 ? "política condicional ainda sem valor, exigida" : "políticas condicionais ainda sem valor, exigidas"} só quando: ${situations}` };
+  }
+  return { tone: "complete", text: `Perfil completo (revisão ${p.revision})` };
 }
 
 /** O estado do Perfil na forma que `buildSavePlan` consome (escopo ÓRGÃO, sem processo): reutiliza o MESMO plano/CAS da preparação. */

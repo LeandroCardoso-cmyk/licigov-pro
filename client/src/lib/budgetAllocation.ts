@@ -14,6 +14,11 @@ export interface BudgetAllocationState {
   catalogVersion: string;
   /** Digest atual dos Dados orçamentários (o mesmo do marcador `orcamento:` gravado na geração do TR). */
   digest?: string;
+  /**
+   * A2 — digests MATERIALMENTE equivalentes ao atual (mesmos status/valores de dotação e fonte; só a decisão de SRP difere, sem mudar o texto).
+   * Ausente (servidor anterior) ⇒ só o `digest` atual conta.
+   */
+  equivalentDigests?: readonly string[];
 }
 
 /** Rótulo e tom visual por status (Pendente × Declarado × Não aplicável). */
@@ -41,9 +46,12 @@ export function budgetPendingItems(a: BudgetAllocationState | null | undefined):
 /**
  * O TR foi gerado com OUTROS dados orçamentários (registrados/alterados depois): aviso informativo para atualizar a seção — nunca bloqueia.
  * Sem marcador no rascunho (TR anterior a esta funcionalidade ou modelo sem dotação) ⇒ nada a comparar.
+ * A2: decidir o SRP sem mudar o conteúdo orçamentário (ex.: indefinido → "não", com dotação/fonte iguais) NÃO é alteração material.
  */
 export function budgetOutdatedInDraft(a: BudgetAllocationState | null | undefined, draftBudgetDigest: string | null | undefined): boolean {
-  return !!a?.digest && !!draftBudgetDigest && a.digest !== draftBudgetDigest;
+  if (!a?.digest || !draftBudgetDigest) return false;
+  const same = a.equivalentDigests && a.equivalentDigests.length > 0 ? a.equivalentDigests : [a.digest];
+  return !same.includes(draftBudgetDigest);
 }
 
 export interface BudgetAllocationEdits { dotacao?: string; fonte?: string }

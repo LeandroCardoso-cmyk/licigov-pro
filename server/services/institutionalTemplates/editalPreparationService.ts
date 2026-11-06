@@ -25,6 +25,7 @@ import {
 } from "../../domain/institutionalTemplates/governedSources";
 import type { OrgId } from "../../domain/institutionalTemplates/types";
 import { CONTENT_PENDING_VARIABLES, isContentPendingVariable } from "../../domain/institutionalTemplates/contentPending";
+import { BUDGET_SRP_VARIABLE } from "../../domain/institutionalTemplates/budgetAllocation";
 import { isDeferredPublication, supportsGovernedDraftRecomposition, type VariableDef2, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { PUBLICATION_VARIABLES, projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { presentationOf } from "../../domain/institutionalTemplates/editalPresentation";
@@ -254,6 +255,23 @@ export function describeVariable(v: VariableDef2) {
   };
 }
 
+/**
+ * A4 (pós-homologação H5) — "exigido quando…" em linguagem operacional, a partir da condição `requiredWhen` do catálogo (puro; o catálogo
+ * publicado não muda). Usa o rótulo de apresentação da variável da condição (ex.: "Sistema de Registro de Preços (SRP): Sim"). Condição
+ * composta ⇒ cita as variáveis envolvidas. `null` quando a variável não é condicional.
+ */
+export function requiredWhenHint(v: Pick<VariableDef2, "requiredWhen">, catalog: { vars: readonly VariableDef2[] }): string | null {
+  if (!v.requiredWhen) return null;
+  const labelOf = (name: string) => { const d = catalog.vars.find((x) => x.name === name); return d ? describeVariable(d).description || name : name; };
+  const valueText = (x: unknown) => (x === true ? "Sim" : x === false ? "Não" : String(x));
+  const c = v.requiredWhen as { op: string; var?: string; value?: unknown; values?: readonly unknown[] };
+  if (c.op === "eq" && c.var) return `${labelOf(c.var)}: ${valueText(c.value)}`;
+  if (c.op === "in" && c.var && c.values) return `${labelOf(c.var)}: ${c.values.map(valueText).join(" ou ")}`;
+  if (c.op === "present" && c.var) return `${labelOf(c.var)} informado(a)`;
+  const vars = [...new Set(conditionVariables(v.requiredWhen))].sort();
+  return `configuração específica do processo (${vars.map(labelOf).join("; ")})`;
+}
+
 const SOURCE_ORDER: readonly VariableSource2[] = ["IDENTITY", "POLICY", "PROCESS", "TR", "CERTAME_CONFIG", "ITEMS", "BUDGET", "NORMATIVE", "LIFECYCLE"];
 const GOVERNABLE = new Set<string>([...PROCESS_SCOPE_SOURCES, ...ORG_SCOPE_SOURCES]);
 const scopeOf = (source: VariableSource2): GovernedScope => ((ORG_SCOPE_SOURCES as readonly string[]).includes(source) ? "ORG" : "PROCESS");
@@ -468,9 +486,11 @@ export async function getEditalPreparationState(
         m.AUTO++; bump(group, "total"); bump(group, "resolved"); bump(group, "reused");
         // LICIGOV-FAST PR-2: dotação/fonte são do PROCESSO (não creditadas à Pesquisa de Preços).
         if (ru.kind === "PLATFORM") m.PLAT++; else if (ru.kind === "BUDGET" && DERIVED_VARIABLES[v.name] !== "BUDGET_ALLOCATION") m.PRICE++; else if (ru.kind === "ITEMS") m.ITEMS++; else if (ru.kind === "LIFECYCLE") m.LIFE++;
-      } else if (isContentPendingVariable(v) && inactive.has(v.name)) {
-        // Registro de preços (condição inativa): a dotação não é exigida no Edital; é indicada na formalização de cada contratação,
-        // conforme o regulamento de SRP aplicável ao órgão (o regulamento federal não é presumido para o município).
+      } else if (isContentPendingVariable(v) && inactive.has(v.name) && facts[BUDGET_SRP_VARIABLE] === true) {
+        // Registro de preços DECLARADO no processo (condição inativa): a dotação não é exigida no Edital; é indicada na formalização de cada
+        // contratação, conforme o regulamento de SRP aplicável ao órgão (o regulamento federal não é presumido para o município).
+        // A1 (pós-homologação H1): condição inativa só porque o SRP AINDA NÃO FOI DECIDIDO não é registro de preços — nada é presumido; o campo
+        // segue como pendência informativa (ramo abaixo), igual ao estado orçamentário do processo (`budgetAllocationView`: srp null ⇒ PENDING).
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "NOT_APPLICABLE", origin: { label: NOT_APPLICABLE_SRP_LABEL }, authority: c.authority, entry: c.entry });
         m.CH++;
       } else if (isContentPendingVariable(v)) {
@@ -569,7 +589,9 @@ export async function getEditalPreparationState(
         origin = { label: "Perfil institucional do órgão", ref: { revision: orgLineage?.revision ?? 0, hash: (orgLineage?.hash ?? "").slice(0, 12) } };
       } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
         status = "PROFILE_INCOMPLETE"; origin = { label: "Perfil institucional de Licitações" };
-        profilePending.push({ name: v.name, description: descriptor.description, reason: "política do órgão ainda não registrada" }); m.PROF_PEND++;
+        // A4: política CONDICIONAL exigida por este processo ⇒ o motivo diz por quê (a tela do Perfil, sem processo, a mostra como condicional).
+        const when = v.required ? null : requiredWhenHint(v, catalog);
+        profilePending.push({ name: v.name, description: descriptor.description, reason: when ? `política do órgão ainda não registrada — exigida neste processo (${when})` : "política do órgão ainda não registrada" }); m.PROF_PEND++;
       } else { status = "OPTIONAL"; m.OH++; }
     } else if (!hasValue && reuse.values.get(v.name)?.kind === "ORG_DEFAULT") {
       // Padrão institucional EXPLÍCITO (criado por ação humana): aplicado, com origem e revisão; alterável neste processo.

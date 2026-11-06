@@ -45,7 +45,7 @@ import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from 
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import { buildEditalReadiness, generationCta } from "../../../client/src/lib/editalReadiness";
-import { completeProfile, fillTrParams, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
+import { completeProfile, fillTrParams, profileAsPrepView, scenarioValueByName, setBudgetDisclosure, setItemsParticipation, stampTrLineage, type ReuseHarness } from "../helpers/contextReuseHelpers";
 import {
   buildSavePlan, executeSavePlan, isStaleSave, livePendingItems, toFormValue,
   type PlannedWrite, type PreparationStateView,
@@ -552,4 +552,117 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     await runXYX(p, 2);
     expect((await officialsOf(p)).filter((o: any) => o.t === "tr")).toEqual(trBefore);
   }, 900_000);
+
+  // ── Correções A1–A4 (homologação H1–H5 em staging, 05/11/2026) ─────────────────────────────────────────────────────────────
+  /** Decide o SRP pelo MESMO plano de gravação da tela (CAS/idempotência das rotas governadas). */
+  async function setSrp(p: P, value: boolean): Promise<void> {
+    const st: any = await getState(p);
+    const sec = st.sections.find((x: any) => x.fields.some((f: any) => f.name === "controle.utilizaSrp"));
+    const f = sec.fields.find((x: any) => x.name === "controle.utilizaSrp");
+    const plan = buildSavePlan(st, { edits: { [sec.source]: { [f.path]: toFormValue(f, value) } } as any });
+    expect(plan.errors).toEqual({});
+    const out = await executeSavePlan(plan.writes, st.revisions, writerFor(p, st), stale);
+    expect(out.failed, JSON.stringify(out.failed)).toBeNull();
+  }
+  const preparedTenant = async (label: string): Promise<P> => {
+    const p = await prepareOrg(label);
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    return p;
+  };
+  const SRP_POLICIES = ["decisao.adesaoAta", "srp.marcoInicialVigenciaAta", "srp.prazoAssinaturaAta"];
+  const profileOf = (p: P, withProcess: boolean) => proc(p.org).licitacoesProfile({ ...(withProcess ? { processId: p.w.processId } : {}), ...WS }) as Promise<any>;
+  const profileField = (st: any, n: string) => st.sections.flatMap((x: any) => x.fields).find((f: any) => f.name === n);
+
+  it("F10 — A1: SRP INDEFINIDO não é presumido (pendência informativa); SRP sim ⇒ não aplicável; SRP não ⇒ pendência", async () => {
+    const p = await preparedTenant("fp2-a1-srp");
+    const st0: any = await getState(p);
+    expect(fieldOf(st0, "controle.utilizaSrp")?.hasValue ?? false).toBe(false);                // SRP ainda não decidido
+    for (const n of [DOT, FON]) {
+      expect(fieldOf(st0, n), n).toMatchObject({ status: "CONTENT_PENDING", entry: "PROCESS_BUDGET" });   // antes: NOT_APPLICABLE "registro de preços"
+      expect(JSON.stringify(fieldOf(st0, n).origin)).not.toMatch(/registro de preços/i);
+    }
+    expect(st0.upstream.contentPending.map((c: any) => c.name).sort()).toEqual([DOT, FON]);
+    expect((await budgetState(p)).allocation).toMatchObject({ srp: null, dotacao: { status: "PENDING" }, fonte: { status: "PENDING" } });   // MESMA leitura nos dois lugares
+
+    await setSrp(p, true);
+    const st1: any = await getState(p);
+    for (const n of [DOT, FON]) expect(fieldOf(st1, n), n).toMatchObject({ status: "NOT_APPLICABLE", origin: { label: expect.stringMatching(/registro de preços/) } });
+    expect(st1.upstream.contentPending).toEqual([]);
+    expect((await budgetState(p)).allocation).toMatchObject({ srp: true, dotacao: { status: "NOT_APPLICABLE" } });
+
+    await setSrp(p, false);
+    const st2: any = await getState(p);
+    for (const n of [DOT, FON]) expect(fieldOf(st2, n), n).toMatchObject({ status: "CONTENT_PENDING" });
+    expect((await budgetState(p)).allocation).toMatchObject({ srp: false, dotacao: { status: "PENDING" } });
+  }, 600_000);
+
+  it("F11 — A4: perfil geral × contextual: as 3 políticas de SRP aparecem como exigidas pelo processo SRP (sem valor atribuído); preflight nomeia os campos", async () => {
+    const p = await preparedTenant("fp2-a4-srp");
+    // GERAL (sem processo): campos gerais completos, mas SEM falso "completo" — as condicionais ficam visíveis com o motivo
+    const general = await profileOf(p, false);
+    expect(general.contextual).toBe(false);
+    expect(general.summary.pendingCount).toBe(0);
+    expect(general.conditional.map((c: any) => c.name)).toEqual(expect.arrayContaining(SRP_POLICIES));
+    for (const n of SRP_POLICIES) {
+      expect(profileField(general, n), n).toMatchObject({ status: "OPTIONAL", hasValue: false, reason: "Exigido apenas quando: Sistema de Registro de Preços (SRP): Sim." });
+    }
+    // processo com SRP indefinido: nada é exigido agora (não presume SRP)
+    expect((await profileOf(p, true)).summary.contextPending).toBe(0);
+
+    await setSrp(p, true);
+    const ctx = await profileOf(p, true);
+    expect(ctx.contextual).toBe(true);
+    expect(ctx.summary.contextPending).toBe(3);
+    expect(ctx.summary.pendingCount).toBe(3);                                    // antes: 0 ("Perfil completo") com o Edital bloqueado
+    for (const n of SRP_POLICIES) {
+      expect(profileField(ctx, n), n).toMatchObject({ status: "PENDING", hasValue: false, reason: "Exigido neste processo (Sistema de Registro de Preços (SRP): Sim)." });
+      expect(profileField(ctx, n).currentValue).toBeUndefined();                // nenhum valor atribuído automaticamente
+    }
+    const st: any = await getState(p);
+    const pend = st.upstream.profilePending.filter((x: any) => SRP_POLICIES.includes(x.name));
+    expect(pend.map((x: any) => x.name).sort()).toEqual([...SRP_POLICIES].sort());
+    for (const x of pend) expect(x.reason).toBe("política do órgão ainda não registrada — exigida neste processo (Sistema de Registro de Preços (SRP): Sim)");
+    const pf = await preflight(p);
+    expect(pf.status).toBe("BLOCKED");                                          // requisito vinculante preservado (nada afrouxado)
+    const issue = pf.issues.find((i: any) => i.code === "LICITACOES_PROFILE_INCOMPLETE");
+    expect(issue.message).toMatch(/^Perfil institucional de Licitações incompleto para este processo \(\d+ campo\(s\): /);
+    for (const n of SRP_POLICIES) expect(issue.message).toContain(profileField(ctx, n).description);
+    expect(issue.message).toContain("Configurações → Perfil de Licitações");
+
+    // a pessoa informa no Perfil (órgão SINTÉTICO do teste), pelo mesmo plano da tela: só os 3 exigidos; o resto do perfil é preservado
+    const before = await profileOf(p, false);
+    const keep = Object.fromEntries(before.sections.flatMap((x: any) => x.fields).filter((f: any) => f.hasValue).map((f: any) => [f.name, f.currentValue]));
+    const r = await completeProfile(harnessOf(p));
+    expect(r.policiesTyped).toBe(3);
+    const after = await profileOf(p, true);
+    expect(after.summary.contextPending).toBe(0);
+    expect(after.summary.pendingCount).toBe(0);
+    for (const [n, v] of Object.entries(keep)) expect(profileField(after, n).currentValue, n).toEqual(v);
+    expect((await profileOf(p, false)).conditional.map((c: any) => c.name)).not.toEqual(expect.arrayContaining(SRP_POLICIES));
+    expect((await preflight(p)).issues?.some((i: any) => i.code === "LICITACOES_PROFILE_INCOMPLETE") ?? false).toBe(false);
+  }, 600_000);
+
+  it("F12 — A4/C1: condição que depende SÓ de política do órgão, ativa ⇒ pendência GERAL do Perfil (sem processo), nunca 'condicional'", async () => {
+    const p = await preparedTenant("fp2-a4-c1");
+    const st0 = await profileOf(p, false);
+    expect(profileField(st0, "habilitacao.registroCadastralAceito")).toMatchObject({ status: "OPTIONAL", hasValue: false });
+    // o órgão registra que aceita registro cadastral (política própria, órgão SINTÉTICO do teste), pelo mesmo plano da tela
+    const sec = st0.sections.find((x: any) => x.fields.some((f: any) => f.name === "decisao.aceitaRegistroCadastral"));
+    const f = sec.fields.find((x: any) => x.name === "decisao.aceitaRegistroCadastral");
+    const view = profileAsPrepView(st0);
+    const plan = buildSavePlan(view, { edits: { [sec.source]: { [f.path]: toFormValue(f, true) } } as any });
+    expect(plan.errors).toEqual({});
+    const out = await executeSavePlan(plan.writes, view.revisions, {
+      async write(w: PlannedWrite, expectedRevision: number) {
+        const r: any = await tpl(p.org).governed.recordOrganizationFields({ confirm: true, idempotencyKey: key(w.id), decision: decision(), expectedRevision, catalogVersion: st0.catalogVersion, source: w.source as any, fields: w.fields ?? {} });
+        return { revision: r.decision.revision as number };
+      },
+    }, stale);
+    expect(out.failed, JSON.stringify(out.failed)).toBeNull();
+    const st1 = await profileOf(p, false);
+    expect(profileField(st1, "habilitacao.registroCadastralAceito")).toMatchObject({ status: "PENDING", hasValue: false, reason: expect.stringMatching(/^Exigido porque o órgão registrou: /) });
+    expect(st1.summary.pendingCount).toBe(st0.summary.pendingCount + 1);
+    expect(st1.conditional.map((c: any) => c.name)).not.toContain("habilitacao.registroCadastralAceito");
+    expect(profileField(st1, "habilitacao.registroCadastralAceito").currentValue).toBeUndefined();   // nada atribuído
+  }, 600_000);
 });

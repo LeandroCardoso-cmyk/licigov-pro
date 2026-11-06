@@ -19,7 +19,7 @@ import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore"
 import { loadContextReuse } from "./editalContextReuse";
 import { describeVariable } from "./editalPreparationService";
 import { isDeferredPublication } from "../../domain/institutionalTemplates/variableCatalog2";
-import { budgetAllocationView, renderBudgetAllocationBlock, type BudgetAllocationView } from "../../domain/institutionalTemplates/budgetAllocation";
+import { budgetAllocationView, equivalentBudgetDigests, renderBudgetAllocationBlock, type BudgetAllocationView } from "../../domain/institutionalTemplates/budgetAllocation";
 import { projectPublicationSchedule, type PublicationReadiness, type PublicationScheduleProjection } from "../../domain/institutionalTemplates/publicationSchedule";
 import { resolveProcurementContext } from "../canonicalContextService";
 
@@ -153,7 +153,11 @@ export interface BudgetDisclosureState {
    * LICIGOV-FAST PR-2 — dotação e fonte de recursos DECLARADAS no processo (mesmo registro/CAS `baseDateRevision`); `null` quando o modelo
    * vinculado não usa esses dados. Status: DECLARED | PENDING (informativo, não bloqueia) | NOT_APPLICABLE (registro de preços).
    */
-  readonly allocation: (BudgetAllocationView & { readonly catalogVersion: string; readonly digest: string }) | null;
+  readonly allocation: (BudgetAllocationView & {
+    readonly catalogVersion: string; readonly digest: string;
+    /** A2 — digests materialmente equivalentes ao atual (mesmo status/valor; só o SRP difere): o rascunho do TR com um deles NÃO está desatualizado. */
+    readonly equivalentDigests: readonly string[];
+  }) | null;
 }
 
 export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId: number, processId: string, params: EditalBoundaryParams): Promise<BudgetDisclosureState> {
@@ -172,6 +176,9 @@ export async function getBudgetDisclosureState(deps: BridgeDeps, organizationId:
   return {
     enabled: true, disclosure, revision: d?.revision ?? 0, baseDate: typeof stored === "string" ? stored : null, baseDateRevision: rec?.revision ?? 0,
     catalogVersion: loaded.status === "OK" && budgetDef ? loaded.catalog.version : null, suggestedBaseDate: suggested,
-    allocation: allocation ? { ...allocation, catalogVersion: loaded.status === "OK" ? loaded.catalog.version : "", digest: renderBudgetAllocationBlock(allocation).digest } : null,
+    allocation: allocation ? {
+      ...allocation, catalogVersion: loaded.status === "OK" ? loaded.catalog.version : "", digest: renderBudgetAllocationBlock(allocation).digest,
+      equivalentDigests: equivalentBudgetDigests(allocation),
+    } : null,
   };
 }

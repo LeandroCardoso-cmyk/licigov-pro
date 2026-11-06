@@ -172,6 +172,13 @@ async function editalBoundaryParams(orgId: number, processId: string, proposal: 
 
 const TR_PIN = z.object({ documentId: z.string().min(1).max(40), version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
 
+/** A4 — preflight: QUAIS campos do Perfil este processo exige (até 5, depois "e mais N") e onde informá-los. Mesmo código/bloqueio de antes. */
+export function profileIncompleteMessage(pending: ReadonlyArray<{ name: string; description: string }>): string {
+  const labels = pending.map((p) => p.description || p.name);
+  const shown = labels.slice(0, 5).join("; ") + (labels.length > 5 ? `; e mais ${labels.length - 5}` : "");
+  return `Perfil institucional de Licitações incompleto para este processo (${labels.length} campo(s): ${shown}): informe uma única vez em Configurações → Perfil de Licitações`;
+}
+
 export const procurementProcessRouter = router({
   createProcess: orgRoleProcedure("operator")
     .input(z.object({
@@ -820,11 +827,26 @@ export const procurementProcessRouter = router({
 
   /** Perfil institucional de Licitações (órgão): papéis, políticas e padrões. Somente leitura; a escrita usa `institutionalTemplates.governed.*`. */
   licitacoesProfile: tenantProcedure
-    .input(z.object({ processId: z.string().min(1).optional(), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional() }).default({}))
+    .input(z.object({
+      processId: z.string().min(1).optional(), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
+      /** A4 — `false` dispensa a leitura contextual (preparação do Edital) quando a tela só precisa dos padrões/revisão. Default: contextual. */
+      contextual: z.boolean().optional(),
+    }).default({}))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const params = input.processId ? (await requireProcess(input.processId, orgId), await editalBoundaryParams(orgId, input.processId, input)) : { modality: input.modality ?? null, form: input.form ?? null, platform: input.platform ?? null };
-      return getLicitacoesProfileState(bridgeDeps(), orgId, params);
+      // A4 (pós-homologação H5) — com processo, a prontidão é CONTEXTUAL: as políticas condicionais que ESTE processo exige vêm da MESMA
+      // fonte do preflight do Edital (`upstream.profilePending` da preparação). Somente leitura; sem processo ⇒ prontidão geral do órgão.
+      let context: { requiredNow: ReadonlySet<string> } | null = null;
+      if (input.processId && input.contextual !== false) {
+        const prep = await getEditalPreparationState(bridgeDeps(), orgId, input.processId, params).catch((err: unknown) => {
+          // Falha da leitura contextual não derruba o Perfil: volta à prontidão geral (sem presumir cenário), sem ficar silenciosa.
+          log.warn("licitacoes_profile_context_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
+          return null;
+        });
+        if (prep?.status === "READY_FOR_PREPARATION") context = { requiredNow: new Set(prep.upstream.profilePending.map((p) => p.name)) };
+      }
+      return getLicitacoesProfileState(bridgeDeps(), orgId, params, context);
     }),
 
   /** CertameConfig (somente leitura): decisões tomadas UMA vez por processo, consumidas pelo Edital e reutilizáveis por outros documentos. Escrita: `institutionalTemplates.governed.recordCertameConfig`. */
@@ -923,7 +945,8 @@ export const procurementProcessRouter = router({
         ? [
           ...(prep.upstream.trPending.length ? [{ code: "TR_PARAMS_PENDING", source: "TR", message: `${prep.upstream.trPending.length} parâmetro(s) estruturado(s) do TR pendente(s): informe-os no TR (Parâmetros estruturados da contratação)` }] : []),
           ...prep.upstream.sourcePending.map((p) => ({ code: "SOURCE_PENDING", source: p.fix, path: p.name, message: `${p.description || p.name}: ${p.reason}` })),
-          ...(prep.upstream.profilePending.length ? [{ code: "LICITACOES_PROFILE_INCOMPLETE", source: "POLICY", message: `Perfil institucional de Licitações incompleto (${prep.upstream.profilePending.length} campo(s)): configure uma única vez em Configurações` }] : []),
+          // A4: o MESMO código; a mensagem diz QUAIS campos este processo exige e onde informá-los (antes: só a contagem).
+          ...(prep.upstream.profilePending.length ? [{ code: "LICITACOES_PROFILE_INCOMPLETE", source: "POLICY", message: profileIncompleteMessage(prep.upstream.profilePending) }] : []),
         ]
         : [];
       return { ...result, pendingDecisions, issues: [...upstreamIssues, ...pendingBySource, ...result.issues], resolution: resolution.status };

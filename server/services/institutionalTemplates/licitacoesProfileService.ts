@@ -16,7 +16,8 @@ import { PLATFORM_VARIABLES, type PlatformSchedule } from "../../domain/institut
 import type { BridgeDeps } from "./editalBridgeService";
 import { loadEditalCatalog } from "./editalCatalogLoader";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore";
-import { describeVariable } from "./editalPreparationService";
+import { describeVariable, requiredWhenHint } from "./editalPreparationService";
+import { conditionVariables, evaluateCondition2 } from "../../domain/institutionalTemplates/conditionalDsl2";
 import type { PreparationField, PreparationSection } from "./editalPreparationService";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 
@@ -65,12 +66,31 @@ export type LicitacoesProfileState =
     readonly defaults: readonly DefaultView[];
     /** Perfil da(s) plataforma(s) usada(s) pelo modelo: configurado UMA vez por órgão, reutilizado por todo Edital. */
     readonly platforms: readonly PlatformView[];
-    readonly summary: { readonly policyTotal: number; readonly policyFilled: number; readonly policyPending: number; readonly rolesNeeded: number; readonly rolesOk: number; readonly rolesPending: number; readonly platformsPending: number; readonly pendingCount: number };
+    /**
+     * `pendingCount` = prontidão GERAL (políticas incondicionais, papéis e plataforma) + `contextPending` (só com processo: políticas
+     * CONDICIONAIS exigidas por ESTE processo). `conditionalUnset` = políticas condicionais ainda sem valor, exigidas só em situações
+     * específicas (ex.: registro de preços) — informativas; não entram no `pendingCount` sem um processo que as exija.
+     */
+    readonly summary: {
+      readonly policyTotal: number; readonly policyFilled: number; readonly policyPending: number; readonly rolesNeeded: number; readonly rolesOk: number;
+      readonly rolesPending: number; readonly platformsPending: number; readonly pendingCount: number;
+      readonly conditionalUnset: number; readonly contextPending: number;
+    };
+    /** A4 — políticas condicionais sem valor: quando são exigidas (`condition`) e se ESTE processo as exige (`requiredNow`). */
+    readonly conditional: readonly { readonly name: string; readonly description: string; readonly condition: string; readonly requiredNow: boolean }[];
+    /** A4 — `true` quando a leitura considerou um processo (prontidão contextual); `false` = só prontidão geral do órgão. */
+    readonly contextual: boolean;
   };
+
+/**
+ * A4 — contexto de UM processo: nomes das políticas do órgão que ESTE processo exige agora (mesma fonte do preflight do Edital:
+ * `upstream.profilePending` da preparação). Ausente ⇒ prontidão geral, sem presumir cenário.
+ */
+export interface LicitacoesProfileContext { readonly requiredNow: ReadonlySet<string> }
 
 const ORG_SOURCES: readonly VariableSource2[] = ["IDENTITY", "POLICY"];
 
-export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId: number, params: EditalBoundaryParams): Promise<LicitacoesProfileState> {
+export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId: number, params: EditalBoundaryParams, context: LicitacoesProfileContext | null = null): Promise<LicitacoesProfileState> {
   const loaded = await loadEditalCatalog(deps, organizationId, params);
   if (loaded.status !== "OK") return { status: "UNAVAILABLE", reason: loaded.reason };
   const { catalog } = loaded;
@@ -79,7 +99,16 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
 
   // Políticas: variáveis do ESCOPO ÓRGÃO que NÃO são papel nem autoridade canônica.
   const fields: Record<string, PreparationField[]> = {};
-  let policyTotal = 0, policyFilled = 0, policyPending = 0;
+  let policyTotal = 0, policyFilled = 0, policyPending = 0, contextPending = 0;
+  // A4/C1 — fatos do PRÓPRIO órgão (Identidade/Políticas registradas): condição que só depende deles vale para todo Edital ⇒ pendência GERAL.
+  const orgVarNames = new Set(catalog.vars.filter((v) => ORG_SOURCES.includes(v.source)).map((v) => v.name));
+  const orgFacts: Record<string, unknown> = {};
+  for (const v of catalog.vars) {
+    if (!orgVarNames.has(v.name)) continue;
+    const sec = record?.payload.sections[v.source] as Record<string, unknown> | undefined;
+    if (sec && Object.prototype.hasOwnProperty.call(sec, v.path)) orgFacts[v.name] = sec[v.path];
+  }
+  const conditional: Array<{ name: string; description: string; condition: string; requiredNow: boolean }> = [];
   for (const v of catalog.vars) {
     if (!ORG_SOURCES.includes(v.source)) continue;
     const c = classifyVariable(v);
@@ -88,10 +117,24 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
     const stored = section && Object.prototype.hasOwnProperty.call(section, v.path) ? section[v.path] : undefined;
     const hasValue = stored !== undefined && stored !== null && stored !== "" && !(Array.isArray(stored) && stored.length === 0);
     const unconditional = !v.requiredWhen && v.required;
-    const status: PreparationField["status"] = hasValue ? "ORG_REUSED" : unconditional ? "PENDING" : "OPTIONAL";
-    if (unconditional) { policyTotal++; if (hasValue) policyFilled++; else policyPending++; }
+    // A4: política CONDICIONAL sem valor — exigida por ESTE processo (contexto) ⇒ pendente aqui também (mesma regra do preflight do Edital);
+    // sem processo ⇒ continua opcional para o órgão, mas visível como "exigida quando…" (nunca "perfil completo" sem ressalva). Nada é atribuído.
+    const when = !v.required ? requiredWhenHint(v, catalog) : null;
+    // C1: condição que depende SÓ de dados do órgão e está ATIVA ⇒ exigida em todo Edital (pendência geral, não "condicional").
+    const orgOnlyActive = !!when && !!v.requiredWhen && conditionVariables(v.requiredWhen).every((n) => orgVarNames.has(n))
+      && evaluateCondition2(v.requiredWhen, orgFacts).result;
+    const requiredNow = !hasValue && !!when && !orgOnlyActive && !!context?.requiredNow.has(v.name);
+    const status: PreparationField["status"] = hasValue ? "ORG_REUSED" : unconditional || orgOnlyActive || requiredNow ? "PENDING" : "OPTIONAL";
+    if (unconditional || orgOnlyActive) { policyTotal++; if (hasValue) policyFilled++; else policyPending++; }
+    if (!hasValue && when && !orgOnlyActive) {
+      conditional.push({ name: v.name, description: describeVariable(v).description, condition: when, requiredNow });
+      if (requiredNow) contextPending++;
+    }
+    const reason = !hasValue && when
+      ? (orgOnlyActive ? `Exigido porque o órgão registrou: ${when}.` : requiredNow ? `Exigido neste processo (${when}).` : `Exigido apenas quando: ${when}.`)
+      : null;
     (fields[v.source] ??= []).push({
-      ...describeVariable(v), hasValue, ...(hasValue ? { currentValue: stored, displayValue: stored } : {}),
+      ...describeVariable(v), hasValue, ...(hasValue ? { currentValue: stored, displayValue: stored } : {}), ...(reason ? { reason } : {}),
       class: c.class, rule: c.rule, authority: c.authority, entry: c.entry, status, editable: true,
       ...(hasValue ? { origin: { label: "Perfil institucional do órgão", ref: { revision: record?.revision ?? 0 } } } : {}),
     });
@@ -140,6 +183,10 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
   const rolesPending = needed.length - rolesOk;
   return {
     status: "READY", catalogVersion: catalog.version, revision: record?.revision ?? 0, hash: record?.hash ?? null, asOf, sections, roles, defaults, platforms,
-    summary: { policyTotal, policyFilled, policyPending, rolesNeeded: needed.length, rolesOk, rolesPending, platformsPending, pendingCount: policyPending + rolesPending + platformsPending },
+    summary: {
+      policyTotal, policyFilled, policyPending, rolesNeeded: needed.length, rolesOk, rolesPending, platformsPending,
+      pendingCount: policyPending + rolesPending + platformsPending + contextPending, conditionalUnset: conditional.length, contextPending,
+    },
+    conditional, contextual: !!context,
   };
 }

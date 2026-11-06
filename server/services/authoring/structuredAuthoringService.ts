@@ -70,7 +70,7 @@ export interface StructuredAuthoringInput {
    * LICIGOV-FAST PR-2 — Dados orçamentários do processo (dotação/fonte). Só TR. Declarados ⇒ usados literalmente na "Adequação orçamentária";
    * pendentes ⇒ pendência INFORMATIVA (sem `[REVISAR]`: o bloco do sistema já traz o marcador governado). Ausente ⇒ prompt idêntico ao anterior.
    */
-  readonly budgetAllocation?: Pick<BudgetAllocationBlock, "declared" | "pending"> | null;
+  readonly budgetAllocation?: BudgetAllocationPromptInput | null;
 }
 
 /** Parâmetros confirmados do TR para a autoria: o MESMO bloco determinístico anexado ao texto e o que ainda falta (só rótulos). */
@@ -258,7 +258,7 @@ function renderMarkdown(doc: StructuredAuthoring): string {
 /** Constrói o prompt/query cognitiva com a instrução de structured output (a estrutura vem do responseSchema). */
 function authoringQuery(
   kind: "etp" | "tr", object: string, sourceContext?: DocumentAuthoringContext, confirmedParams?: TrConfirmedParams | null,
-  budget?: Pick<BudgetAllocationBlock, "declared" | "pending"> | null,
+  budget?: BudgetAllocationPromptInput | null,
 ): string {
   const canon = canonicalSectionsFor(kind).map((s) => `${s.key} (${s.legalAnchorLabel})`).join("; ");
   const mandatory = canonicalSectionsFor(kind).filter((s) => s.mustProvide).map((s) => s.key).join(", ");
@@ -297,10 +297,14 @@ function authoringQuery(
 
 /**
  * LICIGOV-FAST PR-2 — dotação/fonte DECLARADAS no processo entram como fatos (a IA não pede de novo); as pendentes são INFORMATIVAS:
- * a falta não vira `[REVISAR]` (que bloquearia a emissão) — o bloco do sistema anexado ao TR já traz o marcador governado.
+ * a falta não vira `[REVISAR]` (que bloquearia a emissão) — o bloco do sistema anexado ao TR já traz o marcador governado. Com registro de
+ * preços declarado (status NÃO APLICÁVEL), a autoria recebe esse contexto (A3). O prompt depende só dos status/valores (mesma base do digest).
  */
-export function budgetAllocationPrompt(b: Pick<BudgetAllocationBlock, "declared" | "pending">): string[] {
-  if (b.declared.length === 0 && b.pending.length === 0) return [];
+export type BudgetAllocationPromptInput = Pick<BudgetAllocationBlock, "declared" | "pending"> & Partial<Pick<BudgetAllocationBlock, "notApplicable">>;
+
+export function budgetAllocationPrompt(b: BudgetAllocationPromptInput): string[] {
+  const notApplicable = b.notApplicable ?? [];
+  if (b.declared.length === 0 && b.pending.length === 0 && notApplicable.length === 0) return [];
   return [
     "",
     "=== DADOS ORÇAMENTÁRIOS DO PROCESSO (informados uma vez pelo servidor do órgão; declarados, não verificados pelo sistema) ===",
@@ -309,6 +313,16 @@ export function budgetAllocationPrompt(b: Pick<BudgetAllocationBlock, "declared"
     ...(b.pending.length
       ? [`Ainda não informados no processo (pendência INFORMATIVA, não impede a emissão): ${b.pending.join("; ")}. NÃO use '[REVISAR]' para eles e NÃO invente valores: ` +
           "registre que serão indicados pelo setor responsável pela execução orçamentária (o sistema anexa o quadro com a pendência)."]
+      : []),
+    // A3 (pós-homologação H5) — registro de preços DECLARADO no processo: o contexto chega à autoria (antes, nada era dito e a IA criava
+    // `[REVISAR]` só pela ausência da dotação). Não dispensa a exigência orçamentária: ela fica para a formalização de cada contratação.
+    ...(notApplicable.length
+      ? [`Registro de preços declarado neste processo: ${notApplicable.join("; ")} não precisa(m) ser indicada(s) nesta fase; será(ão) indicada(s) ` +
+          "na formalização de cada contratação decorrente da ata, conforme o regulamento de registro de preços aplicável ao órgão. Na seção " +
+          "'adequacao_orcamentaria', registre isso sem inventar valores, sem afirmar que a dotação já foi indicada ou conferida, sem citar " +
+          "regulamento que não esteja no contexto e sem tratar regulamento federal presente no contexto como aplicável ao órgão, salvo se o " +
+          "contexto indicar que o órgão o adotou. A ausência desses dados NÃO é motivo para '[REVISAR]'; mantenha '[REVISAR]' apenas para o que " +
+          "de fato exigir revisão humana. Isso não dispensa a indicação dos créditos orçamentários na formalização de cada contratação."]
       : []),
   ];
 }
