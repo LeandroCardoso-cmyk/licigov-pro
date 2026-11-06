@@ -8935,8 +8935,8 @@
     "semantic_hash": ""
   },
   "server/routers/procurementProcessRouter.ts": {
-    "mtime": 1793924185.7258048,
-    "ast_hash": "84171c5b76cbfb24ad84a6237367e1ff",
+    "mtime": 1793978057.5503802,
+    "ast_hash": "fceef9ce641da1c9da131ec985883724",
     "semantic_hash": ""
   },
   "server/routers/productionReadinessRouter.ts": {
@@ -14135,8 +14135,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composer2.ts": {
-    "mtime": 1793918967.699405,
-    "ast_hash": "7b2cdda913adbf7e9d7b770632363b9d",
+    "mtime": 1793979106.3694706,
+    "ast_hash": "9c8a659981118488b8c5242a5f5ec5fc",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/composerRequirements.ts": {
@@ -14420,13 +14420,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/editalPreparation.test.ts": {
-    "mtime": 1793918967.2561889,
-    "ast_hash": "fbee9cc0a39c53f23a96a614db983210",
+    "mtime": 1793978255.863908,
+    "ast_hash": "64905d9c00a0bc1120b62a9a1049384d",
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1793918967.2643335,
-    "ast_hash": "fe0abfc6f3fb9f2e0ed741f273828ac0",
+    "mtime": 1793979145.82096,
+    "ast_hash": "4cc5e458b850f5c6abab0c9596fe7c64",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -14440,13 +14440,13 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/editalPreparationService.ts": {
-    "mtime": 1793923656.1335292,
-    "ast_hash": "eb351b6e1bec46347867911f81ac1f84",
+    "mtime": 1793979145.8205297,
+    "ast_hash": "d8bc9bdc6a7da7609d2181abe428c0aa",
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalPreparationView.tsx": {
-    "mtime": 1793918967.2561889,
-    "ast_hash": "cbae36c4aebd20b243125310a6fe41d3",
+    "mtime": 1793979241.6657789,
+    "ast_hash": "4ed38005123ec7158510bc6470452307",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts": {
@@ -14505,8 +14505,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/contextReuse.ts": {
-    "mtime": 1793923656.1320448,
-    "ast_hash": "f3d068cea2b7838f536145b9c3da56d8",
+    "mtime": 1793979225.0022557,
+    "ast_hash": "8c5d1ff453660658cf28c16280e69636",
     "semantic_hash": ""
   },
   "server/__tests__/helpers/contextReuseHelpers.ts": {
@@ -14545,8 +14545,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/licitacoesProfileService.ts": {
-    "mtime": 1793924185.7241569,
-    "ast_hash": "0896fcef612b4ec8b555cfbcc14d57ea",
+    "mtime": 1793978057.5507689,
+    "ast_hash": "e3cdf6532b245160f76cc3fa616c2018",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/trStructuredParamsService.ts": {
@@ -14555,8 +14555,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_CONTEXT_REUSE.md": {
-    "mtime": 1793924278.017289,
-    "ast_hash": "6cb5742f0ce6d6dd4721bbb0af695def",
+    "mtime": 1793979241.6669648,
+    "ast_hash": "5633627ddc9f78586fa5ef684a1ff855",
     "semantic_hash": ""
   },
   "client/src/components/procurement/BudgetDisclosureCard.tsx": {
@@ -14645,8 +14645,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalReadiness.ts": {
-    "mtime": 1793918967.2643335,
-    "ast_hash": "98bc7558033f538704356be5103d5b34",
+    "mtime": 1793979145.821214,
+    "ast_hash": "bedfe49d9a3c3bfe7a50331deea9cf5e",
     "semantic_hash": ""
   },
   "docs/architecture/EDITAL_PREPARATION_READINESS_UX.md": {
@@ -14920,13 +14920,13 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/PublicationPendingNotice.tsx": {
-    "mtime": 1793918967.2561889,
-    "ast_hash": "5cd137a7f5f9b678f32074ffd17556aa",
+    "mtime": 1793979182.4034002,
+    "ast_hash": "b9108046a4106ed2674698b1c8b799f5",
     "semantic_hash": ""
   },
   "client/src/components/procurement/publicationPending.test.ts": {
-    "mtime": 1793918967.2561889,
-    "ast_hash": "a941aef23a7485c1914b86ed70d28c99",
+    "mtime": 1793979191.1479416,
+    "ast_hash": "8c6921f50dcb7a02ca800a8f815e7f65",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-bll-deferred-cause.test.ts": {
@@ -15735,8 +15735,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/fast-pr2-budget-allocation-mysql-smoke.test.ts": {
-    "mtime": 1793924248.8746097,
-    "ast_hash": "56109720f50c4bc0427346b8d63dd1c7",
+    "mtime": 1793979284.5706296,
+    "ast_hash": "14a19ed25d71a69ca08c0648e197cec3",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-budget-allocation.test.ts": {
@@ -15750,13 +15750,18 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/contentPending.ts": {
-    "mtime": 1793918967.699405,
-    "ast_hash": "e2754f4cde756645f31c49d27575d92b",
+    "mtime": 1793977892.5276005,
+    "ast_hash": "7f83dcc2ca1d15504a40a48931f63c1b",
     "semantic_hash": ""
   },
   "server/__tests__/unit/fast-pr2-a1-a4-corrections.test.ts": {
     "mtime": 1793924243.3708932,
     "ast_hash": "2a5de89d8b99a402059f28e8f831eab6",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/fast-srp-content-pending.test.ts": {
+    "mtime": 1793979264.0405333,
+    "ast_hash": "789af251856f8db4257e0c9f00e97aec",
     "semantic_hash": ""
   }
 }

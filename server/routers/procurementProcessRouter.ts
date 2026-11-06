@@ -26,7 +26,7 @@ import { promoteOfficialDocument, getOfficialPromotionSummary, draftContentHash 
 import { templateIssuanceHook } from "../services/institutionalTemplates/integration";
 import { generateTemplatedDocument, inspectTemplateReview, preflightTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { getEditalPreparationState } from "../services/institutionalTemplates/editalPreparationService";
-import { getLicitacoesProfileState } from "../services/institutionalTemplates/licitacoesProfileService";
+import { getLicitacoesProfileState, type LicitacoesProfileContext } from "../services/institutionalTemplates/licitacoesProfileService";
 import { getBudgetDisclosureState, getCertameConfigState, getItemsParticipationState } from "../services/institutionalTemplates/certameConfigService";
 import { getTrStructuredState, recordTrStructuredParams, renderBudgetAllocationForTr, renderTrStructuredBlock } from "../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts, templateCompositionPortsConfigured } from "../services/institutionalTemplates/portsRegistry";
@@ -171,6 +171,24 @@ async function editalBoundaryParams(orgId: number, processId: string, proposal: 
 }
 
 const TR_PIN = z.object({ documentId: z.string().min(1).max(40), version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
+
+/**
+ * A4/P2 — contexto do Perfil para UM processo, da MESMA fonte do preflight: políticas que o processo exige (perfil incompleto + pendências
+ * informativas do órgão). "Confirmada" só com o TR oficial EXATO validado; sem pin, com pin inválido ou sem leitura ⇒ "não verificável".
+ */
+export function profileContextFrom(prep: Awaited<ReturnType<typeof getEditalPreparationState>> | null): LicitacoesProfileContext {
+  if (!prep) return { requiredNow: new Set(), status: "UNVERIFIED", reason: "leitura contextual indisponível no momento" };
+  if (prep.status !== "READY_FOR_PREPARATION") return { requiredNow: new Set(), status: "UNVERIFIED", reason: `preparação do Edital indisponível: ${prep.reason}` };
+  const requiredNow = new Set([
+    ...prep.upstream.profilePending.map((p) => p.name),
+    ...(prep.upstream.contentPending ?? []).filter((c) => c.fix === "ORG_PROFILE").map((c) => c.name),
+  ]);
+  if (prep.trPin.state === "VALID") return { requiredNow, status: "CONFIRMED" };
+  return {
+    requiredNow, status: "UNVERIFIED",
+    reason: prep.trPin.state === "INVALID" ? `TR oficial selecionado inválido ou desatualizado (${prep.trPin.code})` : "TR oficial exato não informado",
+  };
+}
 
 /** A4 — preflight: QUAIS campos do Perfil este processo exige (até 5, depois "e mais N") e onde informá-los. Mesmo código/bloqueio de antes. */
 export function profileIncompleteMessage(pending: ReadonlyArray<{ name: string; description: string }>): string {
@@ -831,20 +849,23 @@ export const procurementProcessRouter = router({
       processId: z.string().min(1).optional(), modality: z.enum(MODALITIES).optional(), form: z.enum(FORMS).optional(), platform: z.enum(PLATFORMS).optional(),
       /** A4 — `false` dispensa a leitura contextual (preparação do Edital) quando a tela só precisa dos padrões/revisão. Default: contextual. */
       contextual: z.boolean().optional(),
+      /** P2 — pin EXATO do TR oficial (o MESMO que o preflight recebe): sem ele a prontidão do processo é "não verificada", nunca "confirmada". */
+      officialPins: z.object({ TR: TR_PIN.optional() }).strict().optional(),
     }).default({}))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const params = input.processId ? (await requireProcess(input.processId, orgId), await editalBoundaryParams(orgId, input.processId, input)) : { modality: input.modality ?? null, form: input.form ?? null, platform: input.platform ?? null };
       // A4 (pós-homologação H5) — com processo, a prontidão é CONTEXTUAL: as políticas condicionais que ESTE processo exige vêm da MESMA
       // fonte do preflight do Edital (`upstream.profilePending` da preparação). Somente leitura; sem processo ⇒ prontidão geral do órgão.
-      let context: { requiredNow: ReadonlySet<string> } | null = null;
+      let context: LicitacoesProfileContext | null = null;
       if (input.processId && input.contextual !== false) {
-        const prep = await getEditalPreparationState(bridgeDeps(), orgId, input.processId, params).catch((err: unknown) => {
-          // Falha da leitura contextual não derruba o Perfil: volta à prontidão geral (sem presumir cenário), sem ficar silenciosa.
+        // P2: o pin do TR (quando informado) é validado pela MESMA rotina da preparação/preflight (órgão + processo + versão + hash).
+        const prep = await getEditalPreparationState(bridgeDeps(), orgId, input.processId, params, input.officialPins?.TR).catch((err: unknown) => {
+          // Falha da leitura contextual não derruba o Perfil, mas também não vira prontidão: fica "não verificável", sem ficar silenciosa.
           log.warn("licitacoes_profile_context_unavailable", { correlationId: ctx.correlationId, organizationId: orgId, error: err instanceof Error ? err.message : String(err) });
           return null;
         });
-        if (prep?.status === "READY_FOR_PREPARATION") context = { requiredNow: new Set(prep.upstream.profilePending.map((p) => p.name)) };
+        context = profileContextFrom(prep);
       }
       return getLicitacoesProfileState(bridgeDeps(), orgId, params, context);
     }),

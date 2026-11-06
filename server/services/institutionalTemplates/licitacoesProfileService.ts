@@ -18,6 +18,7 @@ import { loadEditalCatalog } from "./editalCatalogLoader";
 import { GOVERNED_ORG_SUBJECT, readGovernedRecord } from "./governedFieldsStore";
 import { describeVariable, requiredWhenHint } from "./editalPreparationService";
 import { conditionVariables, evaluateCondition2 } from "../../domain/institutionalTemplates/conditionalDsl2";
+import { isContentPendingVariable } from "../../domain/institutionalTemplates/contentPending";
 import type { PreparationField, PreparationSection } from "./editalPreparationService";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 
@@ -80,13 +81,24 @@ export type LicitacoesProfileState =
     readonly conditional: readonly { readonly name: string; readonly description: string; readonly condition: string; readonly requiredNow: boolean }[];
     /** A4 — `true` quando a leitura considerou um processo (prontidão contextual); `false` = só prontidão geral do órgão. */
     readonly contextual: boolean;
+    /** P2 — `GENERAL` (sem processo) · `CONFIRMED` (TR exato validado) · `UNVERIFIED` (prontidão do processo não verificável; `contextReason`). */
+    readonly contextStatus: "GENERAL" | "CONFIRMED" | "UNVERIFIED";
+    readonly contextReason?: string;
   };
 
 /**
  * A4 — contexto de UM processo: nomes das políticas do órgão que ESTE processo exige agora (mesma fonte do preflight do Edital:
  * `upstream.profilePending` da preparação). Ausente ⇒ prontidão geral, sem presumir cenário.
  */
-export interface LicitacoesProfileContext { readonly requiredNow: ReadonlySet<string> }
+export interface LicitacoesProfileContext {
+  readonly requiredNow: ReadonlySet<string>;
+  /**
+   * P2 — `CONFIRMED`: avaliado com o TR oficial EXATO validado (mesmo contexto do preflight). `UNVERIFIED`: sem pin, pin inválido ou leitura
+   * indisponível — as pendências listadas são as conhecidas, mas a prontidão do processo NÃO é declarada (nunca "completo").
+   */
+  readonly status: "CONFIRMED" | "UNVERIFIED";
+  readonly reason?: string;
+}
 
 const ORG_SOURCES: readonly VariableSource2[] = ["IDENTITY", "POLICY"];
 
@@ -130,8 +142,11 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
       conditional.push({ name: v.name, description: describeVariable(v).description, condition: when, requiredNow });
       if (requiredNow) contextPending++;
     }
+    const informative = isContentPendingVariable(v);
     const reason = !hasValue && when
-      ? (orgOnlyActive ? `Exigido porque o órgão registrou: ${when}.` : requiredNow ? `Exigido neste processo (${when}).` : `Exigido apenas quando: ${when}.`)
+      ? (orgOnlyActive ? `Exigido porque o órgão registrou: ${when}.`
+        : requiredNow ? (informative ? `Pendente neste processo (${when}): a minuta é gerada com a indicação da pendência até ser informado.` : `Exigido neste processo (${when}).`)
+          : `Exigido apenas quando: ${when}.`)
       : null;
     (fields[v.source] ??= []).push({
       ...describeVariable(v), hasValue, ...(hasValue ? { currentValue: stored, displayValue: stored } : {}), ...(reason ? { reason } : {}),
@@ -187,6 +202,6 @@ export async function getLicitacoesProfileState(deps: BridgeDeps, organizationId
       policyTotal, policyFilled, policyPending, rolesNeeded: needed.length, rolesOk, rolesPending, platformsPending,
       pendingCount: policyPending + rolesPending + platformsPending + contextPending, conditionalUnset: conditional.length, contextPending,
     },
-    conditional, contextual: !!context,
+    conditional, contextual: !!context, contextStatus: context ? context.status : "GENERAL", ...(context?.reason ? { contextReason: context.reason } : {}),
   };
 }

@@ -190,6 +190,8 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const autoCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority !== "LIFECYCLE_SYSTEM");
   const systemCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority === "LIFECYCLE_SYSTEM");
   const profile = readiness.profile;   // MESMA fonte do contador: lista "O que falta" = ONE_TIME_CONFIGURATION_REQUIRED_TOTAL
+  // LICIGOV-FAST (H5): políticas do órgão com pendência INFORMATIVA — fora do contador de configuração obrigatória (não travam a geração).
+  const orgContentPending = (state.upstream?.contentPending ?? []).filter((c) => c.fix === "ORG_PROFILE");
   const defaultsApplied = allFields.filter(({ field }) => field.status === "ORG_DEFAULT");
   const eligibleDecided = allFields.filter(({ field }) => field.status === "DECIDED" && field.defaultEligible && field.hasValue).map(({ field }) => field);
   const canSave = p.plan.writes.length > 0 && Object.keys(p.plan.errors).length === 0 && !p.busy;
@@ -266,6 +268,14 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             <summary className="cursor-pointer text-muted-foreground">O que falta para este Edital — {profile.required.length}</summary>
             <ul className="mt-1 list-disc pl-5" data-profile-list="required">{profile.required.map((i) => <li key={i.name}>{i.description} — {i.reason}</li>)}</ul>
           </details>
+        </div>
+      )}
+      {/* LICIGOV-FAST (H5) — políticas do órgão ainda não registradas que NÃO impedem gerar a minuta (o texto traz o marcador governado). */}
+      {orgContentPending.length > 0 && (
+        <div role="status" className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm" aria-label="Pendências informativas do órgão" data-org-content-pending={orgContentPending.length}>
+          <p className="font-medium text-foreground">Pendências informativas — não impedem gerar a minuta</p>
+          <ul className="list-disc space-y-1 pl-5 text-xs">{orgContentPending.map((i) => <li key={i.name}><strong>{i.description}</strong> — {i.reason} <span className="text-muted-foreground">({i.providedBy})</span></li>)}</ul>
+          <a href="/configuracoes#perfil-licitacoes" className="text-xs text-primary underline">Informar no Perfil de Licitações</a>
         </div>
       )}
       {profile.additional.length > 0 && (

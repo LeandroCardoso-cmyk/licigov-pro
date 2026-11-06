@@ -16,14 +16,14 @@ export function PublicationPendingNotice({ pending, variant }: PublicationPendin
   if (variant === "drafting") {
     return (
       <p className="mb-3 text-xs text-muted-foreground" data-testid="publication-pending-drafting">
-        Ainda não definidos ({pending.items.length}): {list}. Nesses pontos a minuta mostra “A DEFINIR PARA PUBLICAÇÃO”; informe-os quando o certame estiver pronto — não impede a elaboração.
+        Ainda não definidos ({pending.items.length}): {list}. Nesses pontos a minuta mostra “A DEFINIR PARA PUBLICAÇÃO” (ou, nas políticas do órgão, “A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO”); informe-os quando o certame estiver pronto — não impede a elaboração.
       </p>
     );
   }
   return (
     <div role="status" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300" data-testid="publication-pending-finalizing">
       <strong>Antes de publicar oficialmente este Edital, defina:</strong> {list}.
-      <span className="mt-1 block text-xs">A minuta ainda contém “A DEFINIR PARA PUBLICAÇÃO” nesses pontos. O LiciGov Pro não publica editais oficialmente; esta lista não bloqueia a emissão deste documento.</span>
+      <span className="mt-1 block text-xs">A minuta ainda contém “A DEFINIR PARA PUBLICAÇÃO” (ou “A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO”) nesses pontos. O LiciGov Pro não publica editais oficialmente; esta lista não bloqueia a emissão deste documento.</span>
     </div>
   );
 }

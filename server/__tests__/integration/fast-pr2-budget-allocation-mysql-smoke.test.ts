@@ -51,7 +51,7 @@ import {
   type PlannedWrite, type PreparationStateView,
 } from "../../../client/src/lib/editalPreparation";
 import {
-  BLL, U_EDITOR, U_MANAGER, publishBllModel, cleanupOrgs, ctxOf, decision, seedOfficialTr, seedWorld, type World,
+  BLL, U_EDITOR, U_MANAGER, publishBllModel, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
 
 const DB = process.env.DATABASE_URL;
@@ -570,7 +570,8 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     return p;
   };
   const SRP_POLICIES = ["decisao.adesaoAta", "srp.marcoInicialVigenciaAta", "srp.prazoAssinaturaAta"];
-  const profileOf = (p: P, withProcess: boolean) => proc(p.org).licitacoesProfile({ ...(withProcess ? { processId: p.w.processId } : {}), ...WS }) as Promise<any>;
+  const profileOf = (p: P, withProcess: boolean, pins?: { TR: { documentId: string; version: number; contentHash: string } }) =>
+    proc(p.org).licitacoesProfile({ ...(withProcess ? { processId: p.w.processId } : {}), ...WS, ...(pins ? { officialPins: pins } : {}) }) as Promise<any>;
   const profileField = (st: any, n: string) => st.sections.flatMap((x: any) => x.fields).find((f: any) => f.name === n);
 
   it("F10 — A1: SRP INDEFINIDO não é presumido (pendência informativa); SRP sim ⇒ não aplicável; SRP não ⇒ pendência", async () => {
@@ -587,7 +588,8 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     await setSrp(p, true);
     const st1: any = await getState(p);
     for (const n of [DOT, FON]) expect(fieldOf(st1, n), n).toMatchObject({ status: "NOT_APPLICABLE", origin: { label: expect.stringMatching(/registro de preços/) } });
-    expect(st1.upstream.contentPending).toEqual([]);
+    // orçamento NÃO aplicável em SRP (as pendências informativas restantes são as políticas SRP do órgão — H5, F11/F13)
+    expect(st1.upstream.contentPending.filter((c: any) => c.fix === "PROCESS_BUDGET")).toEqual([]);
     expect((await budgetState(p)).allocation).toMatchObject({ srp: true, dotacao: { status: "NOT_APPLICABLE" } });
 
     await setSrp(p, false);
@@ -596,7 +598,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect((await budgetState(p)).allocation).toMatchObject({ srp: false, dotacao: { status: "PENDING" } });
   }, 600_000);
 
-  it("F11 — A4: perfil geral × contextual: as 3 políticas de SRP aparecem como exigidas pelo processo SRP (sem valor atribuído); preflight nomeia os campos", async () => {
+  it("F11 — A4 + H5: perfil geral × contextual: as 3 políticas de SRP aparecem como PENDÊNCIA INFORMATIVA do processo SRP (sem valor atribuído); não bloqueiam", async () => {
     const p = await preparedTenant("fp2-a4-srp");
     // GERAL (sem processo): campos gerais completos, mas SEM falso "completo" — as condicionais ficam visíveis com o motivo
     const general = await profileOf(p, false);
@@ -613,21 +615,26 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     const ctx = await profileOf(p, true);
     expect(ctx.contextual).toBe(true);
     expect(ctx.summary.contextPending).toBe(3);
-    expect(ctx.summary.pendingCount).toBe(3);                                    // antes: 0 ("Perfil completo") com o Edital bloqueado
+    expect(ctx.summary.pendingCount).toBe(3);                                    // antes do A4: 0 ("Perfil completo") com o Edital bloqueado
+    expect(ctx.contextStatus).toBe("UNVERIFIED");                                // P2: sem o TR exato, a prontidão do processo não é declarada
+    expect(ctx.contextReason).toBe("TR oficial exato não informado");
     for (const n of SRP_POLICIES) {
-      expect(profileField(ctx, n), n).toMatchObject({ status: "PENDING", hasValue: false, reason: "Exigido neste processo (Sistema de Registro de Preços (SRP): Sim)." });
+      expect(profileField(ctx, n), n).toMatchObject({ status: "PENDING", hasValue: false, reason: "Pendente neste processo (Sistema de Registro de Preços (SRP): Sim): a minuta é gerada com a indicação da pendência até ser informado." });
       expect(profileField(ctx, n).currentValue).toBeUndefined();                // nenhum valor atribuído automaticamente
     }
     const st: any = await getState(p);
-    const pend = st.upstream.profilePending.filter((x: any) => SRP_POLICIES.includes(x.name));
-    expect(pend.map((x: any) => x.name).sort()).toEqual([...SRP_POLICIES].sort());
-    for (const x of pend) expect(x.reason).toBe("política do órgão ainda não registrada — exigida neste processo (Sistema de Registro de Preços (SRP): Sim)");
-    const pf = await preflight(p);
-    expect(pf.status).toBe("BLOCKED");                                          // requisito vinculante preservado (nada afrouxado)
-    const issue = pf.issues.find((i: any) => i.code === "LICITACOES_PROFILE_INCOMPLETE");
-    expect(issue.message).toMatch(/^Perfil institucional de Licitações incompleto para este processo \(\d+ campo\(s\): /);
-    for (const n of SRP_POLICIES) expect(issue.message).toContain(profileField(ctx, n).description);
-    expect(issue.message).toContain("Configurações → Perfil de Licitações");
+    // H5: saem do "perfil incompleto" (bloqueante na tela) e viram pendência INFORMATIVA com destino no Perfil de Licitações
+    for (const n of SRP_POLICIES) expect(st.upstream.profilePending.map((x: any) => x.name), n).not.toContain(n);
+    const info = st.upstream.contentPending.filter((x: any) => SRP_POLICIES.includes(x.name));
+    expect(info.map((x: any) => x.name).sort()).toEqual([...SRP_POLICIES].sort());
+    for (const x of info) {
+      expect(x.fix).toBe("ORG_PROFILE");
+      expect(x.reason).toMatch(/^Ainda não registrada no Perfil de Licitações — pendência informativa deste processo \(Sistema de Registro de Preços \(SRP\): Sim\): a minuta indica "/);
+    }
+    for (const n of SRP_POLICIES) expect(fieldOf(st, n), n).toMatchObject({ status: "CONTENT_PENDING", hasValue: false });
+    const readiness = buildEditalReadiness(st);
+    for (const n of SRP_POLICIES) expect(readiness.profile.required.map((i: any) => i.name), n).not.toContain(n);   // não trava o CTA
+    expect((await preflight(p)).issues?.some((i: any) => i.code === "LICITACOES_PROFILE_INCOMPLETE") ?? false).toBe(false);
 
     // a pessoa informa no Perfil (órgão SINTÉTICO do teste), pelo mesmo plano da tela: só os 3 exigidos; o resto do perfil é preservado
     const before = await profileOf(p, false);
@@ -664,5 +671,151 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(st1.summary.pendingCount).toBe(st0.summary.pendingCount + 1);
     expect(st1.conditional.map((c: any) => c.name)).not.toContain("habilitacao.registroCadastralAceito");
     expect(profileField(st1, "habilitacao.registroCadastralAceito").currentValue).toBeUndefined();   // nada atribuído
+  }, 600_000);
+
+  // ── LICIGOV-FAST (H5): as 3 políticas do órgão exigidas em registro de preços são pendência INFORMATIVA (não bloqueiam a minuta) ──────
+  const ADMITE = /Será admitida a adesão à Ata|Esta Ata poderá ser utilizada por órgãos e entidades não participantes/;
+  const VEDA = /Não será admitida a adesão à Ata|Não é admitida a adesão a esta Ata/;
+  const srpMarker = (n: string) => CONTENT_PENDING_VARIABLES[n]!.absentText;
+
+  it("F13 — H5: SRP com as 3 políticas AUSENTES: preflight pronto; minuta composta com os marcadores (nenhum ramo de adesão presumido); M1 no formato anterior; emissão legítima (SoD) — emitir ≠ publicar", async () => {
+    const p = await preparedTenant("fp2-h5-srp");
+    await setSrp(p, true);
+    await fillTrueDecisions(p);
+    const st: any = await getState(p);
+    for (const n of SRP_POLICIES) expect(fieldOf(st, n), n).toMatchObject({ status: "CONTENT_PENDING", hasValue: false });
+    expect(generationCta(buildEditalReadiness(st), { ready: true }).generateDisabledReason).toBeUndefined();   // antes: "Complete a configuração institucional"
+    expect((await preflight(p)).status).toBe("READY_FOR_COMPOSITION");                                         // antes: BLOCKED (MISSING_REQUIRED)
+
+    const ra = await gen(p);
+    expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    const draft = (await draftText(p))!;
+    for (const n of SRP_POLICIES) expect(draft, n).toContain(srpMarker(n));
+    expect(draft).not.toMatch(ADMITE);
+    expect(draft).not.toMatch(VEDA);                                                                            // ausência ≠ decisão negativa
+    expect(draft).not.toMatch(/\[REVISAR[^\]]*(adesaoAta|marcoInicialVigenciaAta|prazoAssinaturaAta)/);
+    const m1 = await m1Of(p, ra.generationManifestId);
+    expect(Object.keys(m1).filter((k) => !BODY_KEYS_9226E4B.has(k))).toEqual([]);                               // R1: nenhuma chave nova
+    const again = await gen(p);
+    expect(again.replayed).toBe(true);
+    expect(again.generationManifestId).toBe(ra.generationManifestId);
+
+    // emissão institucional INTERNA pelo caminho governado (revisão + gestor ≠ autor): o marcador não é [REVISAR] e não bloqueia por si só;
+    // o documento emitido carrega a pendência (a publicação externa continua exigindo a definição — orientação "ANTES DA PUBLICAÇÃO").
+    const { officialId } = await reviewAndIssue(p);
+    const official = (await rows("SELECT content FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, officialId]))[0];
+    for (const n of SRP_POLICIES) expect(official.content, n).toContain(srpMarker(n));
+    for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
+      expect(Object.keys(JSON.parse(m.b)).filter((k) => !BODY_KEYS_9226E4B.has(k))).toEqual([]);
+    }
+  }, 600_000);
+
+  it("F14 — H5: políticas registradas DEPOIS da composição ⇒ SOURCE_CHANGED ⇒ recomposição governada (confirmação de edição humana, CAS, replay) ⇒ valores do órgão, sem marcadores ⇒ emissão; TR intacto", async () => {
+    const p = await preparedTenant("fp2-h5-depois");
+    await setSrp(p, true);
+    await fillTrueDecisions(p);
+    const trBefore = (await officialsOf(p)).filter((o: any) => o.t === "tr");
+    await gen(p);
+    const human1 = await reviewCurrent(p, "h5-a");
+    expect(human1).toContain(srpMarker("decisao.adesaoAta"));
+
+    // a autoridade do órgão define as 3 políticas no Perfil (órgão SINTÉTICO do teste), pelo mesmo plano da tela — nada é atribuído pelo sistema
+    const r = await completeProfile(harnessOf(p));
+    expect(r.policiesTyped).toBe(3);
+    // "admite" (decisão do órgão) ativa uma decisão LEGÍTIMA do processo (`srp.limiteAdesaoAta`, requiredWhen adesão = admite): é pedida, não presumida
+    const adesao = (await profileOf(p, false)).sections.flatMap((x: any) => x.fields).find((f: any) => f.name === "decisao.adesaoAta").currentValue;
+    const typed = await fillTrueDecisions(p);
+    expect(typed).toEqual(adesao === "admite" ? ["srp.limiteAdesaoAta"] : []);
+    const blocked = await err(() => promoteR3(p, human1));
+    expect(String(blocked.message)).toMatch(/SOURCE_CHANGED/);                                                   // a minuta não corresponde às fontes
+    const needConfirm = await err(() => recompose(p, draftContentHash(human1)));
+    expect(String(needConfirm.message)).toMatch(/HUMAN_EDIT_WOULD_BE_OVERWRITTEN/);                              // nenhuma sobrescrita silenciosa
+    expect(await draftText(p)).toBe(human1);
+
+    const k = key("h5-recompose");
+    const ra2 = await recompose(p, draftContentHash(human1), { confirmReplace: true, idempotencyKey: k });
+    const draft2 = (await draftText(p))!;
+    for (const n of SRP_POLICIES) expect(draft2, n).not.toContain(srpMarker(n));
+    expect([ADMITE.test(draft2), VEDA.test(draft2)].filter(Boolean)).toHaveLength(1);                            // exatamente o ramo DECIDIDO
+    const geradoCount = (await officialsOf(p)).filter((o: any) => o.t === "edital").length;
+    const replay = await recompose(p, draftContentHash(human1), { confirmReplace: true, idempotencyKey: k });
+    expect(replay.generationManifestId).toBe(ra2.generationManifestId);
+    expect((await officialsOf(p)).filter((o: any) => o.t === "edital").length).toBe(geradoCount);
+
+    const human2 = await reviewCurrent(p, "h5-b");
+    const promoted = await promoteR3(p, human2);
+    expect(promoted.promoted).toBe(true);
+    const issued = (await officialsOf(p)).filter((o: any) => o.t === "edital" && o.status === "emitido");
+    expect(issued).toHaveLength(1);
+    for (const n of SRP_POLICIES) expect(issued[0].content, n).not.toContain(srpMarker(n));
+    expect((await officialsOf(p)).filter((o: any) => o.t === "tr")).toEqual(trBefore);
+  }, 900_000);
+
+  it("F16 — H5 na Revisão 2 (a vinculada em staging): SRP com as 3 políticas ausentes compõe com marcadores; recomposição pela capability após registrá-las", async () => {
+    const org = newOrg();
+    const w = await seedWorld(conn, org, "fp2-h5-rev2", { flagOn: true });
+    const tr = await seedOfficialTr(conn, w, 1, "TERMO DE REFERÊNCIA — conteúdo sintético v1", TR_META);
+    const p: P = { org, w, tr, model: await publishBllModel(org, 2, key) };
+    await completeProfile(harnessOf(p)); await fillTrStamped(p); await setBudgetDisclosure(harnessOf(p)); await setItemsParticipation(harnessOf(p));
+    await setSrp(p, true);
+    await fillTrueDecisions(p);
+    const st: any = await getState(p);
+    expect(st.capabilities.governedDraftRecomposition).toBe(true);
+    expect((await preflight(p)).status).toBe("READY_FOR_COMPOSITION");
+    await gen(p);
+    const draft = (await draftText(p))!;
+    for (const n of SRP_POLICIES) expect(draft, n).toContain(srpMarker(n));
+    expect(draft).not.toMatch(ADMITE);
+    expect(draft).not.toMatch(VEDA);
+    // P1 (auditoria): apagar o marcador da decisão de adesão na revisão é DESVIO ESTRUTURAL (bloco incluído removido), nunca silencioso
+    const adesaoMarker = srpMarker("decisao.adesaoAta");
+    const removed = draft.split("\n").filter((l) => !l.includes(adesaoMarker)).join("\n");
+    expect(removed).not.toBe(draft);
+    await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: removed, expectedContentHash: draftContentHash(draft), idempotencyKey: key("rm-adesao") });
+    const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    expect(rs.structuralDeviations.some((d: any) => d.kind === "INCLUDED_BLOCK_REMOVED" && /\.pending$/.test(d.blockId)), JSON.stringify(rs.structuralDeviations)).toBe(true);
+    // a autoridade do órgão registra as políticas; a recomposição usa os valores e remove os marcadores
+    expect((await completeProfile(harnessOf(p))).policiesTyped).toBe(3);
+    await fillTrueDecisions(p);
+    const human = await reviewCurrent(p, "h5-rev2");
+    await recompose(p, draftContentHash(human), { confirmReplace: true });
+    const after = (await draftText(p))!;
+    for (const n of SRP_POLICIES) expect(after, n).not.toContain(srpMarker(n));
+    expect([ADMITE.test(after), VEDA.test(after)].filter(Boolean)).toHaveLength(1);
+  }, 900_000);
+
+  it("F15 — P2: o Perfil contextual usa o MESMO pin exato do TR do preflight: válido ⇒ CONFIRMED; ausente/versão/hash/outro processo/outro órgão ⇒ UNVERIFIED (nunca 'completo'); leitura geral inalterada", async () => {
+    const p = await preparedTenant("fp2-p2");
+    await setSrp(p, true);
+    const pinned: any = await getState(p);                                                                       // a MESMA leitura do preflight
+    const expectedNow = new Set([...pinned.upstream.profilePending.map((x: any) => x.name), ...pinned.upstream.contentPending.filter((x: any) => x.fix === "ORG_PROFILE").map((x: any) => x.name)]);
+
+    const ok = await profileOf(p, true, pin(p.tr));
+    expect(ok.contextStatus).toBe("CONFIRMED");
+    expect(ok.contextReason).toBeUndefined();
+    const nowOf = (st: any) => new Set(st.sections.flatMap((x: any) => x.fields).filter((f: any) => f.status === "PENDING" && f.conditional).map((f: any) => f.name));
+    expect([...nowOf(ok)].every((n) => expectedNow.has(n as string))).toBe(true);
+    expect(ok.summary.contextPending).toBe(3);
+
+    const none = await profileOf(p, true);
+    expect(none).toMatchObject({ contextStatus: "UNVERIFIED", contextReason: "TR oficial exato não informado" });
+    const invalid = async (tr: { documentId: string; version: number; contentHash: string }, label: string) => {
+      const st = await profileOf(p, true, { TR: tr });
+      expect(st.contextStatus, label).toBe("UNVERIFIED");
+      expect(st.contextReason, label).toMatch(/^TR oficial selecionado inválido ou desatualizado \(/);
+    };
+    await invalid({ ...p.tr, version: p.tr.version + 1 }, "outra versão");
+    await invalid({ ...p.tr, contentHash: "0".repeat(64) }, "hash incorreto");
+    const other = await seedExtraProcess(p.org, "fp2-p2-outro", 1);
+    await invalid(await seedOfficialTr(conn, other, 1, "TERMO DE REFERÊNCIA — outro processo"), "TR de outro processo");
+    const b = await prepareOrg("fp2-p2-b");
+    await invalid(b.tr, "TR de outro órgão");
+    const cross = await err(() => proc(b.org).licitacoesProfile({ processId: p.w.processId, ...WS, officialPins: pin(p.tr) }));
+    expect(["NOT_FOUND", "FORBIDDEN"]).toContain(cross.data?.code ?? cross.code);                               // processo de outro órgão
+    // leituras gerais inalteradas
+    const general = await profileOf(p, false);
+    expect(general).toMatchObject({ contextual: false, contextStatus: "GENERAL" });
+    const noCtx: any = await proc(p.org).licitacoesProfile({ processId: p.w.processId, ...WS, contextual: false });
+    expect(noCtx).toMatchObject({ contextual: false, contextStatus: "GENERAL" });
   }, 600_000);
 });
