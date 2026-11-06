@@ -233,15 +233,21 @@ export interface ProfileStateView {
   /** A4 — políticas condicionais sem valor: quando são exigidas e se o processo da leitura as exige. Ausente em servidor anterior. */
   conditional?: { name: string; description: string; condition: string; requiredNow: boolean }[];
   contextual?: boolean;
+  /** P2 — prontidão do processo: confirmada (TR exato validado) × não verificável (sem pin/pin inválido/leitura indisponível). */
+  contextStatus?: "GENERAL" | "CONFIRMED" | "UNVERIFIED";
+  contextReason?: string;
 }
 
 /**
  * A4 (pós-homologação H5) — resumo do Perfil SEM "falso pronto": campos gerais pendentes; senão, se faltam políticas condicionais, diz que o
  * perfil está completo só para os campos gerais e quais situações ainda exigirão dados (ex.: registro de preços). Puro.
  */
-export function profileCompletenessSummary(p: Pick<ProfileStateView, "summary" | "revision" | "conditional">): { tone: "pending" | "partial" | "complete"; text: string } {
+export function profileCompletenessSummary(p: Pick<ProfileStateView, "summary" | "revision" | "conditional" | "contextStatus" | "contextReason">): { tone: "pending" | "partial" | "complete"; text: string } {
   const n = p.summary.pendingCount;
-  if (n > 0) return { tone: "pending", text: `${n} ${n === 1 ? "campo pendente" : "campos pendentes"}` };
+  // P2: prontidão do PROCESSO não verificável nunca vira "completo" — diz por quê (as pendências conhecidas continuam contadas).
+  const unverified = p.contextStatus === "UNVERIFIED" ? ` Prontidão para este processo não verificada: ${p.contextReason ?? "contexto indisponível"}.` : "";
+  if (n > 0) return { tone: "pending", text: `${n} ${n === 1 ? "campo pendente" : "campos pendentes"}${unverified ? `.${unverified}` : ""}` };
+  if (unverified) return { tone: "partial", text: `Sem pendências conhecidas.${unverified}` };
   const cond = p.conditional ?? [];
   if (cond.length > 0) {
     const situations = [...new Set(cond.map((c) => c.condition))].join("; ");

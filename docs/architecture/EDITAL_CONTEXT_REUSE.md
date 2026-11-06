@@ -270,17 +270,59 @@ Completude documental ≠ autorização de ato: a formalização da contrataçã
   mais "Perfil completo" quando há políticas condicionais sem valor: lista "exigida(s) só quando: …" (rótulo operacional da condição) e mostra o
   motivo em cada campo. Com `processId`, as políticas que ESTE processo exige vêm da MESMA fonte do preflight (`upstream.profilePending` da preparação)
   e aparecem como pendentes (`summary.contextPending`, incluídas no `pendingCount`). O preflight mantém o código `LICITACOES_PROFILE_INCOMPLETE` e o
-  bloqueio, e passa a nomear os campos e onde informá-los. Nenhum valor é atribuído; nenhuma política é alterada; o requisito vinculante não muda.
+  bloqueio, e passa a nomear os campos e onde informá-los. (As 3 políticas de SRP deixaram de bloquear: pendência informativa — §10.2.) Nenhum valor é atribuído; nenhuma política é alterada; o requisito vinculante não muda.
 - **Ajustes da auditoria independente:** (C1) política condicional cuja condição depende SÓ de dados do próprio órgão e está ativa (ex.:
   `habilitacao.registroCadastralAceito` quando o órgão registrou que aceita registro cadastral) é pendência GERAL do Perfil, não "condicional";
   (C2) `licitacoesProfile({ contextual: false })` dispensa a leitura contextual quando a tela só usa padrões/revisão (`UseAsDefaultButton`);
   (P1) o prompt veda tratar regulamento federal presente no contexto como aplicável ao órgão, salvo indicação de adoção; (P3) a ressalva de políticas
   condicionais usa tom neutro (governança discreta); (P4) a mensagem do preflight cita até 5 campos ("e mais N").
-  Risco residual: a leitura contextual do Perfil não recebe o pin do TR; com pin inválido, condições derivadas do TR podem diferir do preflight
-  (a tela de preparação do Edital continua sendo a referência contextual completa).
-- **Para deliberação (não alterado nesta correção):** em registro de preços, `decisao.adesaoAta`, `srp.marcoInicialVigenciaAta` e
-  `srp.prazoAssinaturaAta` são `requiredWhen` no catálogo publicado e, ausentes, impedem a COMPOSIÇÃO da minuta (`MISSING_REQUIRED`), não só a
-  emissão. São conteúdo legítimo do edital de SRP (Lei 14.133/2021, arts. 82 a 86), mas pela regra LICIGOV-FAST ("informação ausente é pendência,
-  não bloqueio automático de geração") a minuta poderia ser composta com pendência governada e a exigência aplicada na emissão — como já ocorre
-  com a dotação. Mudar isso exige política em código análoga a `contentPending.ts` e decisão do Owner/Jurídico; fica para a revisão abrangente
-  dos bloqueios de geração.
+  Risco residual P2 (leitura contextual do Perfil sem o pin do TR): **resolvido em §10.2**.
+- **Bloqueio de composição do Edital SRP (H5) — resolvido nesta rodada (§10.2).** A deliberação registrada antes deste ponto foi decidida pelo Owner
+  (LICIGOV-FAST: a ausência de conteúdo não impede elaborar/gerar/exportar a minuta).
+
+### 10.2 Edital SRP: políticas do órgão como pendência informativa (H5) e prontidão contextual do Perfil (P2)
+
+**Causa do bloqueio (H5).** Em registro de preços, `decisao.adesaoAta`, `srp.marcoInicialVigenciaAta` e `srp.prazoAssinaturaAta` (fonte POLICY,
+`requiredWhen controle.utilizaSrp = sim` no catálogo publicado) bloqueavam em três pontos: (1) `resolveTemplateVariables2` (composer2) ⇒
+`MISSING_REQUIRED`; (2) o grupo excludente `adesao_ata` (exactly-one, ramos `admite`/`veda`) sem ramo verdadeiro ⇒ `CHOICE_NOT_EXACTLY_ONE`;
+(3) a preparação as listava como "perfil incompleto", o que desabilitava o botão de gerar na tela.
+
+**Correção (mesmo mecanismo, sem motor novo).** As três entram na política em código `contentPending.ts` (com `neededBefore: "PUBLICATION"`;
+dotação/fonte ficam com `CONTRACTING`). Catálogo, AST e hash semântico publicados **não mudam**.
+- Composição: ausente ⇒ segue com o marcador governado ("… A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO"), nunca `[REVISAR]`. Na decisão de adesão
+  ausente, o compositor **não escolhe ramo** — o "padrão: veda" da descrição do catálogo não é decisão do órgão — e insere um parágrafo com o
+  marcador. Qualquer outro grupo excludente sem ramo continua `CHOICE_NOT_EXACTLY_ONE` (fail-closed). Presente ⇒ o valor do Perfil é usado.
+- O marcador ocupa o LUGAR da decisão, na forma comum dos ramos: item numerado no corpo do Edital e a própria seção "DA ADESÃO" no anexo da Ata
+  (numeração preservada). Vale só para a política NÃO obrigatória com condição de exigência ATIVA; grupo misto ou condição inativa ⇒ fail-closed.
+  O bloco pendente é âncora "incluída": removê-lo na revisão ⇒ `INCLUDED_BLOCK_REMOVED` (reconhecimento obrigatório).
+- Manifesto: formato M1/M2 **inalterado** (R1). As decisões dos ramos continuam registradas (todas falsas) e o texto com o marcador fica selado
+  pelo `composedOutputHash`. Replay determinístico. Os textos dos marcadores fazem parte do contrato de replay: mudar a redação faz rascunhos
+  pendentes acusarem `COMPOSITION_DRIFT` na emissão (exige recomposição) — por isso estão fixados por igualdade em teste.
+- Finalização: as três entram na lista "Antes de publicar oficialmente este Edital" (`neededBefore: "PUBLICATION"`), que não bloqueia a emissão.
+- Preparação/tela: as três passam de "perfil incompleto" (bloqueante) a `CONTENT_PENDING` em `upstream.contentPending` (`fix: ORG_PROFILE`),
+  exibidas como "Pendências informativas — não impedem gerar a minuta", com o caminho para o Perfil de Licitações.
+- Registro posterior no Perfil ⇒ `SOURCE_CHANGED` ⇒ recomposição governada (R3 na Revisão 1; capability na Revisão 2), com CAS, confirmação de
+  edição humana e histórico. Decidir "admite" ativa a decisão do processo `srp.limiteAdesaoAta`, que é pedida (nunca presumida).
+
+**Classificação das exigências (o sistema não é gate de publicação).**
+| Parâmetro | Natureza | Momento em que é indispensável | Referência (confirmação jurídica pendente) |
+|---|---|---|---|
+| `decisao.adesaoAta` | decisão institucional do órgão | antes da publicação do edital | Lei 14.133/2021, art. 86 (adesão por não participantes) |
+| `srp.marcoInicialVigenciaAta` | conteúdo do edital/ata | antes da publicação | art. 84 (vigência da ata) e regulamento de SRP do órgão |
+| `srp.prazoAssinaturaAta` | conteúdo do edital (regra de convocação) | antes da publicação | art. 25 (regras de convocação) e arts. 82 a 86 |
+
+A emissão institucional interna (versão emitida no sistema) **não** é bloqueada por esses marcadores, como já ocorre com os dados de publicação
+diferidos ("A DEFINIR PARA PUBLICAÇÃO") e com a dotação: emitir ≠ aprovar ≠ publicar. O documento emitido carrega a pendência no próprio texto.
+Controles preservados: autoridade e SoD na emissão, `[REVISAR]` bloqueando, `SOURCE_CHANGED`, `EMISSION_TR_NOT_EMITTED`, demais variáveis
+obrigatórias (`MISSING_REQUIRED`) e `utilizaSrp` obrigatório (SRP indefinido continua recusando a composição — nada é presumido).
+**Decisão pendente (Owner/Jurídico):** se a emissão institucional interna deve exigir as três políticas (hoje não exige); o regulamento de SRP de
+cada município (o federal não é presumido).
+
+**P2 — pin exato do TR na leitura contextual do Perfil.** Causa: `licitacoesProfile` chamava a preparação sem o pin; as condições das políticas
+condicionais dependem também de parâmetros estruturados do TR (`tratamentoDadosPessoais`, `repactuacao`, `exigeGarantiaContratual`), que o
+preflight descarta quando o pin é inválido ou desatualizado — e o Perfil se declarava contextual mesmo assim. Correção: a rota aceita
+`officialPins.TR` e o repassa à MESMA validação da preparação/preflight (órgão + processo + versão + hash). O Perfil expõe
+`contextStatus`: `GENERAL` (sem processo), `CONFIRMED` (TR exato validado), `UNVERIFIED` (sem pin, pin inválido ou leitura indisponível, com
+`contextReason`). "Não verificada" nunca vira "completo"; falha de leitura não bloqueia nada. Nenhum binding, política ou modelo muda. Hoje nenhuma
+tela chama o Perfil com processo e pin (o painel usa a leitura geral; "usar como padrão" dispensa o contexto): o contrato fica pronto e testado no
+servidor para quando a tela de preparação passar a exibi-lo.

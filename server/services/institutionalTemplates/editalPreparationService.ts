@@ -221,7 +221,11 @@ export type EditalPreparationState =
        * LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam composição nem emissão): o documento traz o marcador governado até o
        * dado ser registrado; `providedBy` orienta quem costuma fornecê-lo; `fix` = onde registrar (uma vez, para todos os documentos).
        */
-      readonly contentPending: readonly { readonly name: string; readonly description: string; readonly reason: string; readonly fix: EntryPoint; readonly providedBy: string }[];
+      readonly contentPending: readonly {
+        readonly name: string; readonly description: string; readonly reason: string; readonly fix: EntryPoint; readonly providedBy: string;
+        /** Momento em que o dado passa a ser indispensável (orientação, não gate): formalização da contratação ou publicação do edital. */
+        readonly neededBefore: "CONTRACTING" | "PUBLICATION";
+      }[];
     };
     readonly summary: { readonly groups: readonly SummaryGroup[]; readonly reusedAutomatically: number; readonly pendingDecisions: number };
     readonly metrics: PreparationMetrics;
@@ -437,7 +441,7 @@ export async function getEditalPreparationState(
   };
   const m = { AUTO: 0, ORG: 0, TRP: 0, DEC: 0, CH: 0, PH: 0, OH: 0, MAN: 0, LS: 0, UTR: 0, TRP_PEND: 0, PROF_PEND: 0, ROLES: 0, POLS: 0, DEFS: 0, PLAT: 0, PRICE: 0, ITEMS: 0, CFG: 0, SCHED: 0, LIFE: 0, SRC_PEND: 0, DEFER: 0 };
   const sourcePending: Array<{ name: string; description: string; reason: string; fix: EntryPoint }> = [];
-  const contentPending: Array<{ name: string; description: string; reason: string; fix: EntryPoint; providedBy: string }> = [];
+  const contentPending: Array<{ name: string; description: string; reason: string; fix: EntryPoint; providedBy: string; neededBefore: "CONTRACTING" | "PUBLICATION" }> = [];
   const byAuthority = Object.fromEntries(AUTHORITY_CLASSES.map((k) => [k, 0])) as Record<AuthorityClass, number>;
   const trPending: Array<{ name: string; description: string; reason?: string }> = [];
   const profilePending: Array<{ name: string; description: string; reason: string; role?: string }> = [];
@@ -498,7 +502,7 @@ export async function getEditalPreparationState(
         const spec = CONTENT_PENDING_VARIABLES[v.name]!;
         const reason = pb?.reason ?? "Ainda não informada — pendência informativa (não impede gerar nem emitir o documento).";
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "CONTENT_PENDING", origin: { label: originLabelOf(c.entry) }, authority: c.authority, entry: pb?.fix ?? c.entry, reason });
-        contentPending.push({ name: v.name, description: descriptor.description, reason, fix: pb?.fix ?? c.entry, providedBy: spec.providedBy });
+        contentPending.push({ name: v.name, description: descriptor.description, reason, fix: pb?.fix ?? c.entry, providedBy: spec.providedBy, neededBefore: spec.neededBefore });
       } else {
         const reason = pb?.reason ?? "dado ainda não disponível na origem";
         canonicalFields.push({ name: v.name, source: v.source, path: v.path, type: v.type, description: descriptor.description, status: "PENDING_SOURCE", origin: { label: originLabelOf(c.entry) }, authority: c.authority, entry: pb?.fix ?? c.entry, reason });
@@ -587,6 +591,13 @@ export async function getEditalPreparationState(
       if (hasValue && !isEmpty(stored)) {
         status = "ORG_REUSED"; displayValue = stored; m.ORG++; m.POLS++;
         origin = { label: "Perfil institucional do órgão", ref: { revision: orgLineage?.revision ?? 0, hash: (orgLineage?.hash ?? "").slice(0, 12) } };
+      } else if (!v.required && v.requiredWhen && !inactive.has(v.name) && isContentPendingVariable(v)) {
+        // LICIGOV-FAST (H5): política do órgão exigida por ESTE processo, ainda não registrada, com pendência INFORMATIVA de conteúdo — não
+        // bloqueia a elaboração: a minuta traz o marcador governado; informar no Perfil de Licitações (uma vez; reaproveitado em todo Edital).
+        const spec = CONTENT_PENDING_VARIABLES[v.name]!;
+        const reason = `Ainda não registrada no Perfil de Licitações — pendência informativa deste processo (${requiredWhenHint(v, catalog)}): a minuta indica "${spec.absentText}" até ser informada.`;
+        status = "CONTENT_PENDING"; origin = { label: "Perfil institucional de Licitações (pendência informativa)" }; fieldReason = reason;
+        contentPending.push({ name: v.name, description: descriptor.description, reason, fix: "ORG_PROFILE", providedBy: spec.providedBy, neededBefore: spec.neededBefore });
       } else if (v.required || (v.requiredWhen && !inactive.has(v.name))) {
         status = "PROFILE_INCOMPLETE"; origin = { label: "Perfil institucional de Licitações" };
         // A4: política CONDICIONAL exigida por este processo ⇒ o motivo diz por quê (a tela do Perfil, sem processo, a mostra como condicional).
@@ -620,7 +631,7 @@ export async function getEditalPreparationState(
     if (!fieldReason) { const pbAny = reuse.problems.get(v.name); if (pbAny && pbAny.code === "DEFAULT_INCOMPATIBLE") fieldReason = `Padrão institucional não aplicado: ${pbAny.reason}`; }
 
     // Denominador do resumo: aplicáveis (não ocultos) que são obrigatórios/condicionais ativos ou já têm valor.
-    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "DEFERRED", "AWAITING", "CANONICAL_UNRESOLVED", "PENDING_TR", "PROFILE_INCOMPLETE"] as FieldStatus[]).includes(status);
+    const applicable = !(["HIDDEN_CONDITIONAL", "OPTIONAL", "DEFERRED", "AWAITING", "CANONICAL_UNRESOLVED", "PENDING_TR", "PROFILE_INCOMPLETE", "CONTENT_PENDING"] as FieldStatus[]).includes(status);
     if (status === "CANONICAL_UNRESOLVED" || status === "PENDING_TR" || status === "PROFILE_INCOMPLETE") { bump(group, "total"); bump(group, "blocked"); }
     if (applicable) {
       bump(group, "total");

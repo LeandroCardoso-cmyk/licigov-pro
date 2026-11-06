@@ -29,7 +29,7 @@ import {
   cell, deepFreeze, inlineText, isAbsent, manifestSourceRefs, MISSING_VALUE_MARK, narrativeWordCount, neutralizeNarrative,
   PENDING_AI_SLOT_MARK, pinIssues, pinsAndNarrativesCheck, readCatalogPath, sealComposedManifest,
 } from "./composerShared";
-import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
+import { conditionVariables, evaluateCondition2, type Cond2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
 import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, DeferredPublicationRef, OfficialDocumentReference } from "./manifest";
 import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
@@ -123,7 +123,7 @@ export function resolveTemplateVariables2(
   for (const def of ordered) {
     if (!absent.has(def.name)) continue;
     // Completude documental ≠ autorização de ato: a ausência de dado informativo não bloqueia a composição (regra do Owner, FAST PR-2).
-    if (isContentPendingVariable(def)) continue;
+    if (isContentPendingVariable(def) && !def.required) continue;
     if (def.required) {
       issues.push({ code: "MISSING_REQUIRED", path: `vars.${def.name}`, message: `valor canônico obrigatório ausente (${def.source}.${def.path})` });
     } else if (def.requiredWhen && evaluateCondition2(def.requiredWhen, values, `vars.${def.name}.requiredWhen`).result) {
@@ -249,6 +249,45 @@ function aiNarrativeText(slot: { readonly slotKey: string; readonly maxTokens: n
   return prose || null;
 }
 
+/**
+ * Grupo excludente sem ramo verdadeiro APENAS porque a variável de decisão é pendência informativa ausente: todos os ramos testam a MESMA
+ * variável (`eq`), declarada no catálogo com a fonte da política (`isContentPendingVariable`) e sem valor resolvido. Qualquer outro caso
+ * continua `CHOICE_NOT_EXACTLY_ONE` (fail-closed). Puro.
+ */
+function pendingChoiceVariable(branches: readonly { readonly when: Cond2 }[], ctx: ECtx): { label: string; absentText: string } | null {
+  const vars = new Set(branches.map((b) => (b.when.op === "eq" ? b.when.var : null)));
+  if (vars.size !== 1 || vars.has(null)) return null;
+  const name = [...vars][0]!;
+  const def = findVariable2(ctx.catalog, name);
+  if (!def || !isContentPendingVariable(def) || ctx.values[name] !== undefined) return null;
+  // Só a política NÃO obrigatória cuja condição de exigência está ATIVA (mesma regra da preparação); fora disso, fail-closed.
+  if (def.required || !def.requiredWhen || !evaluateCondition2(def.requiredWhen, ctx.values).result) return null;
+  const spec = CONTENT_PENDING_VARIABLES[name]!;
+  return { label: spec.label, absentText: spec.absentText };
+}
+
+/**
+ * Nós do marcador de uma decisão pendente na FORMA COMUM dos ramos (nada de decisão presumida): todos os ramos com uma única seção de MESMO título
+ * ⇒ a seção com o marcador (ex.: "DA ADESÃO" no anexo da Ata); todos começando por parágrafo com a MESMA numeração ⇒ parágrafo assim numerado;
+ * senão, parágrafo simples. Puro.
+ */
+function pendingChoiceNodes(branches: readonly { readonly children: readonly TemplateNode2[] }[], text: string): TemplateNode2[] {
+  type Para = Extract<TemplateNode2, { t: "paragraph" }>;
+  type Sec = Extract<TemplateNode2, { t: "section" }>;
+  const para = (numbered?: Para["numbered"]): TemplateNode2 => ({ t: "paragraph", ...(numbered !== undefined ? { numbered } : {}), inline: [{ t: "text", v: text }] } as TemplateNode2);
+  const firstPara = (nodes: readonly TemplateNode2[]) => (nodes[0]?.t === "paragraph" ? (nodes[0] as Para) : null);
+  if (branches.every((b) => b.children.length === 1 && b.children[0].t === "section")) {
+    const secs = branches.map((b) => b.children[0] as Sec);
+    if (secs.every((x) => JSON.stringify(x.title ?? null) === JSON.stringify(secs[0].title ?? null))) {
+      const lead = firstPara(secs[0].children);
+      return [{ ...secs[0], key: `${secs[0].key}.pendente`, children: [para(lead?.numbered)] } as TemplateNode2];
+    }
+  }
+  const leads = branches.map((b) => firstPara(b.children));
+  if (leads.every((l) => l && l.numbered === leads[0]!.numbered)) return [para(leads[0]!.numbered)];
+  return [para()];
+}
+
 /** Âncora estrutural de um conjunto de nós: texto inicial (sem número e sem remissão) do primeiro nó com texto. */
 function anchorOf(nodes: readonly RNode[]): string | null {
   const lead = (segs: readonly RInline[] | null): string | null => {
@@ -333,9 +372,13 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
     case "choice": {
       const evals = n.branches.map((b, i) => evaluateCondition2(b.when, ctx.values, `${path}.branches[${i}].when`));
       const hits = evals.map((e, i) => (e.result ? i : -1)).filter((i) => i >= 0);
+      // LICIGOV-FAST (H5) — decisão governada AINDA NÃO REGISTRADA (pendência informativa, `contentPending.ts`): nenhum ramo é escolhido (nada
+      // é presumido — nem o "padrão" descrito no catálogo); entra o marcador governado. Formato do M1 inalterado (R1): as decisões dos ramos
+      // continuam registradas (todas falsas) e o texto com o marcador fica selado pelo `composedOutputHash`.
+      const pendingDecision = hits.length === 0 ? pendingChoiceVariable(n.branches, ctx) : null;
       if (ctx.record) {
         n.branches.forEach((b, i) => ctx.decisions.push({ nodePath: `${path}.branches[${i}]`, result: evals[i].result, traceHash: templateHash(evals[i].trace) }));
-        const bad = n.mode === "exactly-one" ? hits.length !== 1 : hits.length > 1;
+        const bad = !pendingDecision && (n.mode === "exactly-one" ? hits.length !== 1 : hits.length > 1);
         if (bad) {
           ctx.issues.push({
             code: "CHOICE_NOT_EXACTLY_ONE", path,
@@ -344,8 +387,11 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
         }
       }
       const chosenIdx = hits.length === 1 ? hits[0] : -1;
-      const included = chosenIdx >= 0 ? expandNodes(n.branches[chosenIdx].children, `${path}.branches[${chosenIdx}].children`, ctx) : [];
+      const included: RNode[] = chosenIdx >= 0 ? expandNodes(n.branches[chosenIdx].children, `${path}.branches[${chosenIdx}].children`, ctx)
+        : pendingDecision ? expandNodes(pendingChoiceNodes(n.branches, `${pendingDecision.label}: ${pendingDecision.absentText}.`), `${path}.pending`, ctx) : [];
       if (ctx.record) {
+        // Marcador pendente = bloco INCLUÍDO verificável: removê-lo na revisão ⇒ INCLUDED_BLOCK_REMOVED (fora do M1 — R1 intacto).
+        if (pendingDecision) ctx.blocks.push({ blockId: `${path}.pending`, includedAnchor: anchorOf(included), excludedAnchor: null });
         n.branches.forEach((b, i) => {
           if (i === chosenIdx) ctx.blocks.push({ blockId: `${path}.branches[${i}]`, includedAnchor: anchorOf(included), excludedAnchor: null });
           else ctx.blocks.push({ blockId: `${path}.branches[${i}]`, includedAnchor: null, excludedAnchor: anchorOf(expandNodes(b.children, `${path}.branches[${i}].children`, scratch(ctx))) });

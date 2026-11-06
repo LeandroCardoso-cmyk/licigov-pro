@@ -417,3 +417,43 @@ describe("guardas estruturais", () => {
     expect(sec).toContain("templateReviewBlockers");
   });
 });
+
+describe("LICIGOV-FAST (H5) — pendência INFORMATIVA de política do órgão (SRP) na preparação: visível, sem travar a geração", () => {
+  let View: typeof import("./EditalPreparationView").default;
+  beforeAll(async () => { (globalThis as { React?: unknown }).React = React; View = (await import("./EditalPreparationView")).default; });
+  const noop = () => {};
+  const props = (state: PreparationStateView) => ({
+    state, edits: {}, fieldErrors: {}, pending: pendingItems(state), optional: optionalItems(state), onEdit: noop, plan: { writes: [], errors: {}, decisionCount: 0 }, reviewing: false, onStartReview: noop,
+    onCancelReview: noop, decision: { decidedByName: "", decidedByRole: "", decidedAt: "2026-11-06", basisReference: "", reason: "", confirmed: false }, onDecision: noop,
+    showErrors: false, busy: false, outcome: null, notice: null, onConfirm: noop,
+  });
+  const reason = 'Ainda não registrada no Perfil de Licitações — pendência informativa deste processo (Sistema de Registro de Preços (SRP): Sim): a minuta indica "PRAZO A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO" até ser informada.';
+  const policy = mkSection("POLICY", "ORG", [mkField({
+    name: "srp.prazoAssinaturaAta", path: "prazoAssinaturaAta", source: "POLICY", description: "Prazo para assinatura da Ata", class: "CONDITIONAL", rule: "ORG_SOURCE",
+    required: false, status: "CONTENT_PENDING", editable: false, reason,
+  })]);
+  const st = mkState([policy], {
+    upstream: {
+      trDigest: "x", trPending: [], sourcePending: [], profilePending: [],
+      contentPending: [{ name: "srp.prazoAssinaturaAta", description: "Prazo para assinatura da Ata", reason, fix: "ORG_PROFILE", providedBy: "Autoridade competente do órgão (Perfil de Licitações)" }],
+    },
+  });
+
+  it("aparece como pendência informativa com o caminho para o Perfil; não é 'configuração obrigatória' nem bloqueia o CTA", async () => {
+    const { buildEditalReadiness, generationCta } = await import("../../lib/editalReadiness");
+    const out = renderToStaticMarkup(React.createElement(View as unknown as React.ComponentType<never>, props(st) as never));
+    expect(out).toContain("Pendências informativas — não impedem gerar a minuta");
+    expect(out).toContain("Prazo para assinatura da Ata");
+    expect(out).toContain("Informar no Perfil de Licitações");
+    expect(out).not.toContain("Complete a configuração única do órgão");
+    const readiness = buildEditalReadiness(st);
+    expect(readiness.profile.required).toEqual([]);
+    expect(generationCta(readiness, { ready: true }).generateDisabledReason).toBeUndefined();
+  });
+
+  it("orçamento (PROCESS_BUDGET) continua com o aviso próprio — o bloco do órgão não o duplica", () => {
+    const budget = mkState([], { upstream: { trDigest: "x", trPending: [], sourcePending: [], profilePending: [], contentPending: [{ name: "julgamento.dotacaoOrcamentaria", description: "Dotação orçamentária", reason: "r", fix: "PROCESS_BUDGET", providedBy: "Contabilidade" }] } });
+    const out = renderToStaticMarkup(React.createElement(View as unknown as React.ComponentType<never>, props(budget) as never));
+    expect(out).not.toContain("Pendências informativas — não impedem gerar a minuta");
+  });
+});

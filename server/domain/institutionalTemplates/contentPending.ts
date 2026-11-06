@@ -27,19 +27,46 @@ export interface ContentPendingSpec {
   readonly absentText: string;
   /** Quem costuma fornecer o dado (orientação ao servidor; não é atribuição de competência). */
   readonly providedBy: string;
+  /**
+   * Momento em que o dado passa a ser indispensável (orientação; NÃO é gate do sistema): `CONTRACTING` = formalização de cada contratação
+   * (ex.: créditos orçamentários, Lei 14.133/2021, art. 150); `PUBLICATION` = antes da publicação do edital (conteúdo do edital — ex.: regras de
+   * convocação, art. 25; registro de preços, arts. 82 a 86). A emissão institucional interna ≠ publicação: o documento emitido carrega o marcador.
+   */
+  readonly neededBefore: "CONTRACTING" | "PUBLICATION";
 }
 
-/** Variáveis do Edital institucional cuja ausência é pendência INFORMATIVA (não bloqueante). Chave = nome no catálogo. */
+/**
+ * Variáveis do Edital institucional cuja ausência é pendência INFORMATIVA (não bloqueante). Chave = nome no catálogo. Variável de DECISÃO não
+ * renderizável (enum que escolhe um ramo excludente — ex.: adesão admitida/vedada) ausente ⇒ o compositor NÃO escolhe ramo: insere o marcador.
+ */
 export const CONTENT_PENDING_VARIABLES: Readonly<Record<string, ContentPendingSpec>> = Object.freeze({
   "julgamento.dotacaoOrcamentaria": Object.freeze({
     source: "PROCESS", label: "Dotação orçamentária",
     absentText: "A INDICAR PELO SETOR RESPONSÁVEL PELA EXECUÇÃO ORÇAMENTÁRIA",
-    providedBy: "Setor de contabilidade/orçamento do órgão",
+    providedBy: "Setor de contabilidade/orçamento do órgão", neededBefore: "CONTRACTING",
   }),
   "julgamento.fonteRecursos": Object.freeze({
     source: "PROCESS", label: "Fonte de recursos",
     absentText: "A INDICAR COM A DOTAÇÃO ORÇAMENTÁRIA",
-    providedBy: "Setor de contabilidade/orçamento do órgão",
+    providedBy: "Setor de contabilidade/orçamento do órgão", neededBefore: "CONTRACTING",
+  }),
+  // LICIGOV-FAST (H5) — políticas do ÓRGÃO exigidas só em registro de preços (`requiredWhen controle.utilizaSrp`). Ausentes, a minuta é composta
+  // com o marcador; NADA é presumido: nem adesão admitida ou vedada (o "padrão: veda" da descrição do catálogo NÃO é decisão do órgão), nem
+  // marco/prazo, nem o regulamento federal. O valor vem só do Perfil de Licitações (decisão da autoridade do órgão).
+  "decisao.adesaoAta": Object.freeze({
+    source: "POLICY", label: "Adesão à Ata de Registro de Preços",
+    absentText: "ADMISSÃO OU VEDAÇÃO DA ADESÃO À ATA POR ÓRGÃOS E ENTIDADES NÃO PARTICIPANTES A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO",
+    providedBy: "Autoridade competente do órgão (Perfil de Licitações)", neededBefore: "PUBLICATION",
+  }),
+  "srp.marcoInicialVigenciaAta": Object.freeze({
+    source: "POLICY", label: "Marco inicial da vigência da Ata",
+    absentText: "MARCO INICIAL A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO",
+    providedBy: "Autoridade competente do órgão (Perfil de Licitações), conforme o regulamento de registro de preços aplicável", neededBefore: "PUBLICATION",
+  }),
+  "srp.prazoAssinaturaAta": Object.freeze({
+    source: "POLICY", label: "Prazo para assinatura da Ata",
+    absentText: "PRAZO A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO",
+    providedBy: "Autoridade competente do órgão (Perfil de Licitações)", neededBefore: "PUBLICATION",
   }),
 });
 

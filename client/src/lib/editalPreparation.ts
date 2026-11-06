@@ -89,7 +89,7 @@ export interface UpstreamView {
   /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços, cadastro): cada uma com o `fix` (onde resolver). */
   sourcePending: { name: string; description: string; reason: string; fix: EntryPoint }[];
   /** LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam a geração nem a emissão; o documento traz o marcador governado). */
-  contentPending?: { name: string; description: string; reason: string; fix: EntryPoint; providedBy: string }[];
+  contentPending?: { name: string; description: string; reason: string; fix: EntryPoint; providedBy: string; neededBefore?: "CONTRACTING" | "PUBLICATION" }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
