@@ -190,11 +190,12 @@ export function profileContextFrom(prep: Awaited<ReturnType<typeof getEditalPrep
   };
 }
 
-/** A4 — preflight: QUAIS campos do Perfil este processo exige (até 5, depois "e mais N") e onde informá-los. Mesmo código/bloqueio de antes. */
+/** A4 — preflight: QUAIS campos do Perfil este processo exige (até 5, depois "e mais N") e onde informá-los. Mesmo código/bloqueio de antes.
+ *  F1 (H5): o destino é o item "Perfil de Licitações" do menu (rota `/perfil-licitacoes`, manager+), não Configurações (admin+). */
 export function profileIncompleteMessage(pending: ReadonlyArray<{ name: string; description: string }>): string {
   const labels = pending.map((p) => p.description || p.name);
   const shown = labels.slice(0, 5).join("; ") + (labels.length > 5 ? `; e mais ${labels.length - 5}` : "");
-  return `Perfil institucional de Licitações incompleto para este processo (${labels.length} campo(s): ${shown}): informe uma única vez em Configurações → Perfil de Licitações`;
+  return `Perfil institucional de Licitações incompleto para este processo (${labels.length} campo(s): ${shown}): informe uma única vez no Perfil de Licitações (menu lateral)`;
 }
 
 export const procurementProcessRouter = router({

@@ -326,3 +326,22 @@ preflight descarta quando o pin é inválido ou desatualizado — e o Perfil se 
 `contextReason`). "Não verificada" nunca vira "completo"; falha de leitura não bloqueia nada. Nenhum binding, política ou modelo muda. Hoje nenhuma
 tela chama o Perfil com processo e pin (o painel usa a leitura geral; "usar como padrão" dispensa o contexto): o contrato fica pronto e testado no
 servidor para quando a tela de preparação passar a exibi-lo.
+
+### 10.3 Correções F1/F2 (homologação H5 Etapa 1 em staging, processo 2167/2026)
+
+**F1 — acesso do Gestor ao Perfil de Licitações.** O backend já autoriza `manager` a gravar o Perfil
+(`institutionalTemplates.governed.recordOrganizationFields`/`recordLicitacoesProfile` = `templatesProcedure("govern")`, piso `manager` +
+membership real — SECURITY-02), mas a única tela do Perfil ficava em Configurações (admin+), e os links da preparação ("Configurar agora",
+"Informar no Perfil de Licitações", "Abrir o Perfil") levavam o Gestor a "Acesso não autorizado". Correção (só frontend, RBAC do backend
+inalterado): rota própria **`/perfil-licitacoes`** com o MESMO `LicitacoesProfilePanel` (sem segunda implementação), item de menu "Perfil de
+Licitações" para `manager`/`admin`/`owner` com o módulo de Modelos Institucionais ligado, gate `canGovernLicitacoesProfile` que espelha
+`TEMPLATE_ACTION_MIN_ROLE.govern` (teste de contrato), aviso claro para Operador/Visualizador e mensagem do preflight
+(`LICITACOES_PROFILE_INCOMPLETE`) apontando para o item do menu. Configurações (identidade institucional/documental, usuários) continua
+admin+; "Corrigir cadastro do órgão" continua em Configurações. Os campos canônicos da identidade continuam recusados pelo servidor no Perfil
+(`AUTHORITY_OWNED_PATHS`).
+
+**F2 — rótulo neutro da adesão à Ata.** A descrição técnica do catálogo publicado ("Adesão à Ata de Registro de Preços (padrão: veda)") aparecia
+nas pendências informativas e em "Antes de publicar", sugerindo uma decisão do órgão que não existe (o compositor não aplica "padrão"; sem
+registro, a minuta traz o marcador). Rótulo/pergunta neutros na camada de apresentação (`editalPresentation.ts`, via `describeVariable`).
+Catálogo, AST, hash semântico, manifests e documentos já compostos: inalterados (sha256 dos arquivos fixado em teste). Valor registrado
+(admite/veda) continua exibido como tal. Testes: `fast-f1-f2-profile-access.test.ts`.

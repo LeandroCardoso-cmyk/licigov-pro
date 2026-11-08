@@ -25,9 +25,10 @@ import {
 import { APP_LOGO, APP_TITLE } from "@/const";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2 } from "lucide-react";
+import { Check, LayoutDashboard, LogOut, Monitor, Moon, PanelLeft, Settings, Gauge, FileText, FileCheck, Scale, ScrollText, LibraryBig, HelpCircle, Sun, Users, Building2, SlidersHorizontal } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { canGovernLicitacoesProfile } from "@/utils/orgPermissions";
 import { confirmPendingLeave } from "@/lib/leaveGuard";
 import { trpc } from "@/lib/trpc";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -54,6 +55,9 @@ const menuItems = [
   // Identidade institucional documental (nome, CNPJ, logo, rodapé) é tenant-scoped e restrita a
   // admin/owner (mesmo gate do backend, orgRoleProcedure("admin")). Operator/Manager/Viewer não veem.
   { icon: Settings, label: "Configurações", path: "/configuracoes", requiresOrgAdmin: true },
+  // F1 (homologação H5) — Perfil de Licitações do órgão: `requiresLicitacoesProfileGovern` = manager/admin/owner (espelho do piso `govern`
+  // do backend, que reautoriza cada escrita com membership real); exige também o módulo de Modelos Institucionais ligado (gravação depende dele).
+  { icon: SlidersHorizontal, label: "Perfil de Licitações", path: "/perfil-licitacoes", requiresLicitacoesProfileGovern: true, requiresInstitutionalTemplates: true },
   { icon: Settings, label: "Plataformas", path: "/admin/platforms", adminOnly: true },
   { icon: Building2, label: "Organizações", path: "/admin/organizacoes", adminOnly: true },
 ];
@@ -151,7 +155,7 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const { canManageUsers, organizationName } = useOrgRole();
+  const { canManageUsers, role: orgRole, organizationName } = useOrgRole();
   const templatesCaps = trpc.institutionalTemplates.getCapabilities.useQuery(undefined, { retry: false, staleTime: 5 * 60_000 });
   const institutionalTemplatesEnabled = templatesCaps.data?.enabled === true;
   const { theme, setTheme } = useTheme();
@@ -252,6 +256,7 @@ function DashboardLayoutContent({
                 .filter(item => !item.adminOnly || user?.role === "admin")
                 // PR A.1 — itens `requiresOrgAdmin` só para papel organizacional admin/owner.
                 .filter(item => !("requiresOrgAdmin" in item && item.requiresOrgAdmin) || canManageUsers)
+                .filter(item => !("requiresLicitacoesProfileGovern" in item && item.requiresLicitacoesProfileGovern) || canGovernLicitacoesProfile(orgRole))
                 .filter(item => !("requiresInstitutionalTemplates" in item && item.requiresInstitutionalTemplates) || institutionalTemplatesEnabled)
                 .map(item => {
                 const isActive = location === item.path;
