@@ -29,6 +29,9 @@ export interface ReviewViewProps {
   slotDisabledReason?: string | null;
 }
 
+/** Entorno exibido sem a marcação Markdown do rascunho (títulos `#`, negrito `**`) — só apresentação. */
+const plainContext = (t: string) => t.replace(/^#{1,6}\s+/gm, "").replace(/\*\*/g, "");
+
 const fmtDate = (iso: string | null) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split("-").reverse().join("/") : null);
 
 /** E2 — um trecho pendente do modelo: redigir ou (se elegível) declarar que não há conteúdo adicional. Sem confirmação extra: o botão é o ato. */
@@ -60,6 +63,14 @@ function SlotItem({ slot, text, busy, disabledReason, onText, onResolve }: {
         <span className="font-medium">{slot.label}</span>
         <span className={`rounded px-1.5 py-0.5 ${resolved ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-700 dark:text-amber-300"}`}>{SLOT_STATE_LABEL[slot.state]}</span>
       </div>
+      {slot.context && (
+        <blockquote className="mt-1 whitespace-pre-line border-l-2 border-amber-500/50 pl-2 text-muted-foreground" aria-label={`Onde o trecho entra no Edital: ${slot.label}`} data-slot-context="1">
+          <span className="font-medium text-foreground">No Edital: </span>
+          {plainContext(slot.context.before)}
+          <mark className={`rounded bg-amber-500/20 px-1 text-foreground ${slot.inline ? "" : "my-1 block w-fit"}`}>{slot.inline ? "▢ este trecho" : "▢ este trecho (parágrafo próprio)"}</mark>
+          {plainContext(slot.context.after)}
+        </blockquote>
+      )}
       {!resolved && slot.reason && <p className="mt-1 text-muted-foreground">{slot.reason}</p>}
       {who && <p className="mt-1 text-muted-foreground">{who}.</p>}
       {resolved

@@ -161,6 +161,9 @@ describe.skipIf(!DB)("E2 — resolução humana dos trechos pendentes do Edital 
     expect(rs0.slots.every((s: any) => s.state === "PENDING" && s.revision === 0)).toBe(true);
     expect(rs0.slots.find((s: any) => s.slotKey === CONTRATANTE)).toMatchObject({ declaredNoneAllowed: true, inline: false });
     expect(rs0.slots.find((s: any) => s.slotKey === SUBCONTRATACAO)).toMatchObject({ declaredNoneAllowed: false, inline: true });
+    // a rota devolve o ENTORNO do trecho (onde e como o texto entra) — a pessoa não precisa procurar o marcador no rascunho
+    expect(rs0.slots.find((s: any) => s.slotKey === SUBCONTRATACAO).context.before).toMatch(/pelas razões constantes do processo: $/);
+    expect(rs0.slots.every((s: any) => s.context && typeof s.context.after === "string")).toBe(true);
     expect((await err(promote(w)))?.message).toMatch(/EMISSION_REVIEW_MARKERS|UNRESOLVED_MARKERS/);
 
     // [2][3] redação e declaração pela rota (pessoa autenticada; autor da composição ≠ quem resolve)

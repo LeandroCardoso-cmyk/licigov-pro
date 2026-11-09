@@ -12,7 +12,7 @@ import { computeManifestHash, validateManifest, type IssuanceManifest, type Temp
 import { buildIssuanceManifest, deviationAnchor, revalidateForIssuance, type HumanEditLink, type RevalidationInput } from "../../domain/institutionalTemplates/revalidation";
 import {
   SLOT_RESOLUTION_FORMAT_VERSION, SLOT_RESOLUTION_POLICY_VERSION, captureAnchors, evaluateSlotResolutions, locateSegment, pendingSlotKeys,
-  pendingSlotMark, planSlotResolution, slotPolicy, slotTextIssue, type SlotResolutionRecord, type SlotResolutionType,
+  SLOT_CONTEXT_BEFORE_MAX, pendingSlotMark, planSlotResolution, slotContext, slotPolicy, slotTextIssue, type SlotResolutionRecord, type SlotResolutionType,
 } from "../../domain/institutionalTemplates/slotResolution";
 import { DECISION_OUTCOMES, DECISION_SUBJECT_TYPES, validateDecisionRequest } from "../../domain/institutionalDecision";
 import { bodyOf } from "../../db/institutionalTemplates/manifests";
@@ -287,5 +287,54 @@ describe("E2 — ledger e UI", () => {
     expect(reviewReadiness({ ...base, unresolvedMarkers: { count: 0, slots: [], samples: [] }, slots: [slot("RESOLVED")], revalidation: { status: "PASSED", issues: [] } }).ready).toBe(true);
     expect(revalidationIssueMessage({ code: "AI_SLOT_UNRESOLVED", path: "", message: "" })).toMatch(/apagar o marcador não basta/);
     expect(revalidationIssueMessage({ code: "AI_SLOT_RESOLUTION_STALE", path: "", message: "" })).toMatch(/registre novamente/);
+  });
+});
+
+describe("E2 — entorno do trecho para a pessoa (homologação visual: localizar e completar a frase)", () => {
+  it("trecho em linha: mostra o início do parágrafo e o fim da frase; parágrafo próprio: parágrafos vizinhos; recortes limitados", async () => {
+    const text = DOC.content.text;
+    const sub = text.indexOf(pendingSlotMark(SUBCONTRATACAO));
+    const ctxSub = slotContext(text, sub, sub + pendingSlotMark(SUBCONTRATACAO).length);
+    expect(ctxSub.before).toMatch(/subcontratação do objeto, pelas razões constantes do processo: $/);
+    expect(ctxSub.after.startsWith(".")).toBe(true);
+    const ctr = text.indexOf(pendingSlotMark(CONTRATADO));
+    const ctxCtr = slotContext(text, ctr, ctr + pendingSlotMark(CONTRATADO).length);
+    expect(ctxCtr.before).toMatch(/subcontratação admitida neste contrato\.$/);   // parágrafo anterior (item "j)")
+    expect(ctxCtr.after).toMatch(/^### CLÁUSULA/);                               // parágrafo seguinte
+    const long = `${"a".repeat(500)} ${pendingSlotMark("s")} ${"b".repeat(500)}`;
+    const at = long.indexOf(pendingSlotMark("s"));
+    const c = slotContext(long, at, at + pendingSlotMark("s").length);
+    expect(c.before.length).toBeLessThanOrEqual(SLOT_CONTEXT_BEFORE_MAX + 1);
+    expect(c.before.startsWith("…")).toBe(true);
+    expect(c.after.endsWith("…")).toBe(true);
+    expect(slotContext("só o trecho", 0, 11)).toEqual({ before: "", after: "" });
+  });
+
+  it("o painel mostra o entorno (sem ação de registro automática) e os estados PENDENTE/RESOLVIDO/DESATUALIZADO", async () => {
+    const React = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    (globalThis as { React?: unknown }).React = React;
+    const { EditalTemplateReviewView } = await import("../../../client/src/components/procurement/EditalTemplateReviewPanel");
+    const base = { label: "Razões da vedação à subcontratação", reason: null, inline: true, declaredNoneAllowed: false, declaredNoneText: null, resolution: null, resolvedByName: null, resolvedAt: null, currentText: null };
+    const state: ReviewStateView = {
+      composedByTemplate: true, generationManifestId: "m", unresolvedMarkers: { count: 1, slots: [SUBCONTRATACAO], samples: [] }, structuralDeviations: [], aiNarratives: [],
+      revalidation: { status: "PASSED", issues: [] },
+      slots: [
+        { ...base, slotKey: SUBCONTRATACAO, state: "PENDING", revision: 0, reason: "trecho pendente", context: { before: "22.4. Não é admitida a subcontratação do objeto, pelas razões constantes do processo: ", after: "." } },
+        { ...base, slotKey: CONTRATADO, label: "Obrigações específicas do contratado", inline: false, declaredNoneAllowed: true, declaredNoneText: "Não há…", state: "RESOLVED", revision: 1, resolution: "HUMAN_TEXT", resolvedByName: "Servidor Sintético", resolvedAt: "2026-11-09", currentText: "Texto", context: { before: "j) …", after: "### CLÁUSULA" } },
+        { ...base, slotKey: CONTRATANTE, label: "Obrigações específicas do contratante", inline: false, state: "STALE", revision: 1, resolution: "HUMAN_TEXT", reason: "o texto do trecho foi alterado após a resolução — registre a redação atual", currentText: "Texto alterado", context: null },
+      ],
+    };
+    const html = renderToStaticMarkup(React.createElement(EditalTemplateReviewView, { state, selected: new Set(), onToggle() {}, onAcknowledge() {}, onAcknowledgeSelected() {}, onSlotText() {}, onResolveSlot() {} }));
+    expect(html).toContain("No Edital: ");
+    expect(html).toContain("pelas razões constantes do processo: ");
+    expect(html).toContain("▢ este trecho");
+    expect(html).toContain("Pendente");
+    expect(html).toContain("Resolvido por pessoa");
+    expect(html).toContain("Redigido por Servidor Sintético em 09/11/2026");
+    expect(html).toContain("Alterado após a resolução");
+    expect(html).toContain("registre a redação atual");
+    expect(html).toContain("Texto alterado");                       // a redação atual é reapresentada (sem redigitar)
+    expect((html.match(/data-slot-context="1"/g) ?? []).length).toBe(2);
   });
 });

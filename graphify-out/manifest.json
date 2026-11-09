@@ -13920,8 +13920,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/templateCompositionService.ts": {
-    "mtime": 1794235837.1946719,
-    "ast_hash": "d02767d6fee8823b30898f1f977ffb4e",
+    "mtime": 1794248593.681845,
+    "ast_hash": "3cb207ffba8891e152e35700a54d5e5f",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/workflowService.ts": {
@@ -14410,8 +14410,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
-    "mtime": 1794235973.8535411,
-    "ast_hash": "9243c791b3a6feb609e03f7ae26b1dfd",
+    "mtime": 1794248455.9192808,
+    "ast_hash": "7995f933e64b7e3864a28a2aad61bbe8",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PrepFieldControl.tsx": {
@@ -14425,8 +14425,8 @@
     "semantic_hash": ""
   },
   "client/src/lib/editalPreparation.ts": {
-    "mtime": 1794235929.7266219,
-    "ast_hash": "91232aad258d9692ab9980a80d612032",
+    "mtime": 1794248287.6855388,
+    "ast_hash": "9f4e8af270aeecab3148b195b358c222",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts": {
@@ -15810,18 +15810,18 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/e2-slot-resolution-mysql-smoke.test.ts": {
-    "mtime": 1794236807.829025,
-    "ast_hash": "826b51193024b70e0ac263b5b2ec9427",
+    "mtime": 1794248359.4780889,
+    "ast_hash": "4051b774b1780f494114dcaf0fec83c5",
     "semantic_hash": ""
   },
   "server/__tests__/unit/e2-slot-resolution.test.ts": {
-    "mtime": 1794237409.1758976,
-    "ast_hash": "1e48408e81c73315dd475af744c90aaa",
+    "mtime": 1794248343.24512,
+    "ast_hash": "58e3bcb7b09df39a33dc3cff76c72e9d",
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/slotResolution.ts": {
-    "mtime": 1794237219.1218028,
-    "ast_hash": "261a80583c32e82e63fb141a2643d616",
+    "mtime": 1794248287.6842964,
+    "ast_hash": "d3cfe72bc24e6b9dfdf96279e4163be3",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/slotResolutionService.ts": {
