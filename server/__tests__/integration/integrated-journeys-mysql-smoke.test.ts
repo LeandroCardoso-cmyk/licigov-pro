@@ -428,7 +428,7 @@ describe.skipIf(!DB)("J1-BLL — DFD → ETP → TR (emitido) → Edital BLL Rev
       structuredTotal: (trParamsBefore.fields as any[]).filter((f) => f.active).length,
       structuredPrefilled: (trParamsBefore.fields as any[]).filter((f) => f.active && f.status === "SET").length,
       structuredProposed: (trParamsBefore.fields as any[]).filter((f) => f.active && f.proposal).length,
-      structuredConfirmedByHuman: trTyped.length, structuredConfirmedNames: trTyped, usedSources: trCtx.usedSources, missing: trCtx.missing,
+      structuredFilledByAutomation: trTyped.length, structuredConfirmedNames: trTyped, usedSources: trCtx.usedSources, missing: trCtx.missing,
     };
     // Revisão humana do TR (marcadores [REVISAR] resolvidos por um editor) → emissão oficial por terceiro (SoD).
     const human = trDraft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto conferido pela equipe.");

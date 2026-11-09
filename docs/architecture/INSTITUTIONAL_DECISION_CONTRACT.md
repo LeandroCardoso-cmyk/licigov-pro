@@ -26,6 +26,12 @@
 1. **Quem decide ≠ quem registra (INV-13).** `orgRoleProcedure("manager")` continua sendo apenas o piso técnico de quem
    **registra**. O sistema não presume que esse usuário é a autoridade competente e não valida competência: isso depende
    do insumo jurídico R4.2 (`docs/audits/LEGAL_REVIEW_DECISION_PACKET.md`), hoje **BLOCKED_LEGAL_REVIEW**.
+   **Vínculo autoridade × registrador (P0, auditoria pré-emissão H5):** `decidedByUserId` só pode ser `null` (autoridade
+   NOMEADA no ato — nome, cargo, referência — possivelmente sem conta no sistema) ou o próprio `recordedByUserId` (decisão
+   declarada como sua). Qualquer outra conta ⇒ `DECISION_AUTHORITY_NOT_ACTOR`, nada gravado. Regra única
+   `decidedByMatchesRecorder` (`server/domain/institutionalDecision.ts`), aplicada em `validateDecisionRequest` (todos os
+   escritores), em `resolveAuthority` (antes de qualquer escrita) e em `bindAuthorityToExecutor` (CLI). Registros
+   anteriores não são revalidados nem alterados.
 2. **Sem default (fail-closed).** Resultado ausente ou fora do catálogo ⇒ `BAD_REQUEST`; ato incompleto ⇒
    `DECISION_FIELDS_REQUIRED`. Nada é gravado.
 3. **Append-only.** Cada registro é uma nova linha. Uma nova decisão sobre o mesmo assunto exige `expectedRevision` igual

@@ -76,6 +76,21 @@ export const DECISION_FIELDS_REQUIRED = "DECISION_FIELDS_REQUIRED";
 export const DECISION_OUTCOME_INVALID = "DECISION_OUTCOME_INVALID";
 export const DECISION_STALE_REVISION = "DECISION_STALE_REVISION";
 export const DECISION_IDEMPOTENCY_CONFLICT = "DECISION_IDEMPOTENCY_CONFLICT";
+/** P0 (auditoria pré-emissão H5) — a autoridade declarada aponta para OUTRA identidade do sistema que não a que registra o ato. */
+export const DECISION_AUTHORITY_NOT_ACTOR = "DECISION_AUTHORITY_NOT_ACTOR";
+
+/**
+ * P0 (auditoria pré-emissão H5) — vínculo entre a autoridade declarada e quem registra o ato (regra ÚNICA, também usada por
+ * `bindAuthorityToExecutor`). `decidedByUserId` só pode ser:
+ *  - ausente/`null`: a autoridade é NOMEADA no ato (nome, cargo, ato/portaria) e pode ser externa ao sistema — quem está autenticado apenas
+ *    REGISTRA (INV-13: quem decide ≠ quem registra; o vínculo nominal e a referência do ato ficam no próprio registro); ou
+ *  - igual a `recordedByUserId`: a pessoa autenticada declara a decisão como SUA (registro eletrônico ou ato formal próprio).
+ * Qualquer outro id atribuiria a decisão a outra identidade do sistema (de qualquer órgão) sem a participação dela — recusado (fail-closed).
+ * Não muda decisões já gravadas: vale para novos pedidos (o hash/replay de registros existentes não é tocado).
+ */
+export function decidedByMatchesRecorder(decidedByUserId: number | null | undefined, recordedByUserId: number): boolean {
+  return decidedByUserId === undefined || decidedByUserId === null || decidedByUserId === recordedByUserId;
+}
 
 export interface DecisionRequest {
   readonly organizationId: number;
@@ -163,6 +178,7 @@ export function validateDecisionRequest(raw: DecisionRequest): DecisionValidatio
   if (r.idempotencyKey.length < 8) missing.push("idempotencyKey");
   if (!Number.isInteger(r.expectedRevision) || r.expectedRevision < 0) missing.push("expectedRevision");
   if (missing.length > 0) return { ok: false, code: DECISION_FIELDS_REQUIRED, fields: missing };
+  if (!decidedByMatchesRecorder(r.decidedByUserId, r.recordedByUserId)) return { ok: false, code: DECISION_AUTHORITY_NOT_ACTOR, fields: ["decidedByUserId"] };
   const allowed = DECISION_OUTCOMES[r.decisionType] as readonly string[] | undefined;
   if (!allowed || !allowed.includes(r.outcome)) return { ok: false, code: DECISION_OUTCOME_INVALID };
   return { ok: true };
@@ -213,4 +229,6 @@ export const DECISION_MESSAGES: Record<string, string> = {
     `A decisão foi alterada por outra pessoa desde que você abriu a tela. Recarregue para ver a decisão atual antes de registrar uma nova (${DECISION_STALE_REVISION}).`,
   [DECISION_IDEMPOTENCY_CONFLICT]:
     `Esta solicitação já foi usada para registrar uma decisão com conteúdo diferente. Nada foi gravado (${DECISION_IDEMPOTENCY_CONFLICT}).`,
+  [DECISION_AUTHORITY_NOT_ACTOR]:
+    `A decisão só pode ser registrada em seu próprio nome ou em nome de uma autoridade identificada no ato (nome, cargo e referência), sem vinculá-la à conta de outra pessoa. Nada foi gravado (${DECISION_AUTHORITY_NOT_ACTOR}).`,
 };

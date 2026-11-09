@@ -10635,8 +10635,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1793918967.1919448,
-    "ast_hash": "d8c5e21d90110deba9515a2c0a7b0fe6",
+    "mtime": 1794189378.020292,
+    "ast_hash": "3c9b1e0005a43f036d5c12f49cc3e6db",
     "semantic_hash": ""
   },
   "ENGINEERING_OVERVIEW.md": {
@@ -12885,8 +12885,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalDecision.ts": {
-    "mtime": 1793918967.6985183,
-    "ast_hash": "90d151dc943394bec8f1865465010204",
+    "mtime": 1794188207.6582222,
+    "ast_hash": "66214ab2b9f68290cc2b7a0ca51244c3",
     "semantic_hash": ""
   },
   "server/domain/processLifecycle.ts": {
@@ -12940,8 +12940,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_DECISION_CONTRACT.md": {
-    "mtime": 1793918967.4937665,
-    "ast_hash": "39e1232f4b54b744993c7586c4da26f2",
+    "mtime": 1794188632.6318986,
+    "ast_hash": "f8dc84ac4c9810366fb305d02ee2089e",
     "semantic_hash": ""
   },
   "docs/architecture/PILOT_RESET_GOVERNED_LIFECYCLE.md": {
@@ -14770,8 +14770,8 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/candidateExecution.ts": {
-    "mtime": 1793918967.699405,
-    "ast_hash": "576827b0e741aa234acf4f4c9eca593f",
+    "mtime": 1794188220.053415,
+    "ast_hash": "fc697a8eea0ac840769579f9a4f66da0",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/candidateExecutorAuthService.ts": {
@@ -14915,8 +14915,8 @@
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/electronicAuthority.ts": {
-    "mtime": 1793918967.7827415,
-    "ast_hash": "12516b6e77c0a63adec42a7fc70eedf8",
+    "mtime": 1794188365.5080605,
+    "ast_hash": "742156e15029c61caad288f02f7e7a54",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PublicationPendingNotice.tsx": {
@@ -14935,8 +14935,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/integrated-journeys-mysql-smoke.test.ts": {
-    "mtime": 1793918967.662863,
-    "ast_hash": "5a9f5207acfd8bc49deb3456f08430a2",
+    "mtime": 1794189378.017873,
+    "ast_hash": "1f7816e672c25b6b0dfb721ee2cf774e",
     "semantic_hash": ""
   },
   "server/__tests__/unit/integrated-journeys-rules.test.ts": {
@@ -14975,13 +14975,13 @@
     "semantic_hash": ""
   },
   "scripts/homologation-e2e.ts": {
-    "mtime": 1793918967.6602757,
-    "ast_hash": "bf706b110016152733159ed28cb2693e",
+    "mtime": 1794189378.0162985,
+    "ast_hash": "a584ac82b87516a667476efbdd511d15",
     "semantic_hash": ""
   },
   "server/__tests__/homologation/staging-homologation-e2e.test.ts": {
-    "mtime": 1793918967.6621525,
-    "ast_hash": "3bded354c2cafb762a36e352bf6e6c2f",
+    "mtime": 1794189378.0174394,
+    "ast_hash": "224de672119b2326829b16a1d7b440d8",
     "semantic_hash": ""
   },
   "server/__tests__/unit/homologation-e2e-guards.test.ts": {
@@ -15772,6 +15772,26 @@
   "server/__tests__/unit/fast-f1-f2-profile-access.test.ts": {
     "mtime": 1793997960.2662957,
     "ast_hash": "e068edf8240e2865eb5079fce8c564cb",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/p0-decision-authority-binding.test.ts": {
+    "mtime": 1794189358.258526,
+    "ast_hash": "aa5d3231b1f76413d86b1717854398c0",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/p0-homologation-evidence-guards.test.ts": {
+    "mtime": 1794189386.9904141,
+    "ast_hash": "5fb114e1b5fcfbd0f04ae482ae8e87e6",
+    "semantic_hash": ""
+  },
+  "docs/architecture/DELEGATED_EXECUTION_AND_HUMAN_REVIEW_SPEC.md": {
+    "mtime": 1794188692.2949693,
+    "ast_hash": "87d571646c0e2c6e11b69a1e7e56c3a4",
+    "semantic_hash": ""
+  },
+  "docs/audits/HOMOLOGATION_H1_H5_EVIDENCE_RECLASSIFICATION.md": {
+    "mtime": 1794189412.2002473,
+    "ast_hash": "793b6765cf7697e64cfa7ee874ed6b2f",
     "semantic_hash": ""
   }
 }

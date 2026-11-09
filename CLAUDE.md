@@ -274,6 +274,20 @@ Toda saída de IA deve ser: **editável, revisável e validada por humano.**
 - Sempre gerar migration (`pnpm db:generate`) e aplicar com `pnpm db:migrate` — nunca só `db:push` em produção
 - Numeração de processos: transação atômica (padrão AAAA/NNNN)
 
+### Agentes de IA, confirmações humanas e evidências (P0 — permanente)
+> Origem: auditoria pré-emissão H5 (nov/2026). Dossiê: [`docs/audits/HOMOLOGATION_H1_H5_EVIDENCE_RECLASSIFICATION.md`](docs/audits/HOMOLOGATION_H1_H5_EVIDENCE_RECLASSIFICATION.md).
+
+**Agentes de IA não podem se apresentar como pessoas que realizaram uma confirmação humana.** Sem participação humana efetiva, é proibido:
+marcar declarações pessoais de responsabilidade ("Confirmo, como pessoa responsável…"); confirmar atos em nome de autoridades; aceitar revisões
+como humanas; substituir `[REVISAR]` por declarações de conferência; reconhecer desvios estruturais para liberar emissão; usar identidades técnicas
+distintas como prova de pessoas distintas; declarar aprovação jurídica inexistente. O backend não distingue uma automação que usa a sessão de
+alguém de um clique humano: a regra é operacional e vale mesmo quando a tela "deixa". Automação de homologação usa `scripts/homologation-e2e.ts`
+(`replaceReviewMarkersForMechanismOnly`, `MECHANISM_ONLY_EMISSION_REASON`, `assertNoFictitiousReviewClaim`) e toda evidência que produz é
+`MECHANISM_ONLY — HUMAN_REVIEW_NOT_VERIFIED`. Etapas que exigem decisão humana não são executadas pelo agente: o relatório as classifica como
+`BLOCKED_HUMAN_REVIEW` (classificação de relatório; não é um estado do sistema) até uma pessoa real agir. Testes automatizados em banco descartável
+não são evidência de revisão; prefira textos neutros nas fixtures (há legados com "conferido" — ver o dossiê).
+Delegação formal futura só com proveniência explícita (`docs/architecture/DELEGATED_EXECUTION_AND_HUMAN_REVIEW_SPEC.md`), nunca por declaração do agente.
+
 ### Jamais
 - Propor features de ERP, contabilidade, tributação ou RH (fora do escopo)
 - Hardcodar chaves de API
