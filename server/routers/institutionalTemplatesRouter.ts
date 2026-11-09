@@ -9,6 +9,7 @@ import { getProcess } from "../db/procurement";
 import { TemplatePersistenceError } from "../db/institutionalTemplates";
 import { translatePersistenceError } from "../services/institutionalTemplates/adapters/errors";
 import { TemplateReviewService } from "../services/institutionalTemplates/reviewService";
+import { TemplateSlotResolutionService } from "../services/institutionalTemplates/slotResolutionService";
 import { GovernedSourceService } from "../services/institutionalTemplates/governedSourceService";
 import { generateTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { TRPCError } from "@trpc/server";
@@ -164,6 +165,18 @@ const acceptAiNarrativeInput = z.object({
 const acknowledgeDeviationInput = z.object({
   manifestId: id, blockId: z.string().min(1).max(80), kind: z.enum(["INCLUDED_BLOCK_REMOVED", "EXCLUDED_BLOCK_INSERTED"]),
   confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
+}).strict();
+
+/**
+ * E2 — resolução humana de trecho pendente do Edital: o texto/tipo vêm da pessoa; o PONTO do trecho, o M1, o ator e o órgão são resolvidos
+ * pelo servidor (nada de posição/conteúdo completo enviados pelo cliente). CAS duplo: hash do rascunho visto + revisão da resolução.
+ */
+const resolveSlotInput = z.object({
+  processId: z.string().min(1).max(64), manifestId: id, slotKey: z.string().min(1).max(80),
+  resolution: z.enum(["HUMAN_TEXT", "DECLARED_NONE"]), text: z.string().max(8000).optional(),
+  expectedContentHash: z.string().length(64), expectedRevision: z.number().int().min(0).max(1_000_000),
+  // 64 = `generated_document_edits.idempotency_key` (a mesma chave identifica a edição e a decisão do mesmo ato)
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(64), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
 }).strict();
 
 const officialPin = z.object({ documentId: id, version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
@@ -423,6 +436,13 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acceptAiNarrative(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Aceite de narrativa de IA no documento composto", decision, note) }))),
     acknowledgeDeviation: templatesProcedure("review").input(acknowledgeDeviationInput)
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Reconhecimento de desvio estrutural do documento composto", decision, note) }))),
+    resolveSlot: templatesProcedure("review").input(resolveSlotInput)
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        if (!(await getProcess(rest.processId, ctx.wctx.organizationId))) throw new TemplateWorkflowError("NOT_FOUND", "processo não encontrado nesta organização");
+        const action = rest.resolution === "DECLARED_NONE" ? "Declaração de ausência de conteúdo adicional em trecho do Edital" : "Registro da redação de trecho pendente do Edital";
+        const out = await new TemplateSlotResolutionService(getTemplateCompositionPorts()).resolveSlot(ctx.wctx, { ...rest, decision: authorityOf(ctx, action, decision, note) });
+        return { decisionId: out.decision.id, revision: out.decision.revision, replayed: out.replayed, contentHash: out.contentHash, documentChanged: out.documentChanged };
+      })),
   }),
 
   /**

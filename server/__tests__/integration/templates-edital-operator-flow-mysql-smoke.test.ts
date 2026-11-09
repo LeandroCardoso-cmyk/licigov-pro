@@ -3,7 +3,7 @@
  * Fluxo OPERACIONAL do Edital institucional — MySQL REAL, dados SINTÉTICOS, SEM `seedGoverned`, pelas MESMAS rotas tRPC da UI.
  *
  *  O1  preparação (pendências) → preflight BLOCKED (zero draft/M1) → órgão/divulgação/processo (CAS) → preflight READY →
- *      TR exato → gerar M1 → estado de revisão → editar [REVISAR] → desvios → reconhecimentos (rota) → emitir (M2) → official_document
+ *      TR exato → gerar M1 → estado de revisão → editar marcadores de dado → resolver os trechos do modelo (E2, rota) → emitir (M2) → official_document
  *  O2  segurança: campos de outro tenant / processo arbitrário / revisão, TR e manifesto de outro tenant ⇒ fail-closed, sem enumeração
  *  O3  replay/CAS: mesma key+payload ⇒ replay; mesma key + payload diferente ⇒ CONFLICT; expectedRevision obsoleto ⇒ não sobrescreve;
  *      reconhecimento repetido ⇒ sem duplicar
@@ -32,7 +32,6 @@ vi.mock("../../services/procurementProcessService", async (importOriginal) => {
 import { procurementProcessRouter } from "../../routers/procurementProcessRouter";
 import { institutionalTemplatesRouter } from "../../routers/institutionalTemplatesRouter";
 import { runMigrations, validateSchema } from "../../bootstrap";
-import { draftContentHash } from "../../domain/generatedDocument";
 import { InstitutionalTemplatesWorkflow } from "../../services/institutionalTemplates/workflowService";
 import { ModelRegistrationService } from "../../services/institutionalTemplates/modelRegistrationService";
 import { TemplateGovernanceService } from "../../services/institutionalTemplates/governanceService";
@@ -245,27 +244,41 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     expect(rs0.structuralDeviations).toEqual([]);
     expect(rs0.revalidation.status).toMatch(/^(PASSED|BLOCKED)$/);   // marcadores pendentes são recusados na emissão (checados à parte)
 
-    // 7. edição humana pelo endpoint de edição do workspace
+    // 7. edição humana pelo endpoint de edição do workspace: só os marcadores de DADO; os trechos do modelo seguem pendentes
     const draft: any = await proc(p.org).reviewableDraft({ processId: p.w.processId, kind: "edital" });
-    const human = draft.draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe de licitações.") + "\nObservação do revisor: conteúdo conferido.\n";
-    await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draft.draft.contentHash, idempotencyKey: key("edit") });
+    const slotMarker = /\[REVISAR: narrativa "[^"]+" pendente de redação supervisionada\]/;
+    const dataOnly = draft.draft.content.replace(/\[REVISAR[^\]]*\]/g, (m: string) => (slotMarker.test(m) ? m : "Texto redigido pela equipe de licitações.")) + "\nObservação do revisor: texto final do rascunho.\n";
+    await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: dataOnly, expectedContentHash: draft.draft.contentHash, idempotencyKey: key("edit") });
     const rs1: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
-    expect(rs1.unresolvedMarkers.count).toBe(0);
-    expect(rs1.structuralDeviations.length).toBeGreaterThan(0);
-    expect(rs1.structuralDeviations.every((d: any) => d.acknowledged === false && d.blockId && d.kind)).toBe(true);
+    expect(rs1.slots.length).toBeGreaterThan(0);
+    expect(rs1.slots.every((s: any) => s.state === "PENDING")).toBe(true);
+    expect(rs1.unresolvedMarkers.count).toBe(rs1.slots.length);
 
-    // 8. emissão ANTES do reconhecimento: o backend recusa (autoridade final)
-    const promote = () => proc(p.org, "manager", U_MANAGER).promoteOfficial({ processId: p.w.processId, kind: "edital", idempotencyKey: key("promo"), expectedContentHash: draftContentHash(human), reason: "Revisado e conferido pelo gestor." } as any);
-    const refused = await err(promote());
-    expect(refused?.message).toContain("STRUCTURAL_DEVIATION_UNACKNOWLEDGED");
+    // 8. emissão ANTES de resolver os trechos: o backend recusa (autoridade final)
+    const promote = async () => {
+      const cur: any = await proc(p.org).reviewableDraft({ processId: p.w.processId, kind: "edital" });
+      return proc(p.org, "manager", U_MANAGER).promoteOfficial({ processId: p.w.processId, kind: "edital", idempotencyKey: key("promo"), expectedContentHash: cur.draft.contentHash, reason: "Emissão do Edital revisado." } as any);
+    };
+    expect((await err(promote()))?.message).toMatch(/EMISSION_REVIEW_MARKERS|UNRESOLVED_MARKERS/);
 
-    // 9. reconhecimentos pela ROTA tRPC (um por desvio, idempotency própria por write)
-    for (const d of rs1.structuralDeviations) {
+    // 9. E2 — cada trecho pela ROTA tRPC (redação; "não há conteúdo adicional" onde o modelo admite) + reconhecimento de desvios, se houver
+    for (const sl of rs1.slots) {
+      const cur: any = await proc(p.org).reviewableDraft({ processId: p.w.processId, kind: "edital" });
+      await tpl(p.org, "operator", U_EDITOR).reviews.resolveSlot({
+        processId: p.w.processId, manifestId: rs1.generationManifestId, slotKey: sl.slotKey,
+        ...(sl.declaredNoneAllowed ? { resolution: "DECLARED_NONE" as const } : { resolution: "HUMAN_TEXT" as const, text: `Redação do trecho ${sl.label} pela equipe de licitações.` }),
+        expectedContentHash: cur.draft.contentHash, expectedRevision: sl.revision, ...act("slot"),
+      });
+    }
+    const rs2a: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    for (const d of rs2a.structuralDeviations.filter((x: any) => !x.acknowledged)) {
       await tpl(p.org, "operator", U_MANAGER).reviews.acknowledgeDeviation({
-        manifestId: rs1.generationManifestId, blockId: d.blockId, kind: d.kind, ...act("ack"), decision: decision({ basisReference: "Revisão do documento composto" }),
+        manifestId: rs2a.generationManifestId, blockId: d.blockId, kind: d.kind, ...act("ack"), decision: decision({ basisReference: "Revisão do documento composto" }),
       });
     }
     const rs2: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
+    expect(rs2.slots.every((s: any) => s.state === "RESOLVED")).toBe(true);
+    expect(rs2.unresolvedMarkers.count).toBe(0);
     expect(rs2.structuralDeviations.every((d: any) => d.acknowledged)).toBe(true);
     expect(rs2.revalidation).toMatchObject({ status: "PASSED" });
 
@@ -273,9 +286,10 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     const res: any = await promote();
     expect(res.promoted).toBe(true);
     expect(res.officialDocument.status).toBe("emitido");
-    const m2 = await rows("SELECT derived_from_manifest_id d FROM document_composition_manifests WHERE organization_id = ? AND stage = 'ISSUANCE'", [p.org]);
+    const m2 = await rows("SELECT derived_from_manifest_id d, body_json b FROM document_composition_manifests WHERE organization_id = ? AND stage = 'ISSUANCE'", [p.org]);
     expect(m2).toHaveLength(1);
     expect(m2[0].d).toBe(r.generationManifestId);
+    expect(JSON.parse(m2[0].b).slotResolutions.items).toHaveLength(rs1.slots.length);
     expect(await count("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido'", [p.org])).toBe(1);
     expect(legacy.calls).toBe(0);
   }, 600_000);
@@ -342,7 +356,11 @@ describe.skipIf(!DB)("Fluxo operacional do Edital institucional (MySQL real, rot
     await prepareAll(p);
     const r: any = await proc(p.org).generateNotice({ processId: p.w.processId, object: "x", ...WS, officialPins: pin(p.tr), idempotencyKey: key("g3") } as any);
     const draft: any = await proc(p.org).reviewableDraft({ processId: p.w.processId, kind: "edital" });
-    const human = draft.draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto humano.");
+    // Desvio estrutural REAL: remove o parágrafo de um bloco condicional incluído (o que contém um trecho em linha do modelo).
+    const lines: string[] = draft.draft.content.split("\n");
+    const cut = lines.findIndex((l) => /pendente de redação supervisionada/.test(l) && !l.startsWith("[REVISAR"));
+    expect(cut).toBeGreaterThan(-1);
+    const human = lines.filter((_, i) => i !== cut).join("\n").replace(/\[REVISAR[^\]]*\]/g, "Texto humano.");
     await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draft.draft.contentHash, idempotencyKey: key("e3") });
     const rs: any = await proc(p.org).editalTemplateReviewState({ processId: p.w.processId });
     const d0 = rs.structuralDeviations[0];

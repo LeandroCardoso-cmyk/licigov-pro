@@ -351,6 +351,7 @@ export async function generateDFDDraft(params: {
 // C.4B.3A/C.4B.3B — operações de EDIÇÃO governada (idempotency op por tipo de write).
 const DFD_SAVE_OP = "procurement.dfd.save";       // edição manual do DFD (C.4B.3A)
 const DRAFT_EDIT_OP = "procurement.draft.edit";   // edição humana de ETP/TR/Edital (C.4B.3B)
+const SLOT_RESOLUTION_EDIT_OP = "procurement.draft.slot_resolution"; // E2: resolução humana de trecho pendente do modelo (Edital)
 
 /**
  * C.4B.3A/C.4B.3B — Runner ÚNICO de WRITE GOVERNADO de conteúdo do rascunho (DFD save + human edit de
@@ -863,6 +864,28 @@ export async function saveReviewableDraft(params: {
     title: existing.title, sources: ["edicao_humana"], content: params.content,
     actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
     idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+  });
+}
+
+/**
+ * E2 — Edição governada do rascunho do Edital que RESOLVE um trecho pendente de modelo (slot de IA): mesmo runner/ledger da edição humana
+ * (`human_edit`, CAS, idempotência, último ator substantivo), com linhagem em `reason` e a decisão de resolução gravada em `afterPersist`,
+ * NA MESMA TRANSAÇÃO (tudo-ou-nada: sem decisão, a edição não fica). O conteúdo é montado pelo serviço de resolução (nunca pelo cliente).
+ */
+export async function applyTemplateSlotResolutionEdit(params: {
+  organizationId: number; processId: string; content: string; reason: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+  afterPersist: (tx: ProcurementExecutor, document: GeneratedDocument) => Promise<void>;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente — gere o documento antes de editar." });
+  return runGovernedDraftEdit({
+    op: SLOT_RESOLUTION_EDIT_OP, operation: "human_edit", timelineSummary: "EDITAL: trecho pendente do modelo resolvido por pessoa (rascunho).",
+    organizationId: params.organizationId, processId: params.processId, kind: "edital",
+    title: existing.title, sources: ["edicao_humana"], content: params.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+    reason: params.reason, afterPersist: params.afterPersist,
   });
 }
 

@@ -46,7 +46,13 @@
 7. **Consumo.** A publicação (`generatePublications`) exige a decisão **corrente** do ledger com resultado `ratificado`.
    Linhas legadas de `ratifications` (pré-0312, sem autoridade/data/referência) são histórico legível
    (`getRatificationDecision.legacyRatification`) e **não** bastam para publicar.
-8. **Transação.** Só persistência local (decisão, etapa, timeline com id estável = id da decisão). Sem IA, S3, HTTP,
+8. **E2 — resolução humana de trecho pendente do Edital (`template_slot_resolution`).** Assunto
+   `institutional_template.slot_resolution` = `<M1>:<sha256("slot:"+slotKey)[0..16]>` (lock do M1); resultados explícitos
+   `HUMAN_TEXT` | `DECLARED_NONE`; decisão REVISÁVEL (CAS por `expectedRevision`). Evidência: `slot:`, `type:`, `text:<sha256 do trecho>`,
+   `prefix:`/`suffix:` (âncoras em string JSON), `content:<hash do rascunho>`, `policy:tpl-slot-policy/1`. A edição governada do rascunho
+   (`human_edit`, CAS, idempotência) e a decisão são gravadas na MESMA transação (`recordDecisionInTx`). Detalhes:
+   `docs/architecture/DELEGATED_EXECUTION_AND_HUMAN_REVIEW_SPEC.md` §3 (E2).
+9. **Transação.** Só persistência local (decisão, etapa, timeline com id estável = id da decisão). Sem IA, S3, HTTP,
    e-mail ou provider remoto.
 
 ## 3. Observabilidade

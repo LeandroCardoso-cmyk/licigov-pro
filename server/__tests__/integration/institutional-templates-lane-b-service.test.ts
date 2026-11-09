@@ -148,6 +148,7 @@ function makePorts(): TemplatePorts {
       loadAiOutputs: async (_org, ids) => state.aiOutputs.filter((o) => ids.includes(o.executionId)),
       listAiAcceptances: async () => state.acceptances,
       listDeviationAcknowledgments: async () => [],
+      listSlotResolutions: async () => [],
       listHumanEdits: async () => state.edits,
     },
     clock: { now: () => "2026-10-06T12:00:00.000Z" },

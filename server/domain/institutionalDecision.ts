@@ -35,6 +35,9 @@ export const DECISION_OUTCOMES = {
   // estrutural. A IA nunca registra nenhuma delas.
   template_ai_acceptance: ["aceito"],
   template_deviation_acknowledgment: ["reconhecido"],
+  // E2 — resolução HUMANA de trecho pendente (slot de IA sem narrativa): redação própria ou declaração de que não há conteúdo adicional
+  // (só slots elegíveis). Hash do trecho e âncoras viajam em `evidence` (ver `domain/institutionalTemplates/slotResolution.ts`).
+  template_slot_resolution: ["HUMAN_TEXT", "DECLARED_NONE"],
   // Institutional Templates (multi-modelo) — fontes canônicas GOVERNADAS por decisão humana do órgão. Resultado SEMPRE
   // explícito (nenhum padrão). O conteúdo estruturado viaja em `evidence`
   // (ver `domain/institutionalTemplates/governedSources.ts`). Nenhum segundo ledger.
@@ -58,6 +61,8 @@ export const DECISION_SUBJECT_TYPES = [
   // O assunto é `<manifestId>:<sha256(chave)[0..16]>` (M1 + slot/bloco); o lock é do M1 (`document_composition_manifests`).
   "institutional_template.ai_acceptance",
   "institutional_template.deviation_acknowledgment",
+  // E2 — `<manifestId>:<sha256("slot:"+slotKey)[0..16]>`; lock do M1; decisão REVISÁVEL (CAS por revisão, nova resolução supera a anterior).
+  "institutional_template.slot_resolution",
   // Assunto = id do PROCESSO (lock da linha do processo) / chave da política (lock da organização) / id EXATO da revisão.
   "procurement.source_fields",
   "procurement.budget_disclosure",

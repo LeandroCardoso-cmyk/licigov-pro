@@ -36,6 +36,9 @@ import { LATE_BOUND_VARIABLES, bindLifecycleVariables, type LifecycleBinding } f
 import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTemplates/astVersions";
 import { buildIssuanceManifest, changedAuthorities, revalidateForIssuance, sourceRefreshRecompositionAllowed, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
+import {
+  evaluateSlotResolutions, isStandaloneSegment, pendingSlotMark, slotPolicy, type SlotResolutionRecord, type SlotResolutionType, type SlotState,
+} from "../../domain/institutionalTemplates/slotResolution";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
 import { supportsGovernedDraftRecomposition, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import { sha256Hex } from "../../domain/canonicalJson";
@@ -479,11 +482,47 @@ export interface TemplateReviewState {
   /** Campos de SISTEMA do ciclo de vida (ex.: data de emissão): atribuídos no ato oficial da emissão — informativo, sem ação humana. */
   readonly lateBound?: readonly { readonly variable: string; readonly label: string; readonly message: string }[];
   readonly aiNarratives: readonly { readonly slotKey: string; readonly executionId: string; readonly humanAccepted: boolean }[];
+  /** E2 — trechos pendentes do modelo (slots de IA sem narrativa) e a resolução humana de cada um (mesma regra da emissão). */
+  readonly slots?: readonly TemplateSlotView[];
   /** Resultado da MESMA revalidação canônica da emissão (nenhum detector paralelo). */
   readonly revalidation: { readonly status: "PASSED" | "BLOCKED"; readonly issues: readonly { readonly code: string; readonly path: string; readonly message: string }[] };
 }
 
 const SLOT_IN_MARKER_RE = /narrativa "([^"]+)"/;
+
+export interface TemplateSlotView {
+  readonly slotKey: string;
+  readonly label: string;
+  readonly state: SlotState;
+  readonly reason: string | null;
+  /** Trecho completa uma frase do modelo (em linha): uma linha, sem "não há conteúdo adicional". */
+  readonly inline: boolean;
+  readonly declaredNoneAllowed: boolean;
+  /** Frase fixa registrada quando a pessoa declara que não há conteúdo adicional (só slots elegíveis). */
+  readonly declaredNoneText: string | null;
+  /** Revisão atual da resolução (0 = nenhuma) — o CAS do próximo registro. */
+  readonly revision: number;
+  readonly resolution: SlotResolutionType | null;
+  readonly resolvedByName: string | null;
+  readonly resolvedAt: string | null;
+  /** Trecho atual localizado (para reapresentar à pessoa ao registrar novamente). */
+  readonly currentText: string | null;
+}
+
+/** Visão por slot: a MESMA regra da emissão (`evaluateSlotResolutions`) sobre o texto composto e o conteúdo atual. */
+function slotViews(organizationId: OrgId, manifestId: string, composedText: string, content: string, records: readonly SlotResolutionRecord[]): TemplateSlotView[] {
+  return evaluateSlotResolutions({ organizationId, manifestId, composedText, issuedContent: content, resolutions: records }).map((c) => {
+    const mark = pendingSlotMark(c.slotKey);
+    const at = composedText.indexOf(mark);
+    return {
+      slotKey: c.slotKey, label: c.label, state: c.state, reason: c.reason,
+      inline: at !== -1 && !isStandaloneSegment(composedText, at, at + mark.length),
+      declaredNoneAllowed: c.declaredNoneAllowed, declaredNoneText: c.declaredNoneAllowed ? slotPolicy(c.slotKey).declaredNoneText : null,
+      revision: c.record?.revision ?? 0, resolution: c.record?.resolution ?? null, resolvedByName: c.record?.resolvedByName ?? null,
+      resolvedAt: c.record?.decidedAt ?? null, currentText: c.currentText,
+    };
+  });
+}
 
 /**
  * Estado de revisão do rascunho composto por modelo: marcadores pendentes, desvios estruturais (com reconhecimento), narrativas de IA e a
@@ -505,10 +544,11 @@ export async function inspectTemplateReview(
   await assertEnabled(ports, input.organizationId);
   const t = await loadExactTemplate(ports, input.organizationId, m1.templateIdentityId, m1.templateRevisionId);
   const outputs = m1.aiNarratives.length ? await ports.review.loadAiOutputs(input.organizationId, m1.aiNarratives.map((n) => n.executionId)) : [];
-  const [humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
+  const [humanEdits, aiAcceptances, acknowledgments, slotResolutions] = await Promise.all([
     ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
     ports.review.listAiAcceptances(input.organizationId, m1.id),
     ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),
+    ports.review.listSlotResolutions(input.organizationId, m1.id),
   ]);
   const aiNarratives = m1.aiNarratives.map((n) => ({
     slotKey: n.slotKey, executionId: n.executionId,
@@ -519,15 +559,16 @@ export async function inspectTemplateReview(
     recomposition = await recompose(ports, input.organizationId, input.processId, m1, t, outputs);
   } catch (err) {
     if (err instanceof TemplateSourceUnavailableError) {
+      // Sem recomposição, os trechos pendentes visíveis são os marcadores ainda presentes no rascunho (a emissão bloqueia de qualquer forma).
       return { composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations: [], aiNarratives,
-        lateBound: lateBoundView(m1.lateBound),
+        lateBound: lateBoundView(m1.lateBound), slots: slotViews(input.organizationId, m1.id, input.content, input.content, slotResolutions),
         revalidation: { status: "BLOCKED", issues: [{ code: "SOURCE_UNAVAILABLE", path: err.source, message: `${err.source} — ${err.reason}` }] } };
     }
     throw err;
   }
   const outcome = revalidateForIssuance({
     organizationId: input.organizationId, generation: m1, recomposition, issuedContent: input.content,
-    humanEdits, aiAcceptances, acknowledgments, checkedAt: ports.clock.now(),
+    humanEdits, aiAcceptances, acknowledgments, slotResolutions, checkedAt: ports.clock.now(),
   });
   const structuralDeviations = recomposition.ok
     ? structuralDeviationStatus(recomposition.value.structuralBlocks, recomposition.value.content.text, input.content, acknowledgments)
@@ -536,6 +577,7 @@ export async function inspectTemplateReview(
   return {
     composedByTemplate: true, generationManifestId: m1.id, templateRevisionId: m1.templateRevisionId, unresolvedMarkers: markerView, structuralDeviations, aiNarratives,
     lateBound: lateBoundView(m1.lateBound),
+    slots: slotViews(input.organizationId, m1.id, recomposition.ok ? recomposition.value.content.text : input.content, input.content, slotResolutions),
     revalidation: outcome.ok ? { status: "PASSED", issues: [] } : { status: "BLOCKED", issues: outcome.issues.map((i) => ({ code: i.code, path: i.path, message: i.message })) },
   };
 }
@@ -578,7 +620,7 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         if (!o || sha256Hex(o.text) !== n.outputHash) throw blocked("AI_NARRATIVE_NOT_ACCEPTED", `saída de IA do slot ${n.slotKey} ausente ou divergente do registrado`);
       }
 
-      const [recomposition, humanEdits, aiAcceptances, acknowledgments] = await Promise.all([
+      const [recomposition, humanEdits, aiAcceptances, acknowledgments, slotResolutions] = await Promise.all([
         // Fonte que deixou de estar disponível/íntegra (ex.: configuração corrompida, set normativo desativado) BLOQUEIA a emissão.
         recompose(ports, input.organizationId, input.processId, m1, t, outputs).catch((err: unknown) => {
           if (err instanceof TemplateSourceUnavailableError) throw blocked("SOURCE_UNAVAILABLE", `${err.source} — ${err.reason}`);
@@ -587,13 +629,14 @@ export function createTemplateIssuanceHook(ports: TemplatePorts): PromotionTempl
         ports.review.listHumanEdits(input.organizationId, m1.generatedDocumentId, m1.composedOutputHash),
         ports.review.listAiAcceptances(input.organizationId, m1.id),
         ports.review.listDeviationAcknowledgments(input.organizationId, m1.id),
+        ports.review.listSlotResolutions(input.organizationId, m1.id),
       ]);
       // A revalidação acontece AQUI (fora da transação) e registra o seu PRÓPRIO instante. O instante OFICIAL da emissão NÃO nasce
       // aqui: é capturado pela fronteira transacional que commita o ato (ver `materializeForOfficialIssuance`).
       const revalidatedAt = ports.clock.now();
       const outcome = revalidateForIssuance({
         organizationId: input.organizationId, generation: m1, recomposition, issuedContent: input.content,
-        humanEdits, aiAcceptances, acknowledgments, checkedAt: revalidatedAt,
+        humanEdits, aiAcceptances, acknowledgments, slotResolutions, checkedAt: revalidatedAt,
       });
       if (!outcome.ok) throw blocked(codesOf(outcome.issues), outcome.issues.map((i) => i.message).join(" "));
 
