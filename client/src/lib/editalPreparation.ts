@@ -578,6 +578,8 @@ export interface SlotView {
   inline: boolean; declaredNoneAllowed: boolean; declaredNoneText: string | null;
   revision: number; resolution: "HUMAN_TEXT" | "DECLARED_NONE" | null; resolvedByName: string | null; resolvedAt: string | null;
   currentText: string | null;
+  /** Entorno do trecho no documento (onde e como o texto entra). Ausente em respostas anteriores. */
+  context?: { before: string; after: string } | null;
 }
 export interface ReviewStateView {
   composedByTemplate: boolean; generationManifestId?: string; templateRevisionId?: string;

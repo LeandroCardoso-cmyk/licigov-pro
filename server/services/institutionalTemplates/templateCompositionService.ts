@@ -37,7 +37,8 @@ import { isCatalogV2 as isCatalogV2Late } from "../../domain/institutionalTempla
 import { buildIssuanceManifest, changedAuthorities, revalidateForIssuance, sourceRefreshRecompositionAllowed, structuralDeviationStatus, type StructuralDeviationKind } from "../../domain/institutionalTemplates/revalidation";
 import type { TemplateIdentity, TemplateRevision } from "../../domain/institutionalTemplates/revision";
 import {
-  evaluateSlotResolutions, isStandaloneSegment, pendingSlotMark, slotPolicy, type SlotResolutionRecord, type SlotResolutionType, type SlotState,
+  evaluateSlotResolutions, isStandaloneSegment, locateSegment, pendingSlotMark, slotContext, slotPolicy,
+  type SlotResolutionRecord, type SlotResolutionType, type SlotState,
 } from "../../domain/institutionalTemplates/slotResolution";
 import type { OrgId, TemplateDocumentKind } from "../../domain/institutionalTemplates/types";
 import { supportsGovernedDraftRecomposition, type VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
@@ -507,6 +508,8 @@ export interface TemplateSlotView {
   readonly resolvedAt: string | null;
   /** Trecho atual localizado (para reapresentar à pessoa ao registrar novamente). */
   readonly currentText: string | null;
+  /** Entorno do trecho no rascunho atual (onde e como o texto entra); `null` se o trecho não foi localizado. Só apresentação. */
+  readonly context: { readonly before: string; readonly after: string } | null;
 }
 
 /** Visão por slot: a MESMA regra da emissão (`evaluateSlotResolutions`) sobre o texto composto e o conteúdo atual. */
@@ -514,12 +517,16 @@ function slotViews(organizationId: OrgId, manifestId: string, composedText: stri
   return evaluateSlotResolutions({ organizationId, manifestId, composedText, issuedContent: content, resolutions: records }).map((c) => {
     const mark = pendingSlotMark(c.slotKey);
     const at = composedText.indexOf(mark);
+    // Onde o trecho está no rascunho ATUAL: o marcador ou, se já resolvido, o trecho localizado pelas âncoras da última resolução.
+    const markAt = content.indexOf(mark);
+    const seg = markAt !== -1 ? { start: markAt, end: markAt + mark.length } : c.record ? locateSegment(content, c.record.prefix, c.record.suffix) : null;
     return {
       slotKey: c.slotKey, label: c.label, state: c.state, reason: c.reason,
       inline: at !== -1 && !isStandaloneSegment(composedText, at, at + mark.length),
       declaredNoneAllowed: c.declaredNoneAllowed, declaredNoneText: c.declaredNoneAllowed ? slotPolicy(c.slotKey).declaredNoneText : null,
       revision: c.record?.revision ?? 0, resolution: c.record?.resolution ?? null, resolvedByName: c.record?.resolvedByName ?? null,
       resolvedAt: c.record?.decidedAt ?? null, currentText: c.currentText,
+      context: ((ctx) => (ctx && (ctx.before || ctx.after) ? ctx : null))(seg ? slotContext(content, seg.start, seg.end) : null),
     };
   });
 }

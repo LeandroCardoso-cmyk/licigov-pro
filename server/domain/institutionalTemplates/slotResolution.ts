@@ -124,6 +124,35 @@ export function locateSegment(text: string, prefix: string, suffix: string): { s
   return { start, end, text: text.slice(start, end) };
 }
 
+/** Tamanho máximo do entorno exibido ao servidor (antes/depois do trecho). */
+export const SLOT_CONTEXT_BEFORE_MAX = 240;
+export const SLOT_CONTEXT_AFTER_MAX = 160;
+
+/**
+ * Entorno do trecho [start, end) no documento, para a pessoa ver ONDE e COMO o texto entra (só apresentação; não participa de nenhuma regra):
+ *  - antes: do início do parágrafo até o trecho; trecho que é parágrafo próprio mostra o parágrafo anterior;
+ *  - depois: do fim do trecho até o fim do parágrafo; trecho que é parágrafo próprio mostra o parágrafo seguinte.
+ * Recortes limitados (com "…" quando truncados). Marcadores de OUTROS trechos permanecem visíveis como estão no texto.
+ */
+export function slotContext(text: string, start: number, end: number): { before: string; after: string } {
+  const paraStart = text.lastIndexOf("\n\n", start - 1);
+  let before = text.slice(paraStart === -1 ? 0 : paraStart + 2, start);
+  if (!before.trim()) {
+    const prevEnd = paraStart === -1 ? 0 : paraStart;
+    const prevStart = text.lastIndexOf("\n\n", prevEnd - 1);
+    before = prevEnd > 0 ? text.slice(prevStart === -1 ? 0 : prevStart + 2, prevEnd) : "";
+  }
+  const paraEnd = text.indexOf("\n\n", end);
+  let after = text.slice(end, paraEnd === -1 ? text.length : paraEnd);
+  if (!after.trim() && paraEnd !== -1) {
+    const nextEnd = text.indexOf("\n\n", paraEnd + 2);
+    after = text.slice(paraEnd + 2, nextEnd === -1 ? text.length : nextEnd);
+  }
+  const cutBefore = before.length > SLOT_CONTEXT_BEFORE_MAX ? `…${before.slice(-SLOT_CONTEXT_BEFORE_MAX).trimStart()}` : before.trimStart();
+  const cutAfter = after.length > SLOT_CONTEXT_AFTER_MAX ? `${after.slice(0, SLOT_CONTEXT_AFTER_MAX).trimEnd()}…` : after.trimEnd();
+  return { before: cutBefore, after: cutAfter };
+}
+
 /** Normalização do texto redigido (quebras de linha LF, bordas sem espaço). */
 export const normalizeSlotText = (text: string): string => text.replace(/\r\n?/g, "\n").trim();
 
