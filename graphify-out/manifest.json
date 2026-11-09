@@ -15793,5 +15793,15 @@
     "mtime": 1794189412.2002473,
     "ast_hash": "793b6765cf7697e64cfa7ee874ed6b2f",
     "semantic_hash": ""
+  },
+  "server/__tests__/unit/claude-skills-structure.test.ts": {
+    "mtime": 1794228003.131693,
+    "ast_hash": "5ae15b3724e90e997a6820a1e976a942",
+    "semantic_hash": ""
+  },
+  ".claude/skills/licigov-entrega-completa/SKILL.md": {
+    "mtime": 1794228003.1311362,
+    "ast_hash": "c70bdf8d84b89bf0a252c1ed35830972",
+    "semantic_hash": ""
   }
 }
