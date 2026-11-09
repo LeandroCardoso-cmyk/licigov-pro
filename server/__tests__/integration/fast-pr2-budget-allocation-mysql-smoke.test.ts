@@ -62,6 +62,13 @@ const RUN = STAMP.toString(36);
 let orgSeq = 0;
 let keySeq = 0;
 const key = (p: string) => `${p}-${RUN}-${++keySeq}-fp2`;
+/**
+ * Gate R1 (leitor da staging 9226e4b): chaves do body_json fora do conjunto conhecido. Exceção ÚNICA e explícita: a extensão VERSIONADA
+ * da E2 (`slotResolutions`, só no M2/ISSUANCE, `tpl-slot-resolution/1`) — um build anterior à E2 recusa esse M2 por hash (fail-closed),
+ * nunca o reinterpreta; M1 e M2 sem trechos resolvidos continuam no formato anterior.
+ */
+const unknownBodyKeys = (body: Record<string, any>, known: ReadonlySet<string>): string[] =>
+  Object.keys(body).filter((k) => !known.has(k) && !(k === "slotResolutions" && body.canonicalRevalidation && body.slotResolutions?.formatVersion === "tpl-slot-resolution/1"));
 const ORGS: number[] = [];
 const newOrg = () => { const o = BASE_ORG + orgSeq++; ORGS.push(o); return o; };
 
@@ -163,6 +170,7 @@ async function fillTrueDecisions(p: P): Promise<string[]> {
 async function reviewAndIssue(p: P): Promise<{ m1: string; officialId: string }> {
   const ra = await gen(p);
   expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
   const draft = (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0];
   const human = draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
   await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft.content), idempotencyKey: key("edit") });
@@ -193,6 +201,7 @@ async function readyTenant(label: string): Promise<P> {
 import { CONTENT_PENDING_VARIABLES } from "../../domain/institutionalTemplates/contentPending";
 import { renderBudgetAllocationForTr } from "../../services/institutionalTemplates/trStructuredParamsService";
 import { getTemplateCompositionPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { resolvePendingSlotsForTest } from "../helpers/slotResolutionFixture";
 const bridgeDeps = () => ({ ports: getTemplateCompositionPorts(), now: () => new Date().toISOString() });
 
 const DOT = "julgamento.dotacaoOrcamentaria";
@@ -270,7 +279,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     const BODY_KEYS_9226E4B = new Set(["sources", "conditionalDecisions", "aiNarratives", "annexes", "lateBound", "deferredPublication", "humanEditRefs", "canonicalRevalidation", "lifecycleBindings"]);
     const bodies = await rows("SELECT stage, body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org]);
     expect(new Set(bodies.map((x: any) => x.stage))).toEqual(new Set(["GENERATION", "ISSUANCE"]));
-    for (const x of bodies) expect(Object.keys(JSON.parse(x.b)).filter((k) => !BODY_KEYS_9226E4B.has(k)), x.stage).toEqual([]);
+    for (const x of bodies) expect(unknownBodyKeys(JSON.parse(x.b), BODY_KEYS_9226E4B), x.stage).toEqual([]);
     const official = (await rows("SELECT content FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, officialId]))[0];
     expect(official.content).toContain(DOT_TEXT);
     emitted = { p, officialId, content: official.content };
@@ -358,6 +367,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     proc(opts.org ?? p.org, opts.role ?? "operator", U_AUTHOR_R3).generateNotice({ processId: p.w.processId, object: "Aquisição sintética de material de expediente", ...WS, officialPins: pin(p.tr),
       idempotencyKey: opts.idempotencyKey ?? key("recompose"), expectedContentHash, ...(opts.confirmReplace ? { confirmReplace: true } : {}) } as any) as Promise<any>;
   const reviewCurrent = async (p: P, editKey: string): Promise<string> => {
+    await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key(`${editKey}-slots`));
     const draft = (await draftText(p))!;
     const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
     if (human !== draft) await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key(editKey) });
@@ -436,7 +446,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(officials.filter((o: any) => o.t === "tr")).toEqual(trBefore);
     // contrato de rollback: nenhum manifest com chave desconhecida do leitor da staging 9226e4b
     for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
-      expect(Object.keys(JSON.parse(m.b)).filter((x) => !BODY_KEYS_9226E4B.has(x))).toEqual([]);
+      expect(unknownBodyKeys(JSON.parse(m.b), BODY_KEYS_9226E4B)).toEqual([]);
     }
   }, 900_000);
 
@@ -535,7 +545,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(issued).toHaveLength(1);
     expect(issued[0].content).toContain(X);
     for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
-      expect(Object.keys(JSON.parse(m.b)).filter((x) => !BODY_KEYS_9226E4B.has(x))).toEqual([]);
+      expect(unknownBodyKeys(JSON.parse(m.b), BODY_KEYS_9226E4B)).toEqual([]);
     }
   }
 
@@ -695,7 +705,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     expect(draft).not.toMatch(VEDA);                                                                            // ausência ≠ decisão negativa
     expect(draft).not.toMatch(/\[REVISAR[^\]]*(adesaoAta|marcoInicialVigenciaAta|prazoAssinaturaAta)/);
     const m1 = await m1Of(p, ra.generationManifestId);
-    expect(Object.keys(m1).filter((k) => !BODY_KEYS_9226E4B.has(k))).toEqual([]);                               // R1: nenhuma chave nova
+    expect(unknownBodyKeys(m1, BODY_KEYS_9226E4B)).toEqual([]);                               // R1: nenhuma chave nova
     const again = await gen(p);
     expect(again.replayed).toBe(true);
     expect(again.generationManifestId).toBe(ra.generationManifestId);
@@ -706,7 +716,7 @@ describe.skipIf(!DB)("LICIGOV-FAST PR-2 — dotação/fonte do processo e pendê
     const official = (await rows("SELECT content FROM official_documents WHERE tenant_id = ? AND id = ?", [p.org, officialId]))[0];
     for (const n of SRP_POLICIES) expect(official.content, n).toContain(srpMarker(n));
     for (const m of await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ?", [p.org])) {
-      expect(Object.keys(JSON.parse(m.b)).filter((k) => !BODY_KEYS_9226E4B.has(k))).toEqual([]);
+      expect(unknownBodyKeys(JSON.parse(m.b), BODY_KEYS_9226E4B)).toEqual([]);
     }
   }, 600_000);
 

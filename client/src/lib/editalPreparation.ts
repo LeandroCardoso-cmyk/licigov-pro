@@ -572,6 +572,13 @@ export function generateReady(bound: boolean, hasTrPin: boolean, preflight: Pref
 }
 
 export interface DeviationView { blockId: string; kind: "INCLUDED_BLOCK_REMOVED" | "EXCLUDED_BLOCK_INSERTED"; acknowledged: boolean }
+/** E2 — trecho pendente do modelo (slot de IA sem narrativa) e a resolução humana dele (estado calculado pelo servidor). */
+export interface SlotView {
+  slotKey: string; label: string; state: "PENDING" | "RESOLVED" | "STALE"; reason: string | null;
+  inline: boolean; declaredNoneAllowed: boolean; declaredNoneText: string | null;
+  revision: number; resolution: "HUMAN_TEXT" | "DECLARED_NONE" | null; resolvedByName: string | null; resolvedAt: string | null;
+  currentText: string | null;
+}
 export interface ReviewStateView {
   composedByTemplate: boolean; generationManifestId?: string; templateRevisionId?: string;
   unresolvedMarkers: { count: number; slots: readonly string[]; samples: readonly string[] };
@@ -579,8 +586,26 @@ export interface ReviewStateView {
   /** Campos de SISTEMA do ciclo de vida (ex.: data de emissão): informativo; atribuídos no ato oficial da emissão. */
   lateBound?: readonly { variable: string; label: string; message: string }[];
   aiNarratives: readonly { slotKey: string; executionId: string; humanAccepted: boolean }[];
+  /** E2 — ausente em respostas anteriores à resolução por trecho (o painel cai no aviso genérico de marcadores). */
+  slots?: readonly SlotView[];
   revalidation: { status: "PASSED" | "BLOCKED"; issues: readonly { code: string; path: string; message: string }[] };
 }
+
+/** Trechos do modelo ainda sem resolução humana válida (pendentes ou desatualizados). */
+export const openSlots = (r: Pick<ReviewStateView, "slots"> | undefined): SlotView[] => (r?.slots ?? []).filter((s) => s.state !== "RESOLVED");
+
+/**
+ * Marcadores [REVISAR] que NÃO são trechos de redação supervisionada (dados não informados): os de trecho são tratados por slot.
+ * Sem a lista de trechos (resposta antiga) todos os marcadores contam.
+ */
+export const dataMarkerCount = (r: Pick<ReviewStateView, "unresolvedMarkers" | "slots">): number =>
+  r.slots ? Math.max(0, r.unresolvedMarkers.count - r.unresolvedMarkers.slots.length) : r.unresolvedMarkers.count;
+
+export const SLOT_STATE_LABEL: Record<SlotView["state"], string> = {
+  PENDING: "Pendente",
+  RESOLVED: "Resolvido por pessoa",
+  STALE: "Alterado após a resolução",
+};
 
 export const DEVIATION_LABEL: Record<DeviationView["kind"], string> = {
   INCLUDED_BLOCK_REMOVED: "Bloco do modelo removido ou substituído no texto",
@@ -629,6 +654,10 @@ export function revalidationIssueMessage(i: { code: string; path: string; messag
       return "A minuta não está vinculada à versão exata do TR oficial: selecione o TR oficial e componha novamente.";
     case "CROSS_TENANT_REFERENCE":
       return "A minuta referencia um documento que não pertence a este órgão: componha novamente.";
+    case "AI_SLOT_UNRESOLVED":
+      return "Há trecho do modelo sem redação ou declaração registrada por pessoa: resolva-o no painel de revisão (apagar o marcador não basta).";
+    case "AI_SLOT_RESOLUTION_STALE":
+      return "Um trecho do modelo foi alterado depois de resolvido: registre novamente a redação atual no painel de revisão.";
     default:
       return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
   }
@@ -649,12 +678,17 @@ export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolea
   if (!r || !r.composedByTemplate) return { ready: true, blockers: [], technical: [] };
   const blockers: string[] = [];
   const technical: string[] = [];
-  if (r.unresolvedMarkers.count > 0) blockers.push(`${r.unresolvedMarkers.count} marcador(es) [REVISAR] pendente(s) no texto.`);
+  const open = openSlots(r).length;
+  if (open > 0) blockers.push(`${open} trecho(s) do modelo aguardando redação ou declaração de pessoa responsável.`);
+  const dataMarkers = dataMarkerCount(r);
+  if (dataMarkers > 0) blockers.push(`${dataMarkers} marcador(es) [REVISAR] pendente(s) no texto.`);
   const pend = pendingDeviations(r).length;
   if (pend > 0) blockers.push(`${pend} desvio(s) estrutural(is) sem reconhecimento humano.`);
   if (r.revalidation.status === "BLOCKED") {
     for (const i of r.revalidation.issues) {
       if (i.code === "STRUCTURAL_DEVIATION_UNACKNOWLEDGED") continue;
+      // Trechos do modelo: já contados acima (por slot); o detalhe técnico continua disponível.
+      if ((i.code === "AI_SLOT_UNRESOLVED" || i.code === "AI_SLOT_RESOLUTION_STALE") && r.slots) { technical.push(`${i.code} · ${i.path} — ${i.message}`); continue; }
       const text = revalidationIssueMessage(i);
       if (!blockers.includes(text)) blockers.push(text);
       technical.push(`${i.code} · ${i.path} — ${i.message}`);

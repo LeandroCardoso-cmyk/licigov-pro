@@ -53,6 +53,7 @@ import {
 import {
   BLL, E2E_BUDGET_BASE_DATE, SYNTHETIC_PLATFORMS, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
+import { resolvePendingSlotsForTest } from "../helpers/slotResolutionFixture";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
@@ -171,6 +172,7 @@ async function fillTrueDecisions(p: P): Promise<string[]> {
 async function reviewAndIssue(p: P): Promise<{ m1: string; officialId: string }> {
   const ra = await gen(p);
   expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
   const draft = (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0];
   const human = draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
   await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft.content), idempotencyKey: key("edit") });
@@ -202,6 +204,7 @@ const sha = (t: string) => createHash("sha256").update(t).digest("hex");
 async function composeAndReview(p: P): Promise<{ ra: any; human: string; draft: string }> {
   const ra = await gen(p);
   expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
   const draft = (await draftText(p))!;
   const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
   await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key("edit") });

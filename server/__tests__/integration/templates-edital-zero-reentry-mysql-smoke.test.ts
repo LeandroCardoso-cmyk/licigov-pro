@@ -54,6 +54,7 @@ import {
 import {
   BLL, E2E_SCENARIO, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, governedFieldsFor, seedExtraProcess, seedOfficialTr, seedWorld, syntheticCnpj, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
+import { resolvePendingSlotsForTest } from "../helpers/slotResolutionFixture";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
@@ -247,6 +248,7 @@ describe.skipIf(!DB)("Preparação do Edital — ZERO_REENTRY (MySQL real, rotas
     expect(await writes(a)).toEqual(zero);
     const ra = await gen(a);
     expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+    await resolvePendingSlotsForTest(a.org, a.w.processId, U_EDITOR, key("slots"));
     const draftA = (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [a.org, a.w.processId]))[0];
     expect(draftA.content).toContain("Paraná");                  // UF por extenso projetada do cadastro do órgão
     const reviewA: any = await proc(a.org).editalTemplateReviewState({ processId: a.w.processId });

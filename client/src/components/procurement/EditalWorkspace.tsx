@@ -616,7 +616,7 @@ export default function EditalWorkspace({
         </div>
       )}
 
-      {draft && <div className="mt-6"><EditalTemplateReviewPanel processId={processId} contentKey={draft.contentHash} /></div>}
+      {draft && <div className="mt-6"><EditalTemplateReviewPanel processId={processId} contentKey={draft.contentHash} editorDirty={editorDirty} /></div>}
 
       <RegenerationConfirmDialog
         open={confirmOpen} onOpenChange={setConfirmOpen} documentLabel="Edital"

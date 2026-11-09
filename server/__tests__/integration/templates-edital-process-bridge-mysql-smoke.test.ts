@@ -47,13 +47,15 @@ import { ModelRegistrationService } from "../../services/institutionalTemplates/
 import { TemplateReviewService } from "../../services/institutionalTemplates/reviewService";
 import { TemplateGovernanceService } from "../../services/institutionalTemplates/governanceService";
 import { createTemplateCompositionPorts, createTemplateWorkflowPorts, templateIssuanceHook } from "../../services/institutionalTemplates/integration";
-import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { configureTemplateCompositionPorts, configureTemplateWorkflowPorts, getTemplateCompositionPorts, getTemplateWorkflowPorts } from "../../services/institutionalTemplates/portsRegistry";
+import { inspectTemplateReview } from "../../services/institutionalTemplates/templateCompositionService";
 import { installGovernedLegalReferenceV1, approveAndActivateReferenceSet } from "../../db/legalReference";
 import { computeManifestHashes, LEGAL_REFERENCE_V1_META } from "../../domain/legalReference/manifestV1";
 import { makeContext, mockUser } from "../helpers/fixtures";
 import {
   BLL, E2E_SCENARIO, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, seedGoverned, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
+import { resolvePendingSlotsForTest } from "../helpers/slotResolutionFixture";
 
 const DB = process.env.DATABASE_URL;
 const STAMP = (Date.now() % 1_000_000);
@@ -201,9 +203,11 @@ describe.skipIf(!DB)("Bridge Edital → Modelos Institucionais (MySQL real, rout
 
   /** Revisão humana do rascunho composto pelo bridge (editor ≠ autor): texto humano nos blocos de narrativa + reconhecimento dos desvios. */
   async function reviewByHuman(p: Awaited<ReturnType<typeof prepare>>, r: any) {
-    const d = await draftOf(p.w);
     // Narrativas de IA NÃO são produzidas pelo bridge: o rascunho traz marcadores governados e a emissão recusa pendências.
-    expect(d.content).toMatch(/\[REVISAR/);
+    expect((await draftOf(p.w)).content).toMatch(/\[REVISAR/);
+    // E2 — trechos do modelo resolvidos pelo ato próprio (apagar o marcador não basta); os demais marcadores pelo editor.
+    await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
+    const d = await draftOf(p.w);
     const human = d.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe de licitações.") + "\nObservação do revisor: conteúdo conferido.\n";
     await saveReviewableDraft({
       organizationId: p.org, processId: p.w.processId, kind: "edital", content: human, actorUserId: U_EDITOR,
@@ -213,16 +217,14 @@ describe.skipIf(!DB)("Bridge Edital → Modelos Institucionais (MySQL real, rout
       organizationId: p.org, processId: p.w.processId, kind: "edital", actorUserId: U_MANAGER, actorRole: "manager", idempotencyKey: key("promo"),
       correlationId: `corr-promo-${p.org}`, expectedContentHash: draftContentHash(human), reason: "Revisado e conferido pelo gestor.", templateIssuance: templateIssuanceHook(),
     });
-    // Sem narrativa de IA aceita, a substituição humana dos blocos de narrativa é um DESVIO ESTRUTURAL: exige reconhecimento humano
-    // registrado, bloco a bloco (mecanismo governado existente). A emissão recusa até todos serem reconhecidos.
-    const refused = await err(promote());
-    expect(refused?.message).toContain("STRUCTURAL_DEVIATION_UNACKNOWLEDGED");
-    const deviations = [...(refused?.message ?? "").matchAll(/(INCLUDED_BLOCK_REMOVED|EXCLUDED_BLOCK_INSERTED) em (\S+) sem reconhecimento/g)];
-    expect(deviations.length).toBeGreaterThan(0);
-    const review = new TemplateReviewService(getTemplateWorkflowPorts().manifests!);
-    for (const [, kind, blockId] of deviations) {
-      await review.acknowledgeDeviation(ctxOf(p.org), {
-        manifestId: r.generationManifestId, blockId, kind: kind as any, confirm: true, idempotencyKey: key("ack").slice(0, 120), decision: decision({ basisReference: "Revisão do documento composto" }),
+    // E2: o trecho de narrativa é resolvido pelo ato próprio (redação registrada no ledger); preencher o marcador NÃO é mais tratado como
+    // desvio estrutural (antes exigia um reconhecimento de desvio como substituto da revisão do trecho — confirmação duplicada).
+    const st = await inspectTemplateReview(getTemplateCompositionPorts(), { organizationId: p.org, processId: p.w.processId, draftId: (await draftOf(p.w)).id, content: human });
+    expect(st.slots?.length).toBeGreaterThan(0);
+    expect(st.slots?.every((s) => s.state === "RESOLVED")).toBe(true);
+    for (const d of st.structuralDeviations.filter((x) => !x.acknowledged)) {
+      await new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctxOf(p.org), {
+        manifestId: r.generationManifestId, blockId: d.blockId, kind: d.kind, confirm: true, idempotencyKey: key("ack").slice(0, 120), decision: decision({ basisReference: "Revisão do documento composto" }),
       });
     }
     return promote;

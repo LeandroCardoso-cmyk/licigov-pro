@@ -27,6 +27,7 @@ import type {
 import type { AiNarrativeOutput, CanonicalSourceSnapshot, OfficialDocumentPin } from "../../domain/institutionalTemplates/composer";
 import type { GenerationManifest, IssuanceManifest } from "../../domain/institutionalTemplates/manifest";
 import type { AiNarrativeAcceptance, HumanEditLink, StructuralDeviationAcknowledgment } from "../../domain/institutionalTemplates/revalidation";
+import type { SlotResolutionRecord } from "../../domain/institutionalTemplates/slotResolution";
 import type { VariableSource2 } from "../../domain/institutionalTemplates/variableCatalog2";
 import type { DecisionRequest, DecisionSubjectType, InstitutionalDecision } from "../../domain/institutionalDecision";
 import type { TemplateCapabilities } from "../../domain/institutionalTemplates/governance/capabilities";
@@ -282,6 +283,8 @@ export interface TemplateReviewPort {
   listDeviationAcknowledgments(organizationId: OrgId, generationManifestId: string): Promise<readonly StructuralDeviationAcknowledgment[]>;
   /** Cadeia de edições humanas governadas do rascunho a partir do texto composto. */
   listHumanEdits(organizationId: OrgId, generatedDocumentId: string, fromContentHash: string): Promise<readonly HumanEditLink[]>;
+  /** E2 — resoluções humanas registradas dos slots pendentes do M1 (todas as revisões; a regra escolhe a última). */
+  listSlotResolutions(organizationId: OrgId, generationManifestId: string): Promise<readonly SlotResolutionRecord[]>;
 }
 
 /** Transação dona da escrita, com o retry de deadlock do SEM-084 (repete a transação INTEIRA). */
@@ -365,7 +368,7 @@ export function createUnavailableTemplatePorts(): TemplatePorts {
     },
     review: {
       loadAiOutputs: unavailable("review"), listAiAcceptances: unavailable("review"),
-      listDeviationAcknowledgments: unavailable("review"), listHumanEdits: unavailable("review"),
+      listDeviationAcknowledgments: unavailable("review"), listHumanEdits: unavailable("review"), listSlotResolutions: unavailable("review"),
     },
     clock: { now: () => { throw new TemplatePersistenceUnavailableError("clock"); } },
     transactions: { run: unavailable("transactions") },

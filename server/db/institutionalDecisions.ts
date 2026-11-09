@@ -78,7 +78,8 @@ export async function lockDecisionSubject(
   }
   // Revisão humana de um documento composto — o assunto é `<manifestId>:<chave>`; o lock é do M1 (INSERT-only; o lock
   // serializa apenas as decisões sobre ele, nunca o altera).
-  if (subjectType === "institutional_template.ai_acceptance" || subjectType === "institutional_template.deviation_acknowledgment") {
+  if (subjectType === "institutional_template.ai_acceptance" || subjectType === "institutional_template.deviation_acknowledgment"
+      || subjectType === "institutional_template.slot_resolution") {
     const manifestId = subjectId.split(":")[0] ?? "";
     if (!manifestId) return false;
     const rows = await tx.select({ id: documentCompositionManifestsTable.id }).from(documentCompositionManifestsTable)

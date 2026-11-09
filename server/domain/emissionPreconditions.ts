@@ -48,7 +48,7 @@ export function emissionBlockers(input: EmissionPreconditionInput): EmissionBloc
   const out: EmissionBlocker[] = [];
   const markers = countReviewMarkers(input.content);
   if (markers > 0) {
-    out.push({ code: "EMISSION_REVIEW_MARKERS", message: `O conteúdo ainda tem ${markers} marcador(es) [REVISAR] — resolva-os e salve antes de emitir.` });
+    out.push({ code: "EMISSION_REVIEW_MARKERS", message: `O conteúdo ainda tem ${markers} marcador(es) [REVISAR] — resolva-os antes de emitir (trechos do modelo: pelo painel de revisão; demais: no editor, salvando o texto).` });
   }
   if (input.sourceState === "source_changed") {
     const what = input.changedSourceLabels.length ? `: ${input.changedSourceLabels.join(", ")}` : "";
