@@ -11,6 +11,12 @@
  *  - credencial: não pode ser admin de plataforma (cross-tenant) nem ser membro da organização 1 (referências reais);
  *  - exercício do processo informado explicitamente (`HOMOLOG_EXERCICIO`), nunca "ano corrente" por omissão.
  * Senhas, cookies e tokens nunca são impressos nem gravados no relatório.
+ *
+ * P0 (auditoria pré-emissão H5) — REGRA OPERACIONAL: a automação valida MECANISMOS; nunca se apresenta como pessoa nem simula revisão humana.
+ * Ela não declara conferência/revisão/aprovação que não ocorreu, não reconhece desvios estruturais para liberar emissão e não trata duas
+ * identidades técnicas como duas pessoas. Onde a jornada precisa atravessar um `[REVISAR]` para exercitar o mecanismo de emissão, o texto
+ * inserido e o motivo da emissão DIZEM que é automação sem revisão humana (`MECHANISM_ONLY_*`); a evidência resultante é
+ * `MECHANISM_ONLY — HUMAN_REVIEW_NOT_VERIFIED` (ver docs/audits/HOMOLOGATION_H1_H5_EVIDENCE_RECLASSIFICATION.md).
  */
 import { createTRPCClient, httpLink, TRPCClientError } from "@trpc/client";
 import superjson from "superjson";
@@ -299,12 +305,59 @@ export function looksLike(format: "docx" | "pdf", bytes: Uint8Array): boolean {
   return format === "docx" ? head.startsWith("PK") : head.startsWith("%PDF-");
 }
 
-/** Decisão governada marcada como DADO DE TESTE: autor = usuário autenticado; nenhum ato administrativo é imitado. */
+/**
+ * Decisão governada marcada como DADO DE TESTE: autor = usuário autenticado; nenhum ato administrativo é imitado. P0: a referência e a
+ * justificativa dizem que a execução é AUTOMATIZADA e que não houve confirmação pessoal (o `confirm: true` da API é sinal técnico, não declaração).
+ */
 export function syntheticDecision(user: { name?: string | null; id: number }, today: string) {
   return {
     decidedByName: user.name || `Usuário ${user.id}`, decidedByRole: `${MARK} usuário de homologação`, decidedByUserId: user.id,
-    decidedAt: today, basisReference: `${MARK} sem ato administrativo — dado de teste`, reason: `${MARK} preenchimento de homologação`,
+    decidedAt: today, basisReference: `${MARK} execução automatizada — sem ato administrativo e sem confirmação pessoal (dado de teste)`,
+    reason: `${MARK} preenchimento automatizado de homologação (${MECHANISM_ONLY})`,
   };
+}
+
+// ─── P0 — evidências honestas: automação nunca declara revisão humana ───────────────────────────────────────────────────────────────
+
+/** Classificação de toda evidência produzida por automação neste executor. */
+export const MECHANISM_ONLY = "MECHANISM_ONLY — HUMAN_REVIEW_NOT_VERIFIED";
+/** Texto que a automação insere no lugar de um `[REVISAR]` SÓ para exercitar o mecanismo (diz o que é; não afirma conferência). */
+export const MECHANISM_ONLY_PLACEHOLDER = `${MARK} trecho substituído por automação apenas para validar o mecanismo — SEM REVISÃO HUMANA (${MECHANISM_ONLY})`;
+/** Motivo de emissão para jornadas automatizadas (emissão técnica de teste; não é revisão, aprovação nem publicação). */
+export const MECHANISM_ONLY_EMISSION_REASON = `${MARK} emissão técnica automatizada de homologação — sem revisão humana e sem aprovação (${MECHANISM_ONLY})`;
+export const BLOCKED_FICTITIOUS_HUMAN_REVIEW = "BLOCKED_HOMOLOGATION_FICTITIOUS_HUMAN_REVIEW";
+
+/**
+ * Afirmações de revisão/conferência/aprovação humana (as usadas nas homologações H1–H5 e equivalentes). Aplicada ao texto que a AUTOMAÇÃO
+ * escreve (trecho inserido, motivo de emissão, nota) — nunca ao documento inteiro, que pode citar "conferência" legitimamente.
+ */
+const FICTITIOUS_REVIEW_CLAIM = new RegExp([
+  String.raw`\b(?:conferid[oa]s?|confer(?:i|imos)|revisad[oa]s?|revis(?:ei|amos)|aprovad[oa]s?|aprov(?:o|amos)|validad[oa]s?|verificad[oa]s?|homologad[oa]s?)\b`,
+  String.raw`\b(?:confirmo|declaro|atesto|certifico|ratifico)\b`,
+  String.raw`confer[êe]ncia\s+(?:realizada|feita|conclu[íi]da)|revis[ãa]o\s+(?:realizada|feita|conclu[íi]da)|observa[çc][ãa]o do revisor`,
+].join("|"), "i");
+
+/** Recusa (BLOQUEIO, nunca PASS) texto escrito pela automação que afirme revisão/conferência/aprovação humana. */
+export function assertNoFictitiousReviewClaim(text: string, where: string): void {
+  const withoutDisclaimer = text.split(MECHANISM_ONLY).join("");
+  if (FICTITIOUS_REVIEW_CLAIM.test(withoutDisclaimer)) {
+    throw new Error(`${BLOCKED_FICTITIOUS_HUMAN_REVIEW}: ${where} afirma revisão/conferência/aprovação humana em texto produzido por automação`);
+  }
+}
+
+/**
+ * Única forma permitida de a automação atravessar `[REVISAR]`: substitui pelo `MECHANISM_ONLY_PLACEHOLDER` (que declara a ausência de revisão).
+ * Devolve o conteúdo e quantos marcadores foram substituídos, para o relatório registrar `HUMAN_REVIEW: NOT_VERIFIED`.
+ */
+export function replaceReviewMarkersForMechanismOnly(content: string): { content: string; replaced: number } {
+  assertNoFictitiousReviewClaim(MECHANISM_ONLY_PLACEHOLDER, "texto de substituição de [REVISAR]");
+  const replaced = (content.match(/\[REVISAR[^\]]*\]/g) ?? []).length;
+  return { content: content.replace(/\[REVISAR[^\]]*\]/g, MECHANISM_ONLY_PLACEHOLDER), replaced };
+}
+
+/** Reconhecer desvio estrutural é ato de revisão humana do documento composto: a automação NÃO o pratica (sempre recusa). */
+export function refuseAutomatedDeviationAcknowledgement(): never {
+  throw new Error(`${BLOCKED_FICTITIOUS_HUMAN_REVIEW}: reconhecimento de desvio estrutural exige revisão humana; a automação não o executa`);
 }
 
 export const trpcCode = (e: unknown): string => (e instanceof TRPCClientError ? String((e.data as { code?: string } | undefined)?.code ?? "") : "");

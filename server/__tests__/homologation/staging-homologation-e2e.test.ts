@@ -21,6 +21,7 @@ import { writeFileSync } from "node:fs";
 import * as mammoth from "mammoth";
 import {
   AI_META_RESIDUE, M8_PRICE_RESEARCH_TEXT, MARK, directCallAdapter, homologSession, looksLike,
+  MECHANISM_ONLY, MECHANISM_ONLY_EMISSION_REASON, assertNoFictitiousReviewClaim, replaceReviewMarkersForMechanismOnly,
   runHomologationPreflight, type PreflightRecord,
   pendingMarkers, priceImportMode, redundantReviewMarkers, priceResearchCsv, runCanonicalPriceResearch, syntheticDecision, syntheticProcessNumber, technicalResidue, trpcCode,
 } from "../../../scripts/homologation-e2e";
@@ -42,7 +43,7 @@ const ITEMS = [
 ];
 const OBJ = `${MARK} Aquisição de material de expediente — execução ${RUN}`;
 const REPORT: { run: string; tenant?: unknown; blocked?: string; preflight?: PreflightRecord; journeys: Record<string, unknown>; metrics: Record<string, unknown>; mode: string } =
-  { run: RUN, journeys: {}, metrics: {}, mode: "HTTP real (APIs oficiais); não é homologação visual" };
+  { run: RUN, journeys: {}, metrics: {}, mode: "HTTP real (APIs oficiais); não é homologação visual; evidência MECHANISM_ONLY — HUMAN_REVIEW_NOT_VERIFIED (automação não revisa)" };
 
 const download = async (url: string) => new Uint8Array(await (await fetch(url)).arrayBuffer());
 const docxText = async (b: Uint8Array) => (await mammoth.extractRawText({ buffer: Buffer.from(b) })).value;
@@ -69,6 +70,7 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     exercicio = pre.exercicio;
     orgId = pre.a.org.id;
     decisionA = syntheticDecision(pre.a.me, TODAY);
+    assertNoFictitiousReviewClaim(`${decisionA.basisReference} ${decisionA.reason}`, "decisão sintética do executor");
     REPORT.tenant = { id: orgId, slug: pre.a.org.slug, roles: [pre.a.role, pre.b.role] };
   }, 120_000);
 
@@ -181,13 +183,17 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
       structuredActive: trBefore.fields.filter((f: any) => f.active).length,
       structuredPrefilled: trBefore.fields.filter((f: any) => f.active && f.status === "SET").length,
       structuredProposed: trBefore.fields.filter((f: any) => f.active && f.proposal).length,
-      structuredConfirmedByHuman: trTyped.length, ...pendingMarkers(trDraft.content),
+      structuredFilledByAutomation: trTyped.length,   // P0: preenchido pelo executor (dado sintético), não confirmado por pessoa
+      ...pendingMarkers(trDraft.content),
     };
 
-    // 5) Revisão humana do TR (autor) → emissão oficial pelo OUTRO usuário (SoD) + replay da emissão.
-    const human = trDraft.content.replace(/\[REVISAR[^\]]*\]/g, `${MARK} texto conferido na homologação.`);
+    // 5) MECANISMO de emissão do TR (P0): a automação NÃO revisa. Atravessa os [REVISAR] com o texto que declara "sem revisão humana", emite
+    //    pela OUTRA identidade técnica (SoD técnica, não prova de duas pessoas) e registra a evidência como MECHANISM_ONLY.
+    const { content: human, replaced: trMarkersReplaced } = replaceReviewMarkersForMechanismOnly(trDraft.content);
+    REPORT.metrics.TR_HUMAN_REVIEW = { classification: MECHANISM_ONLY, markersReplacedByAutomation: trMarkersReplaced };
     if (human !== trDraft.content) await op.procurementProcess.saveReviewableDraft.mutate({ processId: pid, kind: "tr", content: human, expectedContentHash: draftContentHash(trDraft.content), idempotencyKey: key("tr-edit") });
-    const promoInput = { processId: pid, kind: "tr" as const, idempotencyKey: key("tr-promo"), expectedContentHash: draftContentHash(human), reason: `${MARK} TR revisado e conferido.` };
+    assertNoFictitiousReviewClaim(MECHANISM_ONLY_EMISSION_REASON, "motivo da emissão do TR");
+    const promoInput = { processId: pid, kind: "tr" as const, idempotencyKey: key("tr-promo"), expectedContentHash: draftContentHash(human), reason: MECHANISM_ONLY_EMISSION_REASON };
     const promoted: any = await mgr.procurementProcess.promoteOfficial.mutate(promoInput);
     expect(promoted.promoted).toBe(true);
     expect(((await mgr.procurementProcess.promoteOfficial.mutate(promoInput)) as any).replayed, "replay da emissão do TR").toBe(true);
@@ -245,7 +251,7 @@ describe.skipIf(!BASE)("Homologação E2E — staging, tenant sintético, HTTP r
     expect(((await op.procurementProcess.generateNotice.mutate(genInput as any)) as any).replayed, "replay da minuta").toBe(true);
     REPORT.metrics.EDITAL = { chars: text.length, ...pendingMarkers(text) };
 
-    // 8) Exportação DOCX/PDF dos quatro documentos (bytes e texto conferidos).
+    // 8) Exportação DOCX/PDF dos quatro documentos (bytes e texto verificados pela automação).
     const exported: Record<string, unknown> = {};
     for (const kind of ["dfd", "etp", "tr", "edital"] as const) {
       for (const format of ["docx", "pdf"] as const) {
