@@ -1,12 +1,20 @@
 # Product Roadmap — LiciGov Pro
 
-**Atualizado:** 28/10/2026 — aceite formal da M8 com ressalvas (ciclo "Jornadas integradas"; seções de maio/2026 preservadas abaixo)\
+**Atualizado:** 05/11/2026 — lote de credenciais concluído; aceite M8 de 28/10 com ressalvas e histórico preservados\
 **Versão:** 1.1
 
 > Fonte de verdade da filosofia: [`docs/architecture/PRODUCT_NORTH_STAR.md`](../docs/architecture/PRODUCT_NORTH_STAR.md).
 > Regras de execução: `CLAUDE.md` (LICIGOV-FAST). Roadmaps por domínio em `docs/business-domains/*/roadmap.md`.
 
 ---
+
+## Segurança — atualização de 05/11/2026
+
+O lote de credenciais está concluído: **16/16 itens (100% desse checklist)**, com D2/staging e D3/produção aceitos, chaves novas em uso, antigas Gemini/AWS/Brevo excluídas e administrador real de staging recuperado. Testes de produção e exclusões foram confirmados manualmente pelo Owner; os testes sintéticos de staging têm evidência do executor. [Relatório e limitações](../docs/security/incident-2026-10/LOTE_CREDENCIAIS_2026-11.md).
+
+**P0 geral permanece aberto.** Restam os critérios de logs históricos, identidade/permissões/MFA, confirmações operacionais e decisões de dependências/release. A contagem atual de assinaturas legadas já retornou zero nas consultas registradas e não precisa ser repetida para encerrar essa pendência. O próximo passo do incidente é reconciliar seus critérios com essas evidências, sem reiniciar rotações ou testes concluídos.
+
+A publicação destes documentos em branch própria/PR draft não homologa produção, não altera os percentuais M0–M9 ou o global de produto de **91,25%**, não libera #319/#337 e não modifica as ressalvas da M8. [Roadmap do incidente](../docs/security/incident-2026-10/ROADMAP.md).
 
 ## Ciclo atual (out/2026) — Jornadas institucionais completas
 
@@ -450,7 +458,7 @@ banco, S3 do staging e provedor de IA) e documentos confirmados. Nenhum impedime
 - Capturas de tela da homologação contêm e-mails das contas de teste e não são anexadas nem publicadas.
 
 #### Pendências independentes (preservadas, sem nova classificação)
-- Incidente de credenciais P0 — aberto.
+- Incidente de credenciais P0 — aberto; lote de credenciais concluído em 05/11/2026 (16/16), com logs históricos, identidade/permissões e confirmações operacionais ainda sujeitos ao roadmap do incidente.
 - Políticas institucionais pendentes, incluindo G-3 (novas versões oficiais) e a segregação solicitante × parecerista.
 - Numeração ambígua de processos.
 - Parecer avulso.
