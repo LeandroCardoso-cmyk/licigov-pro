@@ -13,7 +13,7 @@
 // `any` inevitável ao consumir a AST não-tipada do `marked` e as opções do PDFKit.
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Footer, PageNumber } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Footer, PageNumber, TableLayoutType } from "docx";
 
 // Strip inline markdown (bold, italic, links, code) to plain text
 function stripInline(text: string): string {
@@ -292,12 +292,16 @@ export async function convertToDOCX(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface InlineRun { text: string; bold?: boolean; italic?: boolean }
+/** F3-D — até 4 níveis de título no corpo (antes: 3; "####" virava o mesmo nível de "###" e a hierarquia do TR se perdia). */
+export type HeadingDepth = 1 | 2 | 3 | 4;
+/** Alinhamento declarado na tabela Markdown (`---:` ⇒ direita); `null` = padrão (esquerda). */
+export type CellAlign = "left" | "center" | "right" | null;
 export type DocBlock =
-  | { kind: "heading"; level: 1 | 2 | 3; runs: InlineRun[] }
+  | { kind: "heading"; level: HeadingDepth; runs: InlineRun[] }
   | { kind: "paragraph"; runs: InlineRun[] }
   | { kind: "list"; ordered: boolean; items: InlineRun[][] }
   | { kind: "notice"; runs: InlineRun[] } // blockquote → bloco de aviso destacado
-  | { kind: "table"; header: InlineRun[][]; rows: InlineRun[][][] } // tabela Markdown (GFM) — nunca descartada
+  | { kind: "table"; header: InlineRun[][]; rows: InlineRun[][][]; align?: CellAlign[] } // tabela Markdown (GFM) — nunca descartada
   | { kind: "hr" };
 
 /**
@@ -378,7 +382,7 @@ export function buildInstitutionalModel(content: string, meta: InstitutionalMeta
   for (const token of tokens) {
     switch (token.type) {
       case "heading":
-        blocks.push({ kind: "heading", level: Math.min(Math.max(token.depth, 1), 3) as 1 | 2 | 3, runs: tokensToRuns(token.tokens) });
+        blocks.push({ kind: "heading", level: Math.min(Math.max(token.depth, 1), 4) as HeadingDepth, runs: tokensToRuns(token.tokens) });
         break;
       case "paragraph":
         blocks.push({ kind: "paragraph", runs: tokensToRuns(token.tokens) });
@@ -410,6 +414,7 @@ export function buildInstitutionalModel(content: string, meta: InstitutionalMeta
           kind: "table",
           header: (token.header ?? []).map(cellRuns),
           rows: (token.rows ?? []).map((row: any[]) => row.map(cellRuns)),
+          align: (token.align ?? []).map((a: unknown) => (a === "left" || a === "center" || a === "right" ? a : null)),
         });
         break;
       }
@@ -524,8 +529,13 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
   for (const b of model.blocks) {
     if (b.kind === "hr") { paras.push(new Paragraph({ text: "", border: { bottom: { color: "888888", size: 3, style: BorderStyle.SINGLE, space: 1 } } })); continue; }
     if (b.kind === "heading") {
-      const level = b.level === 1 ? HeadingLevel.HEADING_2 : b.level === 2 ? HeadingLevel.HEADING_3 : HeadingLevel.HEADING_4;
-      paras.push(new Paragraph({ heading: level, spacing: { before: 160, after: 80 }, children: runsToDocx(b.runs) }));
+      const level = [HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5][b.level - 1];
+      // F3-C/D — tamanho/negrito/"manter com o próximo" vêm do ESTILO do título (styles abaixo); o anexo começa em página nova.
+      // Negrito forçado nos runs: `tokensToRuns` grava bold=false explícito, que anularia o negrito do estilo.
+      paras.push(new Paragraph({
+        heading: level, ...(isAnnexHeading(b) ? { pageBreakBefore: true } : {}),
+        children: runsToDocx(b.runs.map((r) => ({ ...r, bold: true })), b.level === 4),
+      }));
     } else if (b.kind === "paragraph") {
       paras.push(new Paragraph({ spacing: { after: 120 }, children: runsToDocx(b.runs) }));
     } else if (b.kind === "list") {
@@ -533,14 +543,23 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
     } else if (b.kind === "notice") {
       paras.push(new Paragraph({ spacing: { before: 100, after: 100 }, children: [new TextRun({ text: "⚠ ", bold: true }), ...runsToDocx(b.runs, true)] }));
     } else if (b.kind === "table") {
-      // Qualidade documental F1 — célula de tabela no MESMO corpo do PDF (9 pt): no corpo do texto, tabelas largas (8 colunas)
-      // partiam palavras no meio ("catalogaçã/o"). Só a apresentação muda; o conteúdo é o mesmo.
-      const cell = (runs: InlineRun[], header: boolean): TableCell => new TableCell({
-        children: [new Paragraph({ children: runsToDocx(header ? runs.map((r) => ({ ...r, bold: true })) : runs, false, DOCX_TABLE_FONT_HALF_POINTS) })],
+      // Qualidade documental F1 — célula de tabela no MESMO corpo do PDF (9 pt) e linha nunca partida entre páginas.
+      // F3-A — larguras PROPORCIONAIS ao conteúdo (mesmo cálculo do PDF): antes as colunas eram iguais e a descrição de uma tabela de
+      // 8 colunas partia palavras ("HOMOLO/GAÇÃO"). Grade fixa em twips; a fonte só diminui (8/7,5 pt) se as palavras não couberem.
+      const plan = planTableColumns(tableGrid(b.header, b.rows), CONTENT_WIDTH_PT, measureHelvetica, TABLE_CELL_PAD_PT);
+      const halfPoints = Math.round(plan.fontSize * 2);
+      const twips = plan.widths.map((w) => Math.floor(w * 20));
+      const cell = (runs: InlineRun[], header: boolean, i: number): TableCell => new TableCell({
+        width: { size: twips[i] ?? 0, type: WidthType.DXA },
+        children: [new Paragraph({ alignment: docxAlign(b.align?.[i]), children: runsToDocx(header ? runs.map((r) => ({ ...r, bold: true })) : runs, false, halfPoints) })],
       });
-      // Linha nunca partida entre páginas (o cabeçalho já se repete em cada página).
-      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: b.header.map((c) => cell(c, true)) }), ...b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((c) => cell(c, false)) }))];
-      paras.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
+      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: b.header.map((c, i) => cell(c, true, i)) }),
+        ...b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((c, i) => cell(c, false, i)) }))];
+      const pad = TABLE_CELL_PAD_PT * 20;
+      paras.push(new Table({
+        width: { size: twips.reduce((a, w) => a + w, 0), type: WidthType.DXA }, columnWidths: twips, layout: TableLayoutType.FIXED,
+        margins: { left: pad, right: pad, top: 40, bottom: 40 }, rows,
+      }));
       paras.push(new Paragraph({ text: "", spacing: { after: 120 } }));
     }
   }
@@ -549,8 +568,110 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
     new TextRun({ text: `${footerText(meta)} · `, size: 16 }),
     new TextRun({ children: ["Página ", PageNumber.CURRENT, " de ", PageNumber.TOTAL_PAGES], size: 16 }),
   ] })] });
-  const doc = new Document({ sections: [{ children: paras, footers: { default: footer } }] });
+  const doc = new Document({
+    styles: DOCX_INSTITUTIONAL_STYLES,
+    // F3 — mesma área útil do PDF (A4, margens de 56 pt): a largura das tabelas é calculada uma vez para os dois formatos.
+    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: PAGE_MARGIN_TWIPS, right: PAGE_MARGIN_TWIPS, bottom: PAGE_MARGIN_TWIPS, left: PAGE_MARGIN_TWIPS } } },
+      children: paras, footers: { default: footer } }],
+  });
   return Packer.toBuffer(doc);
+}
+
+/**
+ * F3-D — hierarquia ÚNICA de títulos (pt), igual no DOCX e no PDF: o título de seção/anexo do Edital (nível 2) é sempre maior que os
+ * títulos do TR incorporado (níveis 3 e 4). Cabeçalho do arquivo: órgão 14 pt, título do documento 13 pt.
+ */
+export const HEADING_SIZES_PT: Record<HeadingDepth, number> = { 1: 13, 2: 12, 3: 11.5, 4: 11 };
+const PAGE_MARGIN_PT = 56;
+const PAGE_MARGIN_TWIPS = PAGE_MARGIN_PT * 20;
+/** Largura útil da página A4 (595,28 pt − margens), comum aos dois renderizadores. */
+const CONTENT_WIDTH_PT = 595.28 - PAGE_MARGIN_PT * 2;
+const TABLE_CELL_PAD_PT = 3;
+
+/** Estilos canônicos do DOCX institucional: Arial (métrica da Helvetica do PDF), corpo 11 pt, títulos com "manter com o próximo". */
+const DOCX_INSTITUTIONAL_STYLES = (() => {
+  const heading = (sizePt: number, opts: { italics?: boolean; before: number; after: number }) => ({
+    run: { font: "Arial", size: Math.round(sizePt * 2), bold: true, italics: !!opts.italics, color: "000000" },
+    // keepNext/keepLines: o título nunca fica isolado no fim da página (fica com o primeiro bloco do conteúdo).
+    paragraph: { keepNext: true, keepLines: true, spacing: { before: opts.before, after: opts.after } },
+  });
+  return {
+    default: {
+      document: { run: { font: "Arial", size: 22 } },
+      heading1: heading(14, { before: 0, after: 60 }),
+      heading2: heading(HEADING_SIZES_PT[1], { before: 200, after: 100 }),
+      heading3: heading(HEADING_SIZES_PT[2], { before: 200, after: 100 }),
+      heading4: heading(HEADING_SIZES_PT[3], { before: 160, after: 80 }),
+      heading5: heading(HEADING_SIZES_PT[4], { italics: true, before: 120, after: 60 }),
+    },
+  };
+})();
+
+/** F3-C — título de ANEXO do documento ("## ANEXO II — …"): começa em página nova nos dois formatos. */
+export function isAnnexHeading(b: DocBlock): boolean {
+  // Numeral romano ou letra única seguido de separador ("—", "–", "-", ":", ".") ou fim: "ANEXO II — …", "ANEXO B: …", "ANEXO III".
+  return b.kind === "heading" && b.level <= 2 && /^ANEXO\s+(?:[IVXLCDM]+|[A-Z])(?=\s*(?:[—–:.-]|$))/i.test(b.runs.map((r) => r.text).join("").trim());
+}
+
+function docxAlign(a: CellAlign | undefined): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
+  return a === "right" ? AlignmentType.RIGHT : a === "center" ? AlignmentType.CENTER : undefined;
+}
+
+type MeasureText = (text: string, bold: boolean, sizePt: number) => number;
+interface GridCell { readonly text: string; readonly bold: boolean }
+
+function tableGrid(header: InlineRun[][], rows: InlineRun[][][]): GridCell[][] {
+  const plain = (runs: InlineRun[]): string => runs.map((r) => r.text).join("");
+  return [header.map((c) => ({ text: plain(c), bold: true })), ...rows.map((r) => r.map((c) => ({ text: plain(c), bold: c.some((x) => x.bold) })))];
+}
+
+/** Fontes candidatas da tabela (pt): 9 é o corpo de tabela da F1; só diminui se as palavras inteiras não couberem nas colunas. */
+export const TABLE_FONT_SIZES_PT = [9, 8, 7.5] as const;
+
+/**
+ * F3-A — larguras das colunas proporcionais ao conteúdo (layout automático clássico), em pt. PURA (a medição é injetada):
+ *  - mínimo de cada coluna = a maior PALAVRA da coluna (nenhuma palavra partida enquanto a soma dos mínimos couber);
+ *  - preferido = o maior texto da coluna em uma linha; o espaço livre vai às colunas que mais precisam (ex.: Descrição);
+ *  - se nem as palavras couberem na menor fonte, os mínimos são reduzidos proporcionalmente (a palavra quebra, o texto nunca se perde).
+ * Uma palavra excepcionalmente longa (hash, URL) tem o mínimo limitado a 40% da largura para não esmagar as demais colunas.
+ */
+export function planTableColumns(grid: readonly (readonly GridCell[])[], totalWidth: number, measure: MeasureText, pad: number): { widths: number[]; fontSize: number } {
+  const cols = Math.max(1, ...grid.map((r) => r.length));
+  const extra = pad * 2 + 1.5; // folga para diferenças de arredondamento entre Word/LibreOffice/PDFKit
+  let fontSize: number = TABLE_FONT_SIZES_PT[0];
+  let min: number[] = [];
+  let pref: number[] = [];
+  for (const size of TABLE_FONT_SIZES_PT) {
+    fontSize = size;
+    min = new Array<number>(cols).fill(extra);
+    pref = new Array<number>(cols).fill(extra);
+    for (const row of grid) {
+      row.forEach((c, i) => {
+        const words = c.text.split(/\s+/).filter(Boolean);
+        const longest = words.reduce((m, w) => Math.max(m, measure(w, c.bold, size)), 0);
+        min[i] = Math.max(min[i], Math.min(longest + extra, totalWidth * 0.4));
+        pref[i] = Math.max(pref[i], Math.min(measure(words.join(" "), c.bold, size) + extra, totalWidth));
+      });
+    }
+    if (min.reduce((a, b) => a + b, 0) <= totalWidth) break;
+  }
+  const sumMin = min.reduce((a, b) => a + b, 0);
+  const sumPref = pref.reduce((a, b) => a + b, 0);
+  let widths: number[];
+  if (sumMin >= totalWidth) widths = min.map((m) => (m * totalWidth) / sumMin);
+  else if (sumPref <= totalWidth) widths = pref.map((p) => p + ((totalWidth - sumPref) * p) / sumPref);
+  else {
+    const k = (totalWidth - sumMin) / (sumPref - sumMin);
+    widths = min.map((m, i) => m + (pref[i] - m) * k);
+  }
+  return { widths, fontSize };
+}
+
+let measuringDoc: PDFKit.PDFDocument | null = null;
+/** Medição com as métricas da Helvetica do PDFKit (o DOCX usa Arial, de métrica compatível). Documento só de medição, nunca emitido. */
+function measureHelvetica(text: string, bold: boolean, sizePt: number): number {
+  measuringDoc ??= new PDFDocument({ size: "A4", autoFirstPage: false });
+  return measuringDoc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(sizePt).widthOfString(text);
 }
 
 /** Corpo das células de tabela no DOCX (meios-pontos: 18 = 9 pt, o mesmo do PDF). */
@@ -588,11 +709,17 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
 
     for (const b of model.blocks) {
       if (b.kind === "hr") { doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.4); continue; }
-      if (b.kind === "heading") { const size = b.level === 1 ? 15 : b.level === 2 ? 12 : 11; doc.moveDown(0.3); writeRunsPDF(doc, b.runs, size, true); }
+      if (b.kind === "heading") {
+        const size = HEADING_SIZES_PT[b.level];
+        // F3-C — anexo em página nova (sem página em branco se já estiver no topo); demais títulos nunca isolados no fim da página.
+        if (isAnnexHeading(b)) { if (doc.y > doc.page.margins.top + 1) doc.addPage(); }
+        else { doc.moveDown(0.3); ensureSpacePDF(doc, size * 1.4 + 11 * 1.2 * 3); }
+        writeRunsPDF(doc, b.runs, size, true, { paragraphGap: 3 }, b.level === 4);
+      }
       else if (b.kind === "paragraph") { writeRunsPDF(doc, b.runs, 11, false, { align: "justify", paragraphGap: 6 }); }
       else if (b.kind === "list") { for (const item of b.items) { doc.fontSize(11).font("Helvetica").text("• ", { continued: true }); writeRunsPDF(doc, item, 11, false, { paragraphGap: 3 }); } doc.moveDown(0.2); }
-      else if (b.kind === "notice") { doc.moveDown(0.2).fontSize(10).font("Helvetica-Oblique").fillColor("#1e3a8a").text("⚠ ", { continued: true }); writeRunsPDF(doc, b.runs, 10, false, { paragraphGap: 4 }, true); doc.fillColor("black"); }
-      else if (b.kind === "table") { writeTablePDF(doc, b.header, b.rows, pageWidth); }
+      else if (b.kind === "notice") { writeNoticePDF(doc, b.runs, pageWidth); }
+      else if (b.kind === "table") { writeTablePDF(doc, b.header, b.rows, pageWidth, b.align); }
     }
     // Pós-M8 — rodapé em todas as páginas (páginas bufferizadas), escrito na margem inferior com a margem zerada só durante a escrita
     // (nunca dispara página nova).
@@ -615,30 +742,89 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
   });
 }
 
-/** Tabela em grade simples (colunas de largura igual; quebra de página por linha). Apresentação apenas. */
-function writeTablePDF(doc: PDFKit.PDFDocument, header: InlineRun[][], rows: InlineRun[][][], pageWidth: number): void {
-  const cols = Math.max(header.length, 1);
-  const colW = pageWidth / cols;
-  const pad = 3;
-  const plain = (runs: InlineRun[]): string => runs.map((r) => r.text).join("");
-  const drawRow = (cells: InlineRun[][], bold: boolean): void => {
-    doc.fontSize(9).font(bold ? "Helvetica-Bold" : "Helvetica");
-    const heights = cells.map((c) => doc.heightOfString(plain(c), { width: colW - pad * 2 }));
-    const h = Math.max(...heights, 10) + pad * 2;
-    if (doc.y + h > doc.page.height - doc.page.margins.bottom) doc.addPage();
+/** Página nova quando o espaço restante não comporta `needed` pt (título + início do conteúdo, início de aviso). */
+function ensureSpacePDF(doc: PDFKit.PDFDocument, needed: number): void {
+  if (doc.y + needed > doc.page.height - doc.page.margins.bottom && doc.y > doc.page.margins.top + 1) doc.addPage();
+}
+
+/**
+ * Tabela em grade (quebra de página por linha; cabeçalho repetido na página seguinte). Apresentação apenas.
+ * F3-A — larguras proporcionais ao conteúdo (`planTableColumns`, o mesmo cálculo do DOCX) e alinhamento declarado na tabela.
+ */
+function writeTablePDF(doc: PDFKit.PDFDocument, header: InlineRun[][], rows: InlineRun[][][], pageWidth: number, align?: CellAlign[]): void {
+  const pad = TABLE_CELL_PAD_PT;
+  const grid = tableGrid(header, rows);
+  const { widths, fontSize } = planTableColumns(grid, pageWidth, measureHelvetica, pad);
+  const xs = widths.map((_, i) => 56 + widths.slice(0, i).reduce((a, w) => a + w, 0));
+  const rowHeight = (cells: readonly GridCell[], bold: boolean): number => {
+    doc.fontSize(fontSize).font(bold ? "Helvetica-Bold" : "Helvetica");
+    const heights = cells.map((c, i) => doc.heightOfString(c.text, { width: (widths[i] ?? 0) - pad * 2 }));
+    return Math.max(...heights, 10) + pad * 2;
+  };
+  const bottom = (): number => doc.page.height - doc.page.margins.bottom;
+  const headerH = rowHeight(grid[0], true);
+  const drawRow = (cells: readonly GridCell[], bold: boolean, repeatHeader: boolean): void => {
+    const h = rowHeight(cells, bold);
+    if (doc.y + h > bottom() && doc.y > doc.page.margins.top + 1) {
+      doc.addPage();
+      // Cabeçalho repetido só quando ele e a linha cabem juntos (uma linha quase do tamanho da página não é empurrada para fora).
+      if (repeatHeader && doc.y + headerH + h <= bottom()) drawRow(grid[0], true, false);
+    }
     const y = doc.y;
     cells.forEach((c, i) => {
-      const x = 56 + i * colW;
-      doc.rect(x, y, colW, h).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black");
-      doc.fontSize(9).font(bold ? "Helvetica-Bold" : "Helvetica").text(plain(c), x + pad, y + pad, { width: colW - pad * 2 });
+      const w = widths[i] ?? 0;
+      doc.rect(xs[i] ?? 56, y, w, h).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black");
+      doc.fontSize(fontSize).font(bold ? "Helvetica-Bold" : "Helvetica")
+        .text(c.text, (xs[i] ?? 56) + pad, y + pad, { width: w - pad * 2, align: align?.[i] === "right" ? "right" : align?.[i] === "center" ? "center" : "left" });
     });
     doc.x = 56;
     doc.y = y + h;
   };
   doc.moveDown(0.3);
-  drawRow(header, true);
-  for (const r of rows) drawRow(r, false);
+  // Cabeçalho nunca órfão no fim da página: começa onde couberem o cabeçalho e a 1ª linha.
+  ensureSpacePDF(doc, headerH + (grid.length > 1 ? rowHeight(grid[1], false) : 0));
+  drawRow(grid[0], true, false);
+  for (const r of grid.slice(1)) drawRow(r, false, true);
   doc.moveDown(0.5);
+}
+
+/**
+ * F3-B — aviso (blockquote). O "⚠" (U+26A0) não existe na Helvetica do PDF (codificação WinAnsi): saía um glifo errado, desenhado
+ * POR CIMA da primeira letra ("⚠Tabela"). Agora o símbolo é um triângulo VETORIAL (sem fonte nova nem imagem) e o texto vem recuado,
+ * numa caixa própria, com a ordem e as quebras internas preservadas. A quebra final do bloco vira espaçamento controlado (nunca um
+ * segmento `continued` pendente: o bloco seguinte sempre começa abaixo do aviso). O DOCX mantém o "⚠" (fontes do Word o têm).
+ */
+function writeNoticePDF(doc: PDFKit.PDFDocument, runs: InlineRun[], pageWidth: number): void {
+  const icon = 16;
+  const body = trimTrailingBreaks(runs);
+  doc.moveDown(0.2).fontSize(10);
+  ensureSpacePDF(doc, 10 * 1.2 * 2 + 4);
+  const x = 56;
+  const y = doc.y;
+  drawWarningIcon(doc, x + 1, y + 0.5);
+  doc.fillColor("#1e3a8a");
+  writeRunsPDF(doc, body, 10, false, { width: pageWidth - icon, paragraphGap: 4 }, true, { x: x + icon, y });
+  doc.fillColor("black");
+  doc.x = 56;
+  doc.moveDown(0.2);
+}
+
+/** Triângulo de alerta vetorial (âmbar) com "!" — não depende de glifo da fonte. */
+function drawWarningIcon(doc: PDFKit.PDFDocument, x: number, y: number): void {
+  doc.save();
+  doc.polygon([x + 5.5, y], [x + 11, y + 9.6], [x, y + 9.6]).fill("#b45309");
+  doc.rect(x + 4.85, y + 3.2, 1.3, 3.6).fill("#ffffff");
+  doc.rect(x + 4.85, y + 7.5, 1.3, 1.2).fill("#ffffff");
+  doc.restore();
+  doc.fillColor("black");
+}
+
+/** Remove a(s) quebra(s) de linha/espaços FINAIS do aviso (as internas, entre parágrafos do aviso, ficam). */
+export function trimTrailingBreaks(runs: readonly InlineRun[]): InlineRun[] {
+  const out = runs.map((r) => ({ ...r }));
+  while (out.length && /^\s*$/.test(out[out.length - 1].text)) out.pop();
+  if (out.length) out[out.length - 1] = { ...out[out.length - 1], text: out[out.length - 1].text.replace(/\s+$/, "") };
+  return out.length ? out : [{ text: "" }];
 }
 
 function pdfFont(bold: boolean, italic: boolean): string {
@@ -667,11 +853,14 @@ export function pdfRunSpacing(runs: readonly InlineRun[]): InlineRun[] {
   return kept.length ? kept : [{ text: "" }];
 }
 
-function writeRunsPDF(doc: PDFKit.PDFDocument, runs: InlineRun[], size: number, headingBold: boolean, opts: any = {}, forceItalic = false): void {
+function writeRunsPDF(doc: PDFKit.PDFDocument, runs: InlineRun[], size: number, headingBold: boolean, opts: any = {}, forceItalic = false,
+  at?: { x: number; y: number }): void {
   const list = runs.length ? pdfRunSpacing(runs) : [{ text: "" }];
   list.forEach((r, i) => {
     const last = i === list.length - 1;
-    doc.fontSize(size).font(pdfFont(r.bold || headingBold, (r.italic || forceItalic) as boolean))
-      .text(r.text, { continued: !last, ...opts });
+    doc.fontSize(size).font(pdfFont(r.bold || headingBold, (r.italic || forceItalic) as boolean));
+    // `at` posiciona só o 1º segmento (caixa do aviso); os seguintes continuam na mesma linha/caixa (`continued`).
+    if (i === 0 && at) doc.text(r.text, at.x, at.y, { continued: !last, ...opts });
+    else doc.text(r.text, { continued: !last, ...opts });
   });
 }

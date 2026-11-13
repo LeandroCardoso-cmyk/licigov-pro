@@ -167,7 +167,7 @@ describe.skipIf(!DB)("F2 — Edital completo com o TR oficial incorporado (MySQL
     const text = docxText(bytesOf(docx.url));
     const at = (s: string) => text.indexOf(s);
     expect(at("ANEXO I — TERMO DE REFERÊNCIA")).toBeGreaterThan(0);
-    expect(text).toContain(`Integridade do conteúdo (SHA-256): ${tr.contentHash}`);
+    expect(text).toContain(`incorporada (SHA-256): ${tr.contentHash}`);   // F3-E: hash completo preservado (discreto, ao fim do TR)
     for (const t of ["1. DO OBJETO", "TR VERSÃO UM", "Papel sulfite A4 75g", "Caneta esferográfica azul", "3. DO RECEBIMENTO", "conferência técnica", "4. DO PAGAMENTO", "ação, opção, ç"]) expect(text, t).toContain(t);
     expect(text).not.toContain("TR VERSÃO DOIS");                                                  // T3
     expect(text).not.toContain("versão oficial emitida no processo");                              // T10: sem página de referência + cópia
