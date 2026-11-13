@@ -14,11 +14,11 @@ import { promotionErrorPlan } from "./generationFollowUp";
  * versão IMUTÁVEL `emitido` em official_documents (decisão humana governada no backend) e exibe as
  * versões oficiais + timeline + export OFICIAL (somente `emitido`) via o OfficialDocumentPanel comum.
  *
- * C.4B.2 — REVIEW PRÉ-EMISSÃO: o aprovador vê o CONTEÚDO EXATO que autoriza. O `reviewSnapshot` (conteúdo
+ * C.4B.2 — REVIEW PRÉ-EMISSÃO: quem emite vê o CONTEÚDO EXATO que consolida. O `reviewSnapshot` (conteúdo
  * + hash) vem da query canônica reload-safe `reviewableDraft` (fonte única, carregada pela workspace) —
  * a emissão usa exatamente o hash do conteúdo exibido. O backend reconsulta o rascunho e compara hashes:
  * se mudou desde a revisão → CONFLICT (fail-closed), a UI recarrega o conteúdo e exige nova revisão.
- * A garantia de governança (papel, revisor ≠ autor, integridade, replay) é do BACKEND.
+ * A garantia de governança (papel, membership real, integridade, replay) é do BACKEND. Emitir ≠ aprovar/publicar (LICIGOV-FAST).
  */
 
 export type ReviewSnapshot = {
@@ -164,6 +164,10 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
               Depois de emitida, a versão oficial <strong>não</strong> muda — alterações no rascunho só se tornam
               oficiais por uma nova emissão, que cria uma nova versão.
             </p>
+            <p className="mt-1 text-xs text-muted-foreground" data-testid="emission-semantics">
+              A emissão consolida a versão que instrui o processo e registra quem elaborou, quem editou por último e quem emitiu.
+              Não é aprovação jurídica nem publicação: parecer, aprovação e publicação seguem com a autoridade competente.
+            </p>
           </div>
           <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${latest ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-muted text-muted-foreground"}`}>
             {latest ? `Emitida — ${emitted}` : "Nenhuma emitida"}
@@ -236,7 +240,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
           </div>
         )}
 
-        {/* C.4B.2 — REVIEW PRÉ-EMISSÃO: o conteúdo EXATO que será emitido, à vista do aprovador. */}
+        {/* C.4B.2 — REVIEW PRÉ-EMISSÃO: o conteúdo EXATO que será emitido, à vista de quem emite. */}
         {hasReview ? (
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between">

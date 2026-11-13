@@ -43,7 +43,7 @@ export type PromotionErrorPlan = "stale" | "follow" | "busy" | "error";
  *    oficial (ledger), nunca reenviando; a chave é preservada (repetir = mesma tentativa lógica, replay idempotente);
  *  - "busy": linhagem ocupada por outra operação — nada foi criado; tentar de novo é seguro;
  *  - "stale": conflito real de conteúdo/hash (inclui chave reutilizada com conteúdo diferente) — recarrega e exige nova revisão;
- *  - "error": demais recusas (SoD, papel, bloqueios), com a mensagem do servidor.
+ *  - "error": demais recusas (papel, membership, bloqueios), com a mensagem do servidor.
  */
 export function promotionErrorPlan(code: string | null | undefined, message: string | null | undefined): PromotionErrorPlan {
   const msg = message ?? "";

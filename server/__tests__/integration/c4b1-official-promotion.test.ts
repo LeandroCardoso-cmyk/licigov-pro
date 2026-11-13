@@ -105,12 +105,12 @@ describe("C.4B.1 — draftContentHash (determinístico)", () => {
   });
 });
 
-describe("C.4B.1 — governança humana / SoD / RBAC", () => {
-  it("autor NÃO pode emitir o próprio documento (segregação de deveres)", async () => {
-    await expect(promoteOfficialDocument(base({ actorUserId: 5 }))).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(createDocument).not.toHaveBeenCalled();
-    expect(insertOfficialPromotion).not.toHaveBeenCalled();
-    expect(failIdempotencyKey).toHaveBeenCalledTimes(1); // sem efeito parcial; retry permitido
+describe("C.4B.1 — governança humana / RBAC (LICIGOV-FAST: emissão preparatória ≠ aprovação)", () => {
+  it("autor com competência (manager) emite a própria versão preparatória — emitir não é aprovar; autoria registrada", async () => {
+    const res = await promoteOfficialDocument(base({ actorUserId: 5 }));
+    expect(res.promoted).toBe(true);
+    expect(createDocument.mock.calls[0][0].metadata).toMatchObject({ authorUserId: 5, emitterUserId: 5 });
+    expect(failIdempotencyKey).not.toHaveBeenCalled();
   });
 
   it("ator não humano (id <= 0) é recusado (IA/sistema não emite)", async () => {

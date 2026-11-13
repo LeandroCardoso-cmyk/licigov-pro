@@ -6,7 +6,8 @@
  * NUNCA provider real) e exercita a PROMOÇÃO governada (promoteOfficialDocument) contra o writer real
  * sob STRICT_TRANS_TABLES. Cobre os 12 cenários exigidos:
  *
- *   1. autor não pode emitir o próprio documento (SoD);
+ *   1. LICIGOV-FAST: autor com competência real (manager) emite a própria versão preparatória; sem membership real ou
+ *      com papel operator continua recusado;
  *   2. ator não humano rejeitado;
  *   3. promoção válida cria UMA versão emitida (+ 1 linha no ledger);
  *   4. replay mesma chave não cria nova versão;
@@ -162,12 +163,20 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     await conn.end();
   });
 
-  it("1) autor NÃO pode emitir o próprio documento (SoD)", async () => {
+  it("1) autor: sem membership real ⇒ FORBIDDEN; como operator ⇒ FORBIDDEN; como manager real ⇒ emite a própria versão (emitir ≠ aprovar)", async () => {
     const pid = "c4b1-p1";
     await seedDraft(ORG, pid, "Material p1");
-    await expect(emit(ORG, pid, "k1", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(emit(ORG, pid, "k1a", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });       // não é membro do órgão
+    await seedRealMembership(conn, ORG, AUTHOR, "operator");
+    await expect(emit(ORG, pid, "k1b", { actorUserId: AUTHOR, actorRole: "operator" })).rejects.toMatchObject({ code: "FORBIDDEN" }); // sem competência
+    await expect(emit(ORG, pid, "k1c", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });       // papel do contexto não basta
     expect(await countEmitido(ORG, pid)).toBe(0);
     expect(await countLedger(ORG, pid)).toBe(0);
+    await seedRealMembership(conn, ORG, AUTHOR, "manager");
+    const res = await emit(ORG, pid, "k1d", { actorUserId: AUTHOR });
+    expect(res.promoted).toBe(true);
+    expect(await countEmitido(ORG, pid)).toBe(1);
+    await removeRealMemberships(conn, ORG, [AUTHOR]);
   }, 60_000);
 
   it("2) ator não humano (id <= 0) é rejeitado", async () => {

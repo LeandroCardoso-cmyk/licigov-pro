@@ -11,7 +11,8 @@
  *   6. save DFD governado preserva originador, registra usuário real, cria ledger (dfd_manual_edit);
  *   7. concorrência otimista: expectedContentHash obsoleto → CONFLICT (nada alterado, sem ledger);
  *   8. idempotência: mesma chave+payload → replay (sem novo ledger); chave+conteúdo diferente → CONFLICT;
- *   9. SoD de 3 atores: originador e último ator substantivo NÃO emitem; terceiro manager emite;
+ *   9. LICIGOV-FAST: originador e último ator substantivo com competência real (manager) concluem a versão (sem terceiro
+ *      servidor); sem membership real continuam recusados; a autoria fica registrada na versão; terceiro manager emite;
  *  10. author NULL histórico permanece NULL após edição; emissão continua bloqueada;
  *  11. isolamento multi-tenant.
  *
@@ -214,7 +215,7 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
       .rejects.toMatchObject({ code: "CONFLICT" });
   }, 60_000);
 
-  it("9) SoD 3 atores: originador (A) e último ator substantivo (B) NÃO emitem; terceiro manager (C) emite", async () => {
+  it("9) originador (A) e último ator substantivo (B): sem membership real ⇒ recusados; com competência real ⇒ concluem (sem terceiro servidor)", async () => {
     const pid = "c4b3a-sod";
     await seedEtp(ORG, pid, "Objeto SoD", A);          // author=A, lastSubst=A
     await seedEtp(ORG, pid, "Objeto SoD v2 (B)", B);   // author=A, lastSubst=B
@@ -224,11 +225,17 @@ describe.skipIf(!DB)("C.4B.3A — proveniência do rascunho (MySQL estrito)", ()
     const row = await draftRow(ORG, pid);
     const h = draftContentHash(row!.content);
 
-    await expect(promoteOfficialDocument(emitInput(ORG, pid, A, "emit-A", h))).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(promoteOfficialDocument(emitInput(ORG, pid, B, "emit-B", h))).rejects.toMatchObject({ code: "FORBIDDEN" });
-    const res = await promoteOfficialDocument(emitInput(ORG, pid, C, "emit-C", h));
+    await expect(promoteOfficialDocument(emitInput(ORG, pid, A, "emit-A", h))).rejects.toMatchObject({ code: "FORBIDDEN" }); // não é membro
+    await expect(promoteOfficialDocument(emitInput(ORG, pid, B, "emit-B", h))).rejects.toMatchObject({ code: "FORBIDDEN" }); // não é membro
+    // Regressão 2167/2026: quem fez a última alteração material (B), com competência real, conclui a versão — sem terceiro revisor.
+    await seedRealMembership(conn, ORG, B, "manager");
+    const res = await promoteOfficialDocument(emitInput(ORG, pid, B, "emit-B2", h));
     expect(res.promoted).toBe(true);
     expect(res.officialDocument.status).toBe("emitido");
+    const rawMeta = ((await conn.execute("SELECT metadata FROM official_documents WHERE tenant_id = ? AND id = ?", [ORG, res.officialDocument.id])) as any)[0][0].metadata;
+    const meta = typeof rawMeta === "string" ? JSON.parse(rawMeta) : rawMeta;
+    expect(meta).toMatchObject({ authorUserId: A, lastSubstantiveActorUserId: B, emitterUserId: B });   // autoria preservada, sem substituir identidades
+    await removeRealMemberships(conn, ORG, [B]);
   }, 120_000);
 
   it("10) author NULL histórico permanece NULL após edição; emissão continua bloqueada", async () => {

@@ -9,6 +9,8 @@
  *  S2  adversarial: remover [REVISAR] sem resolução ⇒ emissão bloqueada; texto alterado após a resolução ⇒ STALE e nova resolução;
  *      DECLARED_NONE em trecho que exige redação; outro órgão; papel insuficiente; autoridade de outra conta; agente (ator não humano);
  *      idempotência (mesma chave converge; mesma chave com outro texto falha); CAS (hash e revisão) e concorrência; M1 trocado
+ *  S3  LICIGOV-FAST (regressão 2167/2026): o MESMO gestor compõe, resolve os trechos e emite a versão preparatória (emitir ≠ aprovar);
+ *      operator continua sem emitir; outro órgão não emite; texto visto desatualizado ⇒ CONFLICT; versão anterior imutável
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import mysql from "mysql2/promise";
@@ -87,7 +89,7 @@ async function publishBll(org: number): Promise<void> {
 }
 
 /** Órgão sintético com modelo publicado e Edital composto SEM narrativas (todos os slots ficam pendentes). */
-async function composed(label: string): Promise<{ w: World; m1: string }> {
+async function composed(label: string, author: number = U_AUTHOR): Promise<{ w: World; m1: string }> {
   const org = newOrg();
   const w = await seedWorld(conn, org, label, { flagOn: true });
   await seedGoverned(w, undefined, "publico", label);
@@ -95,7 +97,7 @@ async function composed(label: string): Promise<{ w: World; m1: string }> {
   await publishBll(org);
   const g = await generateTemplatedDocument({
     organizationId: org, subjectId: w.processId, documentKind: "edital", documentType: "edital", scope: { ...BLL.declaredScope },
-    asOf: "2026-10-07T00:00:00Z", title: "Edital de Pregão Eletrônico — sintético", actorUserId: U_AUTHOR, correlationId: `corr-gen-${org}`,
+    asOf: "2026-10-07T00:00:00Z", title: "Edital de Pregão Eletrônico — sintético", actorUserId: author, correlationId: `corr-gen-${org}`,
     aiNarratives: [], officialPins: { TR: { documentId: tr.documentId, version: tr.version, contentHash: tr.contentHash } },
   }, getTemplateCompositionPorts());
   return { w, m1: g.generationManifest.id };
@@ -314,5 +316,43 @@ describe.skipIf(!DB)("E2 — resolução humana dos trechos pendentes do Edital 
     ]);
     expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     expect(await count("SELECT COUNT(*) n FROM institutional_decisions WHERE organization_id = ? AND decision_type = 'template_slot_resolution' AND subject_id LIKE ?", [b.w.org, `${b.m1}:%`])).toBe(after1.decisions + 1);
+  }, 600_000);
+
+  it("S3 — LICIGOV-FAST (regressão 2167/2026): um único gestor compõe, resolve os trechos e emite; operator/outro órgão/texto desatualizado continuam barrados", async () => {
+    const { w, m1 } = await composed("s3", U_MANAGER);   // autor = gestor
+    const b = await composed("s3b");
+    const mgr = (o: number) => tpl(o, "manager", U_MANAGER);
+    // o mesmo gestor resolve os trechos (vira o último ator substantivo) — antes: emissão recusada por "segregação de deveres"
+    for (const s of (await review(w)).slots) {
+      const inp = await resolveInput(w, m1, s.slotKey, s.declaredNoneAllowed ? "DECLARED_NONE" : "HUMAN_TEXT", s.declaredNoneAllowed ? undefined : textFor(s.slotKey));
+      await mgr(w.org).reviews.resolveSlot(inp);
+    }
+    const draftRow = (await rows("SELECT author_user_id a, last_substantive_actor_user_id l FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [w.org, w.processId]))[0];
+    expect(draftRow).toMatchObject({ a: U_MANAGER, l: U_MANAGER });
+    const d1 = await draftOf(w);
+    const promoteAs = (org: number, role: string, user: number, hash: string, k: string) =>
+      proc(org, role, user).promoteOfficial({ processId: w.processId, kind: "edital", idempotencyKey: key(k), expectedContentHash: hash, reason: "Versão preparatória do Edital." } as any);
+    // operator (mesmo órgão) continua sem competência para emitir
+    expect((await err(promoteAs(w.org, "operator", U_EDITOR, d1.contentHash, "op")))?.code).toBe("FORBIDDEN");
+    // outro órgão não enxerga o processo
+    expect((await err(promoteAs(b.w.org, "manager", U_MANAGER, d1.contentHash, "x")))?.code).toBe("NOT_FOUND");
+    // texto visto desatualizado ⇒ CONFLICT (nenhuma emissão de versão velha)
+    expect((await err(promoteAs(w.org, "manager", U_MANAGER, draftContentHash("versão antiga"), "old")))?.code).toBe("CONFLICT");
+    expect(await count("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido'", [w.org])).toBe(0);
+    // o mesmo gestor (autor + último editor) conclui a versão preparatória
+    const v1: any = await promoteAs(w.org, "manager", U_MANAGER, d1.contentHash, "v1");
+    expect(v1.promoted).toBe(true);
+    const off1 = (await rows("SELECT id, content, metadata FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido'", [w.org]))[0];
+    const meta = typeof off1.metadata === "string" ? JSON.parse(off1.metadata) : off1.metadata;
+    expect(meta).toMatchObject({ authorUserId: U_MANAGER, lastSubstantiveActorUserId: U_MANAGER, emitterUserId: U_MANAGER });
+    const m2 = JSON.parse((await rows("SELECT body_json b FROM document_composition_manifests WHERE organization_id = ? AND stage = 'ISSUANCE'", [w.org]))[0].b);
+    expect(m2.slotResolutions.items.every((i: any) => i.resolvedByUserId === U_MANAGER)).toBe(true);   // E2 íntegra (resoluções legítimas)
+    // nova edição + nova emissão ⇒ v2; a v1 permanece imutável
+    await proc(w.org, "manager", U_MANAGER).saveReviewableDraft({ processId: w.processId, kind: "edital", content: `${d1.content}\nNota final da equipe.\n`, expectedContentHash: d1.contentHash, idempotencyKey: key("ed2") });
+    const v2: any = await promoteAs(w.org, "manager", U_MANAGER, (await draftOf(w)).contentHash, "v2");
+    expect(v2.promoted).toBe(true);
+    const after1 = (await rows("SELECT content FROM official_documents WHERE tenant_id = ? AND id = ?", [w.org, off1.id]))[0];
+    expect(after1.content).toBe(off1.content);
+    expect(await count("SELECT COUNT(*) n FROM official_documents WHERE tenant_id = ? AND document_type = 'edital' AND status = 'emitido'", [w.org])).toBe(2);
   }, 600_000);
 });

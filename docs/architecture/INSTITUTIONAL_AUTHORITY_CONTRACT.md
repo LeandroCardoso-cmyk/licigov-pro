@@ -75,6 +75,15 @@ A membership é relida da fonte autoritativa **a cada ato**. Não há cache, e o
 
 A emissão oficial grava `emitterInstitutionalRole`, que é o papel persistido, relido na transação. No activity log (`logFromCtx`), ações do acesso técnico registram `actorRole = "platform_admin"`, nunca o `owner` sintético.
 
+## Segregação proporcional de funções (LICIGOV-FAST, nov/2026)
+
+A **emissão** de ETP, TR e Edital (`promoteOfficialDocument`) cria a versão imutável `emitido` que instrui o processo. Ela **não é** aprovação jurídica, autorização institucional de publicação nem publicação externa.
+
+- **Pode emitir:** pessoa autenticada com membership real ≥ `manager` no órgão, inclusive quem gerou ou editou por último o rascunho. O gestor pode continuar o trabalho de outro servidor. Não há regra de "terceiro revisor".
+- **Continua registrado:** autor original (`authorUserId`), último editor substantivo (`lastSubstantiveActorUserId`), emissor e o papel persistido dele (`emitterUserId`, `emitterInstitutionalRole`). Os três ficam na versão emitida, e as edições ficam no ledger `generated_document_edits`. Nenhuma identidade é substituída.
+- **Continua barrado:** `operator`/`viewer`, acesso técnico de plataforma sem membership, IA/sistema, outro órgão, rascunho sem autoria rastreável e conteúdo diferente do revisado (CAS). Também continuam valendo pendências vinculantes, fonte alterada, preço fictício e trechos E2 sem resolução humana.
+- **Segregação mantida onde há aprovação ou decisão:** aprovação versionada (`documentReviewService`, autor ≠ aprovador via `assertInstitutionalDecisionRules`), decisões do ledger institucional (`decidedByMatchesRecorder`), aprovação e publicação de modelos (políticas do órgão), ratificação, parecer e publicação.
+
 ## Fora do escopo (decisão do Owner)
 
 - **Lacunas de RBAC anteriores:** viewer nas rotas legadas de contratos e em `moduleLicensing`.
