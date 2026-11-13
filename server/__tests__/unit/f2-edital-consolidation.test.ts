@@ -47,20 +47,20 @@ describe("F2 — Anexo I com o TR oficial integral (domínio)", () => {
     expect(c.endsWith(after)).toBe(true);
     expect(c).not.toContain(TR_DOC_REF_MARK);
     const iAnexoI = c.indexOf("## ANEXO I — TERMO DE REFERÊNCIA");
-    const iIdent = c.indexOf("**Termo de Referência — versão oficial incorporada integralmente a este Edital:**");
+    const iIdent = c.indexOf("Versão incorporada integralmente a este Edital:");
     const iTrObj = c.indexOf("### 1. DO OBJETO");
     const iTrPay = c.indexOf("### 4. DO PAGAMENTO");
     const iAnexoII = c.indexOf("## ANEXO II");
     expect(iAnexoI).toBeGreaterThan(0);
     expect([iAnexoI, iIdent, iTrObj, iTrPay, iAnexoII].every((x, i, a) => x > 0 && (i === 0 || a[i - 1] < x))).toBe(true);
     for (const t of ["Papel sulfite A4 75g", "| 2 | Caneta esferográfica azul | un | 400 |", "**conferência técnica**", "- papel com gramatura", "¿acentos e ç preservados?"]) expect(c).toContain(t);
-    expect(c).toContain(`SHA-256): ${TR.contentHash}`);
-    expect(c).toContain("1ª emissão (revisão técnica v2), emitida em 10/11/2026 às 14:00");
+    expect(c).toContain(`(SHA-256): ${TR.contentHash}_`);
+    expect(c).toContain("1ª emissão oficial, revisão técnica v2, emitida em 10/11/2026 às 14:00");
     for (const a of ["## ANEXO I —", "## ANEXO II —", "## ANEXO III —", "## ANEXO IV —"]) expect(c.split(a).length - 1).toBe(1);   // anexos preservados, sem duplicar
   });
 
-  it("títulos do TR aninhados sob o Anexo I (nível 3); demais linhas intocadas", () => {
-    expect(embedTrContent("# A\r\n\n## B\n\ntexto # não é título\n\n#### C")).toBe("### A\n\n### B\n\ntexto # não é título\n\n### C");
+  it("títulos do TR aninhados sob o Anexo I com a hierarquia RELATIVA preservada (F3-D); demais linhas intocadas", () => {
+    expect(embedTrContent("# A\r\n\n## B\n\ntexto # não é título\n\n#### C")).toEqual({ title: null, body: "### A\n\n#### B\n\ntexto # não é título\n\n###### C" });
   });
 
   it("formato anterior ao M8 P2.1 (aviso citando o id do documento) também é reconhecido — e só o do TR fixado", () => {

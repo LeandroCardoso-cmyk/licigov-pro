@@ -51,25 +51,60 @@ function isTrReference(paragraph: string, trDocumentId: string): boolean {
   return t.includes(TR_DOC_REF_MARK) || t.includes(`(${trDocumentId},`);
 }
 
-/**
- * Conteúdo do TR para o Anexo I: títulos do TR passam ao nível 3 (abaixo do "## ANEXO I"), o resto é preservado como está.
- * Marcadores de cabeçalho Markdown são o único ponto alterado; tabelas, listas, ênfases e texto ficam intactos.
- */
-export function embedTrContent(trContent: string): string {
-  return trContent.replace(/\r\n?/g, "\n").trim().replace(/^#{1,6}[ \t]+/gm, "### ");
+/** Título de nível 1 que abre o TR ("# Termo de Referência — <objeto>"). Só ele é candidato a virar a linha de identificação. */
+const TR_TITLE = /^#[ \t]+(Termo de Refer[eê]ncia\b.*?)[ \t]*#*[ \t]*$/i;
+
+export interface EmbeddedTr {
+  /** Texto do título do TR (verbatim), quando a abertura do TR é o título "Termo de Referência…"; senão `null`. */
+  readonly title: string | null;
+  /** Corpo do TR com os títulos aninhados abaixo do "## ANEXO I". */
+  readonly body: string;
 }
 
-const ordinal = (n: number): string => (n > 0 ? `${n}ª emissão` : "versão emitida");
+/**
+ * Conteúdo do TR para o Anexo I. Marcadores de cabeçalho Markdown são o único ponto alterado; tabelas, listas, ênfases e texto ficam
+ * intactos.
+ *  - F3-E: o título que abre o TR ("# Termo de Referência — <objeto>", único título de nível 1) repetiria o título do Anexo; ele sai do
+ *    corpo e o seu texto, sem nenhuma alteração, abre a linha de identificação (`trIdentificationBlock`). Nada do TR se perde.
+ *  - F3-D: a hierarquia RELATIVA do TR é preservada: o nível mais alto restante vira "###" (abaixo do "## ANEXO I") e os demais
+ *    descem na mesma proporção ("## 2." → "###", "### 2.1." → "####"), limitado a "######". Antes, todos viravam "###".
+ */
+export function embedTrContent(trContent: string): EmbeddedTr {
+  let lines = trContent.replace(/\r\n?/g, "\n").trim().split("\n");
+  let title: string | null = null;
+  const h1Count = lines.filter((l) => /^#[ \t]+/.test(l)).length;
+  const m = TR_TITLE.exec(lines[0] ?? "");
+  if (m && h1Count === 1) {
+    title = m[1].trim();
+    lines = lines.slice(1);
+  }
+  const depths = lines.map((l) => /^(#{1,6})[ \t]+/.exec(l)?.[1].length ?? 0).filter((d) => d > 0);
+  const shift = depths.length ? 3 - Math.min(...depths) : 0;
+  const body = lines.map((l) => l.replace(/^(#{1,6})[ \t]+/, (_x, h: string) => `${"#".repeat(Math.min(Math.max(h.length + shift, 3), 6))} `))
+    .join("\n").trim();
+  return { title, body };
+}
 
-/** Bloco de identificação da versão incorporada (rastreável: emissão, revisão técnica, data e sha256 do conteúdo oficial). */
-export function trIdentificationBlock(tr: ConsolidationTr): string {
-  return `**Termo de Referência — versão oficial incorporada integralmente a este Edital:** ${ordinal(tr.emissionNumber)} (revisão técnica v${tr.version}), `
-    + `emitida em ${tr.emittedAtLabel}. Integridade do conteúdo (SHA-256): ${tr.contentHash}.`;
+const ordinal = (n: number): string => (n > 0 ? `${n}ª emissão oficial` : "versão oficial emitida");
+
+/**
+ * F3-E — identificação SIMPLES da versão incorporada (abre o Anexo I): título do TR + emissão, revisão técnica e data.
+ * O SHA-256 completo não sai da exportação: vai, discreto, ao FIM do TR incorporado (`trIntegrityLine`) e continua no ledger do
+ * artefato e na auditoria (`bundleNote`/`trContentHash`).
+ */
+export function trIdentificationBlock(tr: ConsolidationTr, title: string | null = null): string {
+  return `**${title ?? "Termo de Referência"}**\n\n`
+    + `Versão incorporada integralmente a este Edital: ${ordinal(tr.emissionNumber)}, revisão técnica v${tr.version}, emitida em ${tr.emittedAtLabel}.`;
+}
+
+/** Linha de controle de integridade (SHA-256 completo do conteúdo oficial do TR), em itálico, ao fim do TR incorporado. */
+export function trIntegrityLine(tr: ConsolidationTr): string {
+  return `_Controle de integridade da versão oficial do Termo de Referência incorporada (SHA-256): ${tr.contentHash}_`;
 }
 
 /** Edital consolidado: o parágrafo de referência ao TR é substituído pelo TR oficial integral. O restante do Edital fica idêntico. */
 export function consolidateEditalWithTr(editalContent: string, tr: ConsolidationTr): ConsolidationResult {
-  const body = embedTrContent(tr.content);
+  const { title, body } = embedTrContent(tr.content);
   if (!body) return { ok: false, code: "EDITAL_TR_EMPTY", message: "a versão oficial do TR vinculada está vazia" };
   const hits = paragraphs(editalContent).filter((p) => isTrReference(p.text, tr.documentId));
   if (hits.length === 0) {
@@ -79,6 +114,6 @@ export function consolidateEditalWithTr(editalContent: string, tr: Consolidation
     return { ok: false, code: "EDITAL_TR_REFERENCE_AMBIGUOUS", message: "o Edital emitido referencia o Termo de Referência em mais de um ponto" };
   }
   const [hit] = hits;
-  const block = `${trIdentificationBlock(tr)}\n\n${body}`;
+  const block = `${trIdentificationBlock(tr, title)}\n\n${body}\n\n${trIntegrityLine(tr)}`;
   return { ok: true, content: editalContent.slice(0, hit.start) + block + editalContent.slice(hit.end) };
 }

@@ -136,7 +136,10 @@ describe("Correção 2 — PDF: paginação e RASCUNHO em todas as páginas; emi
   it("título/processo LONGOS (auditoria): rodapé numa linha, sem páginas extras e numeração correta", async () => {
     const base = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(LONG, META)));
     const pages = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(LONG, { ...META, documentTitle: "T".repeat(500), processNumber: "9".repeat(200) })));
-    expect(pages.length).toBe(base.length);
+    // O título longo também alonga o CABEÇALHO da 1ª página (o corpo desce ~10 linhas) e, desde a F3, o "## ANEXO I" abre página nova:
+    // a contagem pode crescer 1 por fluxo legítimo. O defeito auditado (rodapé quebrando e criando páginas) geraria páginas SÓ de rodapé.
+    expect(pages.length).toBeLessThanOrEqual(base.length + 1);
+    pages.forEach((t) => expect(t.replace(/T{10,}…?.*Página \d+ de \d+/s, "").trim().length).toBeGreaterThan(0));
     pages.forEach((t, i) => expect(t).toContain(`Página ${i + 1} de ${pages.length}`));
   }, 30_000);
   it("uma página: 'Página 1 de 1'", async () => {
