@@ -179,6 +179,35 @@ describe("F3.1 — PDF: bloco de assinaturas nunca fragmentado", () => {
   }, 60_000);
 });
 
+describe("F3.1 — auditoria (P1): título imediatamente antes do grupo nunca fica órfão no pé da página (PDF)", () => {
+  const filler = (k: number) => Array.from({ length: k }, (_, i) => `${i + 1}. Parágrafo sintético com redação longa o bastante para ocupar duas linhas do corpo do documento exportado em PDF.`).join("\n\n");
+  const samePage = (pages: PdfLine[][], heading: string, first: string, label: string) => {
+    const h = linePages(pages, heading);
+    const f = linePages(pages, first);
+    expect(h, `${label}: "${heading}"`).toHaveLength(1);
+    expect(f, `${label}: "${first}" na página do título`).toEqual(h);
+  };
+
+  it("seção \"DOS ANEXOS\" (linhas curtas + local/data + signatário) logo após o título", async () => {
+    const section = ["## 34. DOS ANEXOS", "34.1. Integram este Edital, para todos os fins e efeitos:", "a) Anexo I — Termo de Referência;",
+      "b) Anexo II — Modelo de Proposta;", "c) Anexo III — Modelo de Declarações;", "d) Anexo IV — Minuta de Contrato;",
+      "Município Sintético, 05/11/2026.", "Pregoeira Sintética", "Agente de Contratação"].join("\n\n");
+    for (let k = 10; k <= 30; k++) {
+      const pages = await pdfLines(await renderInstitutionalPDF(buildInstitutionalModel(`${filler(k)}\n\n${section}\n\n## ANEXO I — TERMO DE REFERÊNCIA\n\nTexto.`, META)));
+      samePage(pages, "34. DOS ANEXOS", "34.1. Integram este Edital, para todos os fins e efeitos:", `k=${k}`);
+      for (const pg of pages) expect(body(pg).length, `k=${k}`).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
+  it("bloco \"Assinatura\" do Parecer assinado (signatureBlocks): título junto de \"Responsável\"", async () => {
+    const meta: InstitutionalMeta = { ...META, documentTitle: "Parecer Jurídico", signature: { signed: true, signerName: "Procuradora Sintética", signerRole: "Procuradora", methodLabel: "Manual", signedAtLabel: "05/11/2026 às 10:00" } };
+    for (let k = 10; k <= 45; k++) {
+      const pages = await pdfLines(await renderInstitutionalPDF(buildInstitutionalModel(filler(k), meta)));
+      samePage(pages, "Assinatura", "Responsável: Procuradora Sintética", `k=${k}`);
+    }
+  }, 60_000);
+});
+
 describe("F3.1 — DOCX: bloco de assinaturas indivisível", () => {
   it("[T4] encerramento numa tabela SEM bordas de uma célula com a linha \"não quebrar entre páginas\"; texto e ordem preservados", async () => {
     const xml = readZipEntry(await renderInstitutionalDOCX(buildInstitutionalModel(minuta(18, [...CLOSING, ...WITNESSES]), META)), "word/document.xml") ?? "";

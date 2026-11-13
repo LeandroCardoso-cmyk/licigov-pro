@@ -570,6 +570,12 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
       // entre páginas" (cantSplit) — respeitado pelo Word e pelo LibreOffice. A cadeia de "manter com o próximo" sozinha NÃO basta: o
       // LibreOffice a ignora quando só a última linha transborda (reproduzido: "CONTRATADO" isolado). Texto e ordem inalterados.
       const end = closingGroupEnd(model.blocks, bi);
+      // Mesmo teto do PDF: grupo maior que meia página segue o fluxo normal (parágrafos comuns).
+      if (closingGroupHeightPt(model.blocks, bi) > CLOSING_GROUP_MAX_HEIGHT_PT) {
+        for (const g of model.blocks.slice(bi, end)) if (g.kind === "paragraph") paras.push(new Paragraph({ spacing: { after: 120 }, children: runsToDocx(g.runs) }));
+        bi = end - 1;
+        continue;
+      }
       const cellParas = model.blocks.slice(bi, end).map((g) => new Paragraph({ spacing: { after: 120 }, children: runsToDocx(g.kind === "paragraph" ? g.runs : []) }));
       const width = Math.floor(CONTENT_WIDTH_PT * 20);
       paras.push(new Table({
@@ -723,7 +729,7 @@ export function planTableColumns(grid: readonly (readonly GridCell[])[], totalWi
 let measuringDoc: PDFKit.PDFDocument | null = null;
 /** Medição com as métricas da Helvetica do PDFKit (o DOCX usa Arial, de métrica compatível). Documento só de medição, nunca emitido. */
 function measureHelvetica(text: string, bold: boolean, sizePt: number): number {
-  measuringDoc ??= new PDFDocument({ size: "A4", autoFirstPage: false });
+  measuringDoc ??= new PDFDocument({ size: "A4" });
   return measuringDoc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(sizePt).widthOfString(text);
 }
 
@@ -764,16 +770,23 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
       // F3.1 — início de um grupo de encerramento/assinaturas: reserva a altura MEDIDA do grupo inteiro (o grupo vai para a página
       // seguinte se não couber; nunca é partido). Grupo maior que meia página não é reservado (sem vazio grande).
       if (b.kind === "paragraph" && b.keepWithNext && !(bi > 0 && isKeptParagraph(model.blocks[bi - 1]))) {
-        const group = model.blocks.slice(bi, closingGroupEnd(model.blocks, bi));
-        const h = group.reduce((acc, g) => acc + (g.kind === "paragraph" ? paragraphHeightPDF(doc, g.runs, pageWidth) + 6 : 0), 0) + 4;
-        if (h <= (doc.page.height - doc.page.margins.top - doc.page.margins.bottom) / 2) ensureSpacePDF(doc, h);
+        const h = closingGroupHeightPt(model.blocks, bi);
+        if (h <= CLOSING_GROUP_MAX_HEIGHT_PT) ensureSpacePDF(doc, h);
       }
       if (b.kind === "hr") { doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.4); return; }
       if (b.kind === "heading") {
         const size = HEADING_SIZES_PT[b.level];
         // F3-C — anexo em página nova (sem página em branco se já estiver no topo); demais títulos nunca isolados no fim da página.
         if (isAnnexHeading(b)) { if (doc.y > doc.page.margins.top + 1) doc.addPage(); }
-        else { doc.moveDown(0.3); ensureSpacePDF(doc, size * 1.4 + 11 * 1.2 * 3); }
+        else {
+          doc.moveDown(0.3);
+          // F3.1 (auditoria P1) — título seguido de um grupo de encerramento: reserva título + grupo inteiro (senão o grupo mudava de
+          // página sozinho e o título ficava órfão no pé da página — ex.: "34. DOS ANEXOS", "Assinatura" do Parecer).
+          const next = model.blocks[bi + 1];
+          const groupH = next && next.kind === "paragraph" && next.keepWithNext ? closingGroupHeightPt(model.blocks, bi + 1) : 0;
+          const headingH = doc.fontSize(size).font(pdfFont(true, b.level === 4)).heightOfString(b.runs.map((r) => r.text).join("") || " ", { width: pageWidth }) + 3;
+          ensureSpacePDF(doc, groupH > 0 && groupH <= CLOSING_GROUP_MAX_HEIGHT_PT ? headingH + groupH : size * 1.4 + 11 * 1.2 * 3);
+        }
         writeRunsPDF(doc, b.runs, size, true, { paragraphGap: 3 }, b.level === 4);
       }
       else if (b.kind === "paragraph") { writeRunsPDF(doc, b.runs, 11, false, { align: "justify", paragraphGap: 6 }); }
@@ -818,11 +831,24 @@ function isKeptParagraph(b: DocBlock | undefined): boolean {
   return !!b && b.kind === "paragraph" && !!b.keepWithNext;
 }
 
-/** Altura de um parágrafo do corpo (11 pt, justificado) medida com a métrica do PDFKit; negrito medido pela fonte do trecho. */
-function paragraphHeightPDF(doc: PDFKit.PDFDocument, runs: InlineRun[], pageWidth: number): number {
-  const bold = runs.some((r) => r.bold);
-  doc.fontSize(11).font(bold ? "Helvetica-Bold" : "Helvetica");
-  return doc.heightOfString(runs.map((r) => r.text).join("") || " ", { width: pageWidth, align: "justify" });
+/** Teto do grupo de encerramento mantido junto (meia altura útil da página): acima disso, fluxo normal (sem vazio grande). */
+const CLOSING_GROUP_MAX_HEIGHT_PT = (841.89 - PAGE_MARGIN_PT * 2) / 2;
+
+/**
+ * Altura (pt) do grupo de encerramento que começa em `start`, medida com a métrica da Helvetica (o DOCX usa Arial, de métrica
+ * compatível): corpo 11 pt na largura útil + 6 pt entre parágrafos. A MESMA medida decide PDF e DOCX (paginação equivalente).
+ */
+function closingGroupHeightPt(blocks: readonly DocBlock[], start: number): number {
+  const group = blocks.slice(start, closingGroupEnd(blocks, start));
+  measuringDoc ??= new PDFDocument({ size: "A4" });
+  const m = measuringDoc;
+  const heights = group.map((g) => {
+    if (g.kind !== "paragraph") return 0;
+    // A altura da linha no PDFKit é a da fonte do ÚLTIMO trecho (o rótulo em negrito de "Responsável: …" não a altera).
+    m.fontSize(11).font(g.runs.at(-1)?.bold ? "Helvetica-Bold" : "Helvetica");
+    return m.heightOfString(g.runs.map((r) => r.text).join("") || " ", { width: CONTENT_WIDTH_PT, align: "justify" });
+  });
+  return heights.reduce((a, b) => a + b, 0) + 6 * Math.max(heights.length - 1, 0);
 }
 
 /** Página nova quando o espaço restante não comporta `needed` pt (título + início do conteúdo, início de aviso). */

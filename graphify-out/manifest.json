@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1794607327.8075755,
-    "ast_hash": "f6eb90cb5609e74402b52757d80eb749",
+    "mtime": 1794608050.854185,
+    "ast_hash": "d9c2f2eb0495ed9538584982271b5558",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -15870,8 +15870,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/f31-signature-block-pagination.test.ts": {
-    "mtime": 1794607292.2061348,
-    "ast_hash": "34b0500f1b10864a0f1d8aef55a65cc8",
+    "mtime": 1794607928.936709,
+    "ast_hash": "9afff440a28b767430aee8e5a2e1b594",
     "semantic_hash": ""
   }
 }
