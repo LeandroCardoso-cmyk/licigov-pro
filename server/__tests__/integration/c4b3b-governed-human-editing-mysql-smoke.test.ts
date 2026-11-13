@@ -11,7 +11,7 @@
  *   4. concorrência otimista: expectedContentHash obsoleto → CONFLICT (nada alterado);
  *   5. idempotência: mesma chave+payload → replay (response=persisted); chave+conteúdo diferente → CONFLICT;
  *   6. response/replay = estado persistido (originador preservado);
- *   7. SoD de 3 atores: originador (A) e editor (B) NÃO emitem; terceiro manager (C) emite;
+ *   7. LICIGOV-FAST: gestor (C) continua o trabalho de A (edita) e emite a própria versão; A e B sem membership real recusados; emite;
  *   8. author NULL histórico permanece NULL após edição; emissão continua bloqueada;
  *   9. isolamento multi-tenant.
  *
@@ -196,17 +196,22 @@ describe.skipIf(!DB)("C.4B.3B — edição humana governada (MySQL estrito)", ()
       .rejects.toMatchObject({ code: "CONFLICT" });
   }, 60_000);
 
-  it("7) SoD de 3 atores: originador (A) e editor (B) NÃO emitem; terceiro manager (C) emite", async () => {
+  it("7) gestor (C) continua o trabalho de A, edita e emite a própria versão; A/B sem membership real recusados; conteúdo desatualizado ⇒ CONFLICT", async () => {
     const pid = "c4b3b-sod";
     await seedEtp(ORG, pid, "Objeto SoD", A);
     const before = await draftRow(ORG, pid, "etp");
     await saveReviewableDraft(editArgs(ORG, pid, "etp", "# ETP revisado SoD\nx", B, draftContentHash(before!.content), `edit-${pid}`));
+    const mid = await draftRow(ORG, pid, "etp");
+    await expect(promoteOfficialDocument(emitInput(ORG, pid, "etp", A, "emit-A", draftContentHash(mid!.content)))).rejects.toMatchObject({ code: "FORBIDDEN" }); // não é membro
+    await expect(promoteOfficialDocument(emitInput(ORG, pid, "etp", B, "emit-B", draftContentHash(mid!.content)))).rejects.toMatchObject({ code: "FORBIDDEN" }); // não é membro
+    // O gestor assume a continuidade: edita (vira o último ator substantivo) e conclui a versão — sem exigir outro servidor.
+    await saveReviewableDraft(editArgs(ORG, pid, "etp", "# ETP revisado SoD\nx\nAjuste do gestor.", C, draftContentHash(mid!.content), `edit-c-${pid}`));
     const row = await draftRow(ORG, pid, "etp");
-    const h = draftContentHash(row!.content);
-
-    await expect(promoteOfficialDocument(emitInput(ORG, pid, "etp", A, "emit-A", h))).rejects.toMatchObject({ code: "FORBIDDEN" }); // originador
-    await expect(promoteOfficialDocument(emitInput(ORG, pid, "etp", B, "emit-B", h))).rejects.toMatchObject({ code: "FORBIDDEN" }); // editor
-    const res = await promoteOfficialDocument(emitInput(ORG, pid, "etp", C, "emit-C", h));
+    expect(row!.author).toBe(A);                                   // originador preservado
+    expect(row!.lastSubstantive).toBe(C);
+    // Versão vista antes da edição do gestor: desatualizada ⇒ CONFLICT (nenhuma emissão de texto velho)
+    await expect(promoteOfficialDocument(emitInput(ORG, pid, "etp", C, "emit-C-old", draftContentHash(mid!.content)))).rejects.toMatchObject({ code: "CONFLICT" });
+    const res = await promoteOfficialDocument(emitInput(ORG, pid, "etp", C, "emit-C", draftContentHash(row!.content)));
     expect(res.promoted).toBe(true);
     expect(res.officialDocument.status).toBe("emitido");
   }, 120_000);

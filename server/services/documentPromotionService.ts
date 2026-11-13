@@ -2,9 +2,17 @@
  * C.4B.1 — Document Promotion Service (EMISSÃO OFICIAL GOVERNADA do Processo Licitatório).
  *
  * Promove o conteúdo ATUAL do rascunho operacional (`generated_documents`) a uma VERSÃO IMUTÁVEL
- * `emitido` em `official_documents` — a autoridade institucional. Decisão HUMANA governada:
- *   - ator humano identificado (IA/sistema nunca emite) e revisor/emissor ≠ autor do rascunho (SoD);
- *   - papel mínimo institucional (manager) via RBAC canônico;
+ * `emitido` em `official_documents`: a versão consolidada que INSTRUI o processo (ex.: o TR emitido que o Edital fixa).
+ *
+ * LICIGOV-FAST (segregação PROPORCIONAL) — emitir uma versão preparatória NÃO é aprovação jurídica, autorização
+ * institucional de publicação nem publicação externa. Por isso a emissão NÃO aplica a regra de aprovação (autor ≠
+ * aprovador) nem exige um terceiro servidor: quem elaborou/revisou e tem competência operacional (manager com
+ * membership real) conclui a sua versão. A autoria original, o último editor substantivo e o emissor ficam registrados
+ * (metadata da versão + ledger de edições), sem substituir identidades. Atos que exigem independência continuam nos
+ * seus caminhos próprios: aprovação versionada (`documentReviewService`, autor ≠ aprovador), decisões institucionais
+ * (`institutional_decisions`), parecer jurídico, ratificação e publicação. Decisão HUMANA governada:
+ *   - ator humano identificado (IA/sistema nunca emite) com autoria do rascunho rastreável;
+ *   - papel mínimo institucional (manager) via RBAC canônico + membership REAL relida da fonte autoritativa;
  *   - hash de conteúdo determinístico + concorrência otimista (expectedContentHash);
  *   - replay-safe idempotente (mesma chave+conteúdo → replay, sem nova versão; chave+conteúdo
  *     diferente → CONFLICT; concorrência → uma única emissão) reusando o idempotencyService;
@@ -27,7 +35,7 @@ import { demonstrativePricesAllowed, fictitiousPriceBlocker } from "./priceGover
 import { countOfficialPromotions, insertOfficialPromotion, getLatestOfficialPromotion } from "../db/officialDocumentPromotions";
 import { createDocument } from "./officialDocumentLifecycleService";
 import { checkIdempotency, saveIdempotencyResult, failIdempotencyKey } from "./idempotencyService";
-import { assertInstitutionalDecisionRules, orgRoleMeets } from "./documentWorkflowService";
+import { orgRoleMeets } from "./documentWorkflowService";
 import { requireInstitutionalAuthority } from "./institutionalAuthorityService";
 import { draftContentHash } from "../domain/generatedDocument";
 import { snapshotInstitutionalIdentity } from "./institutionalIdentityService";
@@ -45,6 +53,16 @@ const MIN_EMIT_ROLE: OrgRole = "manager";
 
 export type PromotableKind = "etp" | "tr" | "edital";
 const PROMOTABLE_KINDS: readonly PromotableKind[] = ["etp", "tr", "edital"];
+
+/**
+ * Emissão preparatória: só pessoa autenticada identificada (id inteiro positivo). IA/sistema nunca emite. Diferente da regra de
+ * APROVAÇÃO (`assertInstitutionalDecisionRules`, autor ≠ aprovador), que continua valendo onde há aprovação institucional.
+ */
+export function assertPreparatoryEmissionActor(actorUserId: number): void {
+  if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Emissão exige uma pessoa autenticada identificada — IA/sistema não emite." });
+  }
+}
 
 /** Hash determinístico do conteúdo do rascunho (integridade da versão emitida) — primitive ÚNICA,
  *  definida no domínio e re-exportada aqui para compatibilidade dos imports existentes. */
@@ -165,7 +183,7 @@ export async function promoteOfficialDocument(params: {
     throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente ou vazio — nada a emitir." });
   }
 
-  // GUARD (SoD fail-closed) — sem autoria rastreável não é possível provar revisor ≠ autor: recusa.
+  // GUARD (rastreabilidade, fail-closed) — sem autoria registrada a versão emitida não teria proveniência: recusa.
   if (draft.authorUserId == null) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
@@ -206,26 +224,13 @@ export async function promoteOfficialDocument(params: {
 
   // status "new"/"failed": governança humana (fora da tx) → commit atômico (dentro da tx).
   try {
-    // Governança institucional: papel mínimo + ator humano + segregação de deveres (revisor ≠ autor).
+    // Governança da emissão PREPARATÓRIA: papel mínimo + ator humano identificado. Sem regra de aprovação (autor ≠ aprovador)
+    // nem "terceiro revisor": emitir a versão que instrui o processo não é aprovar, autorizar a publicação nem publicar
+    // (LICIGOV-FAST — segregação proporcional; ver cabeçalho). Autor, último editor substantivo e emissor ficam na metadata.
     if (!orgRoleMeets(params.actorRole, MIN_EMIT_ROLE)) {
       throw new TRPCError({ code: "FORBIDDEN", message: `Emissão oficial exige papel mínimo "${MIN_EMIT_ROLE}".` });
     }
-    assertInstitutionalDecisionRules({
-      toState: "approved", // a emissão é o ato de aprovação/autorização institucional
-      actorUserId: params.actorUserId,
-      authorUserId: draft.authorUserId,
-      reason: params.reason ?? null,
-    });
-
-    // C.4B.3A — SoD estendida (guard de domínio, fail-closed, sem bypass): o ÚLTIMO ator substantivo do
-    // rascunho (quem fez a última alteração material — edição/regeneração) também NÃO pode emitir. Não
-    // altera o helper legacy global (documents int); é específico do Processo Licitatório.
-    if (draft.lastSubstantiveActorUserId != null && draft.lastSubstantiveActorUserId === params.actorUserId) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Segregação de deveres: o último editor substantivo do rascunho não pode emiti-lo — a emissão exige um terceiro revisor.",
-      });
-    }
+    assertPreparatoryEmissionActor(params.actorUserId);
 
     // R9 / SEM-057 — pré-condições SEMÂNTICAS (depois da governança, antes de qualquer escrita): sem [REVISAR],
     // fontes atuais, Edital só após TR emitido, e nunca uma nova versão idêntica à última emitida.
@@ -308,7 +313,7 @@ export async function promoteOfficialDocument(params: {
           authorUserId: draft.authorUserId, emitterUserId: params.actorUserId,
           // SECURITY-02 — papel institucional EFETIVO do emissor (membership persistida), nunca o do contexto.
           emitterInstitutionalRole: lockedEmitterAuthority.role,
-          // C.4B.3A — evidência aditiva da SoD estendida (não altera a autoridade existente).
+          // Rastreabilidade (C.4B.3A): último ator substantivo do rascunho — registro de autoria, não regra de bloqueio.
           lastSubstantiveActorUserId: draft.lastSubstantiveActorUserId,
           reason: params.reason ?? null,
           institutionalIdentitySnapshot: identity.snapshot,
@@ -325,7 +330,7 @@ export async function promoteOfficialDocument(params: {
         },
       }, tx);
 
-      // Ledger imutável da decisão institucional.
+      // Ledger imutável da emissão (versão preparatória; não é aprovação nem publicação).
       await insertOfficialPromotion({
         organizationId: params.organizationId, processId: params.processId, officialDocumentId: official.id,
         lineageId: official.lineageId, documentKind: params.kind, version: official.version, contentHash,

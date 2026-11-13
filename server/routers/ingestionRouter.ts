@@ -1022,7 +1022,7 @@ export const ingestionRouter = router({
   // ─── P0 piloto — DOCUMENT INTAKE (DFD/ETP/TR) ─────────────────────────────────────
   // Mesma sessão/upload/storage/checksum/parser; projeção documental revisada por humano e promovida a
   // RASCUNHO governado (nunca oficial). Leitura: tenant; mutações: operator+ (revisar/aprovar/promover a
-  // rascunho não é emissão — a emissão oficial segue exigindo manager + SoD).
+  // rascunho não é emissão — a emissão oficial segue exigindo manager com membership real; emitir ≠ aprovar/publicar).
 
   /** Staging documental vigente do processo + tipo e o estado do rascunho canônico (sem storageKey). */
   getDocumentIntake: tenantProcedure

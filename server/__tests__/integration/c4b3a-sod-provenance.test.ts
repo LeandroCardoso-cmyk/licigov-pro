@@ -93,18 +93,29 @@ beforeEach(() => {
   checkIdempotency.mockResolvedValue({ status: "new" });
 });
 
-describe("C.4B.3A — SoD estendida (emitter ≠ originador E ≠ último ator substantivo)", () => {
-  it("emitter == originador (author) → FORBIDDEN", async () => {
-    await expect(promoteOfficialDocument(base({ actorUserId: 5 }))).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(createDocument).not.toHaveBeenCalled();
-    expect(insertOfficialPromotion).not.toHaveBeenCalled();
+describe("C.4B.3A + LICIGOV-FAST — rastreabilidade de autoria (sem exigir terceiro servidor na emissão preparatória)", () => {
+  it("emitter == originador (author) → emite; a autoria original fica registrada", async () => {
+    const res = await promoteOfficialDocument(base({ actorUserId: 5 }));
+    expect(res.promoted).toBe(true);
+    expect(createDocument.mock.calls[0][0].metadata).toMatchObject({ authorUserId: 5, emitterUserId: 5, lastSubstantiveActorUserId: 9 });
   });
 
-  it("emitter == último ator substantivo (≠ author) → FORBIDDEN", async () => {
-    await expect(promoteOfficialDocument(base({ actorUserId: 9 }))).rejects.toMatchObject({ code: "FORBIDDEN" });
+  it("emitter == último ator substantivo (≠ author) → emite (regressão 2167/2026: quem resolveu os trechos conclui a versão)", async () => {
+    const res = await promoteOfficialDocument(base({ actorUserId: 9 }));
+    expect(res.promoted).toBe(true);
+    expect(createDocument.mock.calls[0][0].metadata).toMatchObject({ authorUserId: 5, emitterUserId: 9, lastSubstantiveActorUserId: 9 });
+    expect(failIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it("IA/sistema (id ≤ 0) continua sem emitir, mesmo sendo o último ator", async () => {
+    await expect(promoteOfficialDocument(base({ actorUserId: 0 }))).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(createDocument).not.toHaveBeenCalled();
-    expect(insertOfficialPromotion).not.toHaveBeenCalled();
-    expect(failIdempotencyKey).toHaveBeenCalledTimes(1); // sem efeito parcial; retry permitido
+  });
+
+  it("a regra de APROVAÇÃO institucional (autor ≠ aprovador) permanece intacta para quem aprova", async () => {
+    const { assertInstitutionalDecisionRules } = await vi.importActual<typeof import("../../services/documentWorkflowService")>("../../services/documentWorkflowService");
+    expect(() => assertInstitutionalDecisionRules({ toState: "approved", actorUserId: 5, authorUserId: 5, reason: null })).toThrow(/Segregação de deveres/);
+    expect(() => assertInstitutionalDecisionRules({ toState: "approved", actorUserId: 7, authorUserId: 5, reason: null })).not.toThrow();
   });
 
   it("terceiro manager (≠ originador e ≠ último ator substantivo) → emite", async () => {
@@ -123,7 +134,7 @@ describe("C.4B.3A — SoD estendida (emitter ≠ originador E ≠ último ator s
     expect(createDocument).not.toHaveBeenCalled();
   });
 
-  it("sem último ator substantivo (null) → regra reduz a emitter ≠ originador (emite)", async () => {
+  it("sem último ator substantivo (null) → emite", async () => {
     getGeneratedDocumentByKind.mockResolvedValue({ ...DRAFT, lastSubstantiveActorUserId: null });
     const res = await promoteOfficialDocument(base({ actorUserId: 7 }));
     expect(res.promoted).toBe(true);

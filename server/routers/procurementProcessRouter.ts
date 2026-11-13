@@ -1140,8 +1140,9 @@ export const procurementProcessRouter = router({
 
   /**
    * C.4B.1 — "Emitir documento oficial": promove o conteúdo ATUAL do rascunho (ETP/TR/Edital) a uma
-   * versão IMUTÁVEL `emitido` em official_documents. Decisão HUMANA governada (papel mínimo, revisor ≠
-   * autor), integridade por hash, replay-safe idempotente e commit atômico. NÃO se aplica ao DFD.
+   * versão IMUTÁVEL `emitido` em official_documents. Decisão HUMANA governada (papel mínimo manager + membership real),
+   * integridade por hash, replay-safe idempotente e commit atômico. NÃO se aplica ao DFD. LICIGOV-FAST: emitir a versão
+   * preparatória não é aprovação nem publicação — quem elaborou/revisou e tem competência conclui (sem "terceiro revisor").
    */
   promoteOfficial: tenantProcedure
     .input(z.object({
@@ -1167,7 +1168,7 @@ export const procurementProcessRouter = router({
 
   /**
    * Hardening P0 (risco D) — "emitido" tem UM significado: emissão OFICIAL governada (OfficialDocumentLifecycle,
-   * manager + SoD). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando ETP, TR e
+   * manager com membership real; versão preparatória imutável — não é aprovação jurídica nem publicação). Este endpoint NÃO emite documento: apenas PROJETA a etapa ISSUED do processo quando ETP, TR e
    * Edital JÁ possuem versão oficial emitida (ledger official_document_promotions; R10 / SEM-087 B). Faltando
    * qualquer uma → PRECONDITION_FAILED listando o que falta, sem nenhuma escrita.
    * Papel mínimo alinhado à emissão (manager).
@@ -1190,7 +1191,8 @@ export const procurementProcessRouter = router({
       const issued = setStage(process, "ISSUED");
       await updateProcessStage(process.id, orgId, "ISSUED", "emitido", issued.updatedAt);
       await recordProcessEvent({
-        organizationId: orgId, processId: process.id, eventType: "approval", actor: String(ctx.user!.id),
+        // LICIGOV-FAST — marcar a etapa não é aprovação jurídica nem publicação: evento de DECISÃO do gestor (não "approval").
+        organizationId: orgId, processId: process.id, eventType: "decision", actor: String(ctx.user!.id),
         summary: `Processo marcado como emitido — Edital oficial v${official.version}.`, refId: official.officialDocumentId, correlationId: ctx.correlationId,
       });
       return { success: true, processId: process.id, status: "emitido" as const, officialEditalVersion: official.version };
