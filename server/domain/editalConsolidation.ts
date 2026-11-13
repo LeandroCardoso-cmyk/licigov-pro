@@ -52,7 +52,7 @@ function isTrReference(paragraph: string, trDocumentId: string): boolean {
 }
 
 /** Título de nível 1 que abre o TR ("# Termo de Referência — <objeto>"). Só ele é candidato a virar a linha de identificação. */
-const TR_TITLE = /^#[ \t]+(Termo de Refer[eê]ncia\b.*?)[ \t]*#*[ \t]*$/i;
+const TR_TITLE = /^#[ \t]+(Termo de Refer[eê]ncia\b.*?)(?:[ \t]+#+)?[ \t]*$/i;   // "#" de fechamento só após espaço (CommonMark)
 
 export interface EmbeddedTr {
   /** Texto do título do TR (verbatim), quando a abertura do TR é o título "Termo de Referência…"; senão `null`. */
@@ -74,7 +74,8 @@ export function embedTrContent(trContent: string): EmbeddedTr {
   let title: string | null = null;
   const h1Count = lines.filter((l) => /^#[ \t]+/.test(l)).length;
   const m = TR_TITLE.exec(lines[0] ?? "");
-  if (m && h1Count === 1) {
+  // Só sai do corpo se restar conteúdo: um TR que é só o título continua como antes (o título vira o corpo).
+  if (m && h1Count === 1 && lines.slice(1).some((l) => l.trim())) {
     title = m[1].trim();
     lines = lines.slice(1);
   }

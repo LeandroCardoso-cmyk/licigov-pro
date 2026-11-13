@@ -160,7 +160,23 @@ describe("F3-C/D — anexos, paginação e hierarquia de títulos", () => {
     expect(isAnnexHeading(h(2, "33. DOS ANEXOS"))).toBe(false);
     expect(isAnnexHeading(h(3, "ANEXO I — subtítulo interno"))).toBe(false);
     expect(isAnnexHeading(h(2, "Anexos e apêndices"))).toBe(false);
+    // auditoria (P2): letras tratadas de forma uniforme; "Anexo Mídia" não é anexo numerado
+    for (const t of ["ANEXO A — Planilha", "ANEXO B: Modelo", "ANEXO C — Minuta", "ANEXO III"]) expect(isAnnexHeading(h(2, t)), t).toBe(true);
+    expect(isAnnexHeading(h(2, "Anexo Mídia digital"))).toBe(false);
   });
+
+  it("auditoria (P2): tabela — cabeçalho nunca órfão no fim da página nem duplicado; texto integral", async () => {
+    for (const k of [30, 31, 32, 33, 34]) {
+      const table = ["| HDRA | HDRB |", "|---|---|", ...Array.from({ length: 6 }, (_, i) => `| linha${i + 1} | ${"palavra ".repeat(20).trim()} |`)].join("\n");
+      const md = [...Array.from({ length: k }, (_, i) => `Parágrafo de preenchimento ${i + 1}.`), table].join("\n\n");
+      const pages = await pdfPages(await renderInstitutionalPDF(buildInstitutionalModel(md, META)));
+      const text = pages.join("\n");
+      const hdrPages = pages.filter((p) => p.includes("HDRA"));
+      // o cabeçalho só aparece em página que também tem linha da tabela (repetição legítima por página, nunca sozinho)
+      for (const p of hdrPages) expect(p, `k=${k}`).toMatch(/linha\d/);
+      for (let i = 1; i <= 6; i++) expect(text, `k=${k}`).toContain(`linha${i}`);
+    }
+  }, 30_000);
 
   it("[T4][T5] DOCX: anexos com quebra de página antes; títulos com \"manter com o próximo\"; Arial; hierarquia do TR em 2 níveis", async () => {
     const buf = await renderInstitutionalDOCX(buildInstitutionalModel(consolidated(), META));
@@ -232,6 +248,10 @@ describe("F3-E — identificação do TR incorporado (apresentação do artefato
     const legacy = "# 1. DO OBJETO\n\nObjeto.\n\n# 2. DO PAGAMENTO\n\n## 2.1. Prazo\n\nTrinta dias.";
     expect(embedTrContent(legacy)).toEqual({ title: null, body: "### 1. DO OBJETO\n\nObjeto.\n\n### 2. DO PAGAMENTO\n\n#### 2.1. Prazo\n\nTrinta dias." });
     expect(embedTrContent("# Termo de Referência\n\nTexto.\n\n# Outro título")).toMatchObject({ title: null });   // H1 não é único ⇒ preservado
+    // auditoria (P2): "#" colado ao texto é conteúdo (só a sequência de fechamento após espaço sai); TR só com título não é recusado
+    expect(embedTrContent("# Termo de Referência — Licença C#\n\nTexto.").title).toBe("Termo de Referência — Licença C#");
+    expect(embedTrContent("# Termo de Referência — Objeto ##\n\nTexto.").title).toBe("Termo de Referência — Objeto");
+    expect(embedTrContent("# Termo de Referência")).toEqual({ title: null, body: "### Termo de Referência" });
     expect(trIdentificationBlock({ ...TR, emissionNumber: 0 })).toBe(
       "**Termo de Referência**\n\nVersão incorporada integralmente a este Edital: versão oficial emitida, revisão técnica v2, emitida em 05/11/2026 às 10:00.");
   });

@@ -609,7 +609,8 @@ const DOCX_INSTITUTIONAL_STYLES = (() => {
 
 /** F3-C — título de ANEXO do documento ("## ANEXO II — …"): começa em página nova nos dois formatos. */
 export function isAnnexHeading(b: DocBlock): boolean {
-  return b.kind === "heading" && b.level <= 2 && /^ANEXO\s+[IVXLCDM]+\b/i.test(b.runs.map((r) => r.text).join("").trim());
+  // Numeral romano ou letra única seguido de separador ("—", "–", "-", ":", ".") ou fim: "ANEXO II — …", "ANEXO B: …", "ANEXO III".
+  return b.kind === "heading" && b.level <= 2 && /^ANEXO\s+(?:[IVXLCDM]+|[A-Z])(?=\s*(?:[—–:.-]|$))/i.test(b.runs.map((r) => r.text).join("").trim());
 }
 
 function docxAlign(a: CellAlign | undefined): (typeof AlignmentType)[keyof typeof AlignmentType] | undefined {
@@ -755,13 +756,19 @@ function writeTablePDF(doc: PDFKit.PDFDocument, header: InlineRun[][], rows: Inl
   const grid = tableGrid(header, rows);
   const { widths, fontSize } = planTableColumns(grid, pageWidth, measureHelvetica, pad);
   const xs = widths.map((_, i) => 56 + widths.slice(0, i).reduce((a, w) => a + w, 0));
-  const drawRow = (cells: readonly GridCell[], bold: boolean, repeatHeader: boolean): void => {
+  const rowHeight = (cells: readonly GridCell[], bold: boolean): number => {
     doc.fontSize(fontSize).font(bold ? "Helvetica-Bold" : "Helvetica");
     const heights = cells.map((c, i) => doc.heightOfString(c.text, { width: (widths[i] ?? 0) - pad * 2 }));
-    const h = Math.max(...heights, 10) + pad * 2;
-    if (doc.y + h > doc.page.height - doc.page.margins.bottom && doc.y > doc.page.margins.top + 1) {
+    return Math.max(...heights, 10) + pad * 2;
+  };
+  const bottom = (): number => doc.page.height - doc.page.margins.bottom;
+  const headerH = rowHeight(grid[0], true);
+  const drawRow = (cells: readonly GridCell[], bold: boolean, repeatHeader: boolean): void => {
+    const h = rowHeight(cells, bold);
+    if (doc.y + h > bottom() && doc.y > doc.page.margins.top + 1) {
       doc.addPage();
-      if (repeatHeader) drawRow(grid[0], true, false);
+      // Cabeçalho repetido só quando ele e a linha cabem juntos (uma linha quase do tamanho da página não é empurrada para fora).
+      if (repeatHeader && doc.y + headerH + h <= bottom()) drawRow(grid[0], true, false);
     }
     const y = doc.y;
     cells.forEach((c, i) => {
@@ -774,6 +781,8 @@ function writeTablePDF(doc: PDFKit.PDFDocument, header: InlineRun[][], rows: Inl
     doc.y = y + h;
   };
   doc.moveDown(0.3);
+  // Cabeçalho nunca órfão no fim da página: começa onde couberem o cabeçalho e a 1ª linha.
+  ensureSpacePDF(doc, headerH + (grid.length > 1 ? rowHeight(grid[1], false) : 0));
   drawRow(grid[0], true, false);
   for (const r of grid.slice(1)) drawRow(r, false, true);
   doc.moveDown(0.5);

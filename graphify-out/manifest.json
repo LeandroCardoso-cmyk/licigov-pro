@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1794603467.0774941,
-    "ast_hash": "437d161e697f5797ca4cc58a78ca7c71",
+    "mtime": 1794604364.370833,
+    "ast_hash": "afc4080e116e4b9163f2f18192aa02ea",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -15855,8 +15855,8 @@
     "semantic_hash": ""
   },
   "server/domain/editalConsolidation.ts": {
-    "mtime": 1794603326.7897542,
-    "ast_hash": "3c37942d89d8244988621825ddfcbc11",
+    "mtime": 1794604319.4569283,
+    "ast_hash": "a312a7020b09b38fe4ab87a1698c5794",
     "semantic_hash": ""
   },
   "server/services/editalConsolidatedExportService.ts": {
@@ -15865,8 +15865,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/f3-document-finishing.test.ts": {
-    "mtime": 1794603449.9357708,
-    "ast_hash": "25961be766c0534a3c42080943141c43",
+    "mtime": 1794604352.4921424,
+    "ast_hash": "ded488ac624cfdb6a501873ade1eee5e",
     "semantic_hash": ""
   }
 }
