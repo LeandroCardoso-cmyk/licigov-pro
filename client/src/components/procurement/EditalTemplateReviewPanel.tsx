@@ -47,7 +47,7 @@ function SlotItem({ slot, text, busy, disabledReason, onText, onResolve }: {
       {slot.inline
         ? <input type="text" aria-label={`Redação: ${slot.label}`} value={text} onChange={(e) => onText(e.target.value)} disabled={busy} className="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs" />
         : <textarea aria-label={`Redação: ${slot.label}`} value={text} onChange={(e) => onText(e.target.value)} disabled={busy} rows={4} className="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs" />}
-      {slot.inline && <p className="text-[11px] text-muted-foreground">Este trecho completa uma frase do modelo: redija em um único parágrafo.</p>}
+      {slot.inline && <p className="text-[11px] text-muted-foreground">Este trecho completa uma frase do modelo: redija em um único parágrafo. A pontuação final da frase já está no modelo.</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={!canAct || !text.trim()} onClick={() => onResolve("HUMAN_TEXT")} className="rounded-lg border border-input px-2 py-1 text-xs disabled:text-muted-foreground">Registrar redação deste trecho</button>
         {slot.declaredNoneAllowed && (

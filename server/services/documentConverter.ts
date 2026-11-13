@@ -533,10 +533,13 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
     } else if (b.kind === "notice") {
       paras.push(new Paragraph({ spacing: { before: 100, after: 100 }, children: [new TextRun({ text: "⚠ ", bold: true }), ...runsToDocx(b.runs, true)] }));
     } else if (b.kind === "table") {
+      // Qualidade documental F1 — célula de tabela no MESMO corpo do PDF (9 pt): no corpo do texto, tabelas largas (8 colunas)
+      // partiam palavras no meio ("catalogaçã/o"). Só a apresentação muda; o conteúdo é o mesmo.
       const cell = (runs: InlineRun[], header: boolean): TableCell => new TableCell({
-        children: [new Paragraph({ children: runsToDocx(header ? runs.map((r) => ({ ...r, bold: true })) : runs) })],
+        children: [new Paragraph({ children: runsToDocx(header ? runs.map((r) => ({ ...r, bold: true })) : runs, false, DOCX_TABLE_FONT_HALF_POINTS) })],
       });
-      const rows = [new TableRow({ tableHeader: true, children: b.header.map((c) => cell(c, true)) }), ...b.rows.map((r) => new TableRow({ children: r.map((c) => cell(c, false)) }))];
+      // Linha nunca partida entre páginas (o cabeçalho já se repete em cada página).
+      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: b.header.map((c) => cell(c, true)) }), ...b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((c) => cell(c, false)) }))];
       paras.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
       paras.push(new Paragraph({ text: "", spacing: { after: 120 } }));
     }
@@ -550,9 +553,12 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
   return Packer.toBuffer(doc);
 }
 
-function runsToDocx(runs: InlineRun[], forceItalic = false): TextRun[] {
+/** Corpo das células de tabela no DOCX (meios-pontos: 18 = 9 pt, o mesmo do PDF). */
+export const DOCX_TABLE_FONT_HALF_POINTS = 18;
+
+function runsToDocx(runs: InlineRun[], forceItalic = false, size?: number): TextRun[] {
   const list = runs.length ? runs : [{ text: "" }];
-  return list.map((r) => new TextRun({ text: r.text, bold: r.bold, italics: forceItalic || r.italic }));
+  return list.map((r) => new TextRun({ text: r.text, bold: r.bold, italics: forceItalic || r.italic, ...(size ? { size } : {}) }));
 }
 
 /** Renderiza o modelo institucional para PDF. */
@@ -642,8 +648,27 @@ function pdfFont(bold: boolean, italic: boolean): string {
   return "Helvetica";
 }
 
+/**
+ * Qualidade documental F1 — no PDFKit, um segmento `continued` com justificação DESCARTA o espaço inicial do segmento seguinte
+ * (ex.: "**licitar e contratar** no âmbito" saía "contratarno âmbito"). O espaço em branco inicial de cada segmento passa para o FIM
+ * do segmento anterior (mesmo texto, mesma ordem; só a fronteira do espaço muda). Pura; não afeta o DOCX nem o conteúdo emitido.
+ */
+export function pdfRunSpacing(runs: readonly InlineRun[]): InlineRun[] {
+  const out: InlineRun[] = runs.map((r) => ({ ...r }));
+  for (let i = 1; i < out.length; i++) {
+    // Só espaço/tab: quebras de linha ("\n" que encerra avisos e citações) ficam onde estão.
+    const lead = /^[ \t]+/.exec(out[i].text)?.[0];
+    if (!lead) continue;
+    out[i - 1] = { ...out[i - 1], text: out[i - 1].text + lead };
+    out[i] = { ...out[i], text: out[i].text.slice(lead.length) };
+  }
+  // Segmento que ficou vazio não é desenhado (no PDFKit um "" `continued` não avança e distorce o espaçamento).
+  const kept = out.filter((r) => r.text.length > 0);
+  return kept.length ? kept : [{ text: "" }];
+}
+
 function writeRunsPDF(doc: PDFKit.PDFDocument, runs: InlineRun[], size: number, headingBold: boolean, opts: any = {}, forceItalic = false): void {
-  const list = runs.length ? runs : [{ text: "" }];
+  const list = runs.length ? pdfRunSpacing(runs) : [{ text: "" }];
   list.forEach((r, i) => {
     const last = i === list.length - 1;
     doc.fontSize(size).font(pdfFont(r.bold || headingBold, (r.italic || forceItalic) as boolean))

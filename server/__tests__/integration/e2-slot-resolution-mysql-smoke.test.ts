@@ -239,7 +239,8 @@ describe.skipIf(!DB)("E2 — resolução humana dos trechos pendentes do Edital 
     const changedText = textFor(SUBCONTRATACAO).replace("equipe", "comissão");
     await proc(w.org).saveReviewableDraft({ processId: w.processId, kind: "edital", content: d2.content.replace(textFor(SUBCONTRATACAO), changedText), expectedContentHash: d2.contentHash, idempotencyKey: key("change") });
     const stale = await slotOf(w, SUBCONTRATACAO);
-    expect(stale).toMatchObject({ state: "STALE", currentText: changedText, revision: 1 });
+    // F1: no trecho EM LINHA o ponto final da frase é do modelo (fica fora do trecho) — o texto atual vem sem ele
+    expect(stale).toMatchObject({ state: "STALE", currentText: changedText.replace(/\.$/, ""), revision: 1 });
     expect((await err(promote(w)))?.message).toMatch(/AI_SLOT_RESOLUTION_STALE/);
     const before = await writes(w);
     const again = await resolveSlot(w, m1, SUBCONTRATACAO, "HUMAN_TEXT", stale.currentText);
