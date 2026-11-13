@@ -309,6 +309,7 @@ export default function OfficialPromotionSection({ processId = "", kind, reviewS
         title="Documentos oficiais (versões emitidas)"
         requireStatusForExport="emitido"
         documentType={kind}
+        consolidatedEdital={kind === "edital"}
       />
     </div>
   );

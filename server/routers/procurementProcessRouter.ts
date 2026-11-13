@@ -52,6 +52,7 @@ import { getEditalScopeSelection, recordEditalScope } from "../services/editalSc
 import { getOrganizationById, getOrganizationMemberNames } from "../db/organizations";
 import { getLatestOfficialPromotion, listLatestOfficialEmissions, officialEmissionsOf, officialVersionsOf } from "../db/officialDocumentPromotions";
 import { exportOfficialDocument } from "../services/officialDocumentExportAdapter";
+import { getOfficialDocument } from "../db/officialDocuments";
 import { isCatalogItemCandidate, parsePriceResearchText, previewOfParse, PriceResearchAmbiguousError } from "../domain/priceResearchParser";
 import { PriceQuoteReplacementRequiresConfirmationError } from "../domain/priceResearch";
 import { isFeatureEnabled } from "../services/featureFlagService";
@@ -324,6 +325,45 @@ export const procurementProcessRouter = router({
         correlationId: ctx.correlationId,
       });
       return { dfd };
+    }),
+
+  /**
+   * F2 — EDITAL COMPLETO (DOCX/PDF): a versão EMITIDA do Edital com o TR oficial integral no Anexo I — o TR exato fixado no M2 da
+   * emissão (nunca o rascunho nem "o último TR"). Mesmo RBAC/pipeline da exportação oficial (tenantProcedure; ação de LEITURA: não
+   * gera, não versiona, não altera documentos). Sem `documentId` ⇒ a versão emitida vigente (ledger de emissões); com ele ⇒ uma
+   * versão HISTÓRICA, conferida no servidor como Edital emitido DESTE processo e órgão. Fonte não verificável ⇒ PRECONDITION_FAILED.
+   */
+  exportConsolidatedEdital: tenantProcedure
+    .input(z.object({
+      processId: z.string().min(1),
+      documentId: z.string().min(1).max(40).optional(),
+      format: z.enum(["docx", "pdf"]),
+      disposition: z.enum(["attachment", "inline"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireProcess(input.processId, orgId);
+      let documentId = input.documentId ?? null;
+      if (!documentId) {
+        const emitted = await getLatestOfficialPromotion(orgId, input.processId, "edital");
+        if (!emitted) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "O Edital ainda não tem versão emitida — emita o Edital para exportá-lo completo." });
+        documentId = emitted.officialDocumentId;
+      }
+      // Tenant-scoped (outro órgão ≡ inexistente) e amarrado a ESTE processo: id de outro processo nunca é aceito.
+      const edital = await getOfficialDocument(documentId, orgId);
+      if (!edital || edital.origin !== input.processId || edital.documentType !== "edital" || edital.businessDomain !== "processo_licitatorio") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Versão do Edital não encontrada neste processo." });
+      }
+      const official = await exportOfficialDocument({
+        organizationId: orgId, userId: ctx.user!.id, documentId: edital.id, format: input.format, disposition: input.disposition,
+        correlationId: ctx.correlationId, platformTechnicalAccess: ctx.platformAdminAccess, consolidated: true,
+      });
+      await recordProcessEvent({
+        organizationId: orgId, processId: input.processId, eventType: "change", actor: String(ctx.user!.id),
+        summary: timelineSummaryForAccess(`Edital completo exportado (${input.format.toUpperCase()}) — versão emitida com o Termo de Referência oficial vinculado.`, ctx.platformAdminAccess),
+        refId: edital.id, correlationId: ctx.correlationId,
+      });
+      return { url: official.url, format: official.format, fileName: official.fileName, artifactHash: official.artifactHash };
     }),
 
   /**
