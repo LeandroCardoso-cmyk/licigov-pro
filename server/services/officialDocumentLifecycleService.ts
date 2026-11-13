@@ -219,6 +219,8 @@ export async function recordOfficialArtifact(params: {
   storageKey?: string; identityFingerprint?: string; actorUserId: number; correlationId?: string;
   /** Pós-homologação (Frente C) — export sob acesso técnico da plataforma: o evento diz isso (mesmo ator, mesmo correlationId). */
   platformTechnicalAccess?: boolean;
+  /** F2 — complemento do evento quando o artefato é DERIVADO de mais de uma fonte oficial (ex.: Edital completo com o TR incorporado). */
+  bundleNote?: string;
 }): Promise<{ artifact: OfficialDocumentArtifact | null; created: boolean }> {
   const { doc, format } = params;
   const actor = humanArtifactActor(params.actorUserId);
@@ -249,7 +251,7 @@ export async function recordOfficialArtifact(params: {
         await insertDocumentTimelineEntry({
           tenantId: doc.tenantId, lineageId: doc.lineageId, documentId: doc.id, order,
           eventType: "documento_exportado", actor, correlationId,
-          summary: timelineSummaryForAccess(`Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}; hash do artefato sha256:${params.artifactHash}; ${where}.`, params.platformTechnicalAccess),
+          summary: timelineSummaryForAccess(`Documento "${doc.title}" (v${doc.version}) exportado em ${format.toUpperCase()}${params.bundleNote ? ` — ${params.bundleNote}` : ""}; hash do artefato sha256:${params.artifactHash}; ${where}.`, params.platformTechnicalAccess),
         }, tx, { insertOnly: true });
       }
       return res;

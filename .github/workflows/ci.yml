@@ -488,6 +488,7 @@ jobs:
           server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts \
           server/__tests__/integration/e2-slot-resolution-mysql-smoke.test.ts \
+          server/__tests__/integration/f2-edital-consolidated-export-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts \
