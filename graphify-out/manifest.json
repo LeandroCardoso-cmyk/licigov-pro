@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1793918967.715196,
-    "ast_hash": "f60dc2c43cc60e2e21c973a307441d4f",
+    "mtime": 1794596152.6537046,
+    "ast_hash": "313ab1a2ae871fb744389decc50050d5",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -14410,8 +14410,8 @@
     "semantic_hash": ""
   },
   "client/src/components/procurement/EditalTemplateReviewPanel.tsx": {
-    "mtime": 1794248455.9192808,
-    "ast_hash": "7995f933e64b7e3864a28a2aad61bbe8",
+    "mtime": 1794595544.0186193,
+    "ast_hash": "e62f0e065f039095f66971753936f81d",
     "semantic_hash": ""
   },
   "client/src/components/procurement/PrepFieldControl.tsx": {
@@ -15810,8 +15810,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/e2-slot-resolution-mysql-smoke.test.ts": {
-    "mtime": 1794579417.0099473,
-    "ast_hash": "b0dcdd401bd37fbe57122b6c47b72e83",
+    "mtime": 1794595907.6903722,
+    "ast_hash": "319cc1c5c2cb77ea8b1b8031ca21b90f",
     "semantic_hash": ""
   },
   "server/__tests__/unit/e2-slot-resolution.test.ts": {
@@ -15820,18 +15820,28 @@
     "semantic_hash": ""
   },
   "server/domain/institutionalTemplates/slotResolution.ts": {
-    "mtime": 1794248287.6842964,
-    "ast_hash": "d3cfe72bc24e6b9dfdf96279e4163be3",
+    "mtime": 1794596152.65406,
+    "ast_hash": "525a9abf94f5d8b8251bcd035cbb7076",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/slotResolutionService.ts": {
-    "mtime": 1794236115.2418022,
-    "ast_hash": "93ab388afc9cab047b0d85d3ee31da96",
+    "mtime": 1794595506.7090054,
+    "ast_hash": "5f2af60c681d098ca04c93c746ee9b4b",
     "semantic_hash": ""
   },
   "server/services/institutionalTemplates/slotResolutionSubject.ts": {
     "mtime": 1794235723.1910236,
     "ast_hash": "107b4a8758d77dd4fc96408e0a0ed937",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/doc-quality-f1.test.ts": {
+    "mtime": 1794596152.6543877,
+    "ast_hash": "dc6f143eaccf0ad6d1713666da2ffe22",
+    "semantic_hash": ""
+  },
+  "docs/ops/PILOT_REAL_PROCESS_CHECKLIST.md": {
+    "mtime": 1794595958.255541,
+    "ast_hash": "d01a0a8528a50c347bd43e3f1f24e10a",
     "semantic_hash": ""
   }
 }

@@ -14,7 +14,7 @@ import { getGeneratedDocumentByKind } from "../../db/procurement";
 import { decisionRequestHash, type InstitutionalDecision } from "../../domain/institutionalDecision";
 import { draftContentHash } from "../../domain/generatedDocument";
 import {
-  SLOT_KEY_RE, SLOT_RESOLUTION_POLICY_VERSION, latestSlotResolutions, normalizeSlotText, planSlotResolution, slotPolicy, type SlotResolutionType,
+  SLOT_KEY_RE, SLOT_RESOLUTION_POLICY_VERSION, latestSlotResolutions, planSlotResolution, slotPolicy, slotTextHashCandidates, type SlotResolutionType,
 } from "../../domain/institutionalTemplates/slotResolution";
 import { sha256Hex } from "../../domain/canonicalJson";
 import type { OrgId } from "../../domain/institutionalTemplates";
@@ -89,9 +89,10 @@ export class TemplateSlotResolutionService {
     const prior = await this.priorByKey(org, input.idempotencyKey);
     if (prior) {
       const policyText = slotPolicy(input.slotKey).declaredNoneText;
-      const expectedTextHash = input.resolution === "DECLARED_NONE" ? (policyText ? sha256Hex(policyText) : null) : sha256Hex(normalizeSlotText(input.text ?? ""));
+      // Mesma redação informada ⇒ mesmo trecho, com ou sem a unificação do ponto final do trecho em linha (F1).
+      const expectedTextHashes = input.resolution === "DECLARED_NONE" ? (policyText ? [sha256Hex(policyText)] : []) : slotTextHashCandidates(input.text ?? "");
       const same = prior.subjectType === SLOT_RESOLUTION_SUBJECT && prior.subjectId === slotResolutionSubjectId(m1.id, input.slotKey)
-        && prior.recordedByUserId === ctx.actor.userId && prior.outcome === input.resolution && evidenceTag(prior.evidence, "text") === expectedTextHash;
+        && prior.recordedByUserId === ctx.actor.userId && prior.outcome === input.resolution && expectedTextHashes.includes(evidenceTag(prior.evidence, "text") ?? "");
       if (!same) throw new TemplateWorkflowError("DECISION_REJECTED", "esta solicitação já foi usada para registrar outra decisão (nada foi gravado)");
       return { decision: prior, replayed: true, contentHash: evidenceTag(prior.evidence, "content") ?? "", documentChanged: false };
     }

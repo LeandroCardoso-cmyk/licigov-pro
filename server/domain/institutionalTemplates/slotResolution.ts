@@ -184,6 +184,23 @@ const TEXT_MESSAGES: Readonly<Record<SlotTextIssue, string>> = {
  *  - nova resolução: o trecho da última resolução, pelas âncoras dela (`previous`).
  * Devolve o conteúdo resultante, o texto exato do trecho, o hash e as âncoras — que precisam localizar o trecho de volta no resultado.
  */
+/**
+ * Qualidade documental F1 — pontuação do trecho EM LINHA. O modelo publicado já traz a pontuação da frase logo após o trecho
+ * (ex.: "…pelas razões constantes do processo: ▢."). Se a redação termina com ponto, o ponto da pessoa e o do modelo se
+ * UNIFICAM (um único ponto), em vez de produzir "..". Vale também para abreviação ("etc.") e reticências ("..."), que mantêm
+ * a grafia correta. "?" e "!" nunca são removidos. Trecho em parágrafo próprio não é tocado. Pura; determinística.
+ */
+export function mergeInlineTerminalPeriod(text: string, standalone: boolean, followingChar: string | undefined): string {
+  if (standalone || followingChar !== "." || !text.endsWith(".")) return text;
+  return text.slice(0, -1).trimEnd();
+}
+
+/** Hashes aceitos para a MESMA redação informada (com e sem a unificação do ponto) — replay idempotente da resolução. */
+export function slotTextHashCandidates(text: string): string[] {
+  const n = normalizeSlotText(text);
+  return n.endsWith(".") ? [sha256Hex(n), sha256Hex(n.slice(0, -1).trimEnd())] : [sha256Hex(n)];
+}
+
 export function planSlotResolution(input: {
   readonly content: string;
   readonly slotKey: string;
@@ -217,6 +234,9 @@ export function planSlotResolution(input: {
     text = normalizeSlotText(input.text ?? "");
     const why = slotTextIssue(text, standalone);
     if (why) return { ok: false, field: "text", reason: TEXT_MESSAGES[why] };
+    text = mergeInlineTerminalPeriod(text, standalone, current[end]);
+    const whyAfter = slotTextIssue(text, standalone);   // o mínimo vale para o texto efetivamente inserido
+    if (whyAfter) return { ok: false, field: "text", reason: TEXT_MESSAGES[whyAfter] };
   }
   const next = current.slice(0, start) + text + current.slice(end);
   const anchors = captureAnchors(next, start, start + text.length);
