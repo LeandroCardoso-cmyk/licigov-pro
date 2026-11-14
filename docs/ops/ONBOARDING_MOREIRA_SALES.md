@@ -33,6 +33,9 @@
      `EMAIL_DISPATCH_INTERVAL_MS` (30s por padrão).
 4. O destinatário recebe o e-mail, clica no link (`/convite?token=...`), define uma senha e cria
    a própria conta — a conta já nasce com papel `owner` na organização.
+   - SECURITY-02: o convite `owner` de onboarding só pode ser aceito enquanto o órgão não tiver nenhum membro
+     ativo, e o e-mail do primeiro administrador **não pode ser o do próprio admin de plataforma** (autoconvite é
+     recusado com `SELF_GRANT_FORBIDDEN`).
 5. A partir daí, o próprio owner usa a tela **Usuários** (`/usuarios`) para convidar o restante
    da equipe (servidores do departamento de licitações), sem depender mais do admin de plataforma.
 

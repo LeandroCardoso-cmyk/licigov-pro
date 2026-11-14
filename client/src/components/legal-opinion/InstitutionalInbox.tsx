@@ -31,7 +31,7 @@ export default function InstitutionalInbox({ onOpenWorkspace }: InstitutionalInb
     <section className="rounded-xl border border-border bg-muted p-4">
       <header className="mb-4">
         <h2 className="text-base font-semibold text-foreground">Caixa Institucional — Parecer Jurídico</h2>
-        <p className="text-xs text-muted-foreground">Solicitações encaminhadas pelo Institutional Request Engine. Documentos referenciados, nunca copiados.</p>
+        <p className="text-xs text-muted-foreground">Solicitações encaminhadas pelos setores do órgão. Os documentos são referenciados, nunca copiados.</p>
       </header>
 
       {/* NEW-007 — recusa do servidor (sem papel/atribuição, já recebida por outro procurador) é exibida, nunca silenciosa. */}

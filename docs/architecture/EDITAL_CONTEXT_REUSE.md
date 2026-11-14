@@ -206,3 +206,142 @@ decimais). Nada é ocultado para atingir meta: o inventário fecha em 185 e cada
 - O TR continua sendo texto revisável; os parâmetros são uma camada **adicional** confirmada por pessoa (não há extração por IA).
 - Modelos fora da Authority Matrix mantêm a classificação anterior (derivada de `PreparationClass`).
 - Definir padrão exige papel `manager`+ (mesmo piso das demais decisões institucionais governadas).
+
+## 10. Addendum — LICIGOV-FAST PR-2: dotação e fonte de recursos do processo (pendência informativa)
+
+Decisão do Owner (05/11/2026): a ausência de informação documental — inclusive dotação orçamentária e fonte de recursos — **não bloqueia,
+por si só,** a geração nem a emissão institucional do documento; o sistema indica a pendência, orienta e reaproveita o dado quando ele surgir.
+Completude documental ≠ autorização de ato: a formalização da contratação continua exigindo a indicação dos créditos (Lei 14.133/2021, art. 150).
+
+- **Autoridade única (processo):** `julgamento.dotacaoOrcamentaria` e `julgamento.fonteRecursos` passam de condicional da CertameConfig a
+  `UPSTREAM_PROCESS` / entrada `PROCESS_BUDGET` (derivação `BUDGET_ALLOCATION`). Escritor único: `institutionalTemplates.governed.recordBudgetAllocation`
+  (mesmo registro governado do processo e **mesmo caminho** que a CertameConfig gravava — valores anteriores continuam válidos, sem migração;
+  CAS, idempotência, confirmação humana; substituir valor registrado diferente exige `confirmReplace`). A escrita genérica e a CertameConfig recusam.
+- **Um preenchimento:** "Dados orçamentários do processo" no card da Pesquisa de Preços e embutido no TR e no Edital (nenhuma etapa é obrigatória
+  nem proprietária). Status visível: **Declarado** (nunca "verificado") · **Pendente** · **Não aplicável** (registro de preços: indicada na
+  formalização de cada contratação, conforme o regulamento de SRP aplicável ao órgão — o regulamento federal não é presumido).
+- **Pendência informativa em código** (`contentPending.ts`, sem alterar catálogo/AST publicados nem o hash semântico): ausente ⇒ a composição
+  segue, o texto traz o marcador governado ("A INDICAR PELO SETOR RESPONSÁVEL PELA EXECUÇÃO ORÇAMENTÁRIA" / "A INDICAR COM A DOTAÇÃO
+  ORÇAMENTÁRIA"; nunca `[REVISAR]`). **O formato do manifesto M1/M2 não muda** (gate R1 do PR #342): a pendência não é campo persistido;
+  o registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2). Leitores de
+  versões anteriores leem e validam esses manifests (teste de contrato com as chaves do leitor da staging `9226e4b`). Num rollback de código,
+  a versão anterior volta à regra antiga e recusa a emissão do rascunho pendente (bloqueio seguro, sem emitir nada). A recuperação NA versão
+  anterior depende da revisão do modelo: com recomposição governada (Revisão 2), registra-se a dotação, recompõe-se e emite-se; sem ela
+  (Revisão 1), o rascunho só volta a ser emitível reaplicando a versão nova (a recomposição é recusada e o reset do processo é bloqueado
+  depois da emissão do TR).
+- **R3 — recuperação governada da minuta (corrigido):** registrar a dotação/fonte (ou outro dado do processo) DEPOIS de compor o Edital e
+  ANTES de emiti-lo torna a minuta divergente das fontes (`SOURCE_CHANGED`). A recomposição governada existente passa a valer também para
+  revisões SEM a capability de dados de publicação (Revisão 1), **somente** nesse caso: mesma revisão exata do modelo, mesmo órgão e alguma
+  fonte/autoridade mudou desde o M1 (`sourceRefreshRecompositionAllowed`, mesma regra `changedAuthorities` da revalidação). Mantém todas as
+  garantias da recomposição: só rascunho de origem modelo, nunca documento aprovado/emitido, CAS do conteúdo visto, confirmação explícita
+  quando há edição humana, conteúdo anterior no histórico append-only, novo M1, idempotência. Sem mudança de fonte, o comportamento legado
+  permanece. Não exige reset do processo, não toca no TR emitido nem em outro documento oficial; a emissão segue a revisão humana e a SoD.
+  (Num rollback para versão anterior a esta correção, a recuperação da Revisão 1 volta a depender de reaplicar a versão nova.)
+  **X → Y → X (corrigido, Revisões 1 e 2):** quando uma fonte VOLTA a um valor já usado, a composição reproduz um M1 que já existe. Conteúdo
+  idêntico não é estado idêntico: o M1 VIGENTE da minuta é o do vínculo explícito `tpl-m1:` (não o gravado por último), o rascunho é
+  ressincronizado a esse M1 pelas mesmas regras governadas (já vinculado ⇒ replay puro; texto idêntico ⇒ só o vínculo; recomposição governada
+  ⇒ conteúdo, com CAS, confirmação de edição humana e histórico; sem ela ⇒ CONFLICT), sem criar M1 nem versão técnica nova, e a cadeia de
+  edições humanas da emissão parte da ocorrência MAIS RECENTE do texto composto. A chave de idempotência da recomposição é única por recomposição (M1 + última linha do histórico de edições, lida sob lock), sem colisão em X → Y → X → Y.
+- **TR:** bloco determinístico "DADOS ORÇAMENTÁRIOS DO PROCESSO" (declarado/pendente/não aplicável), digest no hash do pedido e marcador
+  `orcamento:` na linhagem (fora do digest `trparams:` da linhagem TR → Edital). Dado registrado depois da geração ⇒ aviso informativo para
+  atualizar a seção, sem bloqueio. Documentos emitidos não mudam.
+- **Preservado:** RBAC (`govern` = manager + membership real), isolamento, SoD na emissão, `[REVISAR]` continua bloqueando a emissão,
+  as demais variáveis obrigatórias continuam `MISSING_REQUIRED`.
+- **Limitação conhecida (R2 — provisória; NÃO atende ao requisito geral do LICIGOV-FAST):** dotação e fonte pertencem ao processo, e esta
+  implementação reutiliza o registro governado existente do processo. Hoje, porém, registrar e ler esses dados depende de um catálogo de
+  Edital resolvível (módulo de modelos institucionais habilitado e modelo de Edital vinculado; sem escopo do Edital definido, só quando há um
+  único catálogo vigente). Órgãos sem modelo vinculado não conseguem usar integralmente o recurso (o TR deles segue o comportamento anterior).
+  A evolução prevista é um fato canônico do processo, independente de modalidade, plataforma e modelo (proposta em deliberação do Owner).
+
+### 10.1 Correções A1–A4 (homologação funcional H1–H5 em staging, 05/11/2026)
+
+- **A1 — SRP indefinido não é presumido.** A preparação do Edital só mostra dotação/fonte como "Não aplicável (registro de preços)" quando o
+  processo DECLAROU `controle.utilizaSrp = true`. Antes, a condição `requiredWhen` (`utilizaSrp == false`) avaliada com o SRP ainda não decidido
+  dava `false` e o campo caía no ramo de SRP. Indefinido ⇒ pendência informativa (igual a `budgetAllocationView`: `srp null ⇒ PENDING`).
+- **A2 — aviso "TR desatualizado" só para mudança material.** O digest gravado (hash do pedido de geração do TR e marcador `orcamento:`) mantém o
+  formato v1 — replay e rascunhos existentes intactos. A leitura `budgetDisclosure.allocation` passa a expor `equivalentDigests`: os digests com os
+  MESMOS status/valores de dotação e fonte e outro SRP (o texto do bloco e o contexto da autoria dependem só desses status/valores). A tela compara
+  com esse conjunto; mudança de valor ou de status (inclusive SRP com dotação ausente ⇒ não aplicável) continua acusando o aviso (informativo).
+- **A3 — autoria do TR com registro de preços declarado.** O bloco orçamentário expõe `notApplicable` e o prompt recebe o contexto: indicação na
+  formalização de cada contratação decorrente da ata, conforme o regulamento de SRP aplicável ao órgão (nenhum regulamento presumido), sem inventar
+  valores, sem afirmar dotação indicada/conferida, sem `[REVISAR]` só pela ausência — e sem dispensar a indicação dos créditos na formalização.
+  `[REVISAR]` legítimos continuam. Nenhuma chamada de IA nova; o prompt não entra em hash (o digest do pedido não muda).
+- **A4 — Perfil de Licitações: prontidão geral × contextual.** Sem processo, o Perfil continua contando só as políticas incondicionais, mas não diz
+  mais "Perfil completo" quando há políticas condicionais sem valor: lista "exigida(s) só quando: …" (rótulo operacional da condição) e mostra o
+  motivo em cada campo. Com `processId`, as políticas que ESTE processo exige vêm da MESMA fonte do preflight (`upstream.profilePending` da preparação)
+  e aparecem como pendentes (`summary.contextPending`, incluídas no `pendingCount`). O preflight mantém o código `LICITACOES_PROFILE_INCOMPLETE` e o
+  bloqueio, e passa a nomear os campos e onde informá-los. (As 3 políticas de SRP deixaram de bloquear: pendência informativa — §10.2.) Nenhum valor é atribuído; nenhuma política é alterada; o requisito vinculante não muda.
+- **Ajustes da auditoria independente:** (C1) política condicional cuja condição depende SÓ de dados do próprio órgão e está ativa (ex.:
+  `habilitacao.registroCadastralAceito` quando o órgão registrou que aceita registro cadastral) é pendência GERAL do Perfil, não "condicional";
+  (C2) `licitacoesProfile({ contextual: false })` dispensa a leitura contextual quando a tela só usa padrões/revisão (`UseAsDefaultButton`);
+  (P1) o prompt veda tratar regulamento federal presente no contexto como aplicável ao órgão, salvo indicação de adoção; (P3) a ressalva de políticas
+  condicionais usa tom neutro (governança discreta); (P4) a mensagem do preflight cita até 5 campos ("e mais N").
+  Risco residual P2 (leitura contextual do Perfil sem o pin do TR): **resolvido em §10.2**.
+- **Bloqueio de composição do Edital SRP (H5) — resolvido nesta rodada (§10.2).** A deliberação registrada antes deste ponto foi decidida pelo Owner
+  (LICIGOV-FAST: a ausência de conteúdo não impede elaborar/gerar/exportar a minuta).
+
+### 10.2 Edital SRP: políticas do órgão como pendência informativa (H5) e prontidão contextual do Perfil (P2)
+
+**Causa do bloqueio (H5).** Em registro de preços, `decisao.adesaoAta`, `srp.marcoInicialVigenciaAta` e `srp.prazoAssinaturaAta` (fonte POLICY,
+`requiredWhen controle.utilizaSrp = sim` no catálogo publicado) bloqueavam em três pontos: (1) `resolveTemplateVariables2` (composer2) ⇒
+`MISSING_REQUIRED`; (2) o grupo excludente `adesao_ata` (exactly-one, ramos `admite`/`veda`) sem ramo verdadeiro ⇒ `CHOICE_NOT_EXACTLY_ONE`;
+(3) a preparação as listava como "perfil incompleto", o que desabilitava o botão de gerar na tela.
+
+**Correção (mesmo mecanismo, sem motor novo).** As três entram na política em código `contentPending.ts` (com `neededBefore: "PUBLICATION"`;
+dotação/fonte ficam com `CONTRACTING`). Catálogo, AST e hash semântico publicados **não mudam**.
+- Composição: ausente ⇒ segue com o marcador governado ("… A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO"), nunca `[REVISAR]`. Na decisão de adesão
+  ausente, o compositor **não escolhe ramo** — o "padrão: veda" da descrição do catálogo não é decisão do órgão — e insere um parágrafo com o
+  marcador. Qualquer outro grupo excludente sem ramo continua `CHOICE_NOT_EXACTLY_ONE` (fail-closed). Presente ⇒ o valor do Perfil é usado.
+- O marcador ocupa o LUGAR da decisão, na forma comum dos ramos: item numerado no corpo do Edital e a própria seção "DA ADESÃO" no anexo da Ata
+  (numeração preservada). Vale só para a política NÃO obrigatória com condição de exigência ATIVA; grupo misto ou condição inativa ⇒ fail-closed.
+  O bloco pendente é âncora "incluída": removê-lo na revisão ⇒ `INCLUDED_BLOCK_REMOVED` (reconhecimento obrigatório).
+- Manifesto: formato M1/M2 **inalterado** (R1). As decisões dos ramos continuam registradas (todas falsas) e o texto com o marcador fica selado
+  pelo `composedOutputHash`. Replay determinístico. Os textos dos marcadores fazem parte do contrato de replay: mudar a redação faz rascunhos
+  pendentes acusarem `COMPOSITION_DRIFT` na emissão (exige recomposição) — por isso estão fixados por igualdade em teste.
+- Finalização: as três entram na lista "Antes de publicar oficialmente este Edital" (`neededBefore: "PUBLICATION"`), que não bloqueia a emissão.
+- Preparação/tela: as três passam de "perfil incompleto" (bloqueante) a `CONTENT_PENDING` em `upstream.contentPending` (`fix: ORG_PROFILE`),
+  exibidas como "Pendências informativas — não impedem gerar a minuta", com o caminho para o Perfil de Licitações.
+- Registro posterior no Perfil ⇒ `SOURCE_CHANGED` ⇒ recomposição governada (R3 na Revisão 1; capability na Revisão 2), com CAS, confirmação de
+  edição humana e histórico. Decidir "admite" ativa a decisão do processo `srp.limiteAdesaoAta`, que é pedida (nunca presumida).
+
+**Classificação das exigências (o sistema não é gate de publicação).**
+| Parâmetro | Natureza | Momento em que é indispensável | Referência (confirmação jurídica pendente) |
+|---|---|---|---|
+| `decisao.adesaoAta` | decisão institucional do órgão | antes da publicação do edital | Lei 14.133/2021, art. 86 (adesão por não participantes) |
+| `srp.marcoInicialVigenciaAta` | conteúdo do edital/ata | antes da publicação | art. 84 (vigência da ata) e regulamento de SRP do órgão |
+| `srp.prazoAssinaturaAta` | conteúdo do edital (regra de convocação) | antes da publicação | art. 25 (regras de convocação) e arts. 82 a 86 |
+
+A emissão institucional interna (versão emitida no sistema) **não** é bloqueada por esses marcadores, como já ocorre com os dados de publicação
+diferidos ("A DEFINIR PARA PUBLICAÇÃO") e com a dotação: emitir ≠ aprovar ≠ publicar. O documento emitido carrega a pendência no próprio texto.
+Controles preservados: autoridade e SoD na emissão, `[REVISAR]` bloqueando, `SOURCE_CHANGED`, `EMISSION_TR_NOT_EMITTED`, demais variáveis
+obrigatórias (`MISSING_REQUIRED`) e `utilizaSrp` obrigatório (SRP indefinido continua recusando a composição — nada é presumido).
+**Decisão pendente (Owner/Jurídico):** se a emissão institucional interna deve exigir as três políticas (hoje não exige); o regulamento de SRP de
+cada município (o federal não é presumido).
+
+**P2 — pin exato do TR na leitura contextual do Perfil.** Causa: `licitacoesProfile` chamava a preparação sem o pin; as condições das políticas
+condicionais dependem também de parâmetros estruturados do TR (`tratamentoDadosPessoais`, `repactuacao`, `exigeGarantiaContratual`), que o
+preflight descarta quando o pin é inválido ou desatualizado — e o Perfil se declarava contextual mesmo assim. Correção: a rota aceita
+`officialPins.TR` e o repassa à MESMA validação da preparação/preflight (órgão + processo + versão + hash). O Perfil expõe
+`contextStatus`: `GENERAL` (sem processo), `CONFIRMED` (TR exato validado), `UNVERIFIED` (sem pin, pin inválido ou leitura indisponível, com
+`contextReason`). "Não verificada" nunca vira "completo"; falha de leitura não bloqueia nada. Nenhum binding, política ou modelo muda. Hoje nenhuma
+tela chama o Perfil com processo e pin (o painel usa a leitura geral; "usar como padrão" dispensa o contexto): o contrato fica pronto e testado no
+servidor para quando a tela de preparação passar a exibi-lo.
+
+### 10.3 Correções F1/F2 (homologação H5 Etapa 1 em staging, processo 2167/2026)
+
+**F1 — acesso do Gestor ao Perfil de Licitações.** O backend já autoriza `manager` a gravar o Perfil
+(`institutionalTemplates.governed.recordOrganizationFields`/`recordLicitacoesProfile` = `templatesProcedure("govern")`, piso `manager` +
+membership real — SECURITY-02), mas a única tela do Perfil ficava em Configurações (admin+), e os links da preparação ("Configurar agora",
+"Informar no Perfil de Licitações", "Abrir o Perfil") levavam o Gestor a "Acesso não autorizado". Correção (só frontend, RBAC do backend
+inalterado): rota própria **`/perfil-licitacoes`** com o MESMO `LicitacoesProfilePanel` (sem segunda implementação), item de menu "Perfil de
+Licitações" para `manager`/`admin`/`owner` com o módulo de Modelos Institucionais ligado, gate `canGovernLicitacoesProfile` que espelha
+`TEMPLATE_ACTION_MIN_ROLE.govern` (teste de contrato), aviso claro para Operador/Visualizador e mensagem do preflight
+(`LICITACOES_PROFILE_INCOMPLETE`) apontando para o item do menu. Configurações (identidade institucional/documental, usuários) continua
+admin+; "Corrigir cadastro do órgão" continua em Configurações. Os campos canônicos da identidade continuam recusados pelo servidor no Perfil
+(`AUTHORITY_OWNED_PATHS`).
+
+**F2 — rótulo neutro da adesão à Ata.** A descrição técnica do catálogo publicado ("Adesão à Ata de Registro de Preços (padrão: veda)") aparecia
+nas pendências informativas e em "Antes de publicar", sugerindo uma decisão do órgão que não existe (o compositor não aplica "padrão"; sem
+registro, a minuta traz o marcador). Rótulo/pergunta neutros na camada de apresentação (`editalPresentation.ts`, via `describeVariable`).
+Catálogo, AST, hash semântico, manifests e documentos já compostos: inalterados (sha256 dos arquivos fixado em teste). Valor registrado
+(admite/veda) continua exibido como tal. Testes: `fast-f1-f2-profile-access.test.ts`.

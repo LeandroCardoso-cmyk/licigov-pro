@@ -15,25 +15,74 @@ Executor oficial: `pnpm homolog:e2e` (`server/__tests__/homologation/staging-hom
 - Jornada A: DFD → ETP → TR, com o TR emitido pelo **segundo** usuário (segregação de funções) → Edital BLL
   Revisão 2 → DOCX/PDF + replay.
 - Jornadas B e C, mais o teste de isolamento entre órgãos.
-- Guardas aplicadas ANTES de qualquer escrita:
+- Guardas aplicadas ANTES de qualquer escrita (pré-flight no `beforeAll`):
   - destino só `https://licigov-pro-staging.up.railway.app`;
   - tenant só `homologacao-sintetica` (a organização 1 é recusada);
-  - nenhum admin de plataforma e nenhum membro da organização 1.
+  - nenhum admin de plataforma e nenhum membro da organização 1;
+  - os dois usuários com papel `manager` ou superior;
+  - os dois usuários **distintos** (compara `me.id`, nunca e-mail ou senha) ⇒ senão `BLOCKED_HOMOLOGATION_SAME_IDENTITY`;
+  - exceção controlada de valores demonstrativos **habilitada** para o tenant sintético, lida em
+    `organizations.getCurrent().priceGovernance` do usuário que emite ⇒ senão `BLOCKED_HOMOLOGATION_DEMONSTRATIVE_PRICES_NOT_ENABLED`.
+- Login recusado pelo limitador (5 tentativas a cada 15 min por IP, contando logins bem-sucedidos) ⇒ `BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED`.
 - Senhas, cookies e tokens nunca são impressos nem gravados no relatório.
+
+## Bloqueio (configuração) × falha (defeito)
+| Saída | Significa | Quem age |
+|---|---|---|
+| `BLOCKED_HOMOLOGATION_DEMONSTRATIVE_PRICES_NOT_ENABLED` | A exceção de valores demonstrativos não está habilitada para o tenant sintético neste ambiente. A guarda `EMISSION_FICTITIOUS_PRICES` está correta: cotação fictícia nunca fundamenta emissão sem essa exceção. | Owner (configuração de staging) |
+| `BLOCKED_HOMOLOGATION_SAME_IDENTITY` | `HOMOLOG_EMAIL` e `HOMOLOG_EMAIL_2` resolvem para o mesmo usuário; a emissão do TR exige outro usuário. | Owner (credencial de homologação) |
+| `BLOCKED_HOMOLOGATION_LOGIN_RATE_LIMITED` | Limitador de login esgotado no IP de saída. Aguarde a janela (15 min); **não** reinicie o serviço para zerá-lo. | Operador (esperar) |
+| `BLOCKED_HOMOLOGATION_PREFLIGHT_FAILED` | Outra recusa do pré-flight (credencial inválida/ausente, tenant ou papel recusado, destino, exercício). Ver `preflight.stage`, `preflight.cause` e `preflight.detail`. | Owner/Operador conforme o `stage` |
+| Falha de asserção (`expected …`) em uma jornada | Defeito de produto ou de contrato. | Dev — anexar etapa, `run` e correlation id |
+
+O relatório JSON registra `blocked` (código) e `preflight` quando o pré-flight recusa — **inclusive nos dois logins** (antes, um
+HTTP 429 no login saía do bloco que preenchia `blocked`). `preflight` traz `status` (`BLOCKED`/`PASSED`), `stage`
+(`target`, `exercicio`, `login_author`, `login_issuer`, `same_tenant`, `distinct_identities`, `demonstrative_prices`), `code`,
+`cause` (código tRPC), `environment`, `run`, `tenantId` (quando já validado), `correlationId` da última chamada,
+`writesPerformed: 0`, `guidance` e `detail` sanitizado (sem senha, e-mail, cookie, token ou header de autorização). A execução
+termina falha/bloqueada — nunca PASS. Com bloqueio, **nenhum processo é criado**.
+
+## Verificação segura do ambiente (sem expor configuração)
+- A capacidade é lida pela API oficial, do próprio tenant, só por `manager+`: `organizations.getCurrent().priceGovernance.demonstrativePricesAllowed`.
+  Ela não revela a lista configurada nem o valor da variável.
+- Em painéis de infraestrutura, conferir **somente o nome** da variável no serviço de staging. Nunca ler, copiar ou imprimir valores.
+- A configuração é lida **no boot**: depois de alterada, o serviço precisa reiniciar para valer.
+- Este runbook **não autoriza** alterar configuração. A alteração é um checkpoint do Owner, pedido uma única vez.
+
+## Escalonamento
+- Bloqueio de configuração ou credencial ⇒ um único pedido ao Owner com: o código `BLOCKED_*`, o commit implantado e o que precisa mudar
+  (por exemplo: habilitar a exceção de valores demonstrativos **somente** para o tenant `homologacao-sintetica` em staging; corrigir a segunda conta).
+- Falha de produto ⇒ Dev, com o JSON do relatório, a etapa e o correlation id.
+
+## Critérios de retomada
+- Pré-flight verde: tenant sintético, dois usuários distintos `manager+`, exceção de valores demonstrativos habilitada.
+- Revisão 2 BLL vinculada (BOUND) no tenant sintético.
+- Janela do limitador livre (no máximo 2 execuções a cada 15 min por IP de saída).
+- Processo **novo**. Processos sintéticos de execuções anteriores ficam preservados como evidência; não reutilizar nem apagar.
+- Habilitar a exceção **não** conclui a jornada sozinho: o TR só é emitido sem marcadores `[REVISAR]` pendentes, resolvidos por edição humana.
 
 ## Pré-requisitos (Owner)
 1. Ter dois usuários **distintos**, membros ativos do tenant `homologacao-sintetica` (org 2), **ambos com papel `manager`
    ou superior**. O executor confere isso antes de qualquer escrita, porque atos governados e a emissão do TR exigem esse papel.
 2. A Revisão 2 BLL deve estar vinculada ao tenant sintético (binding `tb4240c06340d9182eb981`), sem alteração.
+2a. A exceção controlada de valores demonstrativos (`HOMOLOGATION_DEMONSTRATIVE_ORG_IDS`, ver `server/config/homologation.ts`) habilitada
+   **somente** para o tenant sintético, em ambiente não produtivo. Condições cumulativas no backend: `APP_ENV` ≠ production, id listado,
+   id ≠ 1, slug real `homologacao-sintetica`. Em produção a lista é sempre ignorada. Sem ela a jornada A é bloqueada no pré-flight.
 3. A execução precisa alcançar `licigov-pro-staging.up.railway.app` via HTTPS. Já foi feita com sucesso a partir do
-   **Console do Railway staging** (`/app`, que tem código e dependências completos). A sessão da nuvem do Claude NÃO
-   alcança o staging, porque o egress é bloqueado.
+   **Console do Railway staging** (`/app`, que tem código e dependências completos). Em 27/10/2026 a sessão da nuvem do
+   Claude também alcançou o staging pelo proxy de saída (Node com `NODE_USE_ENV_PROXY=1`).
 
 ## Resultado registrado (15/10/2026)
 - **APROVADO 4/4**: run `MV9SXMKG`, Console do Railway staging, org 2, processo `4256/2026`.
 - Evidência transcrita em `docs/ops/evidence/M8_E2E_HTTP_STAGING_2026-10-15.json`.
 - Usuário com mais de uma organização: informe `HOMOLOG_ORGANIZATION_ID=2`. Os dois usuários precisam de papel
   `manager` ou superior.
+
+## Resultado registrado (27/10/2026) — reexecução integrada
+- **3/4**: run `MVQO27FI`, org 2. B (legado → contrato vigente → aditivo), C (calendário) e ISO aprovados.
+- A **parou na emissão do TR** com `EMISSION_FICTITIOUS_PRICES`: a exceção de valores demonstrativos não estava habilitada no staging.
+  O executor de então só descobriu isso depois de criar o processo `8830/2026`. O pré-flight acima passou a recusar antes de qualquer escrita.
+- `HOMOLOG_EMAIL_2` resolvia para o mesmo usuário de `HOMOLOG_EMAIL`; a execução usou outra conta de homologação existente (`manager` da org 2).
 
 ## Execução numa máquina autorizada
 ```bash

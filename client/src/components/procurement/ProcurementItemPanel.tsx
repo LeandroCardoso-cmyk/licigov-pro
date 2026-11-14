@@ -5,6 +5,7 @@ import {
   type CatmatDecisionPayload, type CatmatKeyState,
 } from "./catmatKeyPolicy";
 import { formatCentsBRL } from "@/lib/money";
+import { provenanceLabel, riskTypeLabel, sessionByResearchId, severityLabel, type SessionHistoryView } from "@/lib/ingestionHistoryView";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import ItemSourceUpdateConfirm from "./ItemSourceUpdateConfirm";
 import { ITEM_STATUS_LABELS, approveAction, outlierSummary, quoteCountText } from "./itemSourceUpdateView";
@@ -71,6 +72,13 @@ export default function ProcurementItemPanel({
     { itemId },
     { enabled: !!itemId },
   );
+  // M8 — origem das cotações: Pesquisa de Preços → importação (sessão) que a gerou, pelo histórico somente leitura.
+  const itemProcessId = data?.item?.processId ?? "";
+  const historyQuery = trpc.ingestion.listSessionHistory.useQuery(
+    { procurementProcessId: itemProcessId, limit: 50, offset: 0 },
+    { enabled: !!itemProcessId, retry: false },
+  );
+  const originByResearch = sessionByResearchId((historyQuery.data?.sessions ?? []) as SessionHistoryView[]);
 
   const invalidate = () => {
     if (itemId) utils.itemIntelligence.getItem.invalidate({ itemId });
@@ -292,15 +300,25 @@ export default function ProcurementItemPanel({
               <p className="text-sm text-muted-foreground">Sem cotações.</p>
             ) : (
               <ul className="space-y-1">
-                {item.suppliers.map((s, i) => (
-                  <li
-                    key={`${s.name}-${i}`}
-                    className="flex justify-between text-sm text-foreground"
-                  >
-                    <span>{s.name}</span>
-                    <span className="font-mono">{brl(s.value)}</span>
-                  </li>
-                ))}
+                {item.suppliers.map((s, i) => {
+                  const prov = provenanceLabel(s.provenanceKind);
+                  const origin = s.researchId ? originByResearch.get(s.researchId) : undefined;
+                  return (
+                    <li key={`${s.name}-${i}`} className="text-sm text-foreground">
+                      <div className="flex justify-between gap-2">
+                        <span>{s.name}</span>
+                        <span className="font-mono">{brl(s.value)}</span>
+                      </div>
+                      {/* M8 — proveniência registrada da cotação e o arquivo de origem (promoção da ingestão). */}
+                      <p className="text-[11px] text-muted-foreground">
+                        <span className={prov.tone === "warn" ? "font-medium text-amber-700 dark:text-amber-300" : prov.tone === "ok" ? "text-green-700 dark:text-green-300" : ""}>
+                          {prov.label}
+                        </span>
+                        {origin ? <> · origem: importação nº {origin.id} ({origin.sourceFileName})</> : s.researchId ? <> · origem: pesquisa {s.researchId}</> : null}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Block>
@@ -584,14 +602,14 @@ export default function ProcurementItemPanel({
                 {data.risks.map((r) => (
                   <li key={r.id} className="rounded-md bg-muted p-2 text-xs">
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="font-medium text-foreground">{r.type}</span>
+                      <span className="font-medium text-foreground">{riskTypeLabel(r.type)}</span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                           SEVERITY_CLASSES[r.severity] ??
                           "bg-muted text-muted-foreground"
                         }`}
                       >
-                        {r.severity}
+                        {severityLabel(r.severity)}
                       </span>
                     </div>
                     <p className="text-muted-foreground">{r.description}</p>
@@ -631,7 +649,7 @@ export default function ProcurementItemPanel({
           </Block>
 
           {/* 8. Knowledge graph */}
-          <Block title="Knowledge graph">
+          <Block title="Relações do item">
             <p className="text-sm text-muted-foreground">
               {data.graphNodeIds.length} nó(s) conectados a este item.
             </p>

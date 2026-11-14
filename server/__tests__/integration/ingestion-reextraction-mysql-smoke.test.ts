@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { createHash } from "crypto";
 import mysql from "mysql2/promise";
 import PDFDocument from "pdfkit";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const DB = process.env.DATABASE_URL;
 const ORG = 990901;
@@ -295,46 +295,47 @@ describe.skipIf(!DB)("Layout v2 — PDF digital layout-aware + reprocessamento s
     const req = () => reserveReextraction({ sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "pedido concorrente", correlationId: null });
     const results = await Promise.allSettled([req(), req()]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const won = (results.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof req>>>).value;
     expect((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ code: "CONFLICT" });
     const op = await asUser(users.operator);
     expect((await op.ingestion.getSessionStatus({ sessionId: s.id, procurementProcessId: pid })).reprocess).toMatchObject({ eligible: false, inProgress: true });
-    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", actorUserId: users.operator, correlationId: null, code: "TEST", message: "fim do teste" });
+    expect(await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", leaseToken: won.leaseToken, actorUserId: users.operator, correlationId: null, code: "TEST", message: "fim do teste" })).toEqual({ released: true });
     expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
   });
 
   it("6) revisão DURANTE o reprocessamento ⇒ a troca é recusada (decisão humana vence) e nada é substituído", async () => {
     const pid = await newProcess(ORG);
     const s = await legacySession(ORG, pid);
-    await reserveReextraction({ sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "reprocessamento em curso", correlationId: null });
+    const { leaseToken } = await reserveReextraction({ sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "reprocessamento em curso", correlationId: null });
     const before = await getStagingItems(s.id, ORG);
     const op = await asUser(users.operator);
     await op.ingestion.reviewItem({ sessionId: s.id, procurementProcessId: pid, itemId: before[0].id, action: "rejected" });
     const parsed = await new PdfParser().parse(GOLDEN, { importSessionId: s.id, organizationId: ORG, sourceFileId: s.key, sourceFileName: "mapa.pdf", sourceMimeType: "application/pdf", sourceChecksum: s.checksum });
     await expect(commitReextraction({
-      sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "r", correlationId: null, items: parsed.items,
+      sessionId: s.id, organizationId: ORG, leaseToken, actorUserId: users.operator, reason: "r", correlationId: null, items: parsed.items,
       parserVersion: "2.3.0", outcomeStage: "awaiting_review", warnings: parsed.warnings, summary: { ...parsed.summary, extraction: parsed.extraction },
     })).rejects.toBeInstanceOf(StagingAlreadyReviewedError);
     const after = await getStagingItems(s.id, ORG);
     expect(after.map((i) => i.id)).toEqual(before.map((i) => i.id));
     expect((await getStagingSummary(s.id, ORG)).rejected).toBe(1);
     expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextracted'", [ORG, s.id])).toBe(0);
-    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", actorUserId: users.operator, correlationId: null, code: "STAGING_ALREADY_REVIEWED", message: "revisão concorrente" });
+    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", leaseToken, actorUserId: users.operator, correlationId: null, code: "STAGING_ALREADY_REVIEWED", message: "revisão concorrente" });
   });
 
   it("7) falha NO MEIO da troca ⇒ rollback total (nunca metade antiga + metade nova); reserva liberável", async () => {
     const pid = await newProcess(ORG);
     const s = await legacySession(ORG, pid);
-    await reserveReextraction({ sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "teste de atomicidade", correlationId: null });
+    const { leaseToken } = await reserveReextraction({ sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "teste de atomicidade", correlationId: null });
     const before = await getStagingItems(s.id, ORG);
     const parsed = await new PdfParser().parse(GOLDEN, { importSessionId: s.id, organizationId: ORG, sourceFileId: s.key, sourceFileName: "mapa.pdf", sourceMimeType: "application/pdf", sourceChecksum: s.checksum });
     const poisoned = [...parsed.items.slice(0, 5), { ...parsed.items[5], rawUnit: "U".repeat(500) }, ...parsed.items.slice(6)]; // rawUnit > varchar(50)
     await expect(commitReextraction({
-      sessionId: s.id, organizationId: ORG, actorUserId: users.operator, reason: "r", correlationId: null, items: poisoned as any,
+      sessionId: s.id, organizationId: ORG, leaseToken, actorUserId: users.operator, reason: "r", correlationId: null, items: poisoned as any,
       parserVersion: "2.3.0", outcomeStage: "awaiting_review", warnings: [], summary: { ...parsed.summary, extraction: parsed.extraction },
     })).rejects.toThrow();
     expect((await getStagingItems(s.id, ORG)).map((i) => i.id)).toEqual(before.map((i) => i.id));
     expect(await getImportSession(s.id, ORG)).toMatchObject({ parserVersion: "2.2.0", stage: "reprocessing" });
-    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", actorUserId: users.operator, correlationId: null, code: "TEST", message: "rollback" });
+    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: "awaiting_review", leaseToken, actorUserId: users.operator, correlationId: null, code: "TEST", message: "rollback" });
     expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
   });
 
@@ -367,5 +368,95 @@ describe.skipIf(!DB)("Layout v2 — PDF digital layout-aware + reprocessamento s
     expect((b.extractionSummary as any).extraction.fingerprint).toBe((a.extractionSummary as any).extraction.fingerprint);
     expect((b.extractionSummary as any).reextractions).toHaveLength(2);
     expect(await getStagingItems(s.id, ORG)).toHaveLength(30);
+  });
+
+  // ── Reserva com DONO (token): retomada de reserva vencida, commit/release tardios do dono anterior ──────────────────
+  const reserveAs = (id: number, reason: string, correlationId: string | null = null) =>
+    reserveReextraction({ sessionId: id, organizationId: ORG, actorUserId: users.operator, reason, correlationId });
+  /** Envelhece a reserva deterministicamente (sem esperar 15 min). */
+  const ageLease = (id: number) => conn.execute("UPDATE import_sessions SET updatedAt = NOW() - INTERVAL 16 MINUTE WHERE id = ? AND organizationId = ?", [id, ORG]);
+  const parseGolden = (s: { id: number; key: string; checksum: string }) =>
+    new PdfParser().parse(GOLDEN, { importSessionId: s.id, organizationId: ORG, sourceFileId: s.key, sourceFileName: "mapa.pdf", sourceMimeType: "application/pdf", sourceChecksum: s.checksum });
+  const commitAs = async (s: { id: number; key: string; checksum: string }, leaseToken: string) => {
+    const parsed = await parseGolden(s);
+    return commitReextraction({
+      sessionId: s.id, organizationId: ORG, leaseToken, actorUserId: users.operator, reason: "r", correlationId: null, items: parsed.items,
+      parserVersion: "2.3.0", outcomeStage: "awaiting_review", warnings: parsed.warnings, summary: { ...parsed.summary, extraction: parsed.extraction },
+    });
+  };
+  const leaseTokenIn = async (id: number) => ((await getImportSession(id, ORG))?.extractionSummary as any)?.reextractionLease?.token ?? null;
+
+  it("10) reserva vencida retomada: token NOVO, estágio anterior preservado, prazo renovado (3º pedido recebe CONFLICT)", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    const a = await reserveAs(s.id, "reserva original A");
+    expect(a.previousStage).toBe("awaiting_review");
+    await ageLease(s.id);
+    const b = await reserveAs(s.id, "retomada por B após vencer");
+    expect(b.leaseToken).not.toBe(a.leaseToken);
+    expect(b.previousStage).toBe("awaiting_review"); // nunca "reprocessing" (sessão presa)
+    expect(await leaseTokenIn(s.id)).toBe(b.leaseToken);
+    await expect(reserveAs(s.id, "terceiro pedido imediato")).rejects.toMatchObject({ code: "CONFLICT" });
+    await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: b.previousStage, leaseToken: b.leaseToken, actorUserId: users.operator, correlationId: null, code: "TEST", message: "fim" });
+  });
+
+  it("11) commit tardio do dono ANTERIOR é recusado (LEASE_LOST) sem tocar no staging; o dono atual aplica", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    const a = await reserveAs(s.id, "reserva original A");
+    await ageLease(s.id);
+    const b = await reserveAs(s.id, "retomada por B após vencer");
+    const before = await getStagingItems(s.id, ORG);
+    await expect(commitAs(s, a.leaseToken)).rejects.toMatchObject({ name: "ReextractionAbortedError", code: "LEASE_LOST" });
+    expect((await getStagingItems(s.id, ORG)).map((i) => i.id)).toEqual(before.map((i) => i.id));
+    expect(await getImportSession(s.id, ORG)).toMatchObject({ parserVersion: "2.2.0", stage: "reprocessing" });
+    expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextracted'", [ORG, s.id])).toBe(0);
+    const ok = await commitAs(s, b.leaseToken);
+    expect(ok.newStagedCount).toBeGreaterThan(0);
+    const after = await getImportSession(s.id, ORG);
+    expect(after).toMatchObject({ parserVersion: "2.3.0", stage: "awaiting_review" });
+    expect((after?.extractionSummary as any)?.reextractionLease).toBeUndefined(); // a reserva some com a troca
+  });
+
+  it("12) release tardio do dono anterior NÃO desfaz a reserva vigente (released:false, auditado como skipped)", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    const a = await reserveAs(s.id, "reserva original A");
+    await ageLease(s.id);
+    const b = await reserveAs(s.id, "retomada por B após vencer");
+    expect(await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: a.previousStage, leaseToken: a.leaseToken, actorUserId: users.operator, correlationId: null, code: "REEXTRACTION_FAILED", message: "worker antigo" })).toEqual({ released: false });
+    expect((await getImportSession(s.id, ORG))?.stage).toBe("reprocessing");
+    expect(await leaseTokenIn(s.id)).toBe(b.leaseToken);
+    const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT details FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextraction_release_skipped'", [ORG, s.id]);
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse((rows[0] as any).details)).toMatchObject({ released: false, code: "REEXTRACTION_FAILED" });
+    expect((await commitAs(s, b.leaseToken)).newStagedCount).toBeGreaterThan(0);
+  });
+
+  it("13) release depois do commit não toca no estágio de resultado", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    const a = await reserveAs(s.id, "reserva aplicada");
+    await commitAs(s, a.leaseToken);
+    expect(await releaseReextraction({ sessionId: s.id, organizationId: ORG, previousStage: a.previousStage, leaseToken: a.leaseToken, actorUserId: users.operator, correlationId: null, code: "TEST", message: "tarde" })).toEqual({ released: false });
+    expect(await getImportSession(s.id, ORG)).toMatchObject({ stage: "awaiting_review", parserVersion: "2.3.0" });
+  });
+
+  it("14) auditoria da reserva é fail-closed: se não puder ser gravada, a reserva não acontece", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    await expect(reserveAs(s.id, "auditoria inválida", "x".repeat(37))).rejects.toThrow(); // correlationId > varchar(36)
+    expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
+    expect(await leaseTokenIn(s.id)).toBeNull();
+    expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextraction_requested'", [ORG, s.id])).toBe(0);
+  });
+
+  it("15) resumo da extração que não é objeto JSON: a reserva é recusada e desfeita (sessão nunca fica em reprocessing sem dono)", async () => {
+    const pid = await newProcess(ORG);
+    const s = await legacySession(ORG, pid);
+    await (await getDb())!.update(importSessions).set({ extractionSummary: sql`CAST('[1,2]' AS JSON)` as never }).where(mysqlScope(s.id, ORG));
+    await expect(reserveAs(s.id, "resumo malformado")).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await getImportSession(s.id, ORG))?.stage).toBe("awaiting_review");
+    expect(await count("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND entityId = ? AND action = 'import_reextraction_requested'", [ORG, s.id])).toBe(0);
   });
 });

@@ -21,6 +21,41 @@ export interface OperationalCalendarItem {
   readonly eventTime: string;
   readonly referenceType: string;
   readonly referenceId: string | null;
+  /** Evento DERIVADO de uma fonte do processo (ex.: data da sessão declarada na Configuração do certame). */
+  readonly declaredIn?: string;
+}
+
+/** Origem de um evento derivado (null = evento cadastrado no calendário). */
+export function calendarItemOriginText(item: Pick<OperationalCalendarItem, "declaredIn">): string | null {
+  return item.declaredIn === "certame_config" ? "Declarado na Configuração do certame do processo" : null;
+}
+
+/** Endereço que abre a referência do evento fora do Centro de Operações (null = tratada no próprio Centro ou sem destino). */
+export function calendarReferenceHref(referenceType: string, referenceId: string | null | undefined): string | null {
+  if (!referenceId) return null;
+  return referenceType === "procurement_process" ? `/processos?processId=${encodeURIComponent(referenceId)}` : null;
+}
+
+/** Processo a abrir a partir do endereço (`?processId=`), ou null. */
+export function processIdFromSearch(search: string): string | null {
+  const id = new URLSearchParams(search).get("processId")?.trim();
+  return id ? id : null;
+}
+
+/**
+ * M8 — o processo aberto (e a aba) ficam na URL (`/processos?processId=…&tab=…`) para sobreviver ao reload e ao link direto.
+ * Só identificadores: nenhum dado do processo vai para a URL ou para o storage; o servidor continua validando o acesso.
+ */
+export function processRouteSearch(processId: string, tab?: string | null): string {
+  const q = new URLSearchParams({ processId });
+  if (tab && tab !== "overview") q.set("tab", tab);
+  return `?${q.toString()}`;
+}
+
+/** Aba da URL, só se for uma aba conhecida (valor desconhecido ⇒ null: abre a visão geral). */
+export function tabFromSearch<T extends string>(search: string, validTabs: readonly T[]): T | null {
+  const t = new URLSearchParams(search).get("tab")?.trim();
+  return t && (validTabs as readonly string[]).includes(t) ? (t as T) : null;
 }
 
 /** Diferenciação visual mínima exigida pela v1. */

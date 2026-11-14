@@ -26,7 +26,7 @@ vi.mock("../../services/importStagingService", () => ({
 }));
 vi.mock("../../services/importQueueService", () => ({ enqueueImport: vi.fn().mockReturnValue("job_100_1"), isSessionInFlight: vi.fn(() => false), getProvenanceRevalidationFailure: vi.fn(() => null) }));
 vi.mock("../../services/importReprocessService", () => ({
-  reserveReextraction: vi.fn(), releaseReextraction: vi.fn().mockResolvedValue(undefined),
+  reserveReextraction: vi.fn(), releaseReextraction: vi.fn().mockResolvedValue({ released: true }),
   getReprocessEligibility: vi.fn().mockResolvedValue({ eligible: true, blockers: [], message: "ok", stagedCount: 10 }),
 }));
 
@@ -50,7 +50,7 @@ beforeEach(() => {
   role.value = "operator";
   (flags.isFeatureEnabled as any).mockResolvedValue(true);
   (ingestion.getImportSession as any).mockResolvedValue(session());
-  (reprocess.reserveReextraction as any).mockResolvedValue({ previousStage: "awaiting_review", stagedCount: 10, session: session() });
+  (reprocess.reserveReextraction as any).mockResolvedValue({ previousStage: "awaiting_review", leaseToken: "lease-1", stagedCount: 10, session: session() });
   (queue.enqueueImport as any).mockReturnValue("job_100_1");
 });
 
@@ -60,7 +60,7 @@ describe("reprocessExtraction — governança", () => {
     expect(r).toMatchObject({ sessionId: 100, status: "reprocessing", enqueued: true, previousStagedCount: 10 });
     expect(reprocess.reserveReextraction).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 100, organizationId: 1, reason: input.reason }));
     expect(queue.enqueueImport).toHaveBeenCalledWith(100, 1, "imports/1/mapa.pdf", expect.objectContaining({
-      reextract: { actorUserId: mockUser.id, reason: input.reason, previousStage: "awaiting_review" },
+      reextract: { actorUserId: mockUser.id, reason: input.reason, previousStage: "awaiting_review", leaseToken: "lease-1" },
     }));
   });
   it("viewer ⇒ FORBIDDEN (nada reservado)", async () => {
@@ -88,7 +88,7 @@ describe("reprocessExtraction — governança", () => {
   it("processamento já em voo ⇒ reserva DEVOLVIDA e CONFLICT", async () => {
     (queue.enqueueImport as any).mockReturnValue(null);
     await expect(caller().reprocessExtraction(input)).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(reprocess.releaseReextraction).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 100, organizationId: 1, previousStage: "awaiting_review", code: "ALREADY_IN_FLIGHT" }));
+    expect(reprocess.releaseReextraction).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 100, organizationId: 1, previousStage: "awaiting_review", leaseToken: "lease-1", code: "ALREADY_IN_FLIGHT" }));
   });
   it("motivo obrigatório (mín. 10 caracteres)", async () => {
     await expect(caller().reprocessExtraction({ ...input, reason: "curto" })).rejects.toMatchObject({ code: "BAD_REQUEST" });

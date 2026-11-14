@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // M8 — o renderizador de Markdown já usado no produto (streamdown) importa CSS (katex) no módulo; processado pelo
+    // Vite (CSS vira módulo vazio no ambiente node), permite testar a visualização documental com renderToStaticMarkup.
+    server: { deps: { inline: ["streamdown"] } },
     include: [
       "server/**/*.test.ts",
       "server/**/*.spec.ts",

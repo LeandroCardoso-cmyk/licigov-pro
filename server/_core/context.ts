@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User, OrganizationMember } from "../../drizzle/schema";
 import { sdk } from "./sdk";
+import { acceptClientCorrelationId } from "../middleware/correlationMiddleware";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -24,11 +25,12 @@ export async function createContext(
     user = null;
   }
 
-  // correlationId: propagado pelo cliente (header X-Correlation-Id) ou gerado aqui
+  // correlationId: o já validado pelo correlationMiddleware; sem ele, o header X-Correlation-Id do
+  // cliente só se tiver formato seguro (SEC-AUD-2026-10); senão, gerado aqui.
   // requestId: sempre gerado por request, único por chamada HTTP
   const correlationId =
-    (opts.req.headers["x-correlation-id"] as string | undefined) ||
     (opts.req as unknown as Record<string, unknown>)["correlationId"] as string ||
+    acceptClientCorrelationId(opts.req.headers["x-correlation-id"]) ||
     crypto.randomUUID();
 
   const requestId =

@@ -1,4 +1,5 @@
 import React from "react";
+import { actorLabel } from "@/lib/processDocumentStatus";
 
 /**
  * TimelinePanel — PRESENTATIONAL.
@@ -6,8 +7,15 @@ import React from "react";
  */
 
 export interface TimelineEvent {
-  id: string; order: number; eventType: string; actor: string; summary: string; createdAt: string;
+  id: string; order: number; eventType: string; actor: string; actorName?: string | null; summary: string; createdAt: string;
 }
+
+/** Rótulo humano do tipo de evento (o código técnico fica no ledger). Desconhecido ⇒ o próprio código. */
+const EVENT_LABELS: Record<string, string> = {
+  workspace_created: "Contrato registrado", change: "Alteração", recommendation: "Recomendação",
+  approval: "Aprovação", decision: "Decisão", document: "Documento", stage_change: "Mudança de etapa",
+};
+export const timelineEventLabel = (eventType: string): string => EVENT_LABELS[eventType] ?? eventType;
 
 export interface TimelinePanelProps { timeline?: TimelineEvent[] }
 
@@ -31,11 +39,11 @@ export default function TimelinePanel({ timeline = [] }: TimelinePanelProps) {
             <li key={ev.id} className="relative">
               <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-white bg-indigo-500" />
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">{ev.eventType}</span>
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">{timelineEventLabel(ev.eventType)}</span>
                 <span className="text-[11px] text-muted-foreground">{fmt(ev.createdAt)}</span>
               </div>
               <p className="text-sm text-foreground">{ev.summary}</p>
-              <p className="text-xs text-muted-foreground">por {ev.actor}</p>
+              <p className="text-xs text-muted-foreground">por {actorLabel(ev.actorName, ev.actor)}</p>
             </li>
           ))}
         </ol>

@@ -90,12 +90,13 @@ describe("RC-C0.1A.1 — Congelamento do contractsRouter legado (pós-isolamento
     // Cada endpoint do baseline precisa existir nominalmente no source.
     const ausentes = CONTRACTS_ROUTER_ENDPOINTS_BASELINE.filter(name => {
       const leaf = name.split(".").pop()!;
-      return !new RegExp(`\\b${leaf}:\\s*tenantProcedure\\b`).test(src);
+      // SECURITY-02 — atos com efeito contratual passaram a institutionalProcedure("viewer") (membership REAL; piso inalterado).
+      return !new RegExp(`\\b${leaf}:\\s*(tenantProcedure\\b|institutionalProcedure\\("viewer"\\))`).test(src);
     });
     expect(ausentes, `endpoint(s) do baseline não encontrado(s): ${ausentes.join(", ")}`).toEqual([]);
 
     // Nenhuma procedure nova: total de declarações "<nome>: tenantProcedure" não excede o baseline.
-    const totalDeclared = (src.match(/:\s*tenantProcedure\b/g) ?? []).length;
+    const totalDeclared = (src.match(/:\s*(tenantProcedure\b|institutionalProcedure\("viewer"\))/g) ?? []).length;
     expect(totalDeclared, "número de procedures do router cresceu além do baseline (23)").toBeLessThanOrEqual(CONTRACTS_ROUTER_ENDPOINTS_BASELINE.length);
 
     // Nenhuma procedure voltou a usar protectedProcedure (regressão de segurança).

@@ -63,6 +63,9 @@ describe("indicadores de origem (view-model)", () => {
     expect(shouldRotateAssistKeyOnError("CONFLICT")).toBe(true);
     expect(shouldRotateAssistKeyOnError("INTERNAL_SERVER_ERROR")).toBe(false);
     expect(shouldRotateAssistKeyOnError(undefined)).toBe(false);
+    // M8: "em processamento" (mesma chave em voo) não é definitivo — trocar a chave dispararia uma 2ª execução.
+    expect(shouldRotateAssistKeyOnError("CONFLICT", "Operação idêntica já está em processamento para esta chave — aguarde a conclusão.")).toBe(false);
+    expect(shouldRotateAssistKeyOnError("CONFLICT", "O rascunho mudou desde o carregamento — recarregue e revise.")).toBe(true);
   });
 });
 

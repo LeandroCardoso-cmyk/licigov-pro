@@ -6,7 +6,8 @@
  * NUNCA provider real) e exercita a PROMOÇÃO governada (promoteOfficialDocument) contra o writer real
  * sob STRICT_TRANS_TABLES. Cobre os 12 cenários exigidos:
  *
- *   1. autor não pode emitir o próprio documento (SoD);
+ *   1. LICIGOV-FAST: autor com competência real (manager) emite a própria versão preparatória; sem membership real ou
+ *      com papel operator continua recusado;
  *   2. ator não humano rejeitado;
  *   3. promoção válida cria UMA versão emitida (+ 1 linha no ledger);
  *   4. replay mesma chave não cria nova versão;
@@ -22,11 +23,12 @@
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, canonicalDocumentIdentity, saveReviewableDraft } from "../../services/procurementProcessService";
 import { buildMockProviderAuthoring } from "../../services/authoring/structuredAuthoringService";
-import { promoteOfficialDocument, draftContentHash } from "../../services/documentPromotionService";
+import { promoteOfficialDocument, draftContentHash, getOfficialPromotionSummary } from "../../services/documentPromotionService";
 import { exportOfficialDocument } from "../../services/officialDocumentExportAdapter";
 
 const DB = process.env.DATABASE_URL;
@@ -149,21 +151,32 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG, "C4B1 Org", "c4b1-org"]).catch(() => {});
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE nome = VALUES(nome)", [ORG2, "C4B1 Org 2", "c4b1-org-2"]).catch(() => {});
     await cleanup();
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG, EMITTER);
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
+    await removeRealMemberships(conn, ORG, [EMITTER]).catch(() => {});
     await cleanup().catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG, ORG2]).catch(() => {});
     await conn.end();
   });
 
-  it("1) autor NÃO pode emitir o próprio documento (SoD)", async () => {
+  it("1) autor: sem membership real ⇒ FORBIDDEN; como operator ⇒ FORBIDDEN; como manager real ⇒ emite a própria versão (emitir ≠ aprovar)", async () => {
     const pid = "c4b1-p1";
     await seedDraft(ORG, pid, "Material p1");
-    await expect(emit(ORG, pid, "k1", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(emit(ORG, pid, "k1a", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });       // não é membro do órgão
+    await seedRealMembership(conn, ORG, AUTHOR, "operator");
+    await expect(emit(ORG, pid, "k1b", { actorUserId: AUTHOR, actorRole: "operator" })).rejects.toMatchObject({ code: "FORBIDDEN" }); // sem competência
+    await expect(emit(ORG, pid, "k1c", { actorUserId: AUTHOR })).rejects.toMatchObject({ code: "FORBIDDEN" });       // papel do contexto não basta
     expect(await countEmitido(ORG, pid)).toBe(0);
     expect(await countLedger(ORG, pid)).toBe(0);
+    await seedRealMembership(conn, ORG, AUTHOR, "manager");
+    const res = await emit(ORG, pid, "k1d", { actorUserId: AUTHOR });
+    expect(res.promoted).toBe(true);
+    expect(await countEmitido(ORG, pid)).toBe(1);
+    await removeRealMemberships(conn, ORG, [AUTHOR]);
   }, 60_000);
 
   it("2) ator não humano (id <= 0) é rejeitado", async () => {
@@ -181,6 +194,11 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     expect(res.officialDocument.status).toBe("emitido");
     expect(await countEmitido(ORG, pid)).toBe(1);
     expect(await countLedger(ORG, pid)).toBe(1);
+    // M8 P3.3 — a linhagem numera o snapshot técnico (gerado v1) e a emissão (v2); a UI recebe o ordinal "1ª emissão".
+    expect(res.officialDocument.version).toBe(2);
+    const summary = await getOfficialPromotionSummary({ organizationId: ORG, processId: pid, kind: "etp" });
+    expect(summary.latestOfficial).toMatchObject({ version: 2, emissionNumber: 1 });
+    expect((await getOfficialPromotionSummary({ organizationId: ORG2, processId: pid, kind: "etp" })).latestOfficial).toBeNull();
   }, 60_000);
 
   it("4) replay mesma chave NÃO cria nova versão", async () => {
@@ -236,6 +254,7 @@ describe.skipIf(!DB)("C.4B.1 — Emissão oficial governada (MySQL estrito)", ()
     // Agora há DUAS versões emitidas; a primeira permanece imutável (conteúdo inalterado).
     expect(await countEmitido(ORG, pid)).toBe(2);
     expect(await countLedger(ORG, pid)).toBe(2);
+    expect((await getOfficialPromotionSummary({ organizationId: ORG, processId: pid, kind: "etp" })).latestOfficial?.emissionNumber).toBe(2);
     const { lineageId } = canonicalDocumentIdentity({ organizationId: ORG, processId: pid, kind: "etp" });
     const [rows] = await conn.execute<mysql.RowDataPacket[]>(
       "SELECT CAST(content AS CHAR) AS c FROM official_documents WHERE tenant_id = ? AND lineage_id = ? AND status = 'emitido' ORDER BY version",

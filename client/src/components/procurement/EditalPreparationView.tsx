@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import PrepFieldControl from "./PrepFieldControl";
 import Disclosure from "./Disclosure";
 import { type FixAction, type StageTarget } from "@/lib/editalPreparation";
+import { LICITACOES_PROFILE_PATH } from "@/utils/orgPermissions";
 import {
   BLOCKING_LEVEL_LABEL, READINESS_ANCHOR, TR_OFFICIAL_EXACT_MESSAGE, TR_SELECTION_ANCHOR, buildEditalReadiness, isCertameDecision, isDecisionsOpen, isLargeOriginGroup, readinessHeadline,
   type OriginGroup, type ReadinessStep,
@@ -18,9 +19,16 @@ export interface PreparationViewProps {
   state: PreparationStateView;
   edits: Readonly<Record<string, SectionEdits>>;
   fieldErrors: Readonly<Record<string, Record<string, string>>>;
-  /** Pendências/opcionais AO VIVO (condicionais já aplicadas às edições). */
+  /**
+   * Decisões a DESENHAR, AO VIVO (condicionais já aplicadas às edições) e ESTÁVEIS: um campo pendente não sai da tela ao receber valor
+   * (`liveDecisionItems`). A contagem de pendências não vem daqui — é da prontidão (`buildEditalReadiness`).
+   */
   pending: readonly PendingItem[];
+  /** Decisões já registradas deste processo, editáveis para revisão/correção explícita (`liveRegisteredItems`). */
+  registered?: readonly PendingItem[];
   optional: readonly PendingItem[];
+  /** D-01 — decisões ainda não registradas exibidas no bloco da ativadora (registradas/opcionais): sinalizadas e abrem o bloco. */
+  attached?: ReadonlySet<string>;
   onEdit: (source: string, field: PrepField, value: FormValue) => void;
   plan: SavePlan;
   reviewing: boolean;
@@ -57,23 +65,46 @@ function FixButton({ action, onOpenStage }: { action: FixAction; onOpenStage?: (
   return null;
 }
 
-function FieldBlock({ items, edits, errors, busy, onEdit }: { items: readonly PendingItem[]; edits: PreparationViewProps["edits"]; errors: PreparationViewProps["fieldErrors"]; busy: boolean; onEdit: PreparationViewProps["onEdit"] }) {
-  const sources = [...new Set(items.map((i) => i.section.source))];
+function FieldBlock({ items, edits, errors, busy, onEdit, attached }: { items: readonly PendingItem[]; edits: PreparationViewProps["edits"]; errors: PreparationViewProps["fieldErrors"]; busy: boolean; onEdit: PreparationViewProps["onEdit"]; attached?: ReadonlySet<string> }) {
+  // Sequências CONTÍGUAS por fonte, na ordem recebida (D-01): reagrupar por fonte separava a condicional da sua ativadora quando as
+  // fontes diferem (ex.: critério de julgamento × casas decimais). Para listas já agrupadas por fonte, a renderização é a mesma.
+  const runs: { src: string; items: PendingItem[] }[] = [];
+  for (const i of items) {
+    const last = runs[runs.length - 1];
+    if (last && last.src === i.section.source) last.items.push(i); else runs.push({ src: i.section.source, items: [i] });
+  }
   return (
     <div className="space-y-4">
-      {sources.map((src) => (
-        <div key={src} className="space-y-3" data-source={src}>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{SOURCE_TITLE[src] ?? src}</h4>
-          {items.filter((i) => i.section.source === src).map(({ field }) => (
-            <PrepFieldControl key={field.path} field={field} value={edits[src]?.[field.path] ?? toFormValue(field, field.currentValue)}
-              error={errors[src]?.[field.path]} disabled={busy} onChange={(v) => onEdit(src, field, v)} />
-          ))}
+      {runs.map((run) => (
+        <div key={run.items[0].field.name} className="space-y-3" data-source={run.src}>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{SOURCE_TITLE[run.src] ?? run.src}</h4>
+          {run.items.map(({ field }) => {
+            const control = <PrepFieldControl key={field.path} field={field} value={edits[run.src]?.[field.path] ?? toFormValue(field, field.currentValue)}
+              error={errors[run.src]?.[field.path]} disabled={busy} onChange={(v) => onEdit(run.src, field, v)} />;
+            if (!attached?.has(field.name)) return control;
+            return (
+              <div key={field.path} className="space-y-1 border-l-2 border-amber-500 pl-3" data-attached-pending="true">
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Ainda não registrada</span>
+                {control}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
   );
 }
 
+
+/**
+ * `<details>` que ABRE sozinho quando `autoOpen` passa a valer (D-01: condicional ainda não registrada exibida nele), mas nunca FECHA
+ * sozinho — quem fecha é a pessoa. Evita o bloco recolher sob o seletor em uso quando a condicional some ou é registrada.
+ */
+function AutoOpenDetails({ autoOpen, children, ...rest }: { autoOpen: boolean; children: ReactNode; className?: string; "aria-label"?: string }) {
+  const [open, setOpen] = useState(autoOpen);
+  useEffect(() => { if (autoOpen) setOpen(true); }, [autoOpen]);
+  return <details {...rest} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>{children}</details>;
+}
 
 /** Um grupo de origem: pequeno ⇒ lista direta; GRANDE (> LARGE_ORIGIN_GROUP_THRESHOLD) ⇒ contagem + ação visíveis e a lista recolhida (Disclosure). */
 function OriginGroupBlock({ group, onOpenStage, initialOpen }: { group: OriginGroup; onOpenStage?: (s: StageTarget) => void; initialOpen: boolean }) {
@@ -138,6 +169,14 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const { counters, details } = readiness;
   const decisionsOpen = isDecisionsOpen(readiness, userChoice);
   const decisions = p.pending.filter(isCertameDecision);
+  const registeredDecisions = (p.registered ?? []).filter(isCertameDecision);
+  // D-01 — condicionais ainda NÃO registradas exibidas junto da ativadora registrada: o bloco abre sozinho para não escondê-las.
+  const attachedIn = (items: readonly PendingItem[]) => items.filter((i) => p.attached?.has(i.field.name)).length;
+  const pendingInRegistered = attachedIn(registeredDecisions);
+  const registeredOnly = registeredDecisions.length - pendingInRegistered;
+  const pendingInOptional = attachedIn(p.optional);
+  const optionalOnly = p.optional.length - pendingInOptional;
+  const attachedHint = (n: number) => `${n} ${n === 1 ? "decisão ainda não registrada aparece" : "decisões ainda não registradas aparecem"} logo abaixo da decisão que a${n === 1 ? "" : "s"} ativou.`;
   const scheduleBlock = decisions.filter((i) => i.field.authority === "CERTAME_SCHEDULE");
   const decisionBlock = decisions.filter((i) => i.field.authority !== "CERTAME_SCHEDULE");
   const allFields = state.sections.flatMap((s2) => s2.fields.map((field) => ({ section: s2, field })));
@@ -152,10 +191,12 @@ export default function EditalPreparationView(p: PreparationViewProps) {
   const autoCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority !== "LIFECYCLE_SYSTEM");
   const systemCanonical = state.canonicalFields.filter((c) => c.status === "AUTO" && c.authority === "LIFECYCLE_SYSTEM");
   const profile = readiness.profile;   // MESMA fonte do contador: lista "O que falta" = ONE_TIME_CONFIGURATION_REQUIRED_TOTAL
+  // LICIGOV-FAST (H5): políticas do órgão com pendência INFORMATIVA — fora do contador de configuração obrigatória (não travam a geração).
+  const orgContentPending = (state.upstream?.contentPending ?? []).filter((c) => c.fix === "ORG_PROFILE");
   const defaultsApplied = allFields.filter(({ field }) => field.status === "ORG_DEFAULT");
   const eligibleDecided = allFields.filter(({ field }) => field.status === "DECIDED" && field.defaultEligible && field.hasValue).map(({ field }) => field);
   const canSave = p.plan.writes.length > 0 && Object.keys(p.plan.errors).length === 0 && !p.busy;
-  const hasDecisionArea = decisions.length > 0 || derivedSchedule.length > 0 || awaitingSchedule.length > 0 || p.optional.length > 0;
+  const hasDecisionArea = decisions.length > 0 || derivedSchedule.length > 0 || awaitingSchedule.length > 0 || p.optional.length > 0 || registeredDecisions.length > 0;
   const blocking = readiness.blockingPrerequisites;
   const stepByKey = Object.fromEntries(readiness.steps.map((st) => [st.key, st])) as Record<ReadinessStep["key"], ReadinessStep>;
   const trStep = stepByKey.TR_OFFICIAL; const cfgStep = stepByKey.ONE_TIME_CONFIG; const originStep = stepByKey.ORIGIN; const decStep = stepByKey.PROCESS_DECISIONS;
@@ -194,7 +235,7 @@ export default function EditalPreparationView(p: PreparationViewProps) {
           )}
         </StepRow>
         <StepRow step={cfgStep} next={readiness.nextStep === "ONE_TIME_CONFIG"}>
-          {!cfgStep.done && <a href="/configuracoes#perfil-licitacoes" className={BTN}>Configurar agora</a>}
+          {!cfgStep.done && <a href={LICITACOES_PROFILE_PATH} className={BTN}>Configurar agora</a>}
         </StepRow>
         <StepRow step={originStep} next={readiness.nextStep === "ORIGIN"} />
         <StepRow step={decStep} next={readiness.nextStep === "PROCESS_DECISIONS"}>
@@ -223,11 +264,19 @@ export default function EditalPreparationView(p: PreparationViewProps) {
             {details.profileRoles > 0 ? ` (${details.profileRoles} ${details.profileRoles === 1 ? "papel institucional" : "papéis institucionais"} · ${details.profilePolicies} ${details.profilePolicies === 1 ? "política" : "políticas"})` : ""}.
             Configure uma vez; nenhum Edital pede estes dados de novo.
           </p>
-          <a href="/configuracoes#perfil-licitacoes" className={BTN}>Configurar agora</a>
+          <a href={LICITACOES_PROFILE_PATH} className={BTN}>Configurar agora</a>
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground">O que falta para este Edital — {profile.required.length}</summary>
             <ul className="mt-1 list-disc pl-5" data-profile-list="required">{profile.required.map((i) => <li key={i.name}>{i.description} — {i.reason}</li>)}</ul>
           </details>
+        </div>
+      )}
+      {/* LICIGOV-FAST (H5) — políticas do órgão ainda não registradas que NÃO impedem gerar a minuta (o texto traz o marcador governado). */}
+      {orgContentPending.length > 0 && (
+        <div role="status" className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-sm" aria-label="Pendências informativas do órgão" data-org-content-pending={orgContentPending.length}>
+          <p className="font-medium text-foreground">Pendências informativas — não impedem gerar a minuta</p>
+          <ul className="list-disc space-y-1 pl-5 text-xs">{orgContentPending.map((i) => <li key={i.name}><strong>{i.description}</strong> — {i.reason} <span className="text-muted-foreground">({i.providedBy})</span></li>)}</ul>
+          <a href={LICITACOES_PROFILE_PATH} className="text-xs text-primary underline">Informar no Perfil de Licitações</a>
         </div>
       )}
       {profile.additional.length > 0 && (
@@ -297,11 +346,28 @@ export default function EditalPreparationView(p: PreparationViewProps) {
               <FieldBlock items={decisionBlock} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} />
             </div>
           )}
+          {registeredDecisions.length > 0 && (
+            <AutoOpenDetails className="rounded-lg border border-border" aria-label="Decisões já registradas deste certame" autoOpen={pendingInRegistered > 0}>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões já registradas — {registeredOnly} (revisar ou corrigir)</summary>
+              <div className="space-y-2 px-3 pb-3">
+                <p className="text-xs text-muted-foreground">Valores registrados na Configuração do certame. Alterar um valor e salvar registra uma NOVA decisão, com confirmação e histórico; nada muda sem salvar.</p>
+                {pendingInRegistered > 0 && (
+                  <p role="status" className="text-xs text-amber-700 dark:text-amber-300" data-testid="pending-in-registered">
+                    {attachedHint(pendingInRegistered)}
+                  </p>
+                )}
+                <FieldBlock items={registeredDecisions} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} attached={p.attached} />
+              </div>
+            </AutoOpenDetails>
+          )}
           {p.optional.length > 0 && (
-            <details className="rounded-lg border border-border">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões opcionais (ativam campos adicionais) — {p.optional.length}</summary>
-              <div className="px-3 pb-3"><FieldBlock items={p.optional} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} /></div>
-            </details>
+            <AutoOpenDetails className="rounded-lg border border-border" aria-label="Decisões opcionais deste certame" autoOpen={pendingInOptional > 0}>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Decisões opcionais (ativam campos adicionais) — {optionalOnly}</summary>
+              <div className="space-y-2 px-3 pb-3">
+                {pendingInOptional > 0 && <p role="status" className="text-xs text-amber-700 dark:text-amber-300" data-testid="pending-in-optional">{attachedHint(pendingInOptional)}</p>}
+                <FieldBlock items={p.optional} edits={p.edits} errors={p.fieldErrors} busy={p.busy} onEdit={p.onEdit} attached={p.attached} />
+              </div>
+            </AutoOpenDetails>
           )}
         </Disclosure>
       )}

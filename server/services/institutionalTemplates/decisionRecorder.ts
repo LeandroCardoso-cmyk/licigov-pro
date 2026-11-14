@@ -5,7 +5,7 @@
  * INTEIRA; a decisão é determinística por (órgão, assunto, revisão), então replay nunca duplica.
  */
 import { getCurrentDecision, getDecisionByIdempotencyKey, insertDecision, lockDecisionSubject, DecisionWriteRaceError } from "../../db/institutionalDecisions";
-import { TemplatePersistenceError, withTemplatesTransaction } from "../../db/institutionalTemplates";
+import { TemplatePersistenceError, withTemplatesTransaction, type TemplatesTx } from "../../db/institutionalTemplates";
 import {
   DECISION_MESSAGES, planDecision, validateDecisionRequest,
   type DecisionRequest, type DecisionSubjectType, type InstitutionalDecision, type InstitutionalDecisionType,
@@ -39,40 +39,61 @@ export interface RecordDecisionSpec {
   readonly expectedRevision?: number;
 }
 
-/** Valida (campos do ato obrigatórios, resultado do catálogo) e grava, tudo fail-closed. Nada é gravado em caso de recusa. */
-export async function recordHumanDecision(ctx: WorkflowContext, spec: RecordDecisionSpec): Promise<RecordedDecision> {
-  const request: DecisionRequest = {
+/** Pedido normalizado do ledger a partir do ato (ator/organização SEMPRE do contexto autenticado). */
+export function buildDecisionRequest(ctx: WorkflowContext, spec: RecordDecisionSpec): DecisionRequest {
+  return {
     organizationId: ctx.organizationId, subjectType: spec.subjectType, subjectId: spec.subjectId, decisionType: spec.decisionType, outcome: spec.outcome,
     decidedByName: spec.act.decision.decidedByName, decidedByRole: spec.act.decision.decidedByRole, decidedByUserId: spec.act.decision.decidedByUserId ?? null,
     decidedAt: spec.act.decision.decidedAt, basisReference: spec.act.decision.basisReference, reason: spec.act.decision.reason, evidence: spec.evidence,
     recordedByUserId: ctx.actor.userId, expectedRevision: spec.mode === "revision" ? (spec.expectedRevision ?? 0) : 0,
     idempotencyKey: spec.act.idempotencyKey, correlationId: ctx.correlationId,
   };
+}
+
+/** Validação fail-closed do pedido (antes de QUALQUER escrita — inclusive de uma edição que acompanhe a decisão). */
+export function assertDecisionRequestValid(request: DecisionRequest): void {
   const valid = validateDecisionRequest(request);
   if (!valid.ok) {
     throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[valid.code] ?? valid.code,
       (valid.fields ?? []).map((f) => ({ code: valid.code, path: f, message: "campo obrigatório ou inválido" })));
   }
+}
+
+/**
+ * Corpo transacional da gravação (lock do assunto → idempotência → CAS → insert). Usado pela transação própria (`recordHumanDecision`) e
+ * por uma transação JÁ ABERTA que precise gravar a decisão junto com outro efeito (E2: edição do rascunho + resolução, tudo-ou-nada).
+ */
+export async function recordDecisionInTx(tx: TemplatesTx, ctx: WorkflowContext, spec: RecordDecisionSpec, request: DecisionRequest): Promise<RecordedDecision> {
+  const exists = await lockDecisionSubject(tx, ctx.organizationId, spec.subjectType, spec.subjectId);
+  if (!exists) throw new TemplatePersistenceError("NOT_FOUND", "assunto inexistente neste tenant");
+  const [byKey, current] = await Promise.all([
+    getDecisionByIdempotencyKey(tx, ctx.organizationId, spec.act.idempotencyKey.trim()),
+    getCurrentDecision(tx, ctx.organizationId, spec.subjectType, spec.subjectId),
+  ]);
+  if (spec.mode === "converge" && current && !byKey) return { decision: current, replayed: true };
+  const plan = planDecision(request, { byIdempotencyKey: byKey, current });
+  if (plan.kind === "replay") return { decision: plan.decision, replayed: true };
+  if (plan.kind === "conflict") {
+    throw new TemplateWorkflowError(plan.code === "DECISION_STALE_REVISION" ? "STALE_STATE" : "DECISION_REJECTED", DECISION_MESSAGES[plan.code]);
+  }
+  await insertDecision(tx, plan.decision);
+  return { decision: plan.decision, replayed: false };
+}
+
+/** Erros de persistência do ledger → erro de workflow (NOT_FOUND / corrida de escrita). Repassa os demais. */
+export function translateDecisionError(err: unknown): never {
+  if (err instanceof TemplatePersistenceError && err.code === "NOT_FOUND") throw new TemplateWorkflowError("NOT_FOUND", "recurso não encontrado nesta organização");
+  if (err instanceof DecisionWriteRaceError) throw new TemplateWorkflowError("STALE_STATE", "outra pessoa registrou esta decisão ao mesmo tempo; recarregue");
+  throw err;
+}
+
+/** Valida (campos do ato obrigatórios, resultado do catálogo) e grava, tudo fail-closed. Nada é gravado em caso de recusa. */
+export async function recordHumanDecision(ctx: WorkflowContext, spec: RecordDecisionSpec): Promise<RecordedDecision> {
+  const request = buildDecisionRequest(ctx, spec);
+  assertDecisionRequestValid(request);
   try {
-    return await withTemplatesTransaction("template.decision.record", ctx, async (tx) => {
-      const exists = await lockDecisionSubject(tx, ctx.organizationId, spec.subjectType, spec.subjectId);
-      if (!exists) throw new TemplatePersistenceError("NOT_FOUND", "assunto inexistente neste tenant");
-      const [byKey, current] = await Promise.all([
-        getDecisionByIdempotencyKey(tx, ctx.organizationId, spec.act.idempotencyKey.trim()),
-        getCurrentDecision(tx, ctx.organizationId, spec.subjectType, spec.subjectId),
-      ]);
-      if (spec.mode === "converge" && current && !byKey) return { decision: current, replayed: true };
-      const plan = planDecision(request, { byIdempotencyKey: byKey, current });
-      if (plan.kind === "replay") return { decision: plan.decision, replayed: true };
-      if (plan.kind === "conflict") {
-        throw new TemplateWorkflowError(plan.code === "DECISION_STALE_REVISION" ? "STALE_STATE" : "DECISION_REJECTED", DECISION_MESSAGES[plan.code]);
-      }
-      await insertDecision(tx, plan.decision);
-      return { decision: plan.decision, replayed: false };
-    });
+    return await withTemplatesTransaction("template.decision.record", ctx, (tx) => recordDecisionInTx(tx, ctx, spec, request));
   } catch (err) {
-    if (err instanceof TemplatePersistenceError && err.code === "NOT_FOUND") throw new TemplateWorkflowError("NOT_FOUND", "recurso não encontrado nesta organização");
-    if (err instanceof DecisionWriteRaceError) throw new TemplateWorkflowError("STALE_STATE", "outra pessoa registrou esta decisão ao mesmo tempo; recarregue");
-    throw err;
+    return translateDecisionError(err);
   }
 }

@@ -3,6 +3,7 @@
  * Traduz o estado por campo calculado no servidor (dfdAssistState) em rótulos discretos e ações
  * explícitas. Nenhuma decisão de autoridade é tomada aqui — só apresentação.
  */
+import { isProcessingConflict } from "./catmatKeyPolicy";
 
 export type DFDFieldStateUI =
   | "prefilled" | "ai_draft" | "user_modified" | "stale" | "conflict" | "available" | "unknown";
@@ -134,7 +135,11 @@ export function assistSummary(fields: readonly DFDFieldViewUI[]): AssistSummary 
   return { filled, pending, attention };
 }
 
-/** Erros definitivos do write explícito ⇒ nova tentativa lógica (nova chave); transitório ⇒ mantém. */
-export function shouldRotateAssistKeyOnError(code: string | null | undefined): boolean {
+/**
+ * Erros definitivos do write explícito ⇒ nova tentativa lógica (nova chave); transitório ⇒ mantém. O CONFLICT de
+ * "em processamento" (mesma chave em voo) NÃO é definitivo: trocar a chave ali dispararia uma 2ª execução (M8).
+ */
+export function shouldRotateAssistKeyOnError(code: string | null | undefined, message?: string | null): boolean {
+  if (isProcessingConflict(code, message)) return false;
   return code === "CONFLICT" || code === "PRECONDITION_FAILED" || code === "BAD_REQUEST" || code === "NOT_FOUND";
 }

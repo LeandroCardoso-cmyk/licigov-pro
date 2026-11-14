@@ -21,6 +21,7 @@
  * Só roda com DATABASE_URL. NUNCA relaxa o sql_mode.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 
 let aiEngineCalls = 0;
 vi.mock("../../services/aiExecutionEngine", async (orig) => {
@@ -127,10 +128,13 @@ describe.skipIf(!DB)("PR-09 — regerar sem perder edição humana + parâmetros
     const [u] = await conn.execute<mysql.ResultSetHeader>("INSERT INTO users (openId, name, email) VALUES (?, 'PR09', ?)", [`pr09-${Date.now()}`, `pr09-${Date.now()}@teste.local`]);
     routerUserId = u.insertId;
     await conn.execute("INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'operator', 1)", [ORG, routerUserId]);
+    // SECURITY-02 — o emissor é membro REAL e ativo do órgão (o guard da emissão relê organization_members).
+    await seedRealMembership(conn, ORG, EMITTER);
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
+    await removeRealMemberships(conn, ORG, [EMITTER]).catch(() => {});
     await cleanup().catch(() => {});
     if (routerUserId) await conn.execute("DELETE FROM users WHERE id = ?", [routerUserId]).catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id IN (?, ?)", [ORG, ORG2]).catch(() => {});

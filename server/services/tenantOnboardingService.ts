@@ -85,6 +85,8 @@ export async function onboardTenant(input: OnboardTenantInput): Promise<OnboardT
     invitedName: input.firstAdminName,
     createdByUserId: input.actorUserId,
     correlationId: input.correlationId,
+    // SECURITY-02 — bootstrap da PRIMEIRA autoridade de um órgão recém-criado (sem membros): única concessão permitida ao admin de plataforma.
+    bootstrap: "tenant_onboarding",
   });
 
   await logActivity({

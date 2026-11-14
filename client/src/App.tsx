@@ -18,6 +18,7 @@ import AdminOrganizacoes from "./pages/AdminOrganizacoes";
 // suas rotas antigas redirecionam para a jornada canônica (ver Router()).
 import ProcessoLicitatorio from "./pages/ProcessoLicitatorio";
 import Settings from "./pages/Settings";
+import LicitacoesProfilePage from "./pages/LicitacoesProfile";
 import Analytics from "./pages/Analytics";
 import Admin from "./pages/Admin";
 import TermsOfUse from "./pages/TermsOfUse";
@@ -114,6 +115,8 @@ const DocumentSettingsRoute = () => <AuthenticatedRoute component={DocumentSetti
 // V1 UI/UX Stabilization — Configurações é item do menu lateral: renderiza DENTRO do
 // shell (mantém a sidebar, navegação consistente). Antes abria sem shell (sem sidebar).
 const SettingsRoute = withAuthenticatedShell(Settings);
+// F1 (homologação H5) — Perfil de Licitações para `manager`+ (mesmo painel de Configurações; a página reaplica o gate e o backend reautoriza).
+const LicitacoesProfileRoute = withAuthenticatedShell(LicitacoesProfilePage);
 const AnalyticsRoute = () => <AuthenticatedRoute component={Analytics} />;
 const AdminRoute = () => <AuthenticatedRoute component={Admin} />;
 // const AdminSubscriptionsRoute = () => <AuthenticatedRoute component={AdminSubscriptions} />;
@@ -245,6 +248,7 @@ function Router() {
               preservar — o ID não tem alvo canônico. Redireciona à listagem canônica. */}
       <Route path="/processo/:id" component={() => <Redirect to="/processos" replace />} />
       <Route path={"/configuracoes"} component={SettingsRoute} />
+      <Route path={"/perfil-licitacoes"} component={LicitacoesProfileRoute} />
       <Route path={"/analytics"} component={AnalyticsRoute} />
       <Route path={"/admin"} component={AdminRoute} />
       {/* <Route path={"/admin/assinaturas"} component={AdminSubscriptionsRoute} /> */}

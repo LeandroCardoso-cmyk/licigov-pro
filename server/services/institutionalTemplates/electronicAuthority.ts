@@ -8,16 +8,23 @@
  * e `authority_validation = NOT_VALIDATED_POLICY_PENDING`.
  */
 import type { DeclaredAuthority } from "./governanceService";
+import { DECISION_AUTHORITY_NOT_ACTOR, DECISION_MESSAGES, decidedByMatchesRecorder } from "../../domain/institutionalDecision";
+import { TemplateWorkflowError } from "./errors";
 
 export const ELECTRONIC_BASIS = "Registro eletrônico no LiciGov Pro pelo usuário autenticado (nenhum ato administrativo informado)";
 
 export const ROLE_LABEL: Readonly<Record<string, string>> = Object.freeze({ viewer: "Leitor", operator: "Operador", manager: "Gestor", owner: "Titular" });
+
+/** SECURITY-02 — rótulo do acesso técnico de plataforma (curadoria/suporte): não é função nem autoridade do órgão. */
+export const PLATFORM_TECHNICAL_ROLE_LABEL = "Administrador técnico da plataforma (sem vínculo com o órgão)";
 
 export interface ElectronicAuthorityInput {
   readonly userId: number;
   readonly userName: string | null | undefined;
   readonly userEmail: string | null | undefined;
   readonly orgRole: string | null | undefined;
+  /** SECURITY-02 — ator com acesso TÉCNICO de plataforma (sem membership real): nunca rotulado como função do órgão. */
+  readonly platformTechnicalAccess?: boolean;
   /** Data do servidor (AAAA-MM-DD), vinda do relógio das ports. */
   readonly today: string;
   /** Descrição curta da ação, usada na justificativa técnica automática. */
@@ -28,7 +35,9 @@ export interface ElectronicAuthorityInput {
 
 export function electronicAuthority(i: ElectronicAuthorityInput): DeclaredAuthority {
   const name = (i.userName ?? "").trim() || (i.userEmail ?? "").trim() || `Usuário #${i.userId}`;
-  const role = i.orgRole ? `${ROLE_LABEL[i.orgRole] ?? i.orgRole} do órgão (${i.orgRole})` : "Usuário autenticado";
+  const role = i.platformTechnicalAccess
+    ? PLATFORM_TECHNICAL_ROLE_LABEL
+    : i.orgRole ? `${ROLE_LABEL[i.orgRole] ?? i.orgRole} do órgão (${i.orgRole})` : "Usuário autenticado";
   const note = (i.note ?? "").trim();
   return {
     decidedByName: name.slice(0, 255), decidedByRole: role.slice(0, 255), decidedByUserId: i.userId, decidedAt: i.today,
@@ -36,7 +45,16 @@ export function electronicAuthority(i: ElectronicAuthorityInput): DeclaredAuthor
   };
 }
 
-/** `decision` informada (fundamento institucional explícito) prevalece e segue validada como antes; ausente ⇒ autoridade eletrônica. */
+/**
+ * `decision` informada (fundamento institucional explícito) prevalece e segue validada como antes; ausente ⇒ autoridade eletrônica.
+ * P0 (auditoria pré-emissão H5) — a `decision` informada NÃO pode vincular a decisão à conta de outra pessoa: `decidedByUserId` precisa ser
+ * ausente/`null` (autoridade nomeada no ato) ou o próprio usuário autenticado. Recusa AQUI, antes de qualquer escrita (inclusive nos fluxos que
+ * criam a revisão antes de gravar a procedência); o ledger reaplica a MESMA regra (`validateDecisionRequest`) para todos os escritores.
+ */
 export function resolveAuthority<T extends DeclaredAuthority>(decision: T | undefined, auto: ElectronicAuthorityInput): DeclaredAuthority {
+  if (decision && !decidedByMatchesRecorder(decision.decidedByUserId, auto.userId)) {
+    throw new TemplateWorkflowError("DECISION_REJECTED", DECISION_MESSAGES[DECISION_AUTHORITY_NOT_ACTOR],
+      [{ code: DECISION_AUTHORITY_NOT_ACTOR, path: "decision.decidedByUserId", message: "a autoridade declarada não pode ser a conta de outra pessoa" }]);
+  }
   return decision ?? electronicAuthority(auto);
 }

@@ -46,6 +46,7 @@ export const ORIGIN_LABEL: Record<EntryPoint, string> = {
   PLATFORM_PROFILE: "Perfil da plataforma",
   ITEMS: "Itens da contratação",
   PRICE_RESEARCH: "Pesquisa de Preços",
+  PROCESS_BUDGET: "Dados orçamentários do processo",
   ORG_REGISTRY: "Cadastro do órgão",
   REQUESTING_UNIT: "Contexto do processo (unidade requisitante)",
   CERTAME_CONFIG: "Configuração do certame",
@@ -360,11 +361,17 @@ export interface PublicationPendingView {
   readonly items: readonly { readonly name: string; readonly label: string }[];
 }
 
-/** Deriva do ESTADO do servidor (autoridade); o texto da minuta nunca é a fonte. Sem regra nova no cliente: só apresenta `publication.readiness`. */
+/**
+ * Deriva do ESTADO do servidor (autoridade); o texto da minuta nunca é a fonte. Sem regra nova no cliente: apresenta `publication.readiness` e
+ * (LICIGOV-FAST H5) as pendências informativas que o servidor marca como necessárias ANTES DA PUBLICAÇÃO (ex.: políticas de SRP do órgão).
+ */
 export function publicationPending(state: PreparationStateView | null | undefined): PublicationPendingView {
-  const pub = state?.publication;
-  if (!state || !pub?.deferredPolicy) return { applicable: false, complete: true, items: [] };
+  if (!state) return { applicable: false, complete: true, items: [] };
+  const pub = state.publication;
+  const beforePublication = (state.upstream?.contentPending ?? []).filter((c) => c.neededBefore === "PUBLICATION").map((c) => ({ name: c.name, label: c.description || c.name }));
+  if (!pub?.deferredPolicy && beforePublication.length === 0) return { applicable: false, complete: true, items: [] };
   const byName = new Map(state.sections.flatMap((s) => s.fields).map((f) => [f.name, f.question ?? f.description] as const));
-  const items = pub.readiness.missingVariables.map((name) => ({ name, label: byName.get(name) ?? name }));
-  return { applicable: true, complete: pub.readiness.complete && items.length === 0, items };
+  const deferred = pub?.deferredPolicy ? pub.readiness.missingVariables.map((name) => ({ name, label: byName.get(name) ?? name })) : [];
+  const items = [...deferred, ...beforePublication];
+  return { applicable: true, complete: (pub?.deferredPolicy ? pub.readiness.complete : true) && items.length === 0, items };
 }

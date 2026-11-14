@@ -22,6 +22,7 @@
  *      diretamente (token `OFFICIAL_DOCUMENT_REQUIRES_NEW_VERSION_CYCLE`), nem com `confirmReplace`.
  */
 import { draftContentHash, type EditalForm, type EditalModality, type EditalPlatform } from "./generatedDocument";
+import { isCycleOpenFor, type LatestOfficial, type OpenVersionCycle } from "./officialVersionCycle";
 
 /** Token estável da recusa (CONFLICT) — regenerar sobre conteúdo humano sem confirmação explícita. */
 export const HUMAN_EDIT_WOULD_BE_OVERWRITTEN = "HUMAN_EDIT_WOULD_BE_OVERWRITTEN";
@@ -135,9 +136,17 @@ export type OfficialRegenerationBlock =
  */
 export function officialRegenerationBlock(
   draft: { readonly status?: string | null } | null | undefined,
-  latestOfficial: { readonly version: number; readonly createdAt?: string | null } | null | undefined,
+  latestOfficial: (LatestOfficial & { readonly createdAt?: string | null }) | null | undefined,
+  /**
+   * Ciclo de nova versão governado (fundação; nenhum chamador o passa ainda). Só libera o bloqueio de VERSÃO EMITIDA e
+   * só quando o ciclo vale sobre a emissão vigente (fechado por emissão posterior ⇒ continua bloqueado). Nunca libera
+   * rascunho APROVADO. Ausente ⇒ comportamento idêntico ao anterior.
+   */
+  openCycle?: OpenVersionCycle | null,
 ): OfficialRegenerationBlock | null {
-  if (latestOfficial) return { reason: "official_emitted", officialVersion: latestOfficial.version, emittedAt: latestOfficial.createdAt ?? null };
+  if (latestOfficial && !(openCycle && isCycleOpenFor(latestOfficial, openCycle))) {
+    return { reason: "official_emitted", officialVersion: latestOfficial.version, emittedAt: latestOfficial.createdAt ?? null };
+  }
   if (draft?.status === "aprovado") return { reason: "approved", officialVersion: null, emittedAt: null };
   return null;
 }

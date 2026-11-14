@@ -1,4 +1,4 @@
-import { eq, and, or, desc } from "drizzle-orm";
+import { eq, and, or, desc, inArray } from "drizzle-orm";
 import { getDb } from "./connection";
 import { organizations, organizationMembers, users } from "../../drizzle/schema";
 import type { InsertOrganization, InsertOrganizationMember, OrgRole } from "../../drizzle/schema";
@@ -254,4 +254,23 @@ export async function getActiveMemberRole(organizationId: number, userId: number
   const rows = await db.select({ role: organizationMembers.role }).from(organizationMembers).where(and(
     eq(organizationMembers.organizationId, organizationId), eq(organizationMembers.userId, userId), eq(organizationMembers.ativo, true))).limit(1);
   return rows[0]?.role ?? null;
+}
+
+/**
+ * M8 (homologação visual) — nomes de usuários que são (ou foram) membros da organização, em lote. Só resolve ids com
+ * associação NESTA organização (isolamento): id de outro tenant fica sem nome. Usado para exibir autoria registrada.
+ */
+export async function getOrganizationMemberNames(organizationId: number, userIds: readonly number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const ids = [...new Set(userIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return out;
+  const db = await getDb();
+  if (!db) return out;
+  const rows = await db
+    .select({ id: users.id, name: users.name })
+    .from(organizationMembers)
+    .innerJoin(users, eq(users.id, organizationMembers.userId))
+    .where(and(eq(organizationMembers.organizationId, organizationId), inArray(users.id, ids)));
+  for (const r of rows) if (r.name) out.set(r.id, r.name);
+  return out;
 }

@@ -113,7 +113,7 @@ export default function LegalOpinionHome() {
               <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Trabalho {workspaceId.slice(0, 8)}…</p>
-                  <p className="text-xs text-muted-foreground">Processo ref.: {ctx?.workspace?.referenceProcessId || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Origem: {ctx?.reference?.label ?? "não identificada"}</p>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STAGE_CLASSES[stage] ?? STAGE_CLASSES.INBOX}`}>
                   {stageLabel(stage)}

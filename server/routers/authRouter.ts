@@ -114,7 +114,9 @@ export const authRouter = router({
 
   logout: publicProcedure.mutation(({ ctx }) => {
     const cookieOptions = getSessionCookieOptions(ctx.req);
-    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    // Mesmas opções do set (path/domain/sameSite/secure/httpOnly): o cookie expira. `maxAge` em clearCookie é obsoleto no Express 4.x
+    // (aviso em stderr, lido como erro nos logs) e ignorado no 5.x — o resultado é o mesmo sem ele.
+    ctx.res.clearCookie(COOKIE_NAME, cookieOptions);
     return { success: true } as const;
   }),
 

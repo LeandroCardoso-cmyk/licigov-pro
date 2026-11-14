@@ -1,7 +1,5 @@
 import type React from "react";
-import { DURATION_UNIT_LABEL, type FormValue, type PrepField, type TableRowForm } from "@/lib/editalPreparation";
-
-const DURATION_UNITS = ["minute", "hour", "day", "businessDay", "month", "year"] as const;
+import { DURATION_UNITS, DURATION_UNIT_LABEL, type FormValue, type PrepField, type TableRowForm } from "@/lib/editalPreparation";
 const INPUT = "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
 
 const HTML_TYPE: Record<string, string> = { date: "date", datetime: "datetime-local", time: "time", url: "url" };
@@ -53,6 +51,7 @@ export default function PrepFieldControl({ field, value, error, disabled, onChan
       <div className="flex gap-2">
         <input id={id} aria-label={field.description} type="text" inputMode="numeric" className={INPUT} value={d.amount} disabled={disabled} onChange={(e) => onChange({ ...d, amount: e.target.value })} />
         <select aria-label={`${field.description} — unidade`} className={INPUT} value={d.unit} disabled={disabled} onChange={(e) => onChange({ ...d, unit: e.target.value })}>
+          <option value="">Unidade…</option>
           {DURATION_UNITS.map((u) => <option key={u} value={u}>{DURATION_UNIT_LABEL[u]}</option>)}
         </select>
       </div>

@@ -11,11 +11,14 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { LIFECYCLE_ACTIONS } from "../domain/processLifecycle";
 import { executeLifecycle, previewLifecycle } from "../services/processLifecycleService";
 import { listGenerations, listLifecycleEvents } from "../db/processLifecycle";
 
 const actionSchema = z.enum(LIFECYCLE_ACTIONS);
+/** SECURITY-02 — ações com efeito administrativo sobre o processo (não sobre rascunho). */
+const INSTITUTIONAL_LIFECYCLE_ACTIONS: ReadonlySet<string> = new Set(["CANCEL", "ARCHIVE", "CORRECT_NUMBER"]);
 
 export const processLifecycleRouter = router({
   preview: orgRoleProcedure("operator")
@@ -32,12 +35,22 @@ export const processLifecycleRouter = router({
       reason: z.string().max(4000),
       newProcessNumber: z.string().max(64).optional(),
     }))
-    .mutation(({ input, ctx }) => executeLifecycle({
+    .mutation(async ({ input, ctx }) => {
+      // SECURITY-02 — cancelar, arquivar e corrigir o número do processo são atos administrativos do órgão: exigem membership
+      // REAL (a projeção do admin de plataforma não basta). Descartar/resetar RASCUNHO continua técnico (piso de papel).
+      if (INSTITUTIONAL_LIFECYCLE_ACTIONS.has(input.action)) {
+        await requireInstitutionalAuthority({
+          userId: ctx.user.id, organizationId: ctx.organizationId!, minRole: "manager",
+          operation: `processLifecycle.execute#${input.action}`, correlationId: ctx.correlationId,
+        });
+      }
+      return executeLifecycle({
       organizationId: ctx.organizationId!, processId: input.processId, action: input.action,
       expectedRevision: input.expectedRevision, expectedEligibilityDigest: input.expectedEligibilityDigest,
       idempotencyKey: input.idempotencyKey, reason: input.reason, newProcessNumber: input.newProcessNumber,
       actorUserId: ctx.user.id,
-    }, ctx.correlationId)),
+    }, ctx.correlationId);
+    }),
 
   history: tenantProcedure
     .input(z.object({ processId: z.string().min(1).max(20) }))

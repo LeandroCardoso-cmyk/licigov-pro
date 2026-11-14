@@ -26,6 +26,12 @@
 1. **Quem decide ≠ quem registra (INV-13).** `orgRoleProcedure("manager")` continua sendo apenas o piso técnico de quem
    **registra**. O sistema não presume que esse usuário é a autoridade competente e não valida competência: isso depende
    do insumo jurídico R4.2 (`docs/audits/LEGAL_REVIEW_DECISION_PACKET.md`), hoje **BLOCKED_LEGAL_REVIEW**.
+   **Vínculo autoridade × registrador (P0, auditoria pré-emissão H5):** `decidedByUserId` só pode ser `null` (autoridade
+   NOMEADA no ato — nome, cargo, referência — possivelmente sem conta no sistema) ou o próprio `recordedByUserId` (decisão
+   declarada como sua). Qualquer outra conta ⇒ `DECISION_AUTHORITY_NOT_ACTOR`, nada gravado. Regra única
+   `decidedByMatchesRecorder` (`server/domain/institutionalDecision.ts`), aplicada em `validateDecisionRequest` (todos os
+   escritores), em `resolveAuthority` (antes de qualquer escrita) e em `bindAuthorityToExecutor` (CLI). Registros
+   anteriores não são revalidados nem alterados.
 2. **Sem default (fail-closed).** Resultado ausente ou fora do catálogo ⇒ `BAD_REQUEST`; ato incompleto ⇒
    `DECISION_FIELDS_REQUIRED`. Nada é gravado.
 3. **Append-only.** Cada registro é uma nova linha. Uma nova decisão sobre o mesmo assunto exige `expectedRevision` igual
@@ -40,7 +46,13 @@
 7. **Consumo.** A publicação (`generatePublications`) exige a decisão **corrente** do ledger com resultado `ratificado`.
    Linhas legadas de `ratifications` (pré-0312, sem autoridade/data/referência) são histórico legível
    (`getRatificationDecision.legacyRatification`) e **não** bastam para publicar.
-8. **Transação.** Só persistência local (decisão, etapa, timeline com id estável = id da decisão). Sem IA, S3, HTTP,
+8. **E2 — resolução humana de trecho pendente do Edital (`template_slot_resolution`).** Assunto
+   `institutional_template.slot_resolution` = `<M1>:<sha256("slot:"+slotKey)[0..16]>` (lock do M1); resultados explícitos
+   `HUMAN_TEXT` | `DECLARED_NONE`; decisão REVISÁVEL (CAS por `expectedRevision`). Evidência: `slot:`, `type:`, `text:<sha256 do trecho>`,
+   `prefix:`/`suffix:` (âncoras em string JSON), `content:<hash do rascunho>`, `policy:tpl-slot-policy/1`. A edição governada do rascunho
+   (`human_edit`, CAS, idempotência) e a decisão são gravadas na MESMA transação (`recordDecisionInTx`). Detalhes:
+   `docs/architecture/DELEGATED_EXECUTION_AND_HUMAN_REVIEW_SPEC.md` §3 (E2).
+9. **Transação.** Só persistência local (decisão, etapa, timeline com id estável = id da decisão). Sem IA, S3, HTTP,
    e-mail ou provider remoto.
 
 ## 3. Observabilidade

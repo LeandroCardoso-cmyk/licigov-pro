@@ -6,6 +6,7 @@
  * criava a versão `emitido` sem `institutionalIdentitySnapshot` e a reexportação usava a identidade VIGENTE.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { generateDocument, canonicalDocumentIdentity, saveReviewableDraft } from "../../services/procurementProcessService";
@@ -58,6 +59,8 @@ describe.skipIf(!DB)("PR-15 / R7.5 — snapshot institucional na emissão (MySQL
     await conn.execute("INSERT INTO organizations (id, nome, slug, ativo, cnpj) VALUES (?, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE nome = VALUES(nome), cnpj = VALUES(cnpj)",
       [ORG, "Prefeitura Sintética Alfa", "pr15-alfa", "11.111.111/0001-11"]);
     await cleanup();
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG, EMITTER);
     const p = createProcurementWorkspace({
       organizationId: ORG, processNumber: `SINT-PR15/${Date.now()}`, object: "Material sintético PR-15", startOption: "iniciar_pesquisa",
       responsibleUser: AUTHOR, correlationId: "pr15",
@@ -74,6 +77,7 @@ describe.skipIf(!DB)("PR-15 / R7.5 — snapshot institucional na emissão (MySQL
   }, 300_000);
 
   afterAll(async () => {
+    if (conn) await removeRealMemberships(conn, ORG, [EMITTER]).catch(() => {});
     if (!conn) return;
     await cleanup().catch(() => {});
     await conn.execute("DELETE FROM organizations WHERE id = ?", [ORG]).catch(() => {});

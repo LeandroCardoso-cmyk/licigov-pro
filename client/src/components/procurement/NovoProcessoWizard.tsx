@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { trpc } from "../../lib/trpc";
-import { START_OPTIONS, type StartOption } from "./startOptions";
+import { START_OPTIONS, startOptionDescription, type StartOption } from "./startOptions";
+import { useIngestionCapabilities } from "@/hooks/ingestion/useIngestionCapabilities";
 
 /**
  * NovoProcessoWizard — REAL (wired to tRPC).
@@ -26,6 +27,10 @@ export default function NovoProcessoWizard({
   const [object, setObject] = useState("");
   const [requestingUnit, setRequestingUnit] = useState("");
   const [startOption, setStartOption] = useState<StartOption | null>(null);
+  // Descrições honestas: sem a importação documental habilitada, "Importar …" não promete ler o arquivo.
+  // Enquanto a capacidade carrega, mantém o texto padrão (não anuncia indisponibilidade antes de saber).
+  const { enabled: ingestionEnabled, isLoading: capabilitiesLoading } = useIngestionCapabilities();
+  const fileImportEnabled = ingestionEnabled || capabilitiesLoading;
 
   const createProcess = trpc.procurementProcess.createProcess.useMutation({
     onSuccess: (result) => {
@@ -117,7 +122,7 @@ export default function NovoProcessoWizard({
               }`}
             >
               <p className="font-medium text-foreground">{opt.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{opt.description}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{startOptionDescription(opt, fileImportEnabled)}</p>
             </button>
           );
         })}

@@ -16,6 +16,41 @@ export const REEXTRACTION_STAGE = "reprocessing";
 /** Validade da reserva: uma reserva mais antiga (processo reiniciado no meio) pode ser retomada. */
 export const REEXTRACTION_LEASE_MS = 15 * 60_000;
 
+/**
+ * Chave da RESERVA no `extraction_summary` da sessão (JSON já existente — sem migration). A reserva tem DONO: só quem
+ * a detém (mesmo `token`) aplica (commit) ou devolve (release). Uma reserva vencida retomada por outro pedido ganha
+ * token novo; o worker anterior, se ainda vivo, não consegue mais aplicar nem desfazer o estágio (compare-and-set).
+ * A troca do JSON também renova `updatedAt` (ON UPDATE CURRENT_TIMESTAMP): a retomada passa a valer por 15 min.
+ */
+export const REEXTRACTION_LEASE_KEY = "reextractionLease";
+
+export interface ReextractionLease {
+  /** Identificador aleatório do dono da reserva (não é segredo: só distingue reservas concorrentes). */
+  readonly token: string;
+  readonly reservedAt: string;
+  /** Estágio que a sessão tinha ANTES da primeira reserva (devolvido ao liberar). */
+  readonly previousStage: string | null;
+}
+
+/** Reserva registrada no sumário (null quando ausente ou malformada — nunca presume dono). */
+export function reextractionLeaseOf(summary: unknown): ReextractionLease | null {
+  const raw = (summary as Record<string, unknown> | null | undefined)?.[REEXTRACTION_LEASE_KEY];
+  if (!raw || typeof raw !== "object") return null;
+  const l = raw as Record<string, unknown>;
+  if (typeof l.token !== "string" || l.token.length === 0 || typeof l.reservedAt !== "string") return null;
+  const previousStage = typeof l.previousStage === "string" ? l.previousStage : null;
+  return { token: l.token, reservedAt: l.reservedAt, previousStage };
+}
+
+/**
+ * Estágio a devolver quando a reserva for liberada. Numa retomada (a sessão já está `reprocessing`), devolver
+ * `reprocessing` deixaria a sessão presa: usa o estágio anterior registrado pela reserva original, ou `awaiting_review`.
+ */
+export function stageToRestore(currentStage: string | null, summary: unknown): string | null {
+  if (currentStage !== REEXTRACTION_STAGE) return currentStage;
+  return reextractionLeaseOf(summary)?.previousStage ?? "awaiting_review";
+}
+
 export type ReprocessBlocker =
   | "NOT_AWAITING_REVIEW"
   | "DOCUMENT_IMPORT"

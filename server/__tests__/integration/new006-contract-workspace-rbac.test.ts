@@ -32,6 +32,8 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: o fixture é um MEMBRO REAL com o mesmo papel do contexto.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => { const role = h.roleByUser.get(userId); return role && organizationId === h.ORG ? { id: userId, organizationId, userId, role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() } : null; }),
   resolveTenantForUser: vi.fn(async (userId: number) => {
     const role = h.roleByUser.get(userId);
     if (!role) throw new TRPCError({ code: "FORBIDDEN", message: "sem membership" });
@@ -184,7 +186,9 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
 
   it("o builder declarado no código-fonte confere com a matriz, procedure a procedure", () => {
     for (const [name, entry] of Object.entries(CONTRACT_WORKSPACE_RBAC_MATRIX)) {
-      const expected = entry.minRole === null ? "tenantProcedure\\b" : `orgRoleProcedure\\("${entry.minRole}"\\)`;
+      // SECURITY-02 — ato institucional (sem condição) usa institutionalProcedure (piso + membership REAL).
+      const builder = entry.requiresRealMembership && !entry.conditionalMinRole ? "institutionalProcedure" : "orgRoleProcedure";
+      const expected = entry.minRole === null ? "tenantProcedure\\b" : `${builder}\\("${entry.minRole}"\\)`;
       expect(new RegExp(`\\n  ${name}: ${expected}`).test(src), `${name} deveria usar ${expected}`).toBe(true);
     }
     // Nenhuma mutation ficou em tenantProcedure.

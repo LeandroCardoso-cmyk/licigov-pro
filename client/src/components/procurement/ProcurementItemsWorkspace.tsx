@@ -372,7 +372,7 @@ export function CandidatesPanel({ processId, source, lots, items, onClose, onDon
   const { key, rotate } = useIdempotencyKey();
   const confirm = trpc.procurementItems.confirmCandidates.useMutation({
     onSuccess: () => { rotate(); onDone(); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotate(); onError(e); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotate(); onError(e); },
   });
   const candidates = useMemo(() => data?.candidates ?? [], [data]);
   const get = (c: (typeof candidates)[number]): Decision => decisions[c.candidateKey] ?? {
@@ -567,7 +567,7 @@ function ManualItemForm({ processId, lots, onClose, onDone, onError }: {
   const { key, rotate } = useIdempotencyKey();
   const create = trpc.procurementItems.createManual.useMutation({
     onSuccess: () => { rotate(); onDone(); },
-    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code)) rotate(); onError(e); },
+    onError: (e) => { if (shouldRotateAssistKeyOnError(e.data?.code, e.message)) rotate(); onError(e); },
   });
   const qErr = quantityInputError(f.quantity);
   return (

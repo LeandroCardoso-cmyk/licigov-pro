@@ -1,6 +1,8 @@
 import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
+import DocumentMarkdownView from "./DocumentMarkdownView";
+import { emissionOrdinalLabel } from "../../lib/processDocumentStatus";
 
 /**
  * RC-3 / PR B.1 — OfficialDocumentPanel (experiência documental ÚNICA).
@@ -31,6 +33,8 @@ export interface OfficialDocumentPanelProps {
    * Omitido → todos os tipos da origem (comportamento anterior).
    */
   documentType?: string;
+  /** F2 — oferece "Edital completo" (com o TR oficial integral no Anexo I) nas versões emitidas do Edital. `origin` = processo. */
+  consolidatedEdital?: boolean;
 }
 
 /** Status de exibição: "gerado"/"revisado" são snapshots TÉCNICOS do pipeline, não versões oficiais emitidas. */
@@ -44,7 +48,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   contrato: "Contrato", aditivo: "Termo Aditivo", apostilamento: "Apostilamento", rescisao: "Rescisão", outro: "Documento",
 };
 
-export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais", requireStatusForExport, documentType }: OfficialDocumentPanelProps) {
+export default function OfficialDocumentPanel({ businessDomain, origin, title = "Documentos Oficiais", requireStatusForExport, documentType, consolidatedEdital = false }: OfficialDocumentPanelProps) {
   const enabled = origin.trim().length > 0;
   const { data, isLoading } = trpc.documentEngine.list.useQuery({ businessDomain, origin }, { enabled });
   const [previewId, setPreviewId] = React.useState<string>("");
@@ -64,6 +68,18 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
     },
     onError: (e) => toast.error("Falha ao exportar: " + e.message),
   });
+  // F2 — Edital completo (Edital emitido + TR oficial integral no Anexo I), montado no servidor a partir das versões fixadas.
+  const exportFull = trpc.procurementProcess.exportConsolidatedEdital.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Edital completo exportado. Hash do artefato: ${res.artifactHash.slice(0, 12)}…`, { description: `sha256:${res.artifactHash}` });
+      const a = document.createElement("a");
+      a.href = res.url; a.download = res.fileName; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+    },
+    onError: (e) => toast.error("Não foi possível gerar o Edital completo: " + e.message),
+  });
+  const busyFull = (documentId: string, format: "docx" | "pdf") =>
+    exportFull.isPending && exportFull.variables?.documentId === documentId && exportFull.variables?.format === format;
   const preview = trpc.documentEngine.preview.useQuery({ documentId: previewId }, { enabled: previewId.length > 0 });
 
   const busy = (documentId: string, action: "docx" | "pdf" | "print") =>
@@ -78,6 +94,12 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
   // ("gerado") ficam à parte, recolhidos — nunca sob o título de versões oficiais. Dados, versões e hashes inalterados.
   const documents = requireStatusForExport ? all.filter((d) => d.status === requireStatusForExport) : all;
   const technical = requireStatusForExport ? all.filter((d) => d.status !== requireStatusForExport) : [];
+  // M8 P3.3 — versão emitida: "1ª emissão (rev. técnica v2)"; snapshot técnico: "snapshot técnico v1". Nada é renumerado.
+  const versionText = (d: (typeof all)[number]) => {
+    const ordinal = "emissionNumber" in d ? emissionOrdinalLabel((d as { emissionNumber?: number }).emissionNumber) : null;
+    if (ordinal) return `${ordinal} (rev. técnica v${d.version})`;
+    return businessDomain === "processo_licitatorio" && requireStatusForExport && d.status !== requireStatusForExport ? `snapshot técnico v${d.version}` : `v${d.version}`;
+  };
   const renderList = (list: typeof all) => (
     <ul className="divide-y divide-border">
       {list.map((d) => (
@@ -85,7 +107,7 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="line-clamp-1 text-sm font-medium text-foreground">{d.title}</p>
-              <p className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.documentType] ?? d.documentType} · v{d.version} · {requireStatusForExport ? (STATUS_LABEL[d.status] ?? d.status) : d.status}</p>
+              <p className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.documentType] ?? d.documentType} · {versionText(d)} · {requireStatusForExport ? (STATUS_LABEL[d.status] ?? d.status) : d.status}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <button type="button" onClick={() => setPreviewId(previewId === d.id ? "" : d.id)} className={btn}>Preview</button>
@@ -93,6 +115,13 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
                 <span className="text-[11px] text-muted-foreground">exportar só quando emitido</span>
               ) : (
                 <>
+                  {consolidatedEdital && d.documentType === "edital" && (
+                    <>
+                      <button type="button" title="Edital emitido com o Termo de Referência oficial integral no Anexo I e os demais anexos" onClick={() => exportFull.mutate({ processId: origin, documentId: d.id, format: "docx" })} disabled={exportFull.isPending || exportDoc.isPending} className={`${btn} font-semibold`}>{busyFull(d.id, "docx") ? "…" : "Edital completo — DOCX"}</button>
+                      <button type="button" title="Edital emitido com o Termo de Referência oficial integral no Anexo I e os demais anexos" onClick={() => exportFull.mutate({ processId: origin, documentId: d.id, format: "pdf" })} disabled={exportFull.isPending || exportDoc.isPending} className={`${btn} font-semibold`}>{busyFull(d.id, "pdf") ? "…" : "Edital completo — PDF"}</button>
+                      <span className="text-[11px] text-muted-foreground">Só o Edital:</span>
+                    </>
+                  )}
                   <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "docx" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "docx") ? "…" : "DOCX"}</button>
                   <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf" })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "pdf") ? "…" : "PDF"}</button>
                   <button type="button" onClick={() => exportDoc.mutate({ documentId: d.id, format: "pdf", inline: true })} disabled={exportDoc.isPending} className={btn}>{busy(d.id, "print") ? "…" : "Imprimir"}</button>
@@ -106,10 +135,14 @@ export default function OfficialDocumentPanel({ businessDomain, origin, title = 
                 <p className="text-xs text-muted-foreground">Carregando prévia…</p>
               ) : (
                 <>
-                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-xs text-muted-foreground">{preview.data?.document?.content ?? "Sem conteúdo."}</pre>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
+                  {/* Visualização formatada e somente leitura do conteúdo IMUTÁVEL da versão (nada é regravado). */}
+                  <div className="max-h-[32rem] overflow-auto rounded border border-border bg-background p-3">
+                    <DocumentMarkdownView content={preview.data?.document?.content ?? ""} ariaLabel={`Visualização de ${d.title}`} />
+                  </div>
+                  <details className="mt-2 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer">Detalhes técnicos</summary>
                     replayHash: {preview.data?.document?.replayHash?.slice(0, 12)}… · template: {preview.data?.document?.template} · autor: {preview.data?.document?.author}
-                  </p>
+                  </details>
                 </>
               )}
             </div>

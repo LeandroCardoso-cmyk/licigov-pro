@@ -22,7 +22,12 @@ import ETPWorkspace from "@/components/procurement/ETPWorkspace";
 import TRWorkspace from "@/components/procurement/TRWorkspace";
 import EditalWorkspace from "@/components/procurement/EditalWorkspace";
 import ProcurementItemPanel, { ITEM_PANEL_TITLE_ID } from "@/components/procurement/ProcurementItemPanel";
+import { processIdFromSearch, processRouteSearch, tabFromSearch } from "@shared/operationalCalendar";
 import { startTargetFor } from "@/components/procurement/startOptions";
+import DocumentJourneyBar from "@/components/procurement/DocumentJourneyBar";
+import { useJourneyExport } from "@/components/procurement/useJourneyExport";
+import { canLeaveStage, isJourneyKind, journeyStates, unsavedLeaveMessage } from "@/lib/documentJourney";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 
 /**
  * PR B — Processo Licitatório (fluxo canônico, jornada única).
@@ -86,6 +91,47 @@ export default function ProcessoLicitatorio() {
   );
   const processNumber = processQuery.data?.process?.processNumber ?? null;
 
+  // LICIGOV-FAST PR-1 — jornada DFD → ETP → TR → Edital: estado derivado do MESMO `loadProcess` (sem persistência
+  // nova). Edição não salva na etapa aberta é informada pelo workspace e protege a navegação (confirmar ou ficar).
+  const journeyKind = view === "process" && isJourneyKind(activeTab) ? activeTab : null;
+  const [stageDirty, setStageDirty] = useState(false);
+  const journeyExport = useJourneyExport(activeProcessId ?? "");
+  // ETP/TR/Edital gravam pelo rascunho revisável (não invalidam `loadProcess`): quando o rascunho da etapa aberta
+  // muda (gerado, salvo, importado, emitido), relê o processo para a jornada refletir o estado real.
+  const draftKind = journeyKind && journeyKind !== "dfd" ? journeyKind : null;
+  const draftProbe = trpc.procurementProcess.reviewableDraft.useQuery(
+    { processId: activeProcessId ?? "", kind: draftKind ?? "etp" },
+    { enabled: !!activeProcessId && !!draftKind },
+  );
+  const probeDraft = draftProbe.data ? draftProbe.data.draft : undefined;
+  const probeKey = probeDraft === undefined ? undefined
+    : JSON.stringify(probeDraft ? [probeDraft.status, probeDraft.contentHash, probeDraft.regenerationBlock ?? null] : null);
+  const lastProbe = useRef<{ kind: string | null; key: string | undefined }>({ kind: null, key: undefined });
+  useEffect(() => {
+    const prev = lastProbe.current;
+    lastProbe.current = { kind: draftKind, key: probeKey };
+    if (prev.kind === draftKind && prev.key !== undefined && probeKey !== undefined && prev.key !== probeKey) void processQuery.refetch();
+  }, [draftKind, probeKey]);
+
+  // Edição não salva: menu lateral / Sair (shell), recarregar/fechar a aba e Voltar do navegador pedem confirmação (mesma mensagem).
+  useLeaveGuard(stageDirty && journeyKind ? unsavedLeaveMessage(journeyKind) : null);
+
+  /** Sai da etapa aberta só com confirmação quando há edição não salva (cancelar mantém a etapa e o texto). */
+  function confirmLeaveStage(): boolean {
+    if (!canLeaveStage(stageDirty && journeyKind ? journeyKind : null, (m) => window.confirm(m))) return false;
+    setStageDirty(false);
+    return true;
+  }
+
+  function navigateTab(tab: StageTab) {
+    if (tab === activeTab || !confirmLeaveStage()) return;
+    setActiveTab(tab);
+  }
+
+  function leaveToList() {
+    if (confirmLeaveStage()) backToList();
+  }
+
   /**
    * Após criar/atualizar um processo canônico, invalida a listagem E as consultas
    * da Central de Operações — assim o processo recém-criado aparece na Central
@@ -103,8 +149,33 @@ export default function ProcessoLicitatorio() {
     setActiveProcessId(processId);
     setActiveTab(tab);
     setOpenItemId(null);
+    setStageDirty(false);
     setView("process");
   }
+
+  // Link direto (ex.: evento do Calendário Operacional) e RELOAD: `/processos?processId=…&tab=…` reabre o processo e a aba; o
+  // servidor valida o acesso (processo de outra organização ⇒ `process: null` ⇒ volta à lista, abaixo).
+  useEffect(() => {
+    const id = typeof window !== "undefined" ? processIdFromSearch(window.location.search) : null;
+    if (!id) return;
+    openProcess(id, tabFromSearch(window.location.search, STAGE_TABS.map((t) => t.key)) ?? "overview");
+  }, []);
+
+  // M8 — a URL acompanha o processo e a aba abertos (replaceState: sem nova entrada no histórico; voltar/ESC inalterados).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const target = view === "process" && activeProcessId ? `${window.location.pathname}${processRouteSearch(activeProcessId, activeTab)}` : window.location.pathname;
+    if (`${window.location.pathname}${window.location.search}` !== target) window.history.replaceState(window.history.state, "", target);
+  }, [view, activeProcessId, activeTab]);
+
+  // Processo inexistente ou de outra organização (link antigo/editado): não fica numa tela vazia.
+  const [notFoundNotice, setNotFoundNotice] = useState(false);
+  useEffect(() => {
+    if (view === "process" && activeProcessId && processQuery.isSuccess && !processQuery.data?.process) {
+      setNotFoundNotice(true);
+      backToList();
+    }
+  }, [view, activeProcessId, processQuery.isSuccess, processQuery.data]);
 
   // Mapeia a forma de início escolhida no wizard para a etapa (aba) inicial — P0 piloto: o processo
   // começa no ponto em que a Prefeitura já está (DFD, ETP, Pesquisa ou TR), sem pré-requisito artificial.
@@ -126,9 +197,14 @@ export default function ProcessoLicitatorio() {
   if (view === "list") {
     return (
       <div className="min-h-full bg-background">
+        {notFoundNotice && (
+          <p role="status" className="mx-6 mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+            Processo não encontrado nesta organização. Selecione um processo da lista.
+          </p>
+        )}
         <ProcessoLicitatorioHome
           onCreateProcess={() => setView("new")}
-          onOpenProcess={openProcess}
+          onOpenProcess={(id: string) => { setNotFoundNotice(false); openProcess(id); }}
         />
       </div>
     );
@@ -160,25 +236,26 @@ export default function ProcessoLicitatorio() {
   return (
     <div className="min-h-full bg-background">
       {/* Barra de contexto: breadcrumb + voltar */}
-      <div className="border-b border-border bg-card px-6 py-3">
+      <div className="border-b border-border bg-card px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <Breadcrumb
             trail={[
-              { label: "Processo Licitatório", onClick: backToList },
+              { label: "Processo Licitatório", onClick: leaveToList },
               {
                 label: processNumber ?? "Processo",
-                onClick: () => setActiveTab("overview"),
+                onClick: () => navigateTab("overview"),
               },
               { label: STAGE_TAB_LABELS[activeTab] },
             ]}
           />
           <button
             type="button"
-            onClick={backToList}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={leaveToList}
+            aria-label="Voltar aos processos"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar aos processos
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Voltar aos processos</span>
           </button>
         </div>
       </div>
@@ -195,7 +272,7 @@ export default function ProcessoLicitatorio() {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => navigateTab(tab.key)}
                 aria-current={active ? "page" : undefined}
                 className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   active
@@ -211,6 +288,20 @@ export default function ProcessoLicitatorio() {
         </nav>
       </div>
 
+      {/* LICIGOV-FAST PR-1 — jornada documental + exportação individual do documento aberto */}
+      {activeProcessId && journeyKind && (
+        <DocumentJourneyBar
+          current={journeyKind}
+          states={journeyStates(processQuery.data?.documents, processQuery.data?.officialVersions, processQuery.data?.officialEmissions)}
+          loading={processQuery.isLoading}
+          onNavigate={navigateTab}
+          onExport={(action) => void journeyExport.run(journeyKind, action)}
+          pendingAction={journeyExport.pending?.kind === journeyKind ? journeyExport.pending.action : null}
+          exportBusy={!!journeyExport.pending}
+          hasUnsavedEdits={stageDirty}
+        />
+      )}
+
       {/* Conteúdo da etapa ativa */}
       <div>
         {activeProcessId && (
@@ -219,7 +310,8 @@ export default function ProcessoLicitatorio() {
             processId={activeProcessId}
             onOpenItem={setOpenItemId}
             startWithImport={importOpenFor === activeTab}
-            onNavigate={setActiveTab}
+            onNavigate={navigateTab}
+            onDirtyChange={setStageDirty}
           />
         )}
       </div>
@@ -238,18 +330,21 @@ function StagePanel({
   onOpenItem,
   startWithImport = false,
   onNavigate,
+  onDirtyChange,
 }: {
   tab: StageTab;
   processId: string;
   onOpenItem: (itemId: string) => void;
   startWithImport?: boolean;
   onNavigate?: (tab: StageTab) => void;
+  /** Edição não salva na etapa (DFD/ETP/TR/Edital) — protege a navegação. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   switch (tab) {
     case "overview":
       return <ProcessOverview processId={processId} />;
     case "dfd":
-      return <DFDWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <DFDWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "price":
       return <PesquisaPrecosWorkspace processId={processId} onReviewItems={() => onNavigate?.("items")} />;
     case "contract_items":
@@ -262,11 +357,11 @@ function StagePanel({
         />
       );
     case "etp":
-      return <ETPWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <ETPWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "tr":
-      return <TRWorkspace processId={processId} startWithImport={startWithImport} />;
+      return <TRWorkspace processId={processId} startWithImport={startWithImport} onDirtyChange={onDirtyChange} />;
     case "edital":
-      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} onOpenStage={(stage) => onNavigate?.(stage)} />;
+      return <EditalWorkspace processId={processId} onOpenTr={() => onNavigate?.("tr")} onOpenStage={(stage) => onNavigate?.(stage)} onDirtyChange={onDirtyChange} />;
     default:
       return null;
   }
@@ -321,27 +416,29 @@ type Crumb = { label: string; onClick?: () => void };
 
 function Breadcrumb({ trail }: { trail: Crumb[] }) {
   return (
-    <nav aria-label="Trilha de navegação" className="flex items-center gap-1 text-sm">
+    <nav aria-label="Trilha de navegação" className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
       {trail.map((crumb, i) => {
         const isLast = i === trail.length - 1;
+        // Em telas estreitas o primeiro nível ("Processo Licitatório") sai da trilha: o número do processo e a etapa
+        // continuam visíveis e o botão "Voltar" cobre a navegação de retorno (evita sobreposição a 390 px).
         return (
-          <span key={i} className="flex items-center gap-1">
+          <span key={i} className={`flex min-w-0 items-center gap-1 ${i === 0 && trail.length > 2 ? "hidden sm:flex" : ""}`}>
             {crumb.onClick && !isLast ? (
               <button
                 type="button"
                 onClick={crumb.onClick}
-                className="rounded font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="truncate whitespace-nowrap rounded font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {crumb.label}
               </button>
             ) : (
               <span
-                className={isLast ? "font-semibold text-foreground" : "text-muted-foreground"}
+                className={`truncate whitespace-nowrap ${isLast ? "font-semibold text-foreground" : "text-muted-foreground"}`}
               >
                 {crumb.label}
               </span>
             )}
-            {!isLast && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />}
+            {!isLast && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />}
           </span>
         );
       })}

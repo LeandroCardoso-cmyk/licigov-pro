@@ -37,6 +37,11 @@ vi.mock("../../db", () => ({
   createAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../../services/activityLogService", () => ({ logFromCtx: vi.fn() }));
+// SECURITY-02 — conceder/alterar vínculo exige membership REAL admin+. Nestes testes o ator (user 1) é, por padrão, TAMBÉM
+// admin real do órgão 1 (vínculo persistido); `authority.deny(1)` o reduz ao acesso técnico de plataforma (sem vínculo).
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+const authority = createAuthorityFixture();
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o), resolveTenantForUser: vi.fn() }));
 
 import {
   getAllMembersOfOrg,
@@ -74,6 +79,8 @@ function caller() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authority.reset();
+  authority.state.defaultRole = "admin";
 });
 
 describe("organizationsRouter · listAllMembers", () => {
@@ -223,5 +230,51 @@ describe("organizationsRouter · adminList", () => {
     const ctx = makeContext({ id: 5, role: "user" as const, openId: "u5", name: "Fulano", email: "fulano@x.com", theme: "light" as const, loginMethod: "email", passwordHash: null, signaturePassword: null, tokenVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as never);
     const normalCaller = organizationsRouter.createCaller(ctx as never);
     await expect(normalCaller.adminList()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("SECURITY-02 — admin de plataforma não concede autoridade municipal", () => {
+  it("SEM membership real: updateMemberRole/activateMember/inviteMember recusados (INSTITUTIONAL_AUTHORITY_REQUIRED), sem escrita", async () => {
+    authority.deny(1);
+    getAllMembersOfOrgMock.mockResolvedValue([member(10, "operator", false)]);
+    const { getMembersOfOrg, addMemberToOrg } = await import("../../db/organizations");
+    vi.mocked(getMembersOfOrg).mockResolvedValue([member(10, "operator")]);
+    const { getUserByEmail } = await import("../../db");
+    vi.mocked(getUserByEmail).mockResolvedValue({ id: 10 } as never);
+    for (const call of [
+      () => caller().updateMemberRole({ userId: 10, role: "manager" }),
+      () => caller().activateMember({ userId: 10 }),
+      () => caller().inviteMember({ email: "terceiro@x.com", role: "manager" }),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("INSTITUTIONAL_AUTHORITY_REQUIRED") });
+    }
+    expect(updateMemberRoleDbMock).not.toHaveBeenCalled();
+    expect(setMemberAtivoMock).not.toHaveBeenCalled();
+    expect(vi.mocked(addMemberToOrg)).not.toHaveBeenCalled();
+  });
+
+  it("acesso TÉCNICO preservado: sem membership real, listar membros e desativar terceiros continuam disponíveis", async () => {
+    authority.deny(1);
+    getAllMembersOfOrgMock.mockResolvedValue([member(10, "admin"), member(11, "operator")]);
+    await expect(caller().listAllMembers()).resolves.toHaveLength(2);
+    countActiveAdminsMock.mockResolvedValue(2);
+    await expect(caller().deactivateMember({ userId: 11 })).resolves.toEqual({ success: true });
+  });
+
+  it("ninguém altera/ativa/inclui a SI MESMO (SELF_GRANT_FORBIDDEN), mesmo com vínculo real admin", async () => {
+    const { getMembersOfOrg, addMemberToOrg } = await import("../../db/organizations");
+    vi.mocked(getMembersOfOrg).mockResolvedValue([member(1, "admin")]);
+    getAllMembersOfOrgMock.mockResolvedValue([member(1, "admin", false)]);
+    const { getUserByEmail } = await import("../../db");
+    vi.mocked(getUserByEmail).mockResolvedValue({ id: 1 } as never);
+    // autopromoção recusada (manager → admin); autorrebaixamento continua possível (sujeito ao último admin).
+    vi.mocked(getMembersOfOrg).mockResolvedValue([member(1, "manager")]);
+    await expect(caller().updateMemberRole({ userId: 1, role: "admin" })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    await expect(caller().activateMember({ userId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    vi.mocked(getMembersOfOrg).mockResolvedValue([]);
+    await expect(caller().inviteMember({ email: "admin@x.com", role: "admin" })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("SELF_GRANT_FORBIDDEN") });
+    expect(updateMemberRoleDbMock).not.toHaveBeenCalled();
+    expect(setMemberAtivoMock).not.toHaveBeenCalled();
+    expect(vi.mocked(addMemberToOrg)).not.toHaveBeenCalled();
   });
 });

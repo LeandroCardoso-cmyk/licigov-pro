@@ -3,7 +3,9 @@ import { createOperationRecord } from "../../domain/operationRecord";
 import { assertOperationRecordSchedule, isFinalizedOperationRecord, validLocalDate, validLocalTime } from "../../domain/operationRecordSchedule";
 import { computeIndicators } from "../../domain/operationalDashboard";
 
-vi.mock("../../db/procurement", () => ({ listProcesses: async () => [{ id: "canonical", processNumber: "2026/253", object: "Existente", modality: "Pregão", currentStage: "NEW_PROCESS", status: "rascunho" }] }));
+vi.mock("../../db/procurement", () => ({ listProcesses: async () => [{ id: "canonical", processNumber: "2026/253", object: "Existente", modality: "Pregão", currentStage: "NEW_PROCESS", status: "rascunho" }], listActiveProcessRefsByIds: async () => [] }));
+// Sem registros governados de processo: nenhuma sessão derivada da Configuração do certame.
+vi.mock("../../db/institutionalDecisions", () => ({ listCurrentDecisionsBySubjectType: async () => [] }));
 vi.mock("../../db/directProcurement", () => ({ listDirectProcurementWorkspaces: async () => [] }));
 vi.mock("../../db/contractWorkspace", () => ({ listContractWorkspaces: async () => [], countContractAddendaByOrg: async () => 0 }));
 vi.mock("../../db/legalOpinionWorkspace", () => ({ listLegalOpinionWorkspaces: async () => [] }));

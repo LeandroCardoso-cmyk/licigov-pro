@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   createCognitiveWorkspace,
   transitionStatus,
@@ -206,7 +206,7 @@ export const workspaceRouter = router({
       return { decision };
     }),
 
-  approveDecision: tenantProcedure
+  approveDecision: institutionalProcedure("viewer") // SECURITY-02 — aprovação registrada: membership REAL (piso inalterado)
     .input(z.object({ workspaceId: z.string().min(1), decisionId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

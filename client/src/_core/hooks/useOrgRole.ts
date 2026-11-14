@@ -15,9 +15,12 @@ export function useOrgRole() {
   });
 
   const role: OrgRole | null = (query.data?.role as OrgRole | undefined) ?? null;
+  // Nome do órgão ATIVO (mesma query, sem chamada extra) — contexto organizacional visível no shell.
+  const organizationName: string | null = query.data?.org?.nome ?? null;
 
   return {
     role,
+    organizationName,
     isLoading: query.isLoading,
     canManageUsers: canManageOrgUsers(role),
     hasRole: (min: OrgRole) => hasOrgRole(role, min),

@@ -9,6 +9,7 @@ import { getProcess } from "../db/procurement";
 import { TemplatePersistenceError } from "../db/institutionalTemplates";
 import { translatePersistenceError } from "../services/institutionalTemplates/adapters/errors";
 import { TemplateReviewService } from "../services/institutionalTemplates/reviewService";
+import { TemplateSlotResolutionService } from "../services/institutionalTemplates/slotResolutionService";
 import { GovernedSourceService } from "../services/institutionalTemplates/governedSourceService";
 import { generateTemplatedDocument } from "../services/institutionalTemplates/templateCompositionService";
 import { TRPCError } from "@trpc/server";
@@ -27,6 +28,7 @@ import { TemplateGovernanceService } from "../services/institutionalTemplates/go
 import { MODEL_REGISTRATION_PRESETS, ModelRegistrationService } from "../services/institutionalTemplates/modelRegistrationService";
 import { TemplatePreviewDossierService } from "../services/institutionalTemplates/previewDossierService";
 import { resolveAuthority } from "../services/institutionalTemplates/electronicAuthority";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
 import { TemplateDerivationService } from "../services/institutionalTemplates/templateDerivationService";
 import { TemplateReadinessService } from "../services/institutionalTemplates/readinessService";
 import { INTEGRATED_CAPABILITIES } from "../domain/institutionalTemplates/governance/capabilities";
@@ -135,9 +137,18 @@ const previewContext = z.object({ scope, sampleValues }).strict();
 
 /** LICIGOV-FAST: autoridade da decisão = a informada (fundamento institucional explícito) OU o registro eletrônico do usuário autenticado. */
 const authorityOf = (
-  ctx: { user: { id: number; name?: string | null; email?: string | null }; orgMembership?: { role?: string | null } | null; ports: { clock: { now(): string } } },
+  ctx: {
+    user: { id: number; name?: string | null; email?: string | null }; orgMembership?: { role?: string | null } | null; ports: { clock: { now(): string } };
+    institutionalAuthority?: { role: string } | null; platformAdminAccess?: boolean;
+  },
   action: string, decision: z.infer<typeof declaredAuthority> | undefined, note?: string,
-) => resolveAuthority(decision, { userId: ctx.user.id, userName: ctx.user.name, userEmail: ctx.user.email, orgRole: ctx.orgMembership?.role ?? null, today: ctx.ports.clock.now().slice(0, 10), action, note });
+) => resolveAuthority(decision, {
+  userId: ctx.user.id, userName: ctx.user.name, userEmail: ctx.user.email,
+  // SECURITY-02 — papel registrado = o PERSISTIDO (autoridade comprovada); a projeção do admin de plataforma nunca vira "Titular do órgão".
+  orgRole: ctx.institutionalAuthority?.role ?? (ctx.platformAdminAccess ? null : ctx.orgMembership?.role ?? null),
+  platformTechnicalAccess: !ctx.institutionalAuthority && ctx.platformAdminAccess === true,
+  today: ctx.ports.clock.now().slice(0, 10), action, note,
+});
 
 const importInput = z.object({
   format: z.enum(["markdown", "docx"]),
@@ -156,6 +167,18 @@ const acknowledgeDeviationInput = z.object({
   confirm: z.boolean(), idempotencyKey: z.string().min(8).max(128), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
 }).strict();
 
+/**
+ * E2 — resolução humana de trecho pendente do Edital: o texto/tipo vêm da pessoa; o PONTO do trecho, o M1, o ator e o órgão são resolvidos
+ * pelo servidor (nada de posição/conteúdo completo enviados pelo cliente). CAS duplo: hash do rascunho visto + revisão da resolução.
+ */
+const resolveSlotInput = z.object({
+  processId: z.string().min(1).max(64), manifestId: id, slotKey: z.string().min(1).max(80),
+  resolution: z.enum(["HUMAN_TEXT", "DECLARED_NONE"]), text: z.string().max(8000).optional(),
+  expectedContentHash: z.string().length(64), expectedRevision: z.number().int().min(0).max(1_000_000),
+  // 64 = `generated_document_edits.idempotency_key` (a mesma chave identifica a edição e a decisão do mesmo ato)
+  confirm: z.boolean(), idempotencyKey: z.string().min(8).max(64), decision: decisionSchema.optional(), note: z.string().max(2000).optional(),
+}).strict();
+
 const officialPin = z.object({ documentId: id, version: z.number().int().min(1), contentHash: z.string().length(64) }).strict();
 const expectedRevision = z.number().int().min(0).max(1_000_000);
 /**
@@ -170,6 +193,12 @@ const profileInput = z.object({ catalogVersion: z.string().min(3).max(120), role
 const baseDateInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), baseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), ...actBase }).strict();
 const participationInput = z.object({ processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120), participation: z.unknown(), ...actBase }).strict();
 const budgetInput = z.object({ processId: z.string().min(1).max(20), disclosure: z.enum(["publico", "sigiloso"]), ...actBase }).strict();
+/** LICIGOV-FAST PR-2 — dados orçamentários do processo (texto livre declarado; `null` remove; ausente = não altera). */
+const budgetAllocationText = z.string().trim().min(1).max(500).nullable().optional();
+const budgetAllocationInput = z.object({
+  processId: z.string().min(1).max(20), catalogVersion: z.string().min(3).max(120),
+  dotacaoOrcamentaria: budgetAllocationText, fonteRecursos: budgetAllocationText, confirmReplace: z.boolean().optional(), ...actBase,
+}).strict();
 
 const generateInput = z.object({
   processId: z.string().min(1).max(20), documentKind: z.enum(KINDS), documentType: z.enum(["dfd", "etp", "tr", "edital"]),
@@ -212,6 +241,12 @@ async function guarded<T>(fn: () => Promise<T> | T): Promise<T> {
   try { return await fn(); } catch (err) { return mapError(err); }
 }
 
+/** SECURITY-02 — ações que registram ato/decisão institucional do órgão (exigem membership real). Curadoria técnica
+ *  (ler, pré-visualizar, rascunho, importar, registrar/derivar modelo em DRAFT, compor minuta) continua no piso de papel. */
+const INSTITUTIONAL_TEMPLATE_ACTIONS: ReadonlySet<TemplateAction> = new Set<TemplateAction>([
+  "approve", "publish", "available", "deprecate", "bind", "policy", "evidence", "govern", "review",
+]);
+
 /** Procedure com piso de papel + módulo habilitado (flag) + ports configurados + ator humano do contexto autenticado. */
 function templatesProcedure(action: TemplateAction) {
   return orgRoleProcedure(TEMPLATE_ACTION_MIN_ROLE[action]).use(async ({ ctx, next }) => {
@@ -222,6 +257,15 @@ function templatesProcedure(action: TemplateAction) {
       }
       return new InstitutionalTemplatesWorkflow(ports);
     });
+    // SECURITY-02 — atos institucionais do órgão sobre seus modelos e fontes governadas (aprovar, publicar, disponibilizar,
+    // depreciar, vincular, política, evidência, decisões governadas, revisão do documento composto) exigem membership REAL:
+    // o papel do contexto (ex.: projeção sintética `owner` do admin de plataforma) não é autoridade do órgão.
+    const institutionalAuthority = INSTITUTIONAL_TEMPLATE_ACTIONS.has(action)
+      ? await requireInstitutionalAuthority({
+        userId: ctx.user.id, organizationId: ctx.organizationId!, minRole: TEMPLATE_ACTION_MIN_ROLE[action],
+        operation: `institutionalTemplates.${action}`, correlationId: ctx.correlationId,
+      })
+      : null;
     const wctx: WorkflowContext = {
       organizationId: ctx.organizationId!, actor: { kind: "human", userId: ctx.user.id }, correlationId: ctx.correlationId ?? "",
     };
@@ -233,12 +277,12 @@ function templatesProcedure(action: TemplateAction) {
       if (action !== "publish") needs.push(["aprovar", effective.policy.approveMinRole]);
       if (action !== "approve") needs.push(["publicar", effective.policy.publishMinRole]);
       for (const [verb, floor] of needs) {
-        if (!roleMeetsFloor(ctx.orgMembership?.role, floor)) {
+        if (!roleMeetsFloor(institutionalAuthority?.role, floor)) {
           throw new TRPCError({ code: "FORBIDDEN", message: `A política de governança de modelos deste órgão exige papel ${floor} (ou superior) para ${verb} modelos.` });
         }
       }
     }
-    return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts() } });
+    return next({ ctx: { ...ctx, wf, wctx, ports: getTemplateWorkflowPorts(), institutionalAuthority } });
   });
 }
 
@@ -392,6 +436,13 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acceptAiNarrative(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Aceite de narrativa de IA no documento composto", decision, note) }))),
     acknowledgeDeviation: templatesProcedure("review").input(acknowledgeDeviationInput)
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(() => new TemplateReviewService(getTemplateWorkflowPorts().manifests!).acknowledgeDeviation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Reconhecimento de desvio estrutural do documento composto", decision, note) }))),
+    resolveSlot: templatesProcedure("review").input(resolveSlotInput)
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        if (!(await getProcess(rest.processId, ctx.wctx.organizationId))) throw new TemplateWorkflowError("NOT_FOUND", "processo não encontrado nesta organização");
+        const action = rest.resolution === "DECLARED_NONE" ? "Declaração de ausência de conteúdo adicional em trecho do Edital" : "Registro da redação de trecho pendente do Edital";
+        const out = await new TemplateSlotResolutionService(getTemplateCompositionPorts()).resolveSlot(ctx.wctx, { ...rest, decision: authorityOf(ctx, action, decision, note) });
+        return { decisionId: out.decision.id, revision: out.decision.revision, replayed: out.replayed, contentHash: out.contentHash, documentChanged: out.documentChanged };
+      })),
   }),
 
   /**
@@ -427,6 +478,15 @@ export const institutionalTemplatesRouter = router({
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
         await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
         return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetBaseDate(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro da data-base do orçamento", decision, note) });
+      })),
+    /**
+     * LICIGOV-FAST PR-2 — dotação orçamentária e fonte de recursos do PROCESSO: declaradas UMA vez (Pesquisa de Preços, TR ou Edital oferecem
+     * o mesmo registro), consumidas pelo TR e pelo Edital. Mesmo piso e mesmo ledger das demais gravações orçamentárias; tenant-scoped.
+     */
+    recordBudgetAllocation: templatesProcedure("govern").input(budgetAllocationInput)
+      .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {
+        await assertProcessInTenant(rest.processId, ctx.wctx.organizationId);
+        return new GovernedSourceService(getTemplateWorkflowPorts().catalog).recordBudgetAllocation(ctx.wctx, { ...rest, decision: authorityOf(ctx, "Registro dos dados orçamentários do processo", decision, note) });
       })),
     recordBudgetDisclosure: templatesProcedure("govern").input(budgetInput)
       .mutation(({ ctx, input: { note, decision, ...rest } }) => guarded(async () => {

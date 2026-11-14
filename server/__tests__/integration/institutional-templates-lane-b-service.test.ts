@@ -24,7 +24,7 @@ const deadlock = () => Object.assign(new Error("Deadlock found when trying to ge
 const fakeDb = {
   transaction: async (cb: (tx: any) => Promise<unknown>) => {
     txAttempts += 1;
-    const tx = { staged: [] as Row[], attempt: txAttempts };
+    const tx = { staged: [] as Row[], attempt: txAttempts, select: () => authority.txSelect() };
     const out = await cb(tx);
     if (deadlockOnAttempt.has(txAttempts)) throw deadlock(); // InnoDB desfaz a tentativa INTEIRA
     committed.push(...tx.staged);
@@ -35,6 +35,10 @@ const stage = (tx: any, table: string, row: any) => { tx.staged.push({ table, ro
 const rows = (table: string) => committed.filter((r) => r.table === table).map((r) => r.row);
 
 vi.mock("../../db/connection", () => ({ getDb: vi.fn(async () => fakeDb) }));
+// SECURITY-02 — autoridade REAL do emissor (fonte autoritativa simulada; padrão: manager real).
+import { createAuthorityFixture } from "../helpers/institutionalAuthorityFixture";
+const authority = createAuthorityFixture();
+vi.mock("../../services/tenantService", () => ({ getMembership: (u: number, o: number) => authority.getMembership(u, o) }));
 
 // Document Engine: ponto ÚNICO de geração oficial (espião; grava na transação recebida).
 const generateOfficialDocument = vi.fn(async (params: any, executor: any) => {
@@ -127,7 +131,12 @@ function makePorts(): TemplatePorts {
     },
     drafts: {
       reserveDraftId: async () => "gdoc_lb_1",
-      writeDraft: async (d, tx) => { calls.push("writeDraft"); stage(tx, "draft", d); },
+      writeDraft: async (d, tx) => {
+        // X → Y → X: M1 reproduzido já existente e rascunho JÁ vinculado a ele ⇒ replay puro (mesma regra do adapter real)
+        const last = (rows("draft") as Array<{ generationManifestId?: string }>).at(-1);
+        if (d.reuseExistingManifest && last?.generationManifestId === d.generationManifestId) return false;
+        calls.push("writeDraft"); stage(tx, "draft", d); return true;
+      },
     },
     manifests: {
       getManifest: async (org, id) => m1s().find((m) => m.organizationId === org && m.id === id) ?? null,
@@ -139,6 +148,7 @@ function makePorts(): TemplatePorts {
       loadAiOutputs: async (_org, ids) => state.aiOutputs.filter((o) => ids.includes(o.executionId)),
       listAiAcceptances: async () => state.acceptances,
       listDeviationAcknowledgments: async () => [],
+      listSlotResolutions: async () => [],
       listHumanEdits: async () => state.edits,
     },
     clock: { now: () => "2026-10-06T12:00:00.000Z" },
@@ -154,6 +164,7 @@ const genParams = (over: Partial<GenerateTemplatedDocumentParams> = {}): Generat
 const err = async (p: Promise<unknown>): Promise<any> => p.then(() => null, (e) => e);
 
 beforeEach(() => {
+  authority.reset();
   vi.clearAllMocks();
   committed.length = 0;
   calls.length = 0;

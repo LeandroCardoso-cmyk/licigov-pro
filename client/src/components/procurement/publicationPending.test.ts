@@ -73,3 +73,28 @@ describe("PublicationPendingNotice", () => {
     expect(h({ pending: publicationPending(null), variant: "drafting" })).toBe("");
   });
 });
+
+describe("LICIGOV-FAST (H5) — políticas do órgão necessárias ANTES DA PUBLICAÇÃO entram na lista de finalização", () => {
+  const srp = [
+    { name: "decisao.adesaoAta", description: "Adesão à Ata de Registro de Preços", reason: "r", fix: "ORG_PROFILE" as const, providedBy: "p", neededBefore: "PUBLICATION" as const },
+    { name: "srp.prazoAssinaturaAta", description: "Prazo para assinatura da Ata", reason: "r", fix: "ORG_PROFILE" as const, providedBy: "p", neededBefore: "PUBLICATION" as const },
+  ];
+  const budget = { name: "julgamento.dotacaoOrcamentaria", description: "Dotação orçamentária", reason: "r", fix: "PROCESS_BUDGET" as const, providedBy: "p", neededBefore: "CONTRACTING" as const };
+  const up = (contentPending: typeof srp | Array<typeof srp[number] | typeof budget>) => ({ trDigest: "x", trPending: [], sourcePending: [], profilePending: [], contentPending });
+
+  it("Revisão 2: datas diferidas + políticas SRP; orçamento (formalização da contratação) fica de fora", () => {
+    const v = publicationPending(state({ upstream: up([...srp, budget]) }));
+    expect(v.items.map((i) => i.label)).toEqual([...PUB.map(([, l]) => l), "Adesão à Ata de Registro de Preços", "Prazo para assinatura da Ata"]);
+  });
+  it("Revisão 1 (sem política diferida): passa a ser aplicável só pelas políticas SRP; sem elas continua não aplicável", () => {
+    const noDeferred = { publication: { deferredPolicy: false, schedule: {}, readiness: { complete: false, total: 4, missing: [], missingVariables: ["processo.dataAbertura"] } } };
+    const v = publicationPending(state({ ...noDeferred, upstream: up(srp) }));
+    expect(v).toMatchObject({ applicable: true, complete: false });
+    expect(v.items.map((i) => i.name)).toEqual(["decisao.adesaoAta", "srp.prazoAssinaturaAta"]);
+    expect(publicationPending(state({ ...noDeferred, upstream: up([budget]) })).applicable).toBe(false);
+    const html = h({ pending: v, variant: "finalizing" });
+    expect(html).toContain("Adesão à Ata de Registro de Preços");
+    expect(html).toContain("A DEFINIR PELO ÓRGÃO ANTES DA PUBLICAÇÃO");
+    expect(html).toContain("não bloqueia a emissão");
+  });
+});

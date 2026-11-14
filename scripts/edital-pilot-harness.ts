@@ -94,6 +94,13 @@ async function staging(): Promise<PilotReport> {
   const ports = createTemplateWorkflowPorts();
   const compositionPorts = createTemplateCompositionPorts();
   const ctx: WorkflowContext = { organizationId, actor: { kind: "human", userId: actorUserId }, correlationId: `pilot-${arg("run-id") ?? Date.now()}` };
+  // SECURITY-02 — no modo staging (ports REAIS) os passos de decisão (evidência, aprovar, publicar, vincular) são atos do órgão:
+  // o ator informado precisa ter membership REAL ativa ≥ manager na organização (mesmo contrato do router); senão recusa antes de tudo.
+  const decisionSteps: PilotStepId[] = ["LEGAL_EVIDENCE", "APPROVE", "PUBLISH", "BIND", "HUMAN_REVIEW"];
+  if (decisionSteps.some((s) => parseConfirm().has(s))) {
+    const { requireInstitutionalAuthority } = await import("../server/services/institutionalAuthorityService");
+    await requireInstitutionalAuthority({ userId: actorUserId, organizationId, minRole: "manager", operation: "edital-pilot-harness.staging", correlationId: ctx.correlationId });
+  }
   const authority = JSON.parse(readFileSync(need("authority-file"), "utf8")) as PilotInput["authority"];
   const ast = JSON.parse(readFileSync(need("ast-file"), "utf8")) as unknown;
   const inventory = arg("inventory-file") ? (JSON.parse(readFileSync(arg("inventory-file")!, "utf8")) as unknown) : undefined;

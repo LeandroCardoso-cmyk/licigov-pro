@@ -17,6 +17,8 @@ export const NOT_BOUND_MESSAGE =
   "Nenhum modelo institucional publicado está vinculado a este escopo. A geração seguirá o fluxo governado atual.";
 export const TR_OFICIAL_EXATO_NECESSARIO = "TR_OFICIAL_EXATO_NECESSARIO";
 export const TR_REQUIRED_MESSAGE = "Para gerar com o modelo institucional é necessário confirmar um TR oficial emitido (versão exata). Emita o TR oficial deste processo antes.";
+/** Há TR oficial vigente listado, mas nenhum selecionado: a orientação é SELECIONAR (não emitir de novo). */
+export const TR_SELECT_MESSAGE = "Selecione acima o TR oficial emitido que servirá de base para o Edital (versão exata).";
 
 const SCOPE_LABEL: Record<string, string> = {
   pregao: "Pregão", concorrencia: "Concorrência", leilao: "Leilão", concurso: "Concurso", "chamada-publica": "Chamada Pública",
@@ -35,10 +37,22 @@ export function trPinOf(candidate: TrCandidateView | undefined | null) {
 }
 
 /** A geração pode prosseguir? CONFLICT/INVALID bloqueiam; BOUND exige o TR exato confirmado; demais estados seguem o fluxo atual. */
-export function bridgeAllowsGeneration(resolution: TemplateResolutionView | undefined, trPin: ReturnType<typeof trPinOf>): { allowed: boolean; reason?: string } {
+/**
+ * M8 — candidato vigente que corresponde EXATAMENTE ao TR usado na composição (documento + versão + hash). Sem
+ * correspondência (TR superado ou inexistente) ⇒ null: nenhuma versão é escolhida automaticamente.
+ */
+export function composedTrCandidateId(
+  candidates: readonly TrCandidateView[], pin: { documentId: string; version: number; contentHash: string } | null,
+): string | null {
+  if (!pin) return null;
+  const c = candidates.find((x) => x.current && x.documentId === pin.documentId && x.version === pin.version && x.contentHash === pin.contentHash);
+  return c ? c.documentId : null;
+}
+
+export function bridgeAllowsGeneration(resolution: TemplateResolutionView | undefined, trPin: ReturnType<typeof trPinOf>, hasCurrentCandidate = false): { allowed: boolean; reason?: string } {
   if (!resolution) return { allowed: true };
   if (resolution.status === "CONFLICT") return { allowed: false, reason: "Mais de um vínculo vigente para este escopo: nenhum modelo é escolhido automaticamente." };
   if (resolution.status === "INVALID") return { allowed: false, reason: `Vínculo do modelo institucional inválido (${resolution.codes.join(", ")}).` };
-  if (resolution.status === "BOUND" && !trPin) return { allowed: false, reason: TR_REQUIRED_MESSAGE };
+  if (resolution.status === "BOUND" && !trPin) return { allowed: false, reason: hasCurrentCandidate ? TR_SELECT_MESSAGE : TR_REQUIRED_MESSAGE };
   return { allowed: true };
 }

@@ -14,6 +14,10 @@ export interface TrParamViewModel {
   origin?: { sourceType: string; sourceId: string; sourceVersion: string; status: string; actorUserId: number | null; updatedAt: string | null };
   proposal?: { value: unknown; orgProfileRevision: number };
   defaultEligible: boolean;
+  /** M8 — suprido pela fonte autoritativa (servidor): não é pendência. */
+  suppliedBy?: { source: "tr_oficial"; value: string; version: number } | { source: "processo"; value: string };
+  /** Motivo conhecido de o campo continuar pendente (servidor). */
+  pendingReason?: { code: "LEGACY_TR_WITHOUT_OBJECT"; trVersion: number };
 }
 export type TrStructuredView =
   | { status: "UNAVAILABLE"; reason: string }
@@ -29,9 +33,45 @@ export function trParamToPrepField(f: TrParamViewModel): PrepField {
   };
 }
 
-/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR. */
+/**
+ * M8 (Discovery "Objeto completo") — sem valor no TR, mas SUPRIDO pela fonte autoritativa que o servidor indica (`suppliedBy`:
+ * TR oficial vigente com objeto, ou objeto do processo quando ainda não há TR emitido). Não é pendência e não pede segundo
+ * preenchimento; nada é gravado nem confirmado em nome da pessoa. Sem `suppliedBy` (ex.: TR emitido antes do registro do
+ * objeto), o campo continua pendente — o Edital o exige no TR.
+ */
+export const isSuppliedBySource = (f: TrParamViewModel): boolean => f.status === "UNSET" && !!f.suppliedBy;
+
+/** Pendentes (ativos e sem valor): o que a pessoa precisa confirmar no TR — exceto o que a fonte autoritativa já supre. */
 export const trPendingFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
-  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET");
+  fields.filter((f) => f.active && (f.required || f.conditional) && f.status !== "SET" && !isSuppliedBySource(f));
+/** Supridos pela fonte autoritativa (sem valor confirmado no TR): exibidos como informação, não como pendência. */
+export const trSuppliedFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] => fields.filter(isSuppliedBySource);
+
+/** Texto da origem do valor suprido (o que o Edital de fato usa). */
+export function suppliedByText(s: NonNullable<TrParamViewModel["suppliedBy"]>): string {
+  return s.source === "tr_oficial"
+    ? `Obtido do TR oficial emitido (v${s.version}), que registra o objeto do processo; o Edital usa este valor. Não é preciso digitar de novo.`
+    : "Obtido do objeto do processo: a emissão do TR registra este objeto e o Edital o reaproveita. Não é preciso digitar de novo.";
+}
+/** Explicação do motivo de pendência informado pelo servidor (null = sem motivo especial). */
+export function pendingReasonText(r: TrParamViewModel["pendingReason"]): string | null {
+  if (!r) return null;
+  return `O TR oficial vigente (v${r.trVersion}) foi emitido antes de o sistema registrar o objeto completo. O Edital por modelo `
+    + "institucional usa o objeto registrado no próprio TR emitido; por isso, com esta versão do TR, ele continuará pendente. "
+    + "Informar o valor aqui não altera o TR emitido e só vale para uma versão do TR emitida depois deste registro — a abertura de "
+    + "nova versão de documento já emitido depende de definição institucional ainda pendente.";
+}
+
+/**
+ * Texto do estado "parâmetros estruturados indisponíveis" — só quando há algo que a pessoa possa fazer (escolher o escopo do Edital
+ * para definir o modelo). Demais motivos são técnicos/de configuração: nada é exibido no TR (null).
+ */
+export function trStructuredUnavailableText(reason: string): string | null {
+  return /catálogos diferentes/.test(reason)
+    ? "Parâmetros estruturados da contratação: escolha a modalidade, a forma e a plataforma na etapa Edital para definir o modelo aplicável."
+    : null;
+}
+
 /** Opcionais ativos sem valor (decisões que ativam campos adicionais): recolhidos por padrão. */
 export const trOptionalFields = (fields: readonly TrParamViewModel[]): TrParamViewModel[] =>
   fields.filter((f) => f.active && !f.required && !f.conditional && f.status === "UNSET");
@@ -185,7 +225,35 @@ export function defaultConsentText(description: string, valueText: string, exist
 export interface ProfileStateView {
   status: "READY"; catalogVersion: string; revision: number; hash: string | null; asOf: string; sections: PrepSection[];
   roles: RoleViewModel[]; defaults: DefaultViewModel[]; platforms: PlatformViewModel[];
-  summary: { policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; platformsPending: number; pendingCount: number };
+  summary: {
+    policyTotal: number; policyFilled: number; policyPending: number; rolesNeeded: number; rolesOk: number; rolesPending: number; platformsPending: number; pendingCount: number;
+    /** A4 — políticas condicionais sem valor (exigidas só em situações específicas) e, com processo, as que ESTE processo exige. */
+    conditionalUnset?: number; contextPending?: number;
+  };
+  /** A4 — políticas condicionais sem valor: quando são exigidas e se o processo da leitura as exige. Ausente em servidor anterior. */
+  conditional?: { name: string; description: string; condition: string; requiredNow: boolean }[];
+  contextual?: boolean;
+  /** P2 — prontidão do processo: confirmada (TR exato validado) × não verificável (sem pin/pin inválido/leitura indisponível). */
+  contextStatus?: "GENERAL" | "CONFIRMED" | "UNVERIFIED";
+  contextReason?: string;
+}
+
+/**
+ * A4 (pós-homologação H5) — resumo do Perfil SEM "falso pronto": campos gerais pendentes; senão, se faltam políticas condicionais, diz que o
+ * perfil está completo só para os campos gerais e quais situações ainda exigirão dados (ex.: registro de preços). Puro.
+ */
+export function profileCompletenessSummary(p: Pick<ProfileStateView, "summary" | "revision" | "conditional" | "contextStatus" | "contextReason">): { tone: "pending" | "partial" | "complete"; text: string } {
+  const n = p.summary.pendingCount;
+  // P2: prontidão do PROCESSO não verificável nunca vira "completo" — diz por quê (as pendências conhecidas continuam contadas).
+  const unverified = p.contextStatus === "UNVERIFIED" ? ` Prontidão para este processo não verificada: ${p.contextReason ?? "contexto indisponível"}.` : "";
+  if (n > 0) return { tone: "pending", text: `${n} ${n === 1 ? "campo pendente" : "campos pendentes"}${unverified ? `.${unverified}` : ""}` };
+  if (unverified) return { tone: "partial", text: `Sem pendências conhecidas.${unverified}` };
+  const cond = p.conditional ?? [];
+  if (cond.length > 0) {
+    const situations = [...new Set(cond.map((c) => c.condition))].join("; ");
+    return { tone: "partial", text: `Campos gerais completos (revisão ${p.revision}). ${cond.length} ${cond.length === 1 ? "política condicional ainda sem valor, exigida" : "políticas condicionais ainda sem valor, exigidas"} só quando: ${situations}` };
+  }
+  return { tone: "complete", text: `Perfil completo (revisão ${p.revision})` };
 }
 
 /** O estado do Perfil na forma que `buildSavePlan` consome (escopo ÓRGÃO, sem processo): reutiliza o MESMO plano/CAS da preparação. */

@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
-import { router, publicProcedure, protectedProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, publicProcedure, protectedProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { sdk } from "../_core/sdk";
 import { getSessionCookieOptions } from "../_core/cookies";
@@ -26,7 +26,8 @@ import {
 const ORG_ROLE_ENUM = z.enum(["owner", "admin", "manager", "operator", "viewer"]);
 
 export const invitationsRouter = router({
-  create: orgRoleProcedure("admin")
+  // SECURITY-02 — emitir/reemitir convite concede vínculo: membership REAL admin+ (o serviço revalida e recusa autoconvite).
+  create: institutionalProcedure("admin")
     .input(
       z.object({
         email: z.string().email("E-mail inválido").max(254),
@@ -50,6 +51,8 @@ export const invitationsRouter = router({
     return await listInvitations(ctx.organizationId!);
   }),
 
+  // SECURITY-02 — o serviço exige autoridade REAL de quem reenvia; a única exceção é o convite `owner` de bootstrap de um órgão
+  // ainda sem membros (onboarding), que o admin de plataforma pode reemitir.
   resend: orgRoleProcedure("admin")
     .use(rateLimitMiddleware("invitationManage"))
     .input(z.object({ invitationId: z.number().int().positive() }))

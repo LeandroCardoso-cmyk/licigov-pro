@@ -15,6 +15,7 @@
  */
 
 import { assertKernelAccess } from "./kernelAccessService";
+import { formatBrazilianDateTime } from "../domain/brazilianDateTime";
 // Motor de conversão (ENGINE OFICIAL) — produz o artefato binário (DOCX/PDF).
 import {
   convertToDOCX, convertToPDF,
@@ -25,7 +26,6 @@ import {
 import { createDocument, storeRenderedArtifact, type StoredArtifact } from "./officialDocumentLifecycleService";
 import type { OfficialDocsExecutor } from "../db/officialDocuments";
 import {
-  officialFilename,
   type OfficialDocument, type DocumentBusinessDomain, type OfficialDocumentType, type OfficialFormat,
 } from "../domain/officialDocument";
 import {
@@ -48,6 +48,8 @@ export interface GenerateOfficialDocumentParams {
   author: string;
   status?: OfficialDocument["status"];
   correlationId: string;
+  /** Recusa (sob o lock da linhagem) se a linhagem já tem versão emitida — ver `createDocument`. */
+  refuseIfLineageHasEmitted?: boolean;
 }
 
 /**
@@ -89,10 +91,17 @@ export async function renderOfficialDocument(params: {
   assertKernelAccess(doc.businessDomain, "document_engine");
 
   // Document Engine: gerar/converter/renderizar → artefato (buffer). Nada além disso.
-  const filename = officialFilename(doc, params.format);
-  const buffer = params.format === "docx"
-    ? await convertToDOCX(doc.content, filename)
-    : await convertToPDF(doc.content, filename);
+  // Pós-M8 — o MESMO renderizador institucional das demais exportações (tabelas preservadas, marcadores internos fora do arquivo,
+  // cabeçalho com status e rodapé paginado). Versão não emitida sai marcada como não final pelo próprio status. Contrato,
+  // permissões e ledger de artefatos inalterados.
+  const statusLabel = doc.status.toUpperCase();
+  const buffer = await renderInstitutionalContent({
+    content: doc.content, format: params.format,
+    meta: {
+      documentTitle: doc.title, statusLabel, isDraft: doc.status !== "emitido", draftNoticeLabel: statusLabel,
+      version: doc.version, exportedAtLabel: formatBrazilianDateTime(new Date()),
+    },
+  });
 
   // Ciclo de vida (hash, Storage, Signed URL, persistência) é do Lifecycle Service.
   return storeRenderedArtifact({ doc, format: params.format, buffer, actorUserId: params.actorUserId, correlationId: params.correlationId });

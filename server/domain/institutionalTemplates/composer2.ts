@@ -29,16 +29,23 @@ import {
   cell, deepFreeze, inlineText, isAbsent, manifestSourceRefs, MISSING_VALUE_MARK, narrativeWordCount, neutralizeNarrative,
   PENDING_AI_SLOT_MARK, pinIssues, pinsAndNarrativesCheck, readCatalogPath, sealComposedManifest,
 } from "./composerShared";
-import { conditionVariables, evaluateCondition2 } from "./conditionalDsl2";
+import { conditionVariables, evaluateCondition2, type Cond2 } from "./conditionalDsl2";
 import { evaluateModelRules, ruleVariables, validateModelRules } from "./modelRules";
 import type { AiNarrativeRef, AnnexRef, ConditionalDecisionRef, DeferredPublicationRef, OfficialDocumentReference } from "./manifest";
 import { LATE_BOUND_PENDING, isLateBoundVariable, lateBoundMarker, type LateBoundRef } from "./lifecycleLateBound";
+import { CONTENT_PENDING_VARIABLES, isContentPendingVariable } from "./contentPending";
 import { validateTemplateRevision } from "./revision";
 import { templateHash } from "./semanticHash";
 import { organizationIssues, sameOrganizationIssues } from "./tenant";
 import { isOrgId, type OrgId } from "./types";
 import { formatScalar, formatValue2, normalizeValue2 } from "./valueTypes2";
 import { findVariable2, isDeferredPublication, type VariableCatalog2, type VariableDef2, type VariableSource2 } from "./variableCatalog2";
+
+/** Nome institucional do tipo documental referenciado (apresentação do docRef). */
+const DOC_REF_KIND_LABEL: Readonly<Record<DocRefKind2, string>> = {
+  TR: "Termo de Referência", ETP: "Estudo Técnico Preliminar", DFD: "Documento de Formalização da Demanda", ANNEX: "Anexo",
+  EDITAL: "Edital", CONTRATO: "Contrato", PARECER: "Parecer jurídico",
+};
 
 // ─── Resolução de variáveis (catálogo v2) ───────────────────────────────────────────────────────────────────────────
 
@@ -54,7 +61,8 @@ export interface ResolvedVariables2 {
 
 /**
  * Resolve as variáveis referenciadas pelo AST (e as exigidas por `requiredWhen`) a partir dos snapshots canônicos.
- * Ausente + obrigatória ⇒ MISSING_REQUIRED; ausente + `requiredWhen` verdadeira ⇒ MISSING_REQUIRED; valor fora do
+ * Ausente + obrigatória ⇒ MISSING_REQUIRED; ausente + `requiredWhen` verdadeira ⇒ MISSING_REQUIRED (exceto pendência INFORMATIVA de
+ * conteúdo — `contentPending.ts`: nunca bloqueia nem é inventada; o texto traz o marcador governado); valor fora do
  * contrato do tipo ⇒ VALUE_TYPE_INVALID (linhas de tabela: TABLE_ROWS_INVALID); snapshot de outro tenant ⇒ CROSS_TENANT_REFERENCE.
  */
 export function resolveTemplateVariables2(
@@ -114,6 +122,8 @@ export function resolveTemplateVariables2(
   // Validação: obrigatória sempre, ou obrigatória quando a condição (sobre valores canônicos) é verdadeira.
   for (const def of ordered) {
     if (!absent.has(def.name)) continue;
+    // Completude documental ≠ autorização de ato: a ausência de dado informativo não bloqueia a composição (regra do Owner, FAST PR-2).
+    if (isContentPendingVariable(def) && !def.required) continue;
     if (def.required) {
       issues.push({ code: "MISSING_REQUIRED", path: `vars.${def.name}`, message: `valor canônico obrigatório ausente (${def.source}.${def.path})` });
     } else if (def.requiredWhen && evaluateCondition2(def.requiredWhen, values, `vars.${def.name}.requiredWhen`).result) {
@@ -207,7 +217,14 @@ function expandInlines(xs: readonly Inline2[], path: string, ctx: ECtx, out: RIn
           pushStr(out, marker);
           break;
         }
-        if (v === undefined) { pushStr(out, def.absentText ?? MISSING_VALUE_MARK(x.name)); break; }
+        if (v === undefined) {
+          // Texto do catálogo publicado prevalece; senão o marcador governado da pendência informativa; senão [REVISAR] (regra comum).
+          // R1 (gate do PR #342): a pendência NÃO é campo do manifesto (formato M1/M2 inalterado ⇒ leitores anteriores compatíveis); o
+          // registro auditável é o próprio texto com o marcador, selado por `composedOutputHash` (M1) e `documentContentHash` (M2).
+          const pending = isContentPendingVariable(def) ? CONTENT_PENDING_VARIABLES[def.name]!.absentText : undefined;
+          pushStr(out, def.absentText ?? pending ?? MISSING_VALUE_MARK(x.name));
+          break;
+        }
         const text = formatValue2(def, v);
         if (ctx.record && text.trim()) ctx.fragments.push({ nodeId: p, text, fragmentHash: sha256Hex(text) });
         pushStr(out, text);
@@ -230,6 +247,45 @@ function aiNarrativeText(slot: { readonly slotKey: string; readonly maxTokens: n
   const { prose } = flagUnverifiedAmounts(neutralizeNarrative(out.text), ctx.allowedCents);
   if (ctx.record) ctx.ai.push({ slotKey: slot.slotKey, executionId: out.executionId, outputHash: sha256Hex(out.text), humanAccepted: false });
   return prose || null;
+}
+
+/**
+ * Grupo excludente sem ramo verdadeiro APENAS porque a variável de decisão é pendência informativa ausente: todos os ramos testam a MESMA
+ * variável (`eq`), declarada no catálogo com a fonte da política (`isContentPendingVariable`) e sem valor resolvido. Qualquer outro caso
+ * continua `CHOICE_NOT_EXACTLY_ONE` (fail-closed). Puro.
+ */
+function pendingChoiceVariable(branches: readonly { readonly when: Cond2 }[], ctx: ECtx): { label: string; absentText: string } | null {
+  const vars = new Set(branches.map((b) => (b.when.op === "eq" ? b.when.var : null)));
+  if (vars.size !== 1 || vars.has(null)) return null;
+  const name = [...vars][0]!;
+  const def = findVariable2(ctx.catalog, name);
+  if (!def || !isContentPendingVariable(def) || ctx.values[name] !== undefined) return null;
+  // Só a política NÃO obrigatória cuja condição de exigência está ATIVA (mesma regra da preparação); fora disso, fail-closed.
+  if (def.required || !def.requiredWhen || !evaluateCondition2(def.requiredWhen, ctx.values).result) return null;
+  const spec = CONTENT_PENDING_VARIABLES[name]!;
+  return { label: spec.label, absentText: spec.absentText };
+}
+
+/**
+ * Nós do marcador de uma decisão pendente na FORMA COMUM dos ramos (nada de decisão presumida): todos os ramos com uma única seção de MESMO título
+ * ⇒ a seção com o marcador (ex.: "DA ADESÃO" no anexo da Ata); todos começando por parágrafo com a MESMA numeração ⇒ parágrafo assim numerado;
+ * senão, parágrafo simples. Puro.
+ */
+function pendingChoiceNodes(branches: readonly { readonly children: readonly TemplateNode2[] }[], text: string): TemplateNode2[] {
+  type Para = Extract<TemplateNode2, { t: "paragraph" }>;
+  type Sec = Extract<TemplateNode2, { t: "section" }>;
+  const para = (numbered?: Para["numbered"]): TemplateNode2 => ({ t: "paragraph", ...(numbered !== undefined ? { numbered } : {}), inline: [{ t: "text", v: text }] } as TemplateNode2);
+  const firstPara = (nodes: readonly TemplateNode2[]) => (nodes[0]?.t === "paragraph" ? (nodes[0] as Para) : null);
+  if (branches.every((b) => b.children.length === 1 && b.children[0].t === "section")) {
+    const secs = branches.map((b) => b.children[0] as Sec);
+    if (secs.every((x) => JSON.stringify(x.title ?? null) === JSON.stringify(secs[0].title ?? null))) {
+      const lead = firstPara(secs[0].children);
+      return [{ ...secs[0], key: `${secs[0].key}.pendente`, children: [para(lead?.numbered)] } as TemplateNode2];
+    }
+  }
+  const leads = branches.map((b) => firstPara(b.children));
+  if (leads.every((l) => l && l.numbered === leads[0]!.numbered)) return [para(leads[0]!.numbered)];
+  return [para()];
 }
 
 /** Âncora estrutural de um conjunto de nós: texto inicial (sem número e sem remissão) do primeiro nó com texto. */
@@ -316,9 +372,13 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
     case "choice": {
       const evals = n.branches.map((b, i) => evaluateCondition2(b.when, ctx.values, `${path}.branches[${i}].when`));
       const hits = evals.map((e, i) => (e.result ? i : -1)).filter((i) => i >= 0);
+      // LICIGOV-FAST (H5) — decisão governada AINDA NÃO REGISTRADA (pendência informativa, `contentPending.ts`): nenhum ramo é escolhido (nada
+      // é presumido — nem o "padrão" descrito no catálogo); entra o marcador governado. Formato do M1 inalterado (R1): as decisões dos ramos
+      // continuam registradas (todas falsas) e o texto com o marcador fica selado pelo `composedOutputHash`.
+      const pendingDecision = hits.length === 0 ? pendingChoiceVariable(n.branches, ctx) : null;
       if (ctx.record) {
         n.branches.forEach((b, i) => ctx.decisions.push({ nodePath: `${path}.branches[${i}]`, result: evals[i].result, traceHash: templateHash(evals[i].trace) }));
-        const bad = n.mode === "exactly-one" ? hits.length !== 1 : hits.length > 1;
+        const bad = !pendingDecision && (n.mode === "exactly-one" ? hits.length !== 1 : hits.length > 1);
         if (bad) {
           ctx.issues.push({
             code: "CHOICE_NOT_EXACTLY_ONE", path,
@@ -327,8 +387,11 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
         }
       }
       const chosenIdx = hits.length === 1 ? hits[0] : -1;
-      const included = chosenIdx >= 0 ? expandNodes(n.branches[chosenIdx].children, `${path}.branches[${chosenIdx}].children`, ctx) : [];
+      const included: RNode[] = chosenIdx >= 0 ? expandNodes(n.branches[chosenIdx].children, `${path}.branches[${chosenIdx}].children`, ctx)
+        : pendingDecision ? expandNodes(pendingChoiceNodes(n.branches, `${pendingDecision.label}: ${pendingDecision.absentText}.`), `${path}.pending`, ctx) : [];
       if (ctx.record) {
+        // Marcador pendente = bloco INCLUÍDO verificável: removê-lo na revisão ⇒ INCLUDED_BLOCK_REMOVED (fora do M1 — R1 intacto).
+        if (pendingDecision) ctx.blocks.push({ blockId: `${path}.pending`, includedAnchor: anchorOf(included), excludedAnchor: null });
         n.branches.forEach((b, i) => {
           if (i === chosenIdx) ctx.blocks.push({ blockId: `${path}.branches[${i}]`, includedAnchor: anchorOf(included), excludedAnchor: null });
           else ctx.blocks.push({ blockId: `${path}.branches[${i}]`, includedAnchor: null, excludedAnchor: anchorOf(expandNodes(b.children, `${path}.branches[${i}].children`, scratch(ctx))) });
@@ -343,7 +406,9 @@ function expandNode(n: TemplateNode2, path: string, ctx: ECtx): RNode[] {
         return [];
       }
       const label: RInline[] = n.label ? expandInlines(n.label, `${path}.label`, ctx) : [inlineText(pin.title)];
-      const text: RInline[] = ["> Documento de referência: ", ...label, ` — ${n.kind}, versão ${pin.version} (${pin.documentId}, hash ${pin.contentHash.slice(0, 12)})`];
+      // Texto INSTITUCIONAL: tipo documental + condição de documento oficial emitido. A identidade técnica do pin (id, linhagem,
+      // revisão técnica e hash) NÃO é conteúdo para o leitor — fica no manifesto (`officialDocRefs`), que é a evidência de lineage.
+      const text: RInline[] = ["Documento de referência: ", ...label, ` (${DOC_REF_KIND_LABEL[n.kind]} — versão oficial emitida no processo).`];
       if (ctx.record && !ctx.refs.has(n.role)) {
         ctx.refs.set(n.role, {
           role: n.role, order: n.order, documentId: pin.documentId, lineageId: pin.lineageId,
