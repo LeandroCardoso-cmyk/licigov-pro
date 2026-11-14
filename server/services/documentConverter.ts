@@ -13,7 +13,7 @@
 // `any` inevitável ao consumir a AST não-tipada do `marked` e as opções do PDFKit.
 import PDFDocument from "pdfkit";
 import { Lexer } from "marked";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Footer, PageNumber, TableLayoutType } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, Table, TableRow, TableCell, WidthType, Footer, PageNumber, TableLayoutType, TableBorders } from "docx";
 
 // Strip inline markdown (bold, italic, links, code) to plain text
 function stripInline(text: string): string {
@@ -298,7 +298,8 @@ export type HeadingDepth = 1 | 2 | 3 | 4;
 export type CellAlign = "left" | "center" | "right" | null;
 export type DocBlock =
   | { kind: "heading"; level: HeadingDepth; runs: InlineRun[] }
-  | { kind: "paragraph"; runs: InlineRun[] }
+  // F3.1 — `keepWithNext`: o parágrafo fica na mesma página do bloco seguinte (encerramento/assinaturas; ver `markClosingBlocks`).
+  | { kind: "paragraph"; runs: InlineRun[]; keepWithNext?: true }
   | { kind: "list"; ordered: boolean; items: InlineRun[][] }
   | { kind: "notice"; runs: InlineRun[] } // blockquote → bloco de aviso destacado
   | { kind: "table"; header: InlineRun[][]; rows: InlineRun[][][]; align?: CellAlign[] } // tabela Markdown (GFM) — nunca descartada
@@ -428,7 +429,43 @@ export function buildInstitutionalModel(content: string, meta: InstitutionalMeta
   if (meta.signature?.signed) {
     blocks.push(...signatureBlocks(meta.signature));
   }
-  return { meta, blocks };
+  return { meta, blocks: markClosingBlocks(blocks) };
+}
+
+/** Parágrafo "curto" de encerramento (≤ 2 linhas, sem quebra interna): local/data, nome — cargo, legenda do signatário. */
+export const CLOSING_LINE_MAX_CHARS = 140;
+/** Máximo de parágrafos mantidos juntos (o grupo nunca passa de meia página: sem vazio grande nem laço de paginação). */
+export const CLOSING_BLOCK_MAX_PARAGRAPHS = 12;
+
+/**
+ * F3.1 — coesão do ENCERRAMENTO de cada parte do documento (minuta, anexo, documento avulso): a sequência final de parágrafos
+ * CURTOS imediatamente antes de um título de nível ≤ 2 (ex.: "## ANEXO V") ou do fim do documento — fórmula de encerramento,
+ * local/data, "nome — cargo" e legenda de cada signatário — fica numa mesma página. Antes, cada linha era um parágrafo
+ * independente e 1–2 linhas ("a preencher — a preencher", "CONTRATADO") transbordavam sozinhas para uma página quase vazia,
+ * seguida da página nova do anexo.
+ * Critério ESTRUTURAL (posição + forma), sem palavras-chave: o conteúdo publicado não traz marca semântica de assinatura. Um falso
+ * positivo só mantém juntas até 12 linhas curtas ao fim de uma parte. Apresentação apenas: texto, ordem e conteúdo intactos.
+ */
+export function markClosingBlocks(blocks: DocBlock[]): DocBlock[] {
+  const out = blocks.slice();
+  const short = (b: DocBlock): boolean => {
+    if (b.kind !== "paragraph") return false;
+    const t = b.runs.map((r) => r.text).join("").trim();
+    return t.length > 0 && t.length <= CLOSING_LINE_MAX_CHARS && !t.includes("\n");
+  };
+  const partEnds: number[] = [];
+  out.forEach((b, i) => { if (b.kind === "heading" && b.level <= 2) partEnds.push(i); });
+  partEnds.push(out.length);
+  for (const end of partEnds) {
+    let start = end;
+    while (start > 0 && end - start < CLOSING_BLOCK_MAX_PARAGRAPHS && short(out[start - 1])) start--;
+    if (end - start < 2) continue;
+    for (let i = start; i < end - 1; i++) {
+      const b = out[i];
+      if (b.kind === "paragraph") out[i] = { ...b, keepWithNext: true };
+    }
+  }
+  return out;
 }
 
 /** Constrói os blocos do bloco institucional de assinatura (comum aos dois renderers). */
@@ -526,7 +563,29 @@ export async function renderInstitutionalDOCX(model: InstitutionalModel): Promis
   }
   paras.push(new Paragraph({ text: "", border: { bottom: { color: "1e40af", size: 6, style: BorderStyle.SINGLE, space: 1 } } }));
 
-  for (const b of model.blocks) {
+  for (let bi = 0; bi < model.blocks.length; bi++) {
+    const b = model.blocks[bi];
+    if (b.kind === "paragraph" && b.keepWithNext) {
+      // F3.1 — encerramento/assinaturas como UM bloco indivisível: tabela de uma célula, SEM bordas, com a linha marcada "não quebrar
+      // entre páginas" (cantSplit) — respeitado pelo Word e pelo LibreOffice. A cadeia de "manter com o próximo" sozinha NÃO basta: o
+      // LibreOffice a ignora quando só a última linha transborda (reproduzido: "CONTRATADO" isolado). Texto e ordem inalterados.
+      const end = closingGroupEnd(model.blocks, bi);
+      // Mesmo teto do PDF: grupo maior que meia página segue o fluxo normal (parágrafos comuns).
+      if (closingGroupHeightPt(model.blocks, bi) > CLOSING_GROUP_MAX_HEIGHT_PT) {
+        for (const g of model.blocks.slice(bi, end)) if (g.kind === "paragraph") paras.push(new Paragraph({ spacing: { after: 120 }, children: runsToDocx(g.runs) }));
+        bi = end - 1;
+        continue;
+      }
+      const cellParas = model.blocks.slice(bi, end).map((g) => new Paragraph({ spacing: { after: 120 }, children: runsToDocx(g.kind === "paragraph" ? g.runs : []) }));
+      const width = Math.floor(CONTENT_WIDTH_PT * 20);
+      paras.push(new Table({
+        width: { size: width, type: WidthType.DXA }, columnWidths: [width], layout: TableLayoutType.FIXED, borders: TableBorders.NONE,
+        margins: { left: 0, right: 0, top: 0, bottom: 0 },
+        rows: [new TableRow({ cantSplit: true, children: [new TableCell({ width: { size: width, type: WidthType.DXA }, children: cellParas })] })],
+      }));
+      bi = end - 1;
+      continue;
+    }
     if (b.kind === "hr") { paras.push(new Paragraph({ text: "", border: { bottom: { color: "888888", size: 3, style: BorderStyle.SINGLE, space: 1 } } })); continue; }
     if (b.kind === "heading") {
       const level = [HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5][b.level - 1];
@@ -670,7 +729,7 @@ export function planTableColumns(grid: readonly (readonly GridCell[])[], totalWi
 let measuringDoc: PDFKit.PDFDocument | null = null;
 /** Medição com as métricas da Helvetica do PDFKit (o DOCX usa Arial, de métrica compatível). Documento só de medição, nunca emitido. */
 function measureHelvetica(text: string, bold: boolean, sizePt: number): number {
-  measuringDoc ??= new PDFDocument({ size: "A4", autoFirstPage: false });
+  measuringDoc ??= new PDFDocument({ size: "A4" });
   return measuringDoc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(sizePt).widthOfString(text);
 }
 
@@ -707,20 +766,34 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
     }
     doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#1e40af").lineWidth(1.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.6);
 
-    for (const b of model.blocks) {
-      if (b.kind === "hr") { doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.4); continue; }
+    model.blocks.forEach((b, bi) => {
+      // F3.1 — início de um grupo de encerramento/assinaturas: reserva a altura MEDIDA do grupo inteiro (o grupo vai para a página
+      // seguinte se não couber; nunca é partido). Grupo maior que meia página não é reservado (sem vazio grande).
+      if (b.kind === "paragraph" && b.keepWithNext && !(bi > 0 && isKeptParagraph(model.blocks[bi - 1]))) {
+        const h = closingGroupHeightPt(model.blocks, bi);
+        if (h <= CLOSING_GROUP_MAX_HEIGHT_PT) ensureSpacePDF(doc, h);
+      }
+      if (b.kind === "hr") { doc.moveDown(0.4).moveTo(56, doc.y).lineTo(56 + pageWidth, doc.y).strokeColor("#888").lineWidth(0.5).stroke().strokeColor("black").lineWidth(1).moveDown(0.4); return; }
       if (b.kind === "heading") {
         const size = HEADING_SIZES_PT[b.level];
         // F3-C — anexo em página nova (sem página em branco se já estiver no topo); demais títulos nunca isolados no fim da página.
         if (isAnnexHeading(b)) { if (doc.y > doc.page.margins.top + 1) doc.addPage(); }
-        else { doc.moveDown(0.3); ensureSpacePDF(doc, size * 1.4 + 11 * 1.2 * 3); }
+        else {
+          doc.moveDown(0.3);
+          // F3.1 (auditoria P1) — título seguido de um grupo de encerramento: reserva título + grupo inteiro (senão o grupo mudava de
+          // página sozinho e o título ficava órfão no pé da página — ex.: "34. DOS ANEXOS", "Assinatura" do Parecer).
+          const next = model.blocks[bi + 1];
+          const groupH = next && next.kind === "paragraph" && next.keepWithNext ? closingGroupHeightPt(model.blocks, bi + 1) : 0;
+          const headingH = doc.fontSize(size).font(pdfFont(true, b.level === 4)).heightOfString(b.runs.map((r) => r.text).join("") || " ", { width: pageWidth }) + 3;
+          ensureSpacePDF(doc, groupH > 0 && groupH <= CLOSING_GROUP_MAX_HEIGHT_PT ? headingH + groupH : size * 1.4 + 11 * 1.2 * 3);
+        }
         writeRunsPDF(doc, b.runs, size, true, { paragraphGap: 3 }, b.level === 4);
       }
       else if (b.kind === "paragraph") { writeRunsPDF(doc, b.runs, 11, false, { align: "justify", paragraphGap: 6 }); }
       else if (b.kind === "list") { for (const item of b.items) { doc.fontSize(11).font("Helvetica").text("• ", { continued: true }); writeRunsPDF(doc, item, 11, false, { paragraphGap: 3 }); } doc.moveDown(0.2); }
       else if (b.kind === "notice") { writeNoticePDF(doc, b.runs, pageWidth); }
       else if (b.kind === "table") { writeTablePDF(doc, b.header, b.rows, pageWidth, b.align); }
-    }
+    });
     // Pós-M8 — rodapé em todas as páginas (páginas bufferizadas), escrito na margem inferior com a margem zerada só durante a escrita
     // (nunca dispara página nova).
     const range = doc.bufferedPageRange();
@@ -740,6 +813,42 @@ export async function renderInstitutionalPDF(model: InstitutionalModel): Promise
     doc.fillColor("black");
     doc.end();
   });
+}
+
+/** Fim (exclusivo) do grupo de encerramento que começa em `start`: os parágrafos `keepWithNext` + o parágrafo que os encerra. */
+function closingGroupEnd(blocks: readonly DocBlock[], start: number): number {
+  let j = start;
+  while (j < blocks.length) {
+    const g = blocks[j];
+    if (g.kind !== "paragraph") return j;
+    j++;
+    if (!g.keepWithNext) return j;
+  }
+  return j;
+}
+
+function isKeptParagraph(b: DocBlock | undefined): boolean {
+  return !!b && b.kind === "paragraph" && !!b.keepWithNext;
+}
+
+/** Teto do grupo de encerramento mantido junto (meia altura útil da página): acima disso, fluxo normal (sem vazio grande). */
+const CLOSING_GROUP_MAX_HEIGHT_PT = (841.89 - PAGE_MARGIN_PT * 2) / 2;
+
+/**
+ * Altura (pt) do grupo de encerramento que começa em `start`, medida com a métrica da Helvetica (o DOCX usa Arial, de métrica
+ * compatível): corpo 11 pt na largura útil + 6 pt entre parágrafos. A MESMA medida decide PDF e DOCX (paginação equivalente).
+ */
+function closingGroupHeightPt(blocks: readonly DocBlock[], start: number): number {
+  const group = blocks.slice(start, closingGroupEnd(blocks, start));
+  measuringDoc ??= new PDFDocument({ size: "A4" });
+  const m = measuringDoc;
+  const heights = group.map((g) => {
+    if (g.kind !== "paragraph") return 0;
+    // A altura da linha no PDFKit é a da fonte do ÚLTIMO trecho (o rótulo em negrito de "Responsável: …" não a altera).
+    m.fontSize(11).font(g.runs.at(-1)?.bold ? "Helvetica-Bold" : "Helvetica");
+    return m.heightOfString(g.runs.map((r) => r.text).join("") || " ", { width: CONTENT_WIDTH_PT, align: "justify" });
+  });
+  return heights.reduce((a, b) => a + b, 0) + 6 * Math.max(heights.length - 1, 0);
 }
 
 /** Página nova quando o espaço restante não comporta `needed` pt (título + início do conteúdo, início de aviso). */

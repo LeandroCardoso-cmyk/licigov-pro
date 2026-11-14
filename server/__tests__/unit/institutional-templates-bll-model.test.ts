@@ -291,7 +291,12 @@ describe("BLL — achado de fidelidade do DOCX: o renderizador preserva '(R$)' e
     expect(mdTables).toBeGreaterThanOrEqual(5);
     const docx = await renderInstitutionalDOCX(model);
     const xml = readZipEntry(docx, "word/document.xml") ?? "";
-    expect(xml.split("<w:tbl>").length - 1).toBe(mdTables);
+    // F3.1 — cada encerramento/bloco de assinaturas vira uma tabela de LAYOUT sem bordas (uma célula, linha indivisível); as tabelas
+    // de DADOS (com bordas) continuam exatamente as do Markdown — nenhuma descartada.
+    const tables = xml.split("<w:tbl>").slice(1).map((t) => t.slice(0, t.indexOf("</w:tblPr>")));
+    const layoutTables = tables.filter((t) => /<w:tblBorders>(?:(?!<\/w:tblBorders>).)*w:val="none"/s.test(t)).length;
+    expect(layoutTables).toBe(model.blocks.filter((b, i, all) => b.kind === "paragraph" && b.keepWithNext && !(all[i - 1]?.kind === "paragraph" && (all[i - 1] as { keepWithNext?: true }).keepWithNext)).length);
+    expect(tables.length - layoutTables).toBe(mdTables);
     expect(xml).not.toContain("<m:oMath"); // nenhuma matemática em linha: o "$" de "R$" não é interpretado
     const plain = xml.replace(/<[^>]+>/g, "|");
     for (const frag of ["Preço unitário (R$)", "Preço total (R$)", "Valor unitário estimado (R$)", "R$ 25,50", "R$ 9.876,54"]) expect(plain, frag).toContain(frag);

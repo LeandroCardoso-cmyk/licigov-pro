@@ -9535,8 +9535,8 @@
     "semantic_hash": ""
   },
   "server/services/documentConverter.ts": {
-    "mtime": 1794604364.370833,
-    "ast_hash": "afc4080e116e4b9163f2f18192aa02ea",
+    "mtime": 1794608050.854185,
+    "ast_hash": "d9c2f2eb0495ed9538584982271b5558",
     "semantic_hash": ""
   },
   "server/services/documentDiffService.ts": {
@@ -14045,8 +14045,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
-    "mtime": 1794602917.3997393,
-    "ast_hash": "09dcc51a2caeb5f53f05b145b10f8b50",
+    "mtime": 1794607441.3672626,
+    "ast_hash": "b27ef0118a33bef89c3ec577ffa7fbd1",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-pilot-mysql-smoke.test.ts": {
@@ -14080,8 +14080,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-bll-model.test.ts": {
-    "mtime": 1794602917.4084663,
-    "ast_hash": "4533334fe70600f75ce4760ebee373d2",
+    "mtime": 1794607425.6152616,
+    "ast_hash": "fbf44cd7e4e76f79c4641a11e2d13a86",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-edital-pilot-domain.test.ts": {
@@ -15867,6 +15867,11 @@
   "server/__tests__/unit/f3-document-finishing.test.ts": {
     "mtime": 1794604352.4921424,
     "ast_hash": "ded488ac624cfdb6a501873ade1eee5e",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/f31-signature-block-pagination.test.ts": {
+    "mtime": 1794607928.936709,
+    "ast_hash": "9afff440a28b767430aee8e5a2e1b594",
     "semantic_hash": ""
   }
 }
