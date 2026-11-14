@@ -1,5 +1,6 @@
 import React from "react";
 import { trpc } from "../../lib/trpc";
+import { latestOfficialSummary, processStatusLabel, stageLabel } from "../../lib/processDocumentStatus";
 
 /**
  * ProcessoLicitatorioHome — REAL (wired to tRPC).
@@ -13,33 +14,12 @@ import { trpc } from "../../lib/trpc";
  * (blue/amber/green) preservadas.
  */
 
-const STAGE_LABELS: Record<string, string> = {
-  NEW_PROCESS: "Novo Processo",
-  DFD: "DFD",
-  ETP: "ETP",
-  PRICE_RESEARCH: "Pesquisa de Preços",
-  ITEM_WORKSPACE: "Workspace de Itens",
-  TR: "Termo de Referência",
-  NOTICE: "Edital",
-  REVIEW: "Revisão",
-  ISSUED: "Emitido",
-  ARCHIVED: "Arquivado",
-};
-
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
   rascunho: "bg-muted text-muted-foreground",
   em_andamento: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   em_revisao: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   emitido: "bg-green-500/15 text-green-600 dark:text-green-400",
   arquivado: "bg-muted text-muted-foreground",
-};
-
-const PROCESS_STATUS_LABELS: Record<string, string> = {
-  rascunho: "Rascunho",
-  em_andamento: "Em andamento",
-  em_revisao: "Em revisão",
-  emitido: "Emitido",
-  arquivado: "Arquivado",
 };
 
 export type ProcessoLicitatorioHomeProps = {
@@ -141,16 +121,23 @@ export default function ProcessoLicitatorioHome({
                       "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {PROCESS_STATUS_LABELS[p.status] ?? p.status}
+                    {processStatusLabel(p.status)}
                   </span>
                 </div>
                 <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
                   {p.object}
                 </p>
-                <div className="flex items-center justify-between">
-                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    {STAGE_LABELS[p.currentStage] ?? p.currentStage}
-                  </span>
+                <div className="flex items-center justify-between gap-2">
+                  {/* Documento oficial mais avançado (ledger de emissões); sem emissão, a etapa registrada. */}
+                  {latestOfficialSummary(p.officialVersions, p.officialEmissions) ? (
+                    <span className="rounded-md bg-green-100 dark:bg-green-900 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300">
+                      {latestOfficialSummary(p.officialVersions, p.officialEmissions)}
+                    </span>
+                  ) : (
+                    <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary" title="Etapa registrada no processo">
+                      {stageLabel(p.currentStage)}
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     {new Date(p.updatedAt).toLocaleDateString("pt-BR")}
                   </span>

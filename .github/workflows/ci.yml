@@ -158,6 +158,10 @@ jobs:
       - name: Smoke — concorrência e rollback do versionamento (DATA-012)
         run: pnpm exec vitest run server/__tests__/integration/document-version-concurrency-mysql-smoke.test.ts
 
+      # documentEngine.generate × emissão concorrente: a recusa "linhagem já emitida" vale sob o lock da linhagem (interleaving injetado).
+      - name: Smoke — geração genérica × emissão concorrente
+        run: pnpm exec vitest run server/__tests__/integration/document-engine-generate-race-mysql-smoke.test.ts
+
       # F2 (homologação V1) — transição de Item concorrência-segura (compare-and-set atômico).
       - name: Smoke — transição de Item concorrência-segura (F2 CAS)
         run: pnpm exec vitest run server/__tests__/integration/item-transition-concurrency-mysql-smoke.test.ts
@@ -342,12 +346,31 @@ jobs:
       - name: Smoke — homologação com usuário de múltiplas organizações
         run: pnpm exec vitest run server/__tests__/integration/homolog-multi-org-header-mysql-smoke.test.ts
 
+      # Executor de homologação × ingestão canônica (PR-04 / SEM-005): cliente HTTP real do executor contra Express + upload
+      # multipart + tRPC; flag real por tenant; 2 sessões somam cotações; cutover recusa a colagem legada; isolamento do upload.
+      - name: Smoke — executor de homologação pela ingestão canônica
+        run: pnpm exec vitest run server/__tests__/integration/homolog-e2e-canonical-ingestion-mysql-smoke.test.ts
+
+      # M8 (homologação visual): histórico SOMENTE LEITURA das sessões de ingestão por processo (registrado, paginado,
+      # isolado por processo/tenant), versões oficiais em lote e nomes de autoria só de membros da organização.
+      - name: Smoke — histórico de ingestão e versões oficiais (homologação visual M8)
+        run: pnpm exec vitest run server/__tests__/integration/m8-visual-homologation-mysql-smoke.test.ts
+
+      # M8 pré-produção (P2.1): minuta composta por modelo com texto IDÊNTICO e outro M1 só revincula o M1 (auditado, invalida a
+      # revisão); documento com versão oficial emitida recusa; nada de conteúdo/autoria muda.
+      - name: Smoke — rascunho por modelo revinculado ao M1 vigente (M8 P2.1)
+        run: pnpm exec vitest run server/__tests__/integration/m8-template-draft-relink-mysql-smoke.test.ts
+
       # Continuidade legado → contrato → aditivo → vigência: contrato vigente reaproveita o registro do processo anterior,
       # aditivos anteriores DECLARADOS, aditivo de prazo com término reagenda o vencimento (sem alerta duplicado, KPI por
       # contrato), termo DOCX/PDF com histórico, contrato externo monitorado → contrato completo; pedido de parecer sem
       # parecer produzido; contratação direta completa; RBAC, replay e tenant.
       - name: Smoke — continuidade legado, contratos, aditivos e vigência
         run: pnpm exec vitest run server/__tests__/integration/legacy-contracts-continuity-mysql-smoke.test.ts
+
+      # Contrato vigente legado — retomada idempotente após falha parcial (falha injetada); divergência ⇒ CONFLICT sem escrita.
+      - name: Smoke — retomada do contrato vigente legado
+        run: pnpm exec vitest run server/__tests__/integration/legacy-contract-resume-mysql-smoke.test.ts
 
       # Hotfix — elegibilidade dos candidatos da Pesquisa: legado de importação manual sem revisão + Pesquisa em
       # revisão (5 itens / 30 cotações) ⇒ 0 candidatos; revisão + aprovação + promoção ⇒ EXATAMENTE 5; nova sessão
@@ -464,13 +487,17 @@ jobs:
           server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-process-bridge-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-operator-flow-mysql-smoke.test.ts \
+          server/__tests__/integration/e2-slot-resolution-mysql-smoke.test.ts \
+          server/__tests__/integration/f2-edital-consolidated-export-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-zero-reentry-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-context-reuse-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-certame-config-mysql-smoke.test.ts \
           server/__tests__/integration/templates-edital-deferred-publication-mysql-smoke.test.ts \
+          server/__tests__/integration/edital-scope-calendar-mysql-smoke.test.ts \
           server/__tests__/integration/templates-governance-v2-mysql-smoke.test.ts \
           server/__tests__/integration/templates-0318-migration-mysql-smoke.test.ts \
-          server/__tests__/integration/templates-fast-mysql-smoke.test.ts
+          server/__tests__/integration/templates-fast-mysql-smoke.test.ts \
+          server/__tests__/integration/fast-pr2-budget-allocation-mysql-smoke.test.ts
 
   # ── GATE OBRIGATÓRIO 4: build de produção real (vite build + esbuild) ──
   build:

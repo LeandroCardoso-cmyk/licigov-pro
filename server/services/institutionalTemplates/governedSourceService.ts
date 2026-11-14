@@ -262,6 +262,73 @@ export class GovernedSourceService {
     return out;
   }
 
+  /**
+   * DADOS ORÇAMENTÁRIOS DO PROCESSO (LICIGOV-FAST PR-2): dotação orçamentária e fonte de recursos, DECLARADAS uma vez por pessoa autorizada
+   * e consumidas pelo TR e pelo Edital. Escritor ÚNICO deste caminho (a escrita genérica e a CertameConfig o recusam: `DERIVED_AUTHORITY_OWNED`
+   * / `NOT_CERTAME_CONFIG`). Mesmo registro governado do processo e MESMO caminho em que a CertameConfig gravava (sem segunda fonte de verdade,
+   * sem migração). CAS do registro inteiro + idempotência + confirmação humana; histórico no ledger existente.
+   *
+   * `undefined` = não altera o campo; `null` = remove o valor declarado (volta a pendente; o histórico permanece). Substituir um valor JÁ
+   * registrado por outro diferente exige `confirmReplace` (nunca sobrescrita silenciosa). Declarado ≠ verificado: nada aqui afirma conferência
+   * contábil.
+   */
+  async recordBudgetAllocation(ctx: WorkflowContext, input: DecisionActInput & {
+    processId: string; catalogVersion: string; expectedRevision: number;
+    dotacaoOrcamentaria?: string | null; fonteRecursos?: string | null; confirmReplace?: boolean;
+  }): Promise<RecordedDecision> {
+    assertHumanActor(ctx.actor);
+    requireConfirmed(input, "registrar os dados orçamentários do processo");
+    const catalog = this.catalog(input.catalogVersion);
+    const wanted: Array<[string, string | null]> = [];
+    if (input.dotacaoOrcamentaria !== undefined) wanted.push(["julgamento.dotacaoOrcamentaria", input.dotacaoOrcamentaria]);
+    if (input.fonteRecursos !== undefined) wanted.push(["julgamento.fonteRecursos", input.fonteRecursos]);
+    if (wanted.length === 0) throw new TemplateWorkflowError("VALIDATION_FAILED", "informe a dotação orçamentária e/ou a fonte de recursos (nada foi alterado)");
+    const current = await readGovernedRecord(ctx.organizationId, "PROCESS", input.processId, catalog).catch((e: unknown) => {
+      throw new TemplateWorkflowError("VALIDATION_FAILED", e instanceof Error ? e.message : "registro corrente ilegível");
+    });
+    const rawSections = (current?.raw.sections ?? {}) as Record<string, Record<string, unknown>>;
+    const nextSections: Record<string, Record<string, unknown>> = { ...rawSections };
+    const replaced: string[] = [];
+    for (const [name, raw] of wanted) {
+      const def = catalog.vars.find((v) => v.name === name && DERIVED_VARIABLES[v.name] === "BUDGET_ALLOCATION");
+      if (!def) throw new TemplateWorkflowError("VALIDATION_FAILED", `o modelo vinculado não usa ${name}`);
+      const section = { ...(nextSections[def.source] ?? {}) };
+      const before = section[def.path];
+      if (raw === null) {
+        delete section[def.path];
+      } else {
+        const norm = normalizeValue2(def, raw);
+        if (!norm.ok || typeof norm.value !== "string" || norm.value.trim() === "") {
+          throw new TemplateWorkflowError("VALIDATION_FAILED", "valor inválido", [{ code: "SOURCE_PAYLOAD_INVALID", path: `${def.source}.${def.path}`, message: norm.ok ? "texto vazio" : norm.reason }]);
+        }
+        if (typeof before === "string" && before.trim() !== "" && before !== norm.value) replaced.push(name);
+        section[def.path] = norm.value;
+      }
+      if (raw === null && typeof before === "string" && before.trim() !== "") replaced.push(name);
+      nextSections[def.source] = section;
+    }
+    if (replaced.length > 0 && input.confirmReplace !== true) {
+      throw new TemplateWorkflowError("CONFLICT", "já existe valor registrado diferente; confirme a substituição (nada foi alterado)",
+        replaced.map((n) => ({ code: "BUDGET_ALLOCATION_REPLACE_UNCONFIRMED", path: n, message: `${n}: substituir o valor registrado exige confirmação explícita` })));
+    }
+    const merged: GovernedPayload = {
+      sections: nextSections as GovernedPayload["sections"],
+      ...(current?.payload.participation ? { participation: current.payload.participation } : {}),
+    };
+    const whole = validateGovernedPayload(catalog, "PROCESS", merged);
+    if (!whole.ok) throw new TemplateWorkflowError("VALIDATION_FAILED", "o registro resultante é inválido", toIssues(whole.issues));
+    const { evidence } = encodeGovernedPayload(GOVERNED_FIELDS_SCHEMA, merged);
+    const out = await recordHumanDecision(ctx, {
+      subjectType: GOVERNED_SUBJECT_TYPE.PROCESS, decisionType: GOVERNED_DECISION_TYPE.PROCESS, outcome: GOVERNED_OUTCOME.PROCESS, mode: "revision",
+      subjectId: input.processId, evidence, act: input, expectedRevision: input.expectedRevision,
+    });
+    log.info("budget_allocation_recorded", {
+      organizationId: ctx.organizationId, processId: input.processId, fields: wanted.map(([n]) => n), replaced, decisionId: out.decision.id,
+      revision: out.decision.revision, replayed: out.replayed, actorUserId: ctx.actor.userId, correlationId: ctx.correlationId,
+    });
+    return out;
+  }
+
   /** Divulgação do orçamento do processo: o resultado (público | sigiloso) é a decisão — sem padrão. */
   async recordBudgetDisclosure(ctx: WorkflowContext, input: DecisionActInput & { processId: string; disclosure: BudgetDisclosure; expectedRevision: number }): Promise<RecordedDecision> {
     assertHumanActor(ctx.actor);

@@ -18,7 +18,7 @@ import { getEstimatedActiveValueCents } from "../db/directContractsValueKpi";
 import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import { runDirectContractShadow } from "../services/directContractShadowService";
 import type { DirectContractDocType } from "../domain/directContractShadow";
-import { tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure } from "../_core/trpc";
 import {
   getLegalArticles,
   getLegalArticleById,
@@ -235,7 +235,7 @@ export const directContractsRouter = router({
         try {
           resolved = await resolveGovernedReference(input.canonicalLocator!, asOfDate);
         } catch (err) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Referência governada indisponível" });
+          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Referência governada indisponível", cause: err });
         }
         // Versão esperada do cliente é ASSERÇÃO, nunca autoridade (a autoridade é o set ativo).
         if (input.referenceSetVersion != null && input.referenceSetVersion !== resolved.referenceSetVersion) {
@@ -348,7 +348,7 @@ export const directContractsRouter = router({
       return directContract;
     }),
   
-  update: tenantProcedure
+  update: institutionalProcedure("viewer") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL (piso legado inalterado)
     .input(z.object({
       id: z.number(),
       data: z.object({
@@ -408,7 +408,7 @@ export const directContractsRouter = router({
   // ========================================
   
   documents: router({
-    create: tenantProcedure
+    create: institutionalProcedure("viewer") // SECURITY-02 — pode nascer `final`: membership REAL (piso legado inalterado)
       .input(z.object({
         directContractId: z.number(),
         type: z.enum([
@@ -489,7 +489,7 @@ export const directContractsRouter = router({
         return await getDirectContractDocuments(input.directContractId);
       }),
     
-    update: tenantProcedure
+    update: institutionalProcedure("viewer") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL (piso legado inalterado)
       .input(z.object({
         id: z.number(),
         data: z.object({

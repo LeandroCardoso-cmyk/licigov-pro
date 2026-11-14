@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: o fixture é um MEMBRO REAL com o mesmo papel do contexto.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: tenant.org,
     membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },

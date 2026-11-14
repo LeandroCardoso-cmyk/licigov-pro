@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
+import { browserStorage, clearSessionScopedState } from "@/_core/sessionState";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -35,6 +36,8 @@ export function useAuth(options?: UseAuthOptions) {
       }
       throw error;
     } finally {
+      // Estado de sessão no navegador (organização selecionada, histórico) não sobrevive ao logout.
+      clearSessionScopedState(browserStorage());
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }
@@ -54,10 +57,6 @@ export function useAuth(options?: UseAuthOptions) {
     logoutMutation.error,
     logoutMutation.isPending,
   ]);
-
-  useEffect(() => {
-    localStorage.setItem("licigov-user-info", JSON.stringify(meQuery.data ?? null));
-  }, [meQuery.data]);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;

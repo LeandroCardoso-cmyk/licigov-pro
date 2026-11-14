@@ -6,16 +6,18 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure } from "../_core/trpc";
-import { assignTo, transition } from "../domain/institutionalRequest";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { requireInstitutionalAuthority } from "../services/institutionalAuthorityService";
+import { assignTo, transition, requestRoutingViolation, requiresGovernedLegalOpinionFlow, LEGAL_OPINION_GOVERNED_FLOW } from "../domain/institutionalRequest";
 import {
-  requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest,
+  requestInstitutionalReview, receiveRequest, respondRequest, archiveRequest, readLegalOpinionForConsumer,
 } from "../services/institutionalRequestService";
 import {
   getRequest, updateRequestStatus, insertAssignment,
   listPendingForDomain, listCompletedForDomain, listRequestTimeline, listDocumentReferences, getResponseForRequest,
 } from "../db/institutionalRequests";
 import { createRequestAssignment } from "../domain/requestAssignment";
+import { getMembership } from "../services/tenantService";
 
 const DOMAINS = ["processo_licitatorio", "contratacao_direta", "contratos", "parecer_juridico", "gestao_departamento", "controle_interno"] as const;
 const REQUEST_TYPES = ["LEGAL_OPINION_INITIAL", "LEGAL_OPINION_FINAL", "CONTROL_REVIEW", "TECHNICAL_REVIEW", "DOCUMENT_REVIEW", "APPROVAL", "SIGNATURE", "INFORMATION_REQUEST", "CORRECTION_REQUEST"] as const;
@@ -30,8 +32,27 @@ async function requireRequest(id: string, orgId: number) {
   return r;
 }
 
+/**
+ * NEW-007 — solicitação destinada ao Parecer Jurídico OU juridicamente tipificada (`LEGAL_OPINION_*`, inclusive registro legado com
+ * destino incoerente) só é designada, recebida, respondida/assinada, devolvida ou arquivada pelo fluxo GOVERNADO do Parecer
+ * (`legalOpinionWorkspace.*`: autoridade do procurador designado). Pelo router genérico, um operator sem atribuição concluiria a
+ * solicitação com um "parecer favorável assinado" que o contrato/contratação direta exibem. Recusa ANTES de qualquer escrita.
+ */
+function assertNotGovernedLegalOpinion(req: { destinationDomain: string; requestType?: string | null }): void {
+  if (requiresGovernedLegalOpinionFlow(req)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: `${LEGAL_OPINION_GOVERNED_FLOW}: solicitação de parecer jurídico é tratada no módulo Parecer Jurídico (procurador designado).` });
+  }
+}
+
+/**
+ * M8 pós-homologação — toda MUTAÇÃO da solicitação institucional exige papel operacional (operator+), como as mutações do
+ * Parecer (NEW-007) e da origem. Antes eram `tenantProcedure` puro: um viewer podia criar, designar, receber, "responder com
+ * assinatura" (o contrato lê a resposta como parecer), devolver ou arquivar. Leituras seguem `tenantProcedure`.
+ */
+const requestMutationProcedure = orgRoleProcedure("operator");
+
 export const institutionalRequestRouter = router({
-  createRequest: tenantProcedure
+  createRequest: requestMutationProcedure
     .input(z.object({
       sourceDomain: z.enum(DOMAINS),
       destinationDomain: z.enum(DOMAINS),
@@ -44,9 +65,9 @@ export const institutionalRequestRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      if (input.sourceDomain === input.destinationDomain) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Origem e destino não podem ser o mesmo domínio." });
-      }
+      // NEW-007 — tipo jurídico só com destino Parecer Jurídico (sem rota alternativa ao fluxo governado). Antes de gravar.
+      const violation = requestRoutingViolation(input);
+      if (violation) throw new TRPCError({ code: "BAD_REQUEST", message: violation });
       const result = await requestInstitutionalReview({
         organizationId: orgId, sourceDomain: input.sourceDomain, destinationDomain: input.destinationDomain,
         requestType: input.requestType, referenceProcessId: input.referenceProcessId, title: input.title,
@@ -56,11 +77,15 @@ export const institutionalRequestRouter = router({
       return result;
     }),
 
-  assignRequest: tenantProcedure
+  assignRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1), userId: z.number(), sector: z.string().optional(), queue: z.string().optional(), priority: z.enum(PRIORITIES).optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const req = await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(req);
+      // O designado precisa ser membro ATIVO desta organização (nunca um usuário de outro tenant).
+      const member = await getMembership(input.userId, orgId);
+      if (!member || member.ativo === false) throw new TRPCError({ code: "BAD_REQUEST", message: "O usuário designado não é membro ativo desta organização." });
       const assignment = createRequestAssignment({
         requestId: req.id, organizationId: orgId, userId: input.userId, sector: input.sector, queue: input.queue,
         priority: input.priority, correlationId: ctx.correlationId,
@@ -71,11 +96,11 @@ export const institutionalRequestRouter = router({
       return { assignment, requestId: req.id };
     }),
 
-  receiveRequest: tenantProcedure
+  receiveRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
       const request = await receiveRequest(input.requestId, orgId, ctx.user.id);
       return { request };
     }),
@@ -96,7 +121,7 @@ export const institutionalRequestRouter = router({
       return { requests, total: requests.length };
     }),
 
-  respond: tenantProcedure
+  respond: requestMutationProcedure
     .input(z.object({
       requestId: z.string().min(1),
       responseType: z.enum(RESPONSE_TYPES),
@@ -107,7 +132,13 @@ export const institutionalRequestRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
+      // SECURITY-02 — a resposta institucional (aprovação, assinatura, manifestação favorável/desfavorável) é ato do órgão:
+      // exige membership REAL do respondente; a projeção sintética do admin de plataforma não responde pelo órgão.
+      await requireInstitutionalAuthority({
+        userId: ctx.user.id, organizationId: orgId, minRole: "operator",
+        operation: "institutionalRequest.respond", correlationId: ctx.correlationId,
+      });
       const result = await respondRequest({
         id: input.requestId, organizationId: orgId, responder: ctx.user.id, responseType: input.responseType,
         responseStatus: input.responseStatus, comments: input.comments, attachedDocuments: input.attachedDocuments,
@@ -116,11 +147,12 @@ export const institutionalRequestRouter = router({
       return result;
     }),
 
-  returnRequest: tenantProcedure
+  returnRequest: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       const req = await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(req);
       if (req.status === "RETURNED") {
         return { success: true, requestId: req.id, status: "RETURNED" as const };
       }
@@ -129,11 +161,11 @@ export const institutionalRequestRouter = router({
       return { success: true, requestId: req.id, status: "RETURNED" as const };
     }),
 
-  archive: tenantProcedure
+  archive: requestMutationProcedure
     .input(z.object({ requestId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      await requireRequest(input.requestId, orgId);
+      assertNotGovernedLegalOpinion(await requireRequest(input.requestId, orgId));
       const request = await archiveRequest(input.requestId, orgId, ctx.user.id);
       return { success: true, requestId: request.id, status: "ARCHIVED" as const };
     }),
@@ -142,11 +174,13 @@ export const institutionalRequestRouter = router({
     .input(z.object({ requestId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
-      const [timeline, documents, response] = await Promise.all([
+      const [timeline, documents, response, opinion] = await Promise.all([
         listRequestTimeline(input.requestId, orgId),
         listDocumentReferences(input.requestId, orgId),
         getResponseForRequest(input.requestId, orgId),
+        readLegalOpinionForConsumer(input.requestId, orgId),
       ]);
-      return { timeline, documents, response };
+      // NEW-007 — a resposta institucional é exibida como registrada; `legalOpinion` diz se é parecer jurídico governado.
+      return { timeline, documents, response, legalOpinion: opinion.legalOpinion };
     }),
 });

@@ -92,6 +92,10 @@ export async function seedWorld(conn: mysql.Connection, org: number, label: stri
     website: "https://sintetico.exemplo.gov.br",
   });
   await setFlag(conn, org, opts.flagOn ?? true);
+  // SECURITY-02 — o emissor (U_MANAGER) é membro REAL e ativo do órgão: a emissão relê organization_members (nunca o papel do contexto).
+  await conn.execute(
+    "INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'manager', 1) ON DUPLICATE KEY UPDATE role = 'manager', ativo = 1",
+    [org, U_MANAGER]);
   return seedProcessWithItems(org, label, `2026/${String(org % 10000).padStart(4, "0")}`, opts.items);
 }
 
@@ -202,6 +206,8 @@ export async function cleanupOrgs(conn: mysql.Connection, orgs: number[]): Promi
     // e os fatos canônicos de contexto. Escopo estrito: só os orgs sintéticos do cenário.
     `DELETE FROM idempotency_keys WHERE organizationId IN (${q})`,
     `DELETE FROM procurement_context_facts WHERE organization_id IN (${q})`,
+    // SECURITY-02 — só o vínculo sintético do emissor criado por seedWorld.
+    `DELETE FROM organization_members WHERE organizationId IN (${q}) AND userId = ${U_MANAGER}`,
   ];
   for (const sql of stmts) await conn.query(sql).catch(() => { /* tabela/coluna ausente em esquemas antigos */ });
 }

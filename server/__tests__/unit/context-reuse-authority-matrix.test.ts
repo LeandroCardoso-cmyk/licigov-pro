@@ -41,11 +41,13 @@ describe("Authority Matrix — 100% explícita, sem fallback manual", () => {
     expect(counts).toMatchObject({ PLATFORM_PROFILE: 2, CERTAME_CONFIG: 15, CERTAME_SCHEDULE: 6, LIFECYCLE_SYSTEM: 1, UPSTREAM_PRICE_RESEARCH: 2, UPSTREAM_ITEMS: 3 });
   });
 
-  it("POST_AWARD ⇔ pos.*; CONDITIONAL ⇔ requiredWhen (exceto a estimativa, que é UPSTREAM_PRICE_RESEARCH)", () => {
+  it("POST_AWARD ⇔ pos.*; CONDITIONAL ⇔ requiredWhen (exceto a estimativa, UPSTREAM_PRICE_RESEARCH, e dotação/fonte, UPSTREAM_PROCESS)", () => {
     for (const v of catalog.vars) {
       const e = authorityEntryOf(v.name)!;
       expect(e.cls === "POST_AWARD", v.name).toBe(v.name.startsWith("pos."));
       if (v.name === "julgamento.valorEstimado") expect(e.cls).toBe("UPSTREAM_PRICE_RESEARCH");
+      // LICIGOV-FAST PR-2: dotação/fonte mantêm o `requiredWhen` do catálogo (não SRP), mas a autoridade é o processo (declarada uma vez).
+      else if (v.name === "julgamento.dotacaoOrcamentaria" || v.name === "julgamento.fonteRecursos") expect(e).toMatchObject({ cls: "UPSTREAM_PROCESS", entry: "PROCESS_BUDGET" });
       else expect(e.cls === "CONDITIONAL", v.name).toBe(!!v.requiredWhen);
     }
   });

@@ -24,6 +24,7 @@ const routeLabels: Record<string, string> = {
   "/gestao-departamento": "Gestão do Departamento",
   "/admin": "Painel Admin",
   "/configuracoes": "Configurações",
+  "/perfil-licitacoes": "Perfil de Licitações",
   "/analytics": "Analytics",
 };
 

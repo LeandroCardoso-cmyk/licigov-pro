@@ -87,6 +87,7 @@ export interface CanonicalRevalidationRecord {
 
 import type { LateBoundRef, LifecycleBinding } from "./lifecycleLateBound";
 import { LATE_BOUND_PENDING, LATE_BOUND_VARIABLES } from "./lifecycleLateBound";
+import { SLOT_RESOLUTION_FORMAT_VERSION, slotResolutionsRecordIssues, type SlotResolutionRef, type SlotResolutionsRecord } from "./slotResolution";
 
 /**
  * Dado de PUBLICAÇÃO diferido (catálogo: `completionPolicy = DEFERRED_PUBLICATION`) consultado pela composição.
@@ -147,6 +148,12 @@ export interface IssuanceManifest extends ManifestCore {
    * `lifecycleBindings[0].beforeContentHash`. Ausente quando o M1 não tem campos late-bound.
    */
   readonly lifecycleBindings?: readonly LifecycleBinding[];
+  /**
+   * E2 — resoluções HUMANAS dos trechos pendentes (slots de IA sem narrativa) conferidas na revalidação: por slot, tipo
+   * (`HUMAN_TEXT` | `DECLARED_NONE`), decisão do ledger, hash do trecho e quem registrou. Registro VERSIONADO (`formatVersion`);
+   * ausente quando não há slot pendente — os M2 anteriores (sem o campo) mantêm hash e validação idênticos.
+   */
+  readonly slotResolutions?: SlotResolutionsRecord;
 }
 
 export type CompositionManifest = GenerationManifest | IssuanceManifest;
@@ -295,6 +302,9 @@ export function validateManifest(m: CompositionManifest): TemplateResult<Composi
       }
     }
     issues.push(...revalidationIssues(m.canonicalRevalidation, "canonicalRevalidation"));
+    if (m.slotResolutions !== undefined) {
+      for (const why of slotResolutionsRecordIssues(m.slotResolutions)) issues.push(issue("MANIFEST_INVALID", "slotResolutions", why));
+    }
   } else if (m.stage !== "GENERATION") {
     issues.push(issue("MANIFEST_INVALID", "stage", "estágio desconhecido"));
   }
@@ -323,6 +333,8 @@ export interface IssuanceDerivation {
   readonly humanEditRefs: readonly HumanEditRef[];
   readonly canonicalRevalidation: CanonicalRevalidationRecord;
   readonly lifecycleBindings?: readonly LifecycleBinding[];
+  /** E2 — resoluções humanas de slot conferidas na revalidação (omitido/vazio ⇒ o campo não entra no M2). */
+  readonly slotResolutions?: readonly SlotResolutionRef[];
 }
 
 /**
@@ -340,6 +352,9 @@ export function deriveIssuanceManifest(generation: GenerationManifest, d: Issuan
     humanEditRefs: d.humanEditRefs,
     canonicalRevalidation: d.canonicalRevalidation,
     ...(d.lifecycleBindings && d.lifecycleBindings.length > 0 ? { lifecycleBindings: d.lifecycleBindings } : {}),
+    ...(d.slotResolutions && d.slotResolutions.length > 0
+      ? { slotResolutions: { formatVersion: SLOT_RESOLUTION_FORMAT_VERSION, items: d.slotResolutions } }
+      : {}),
     manifestHash: "",
   };
   const sealed: IssuanceManifest = { ...draft, manifestHash: computeManifestHash(draft) };

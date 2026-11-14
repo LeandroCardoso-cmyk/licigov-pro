@@ -19,6 +19,7 @@
  * competente para ratificar (autoridade competente / decidedBy × recordedBy / SoD = PR-07).
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { institutionalAuthorityRequiredMessage } from "../../domain/institutionalAuthority";
 import mysql from "mysql2/promise";
 
 vi.mock("../../services/aiExecutionEngine", async (importOriginal) => {
@@ -262,11 +263,18 @@ describe.skipIf(!DB)("NEW-005 — RBAC da Contratação Direta (MySQL real)", ()
       { code: "FORBIDDEN", message: "Sem acesso à organização solicitada." });
   }, 120_000);
 
-  it("owner/admin do órgão e admin de plataforma (auditado) alcançam configureFlags — coerente com orgRoleProcedure", async () => {
+  // SECURITY-02 — antes este teste AFIRMAVA que o admin de plataforma (owner sintético) alcançava configureFlags. Agora: owner/admin
+  // REAIS do órgão continuam alcançando; o admin de plataforma SEM vínculo é recusado sem efeito — e o acesso continua auditado.
+  it("owner/admin do órgão alcançam configureFlags; admin de plataforma sem vínculo é recusado (auditado, sem efeito)", async () => {
     await flagsCall(await caller(owner, ORG_A));
     await flagsCall(await caller(orgAdmin, ORG_A));
     const corr = `new005-platform-${stamp}`;
-    await flagsCall(await caller(platformAdmin, ORG_A, { platformAdmin: true, correlationId: corr }));
+    await expectDeniedWithoutEffect("admin de plataforma sem vínculo — configureFlags", async () => flagsCall(await caller(platformAdmin, ORG_A, { platformAdmin: true, correlationId: corr })),
+      { code: "FORBIDDEN", message: institutionalAuthorityRequiredMessage("manager") });
+    for (const [label, fn] of [["ratify", ratifyCall], ["publish", (c: Caller) => c.directProcurement.publish({ workspaceId: wsId })]] as const) {
+      await expectDeniedWithoutEffect(`admin de plataforma sem vínculo — ${label}`, async () => fn(await caller(platformAdmin, ORG_A, { platformAdmin: true, correlationId: corr })),
+        { code: "FORBIDDEN", message: institutionalAuthorityRequiredMessage("manager") });
+    }
     const audit = await one(`SELECT details FROM audit_logs WHERE adminId = ? ORDER BY id DESC LIMIT 1`, [platformAdmin]);
     expect(JSON.parse(String(audit.details))).toMatchObject({ event: "platform_admin_tenant_access", organizationId: ORG_A, correlationId: corr });
   }, 120_000);

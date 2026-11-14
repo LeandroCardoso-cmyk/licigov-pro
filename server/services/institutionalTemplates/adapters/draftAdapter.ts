@@ -5,7 +5,8 @@
  * Regras:
  *  - id determinístico por (organização, processo, tipo): repetir o comando não cria segundo rascunho;
  *  - NUNCA sobrescreve um rascunho existente com conteúdo diferente (a edição humana não é perdida): falha fechada;
- *    conteúdo idêntico ⇒ no-op (replay); a ÚNICA exceção é a RECOMPOSIÇÃO governada (`draft.replace`): hash esperado sob lock,
+ *    conteúdo idêntico ⇒ no-op (replay) — com OUTRO M1 (ex.: novo pin oficial; a referência institucional não carrega id/hash, então o
+ *    texto pode não mudar) só o vínculo `tpl-m1:` é atualizado, com a MESMA trava de documento oficial da recomposição; a ÚNICA exceção é a RECOMPOSIÇÃO governada (`draft.replace`): hash esperado sob lock,
  *    sem documento aprovado/oficial, sem edição humana (ou `confirmReplace`), com o conteúdo anterior preservado no ledger;
  *  - só documentos de processo licitatório (dfd/etp/tr/edital); outros tipos ⇒ falha fechada (sem backing).
  */
@@ -14,8 +15,9 @@ import { and, desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generatedDocumentEditsTable, generatedDocumentsTable } from "../../../../drizzle/schema";
 import { getDb } from "../../../db/connection";
-import { applyDraftContentMutationTx, type ProcurementExecutor } from "../../../db/procurement";
+import { applyDraftContentMutationTx, recordProcessEvent, type ProcurementExecutor } from "../../../db/procurement";
 import { TemplatePersistenceError } from "../../../db/institutionalTemplates";
+import { toDbDatetime } from "../../../db/institutionalConsultations";
 import { draftContentHash, type DocumentKind, type GeneratedDocument } from "../../../domain/generatedDocument";
 import { classifyTemplateDraftHumanState, humanEditRefusalMessage, officialRegenerationBlock, officialRegenerationRefusalMessage } from "../../../domain/draftRegeneration";
 import { getLatestOfficialPromotion, type PromotionExecutor } from "../../../db/officialDocumentPromotions";
@@ -52,12 +54,16 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
         .limit(1).for("update");
       if (rows.length === 1) {
         const existing = rows[0];
-        if (existing.id === draft.id && draftContentHash(existing.content ?? "") === draftContentHash(draft.content)) return; // replay
+        // M1 reproduzido já existente e rascunho JÁ vinculado a ele ⇒ replay puro (o conteúdo vigente — inclusive edição humana — fica intacto).
+        if (draft.reuseExistingManifest && parseSources(existing.sources).includes(`tpl-m1:${draft.generationManifestId}`)) return false;
+        if (existing.id === draft.id && draftContentHash(existing.content ?? "") === draftContentHash(draft.content)) {
+          return relinkIdenticalDraft(tx, existing, draft, kind);   // replay (mesmo M1) ou só o vínculo do M1 novo
+        }
         if (!draft.replace) {
           throw new TemplatePersistenceError("CONFLICT", "já existe rascunho para este processo e tipo com outro conteúdo; descarte-o (reset governado) antes de compor por modelo — nada foi sobrescrito");
         }
         await recomposeExisting(tx, existing, draft, kind);
-        return;
+        return true;
       }
       const now = new Date().toISOString();
       const doc: GeneratedDocument = {
@@ -71,8 +77,40 @@ export function createTemplateDraftAdapter(): TemplateDraftPort {
         expectedState: { type: "absent" }, idempotencyKey: `tplc_${draft.generationManifestId}`.slice(0, 64), correlationId: draft.correlationId,
         reason: `Composição governada por modelo institucional (${draft.generationManifestId}).`, ledgerOnCreate: true,
       });
+      return true;
     },
   };
+}
+
+/**
+ * Texto IDÊNTICO ao do rascunho `origem:template` existente (já bloqueado FOR UPDATE). Mesmo M1 ⇒ replay puro. OUTRO M1 (fontes/pins
+ * mudaram sem mudar o texto composto) ⇒ o conteúdo não muda: o vínculo `tpl-m1:` passa a apontar o M1 vigente, sem mudar autoria nem
+ * último ator substantivo. NÃO é silencioso: `updatedAt`/`correlationId` mudam (a revisão confirmada antes deixa de valer — o revisor
+ * revê a minuta, agora ligada a outras fontes/referências oficiais) e um evento de processo registra a troca, na MESMA transação.
+ * Documento com versão OFICIAL emitida nunca é revinculado (mesma recusa da recomposição): sem isso, um novo M1 geraria uma versão
+ * `gerado` depois da emissão.
+ */
+async function relinkIdenticalDraft(
+  tx: ProcurementExecutor, existing: typeof generatedDocumentsTable.$inferSelect,
+  draft: Parameters<TemplateDraftPort["writeDraft"]>[0], kind: DocumentKind,
+): Promise<boolean> {
+  const sources = parseSources(existing.sources);
+  const link = `tpl-m1:${draft.generationManifestId}`;
+  if (!sources.includes("origem:template") || sources.includes(link)) return false;
+  const block = officialRegenerationBlock(existing, await getLatestOfficialPromotion(draft.organizationId, draft.subjectId, kind, tx as unknown as PromotionExecutor));
+  if (block) throw new TRPCError({ code: "PRECONDITION_FAILED", message: officialRegenerationRefusalMessage(kind as "etp" | "tr" | "edital", block) });
+  const previous = sources.find((x) => x.startsWith("tpl-m1:"))?.slice("tpl-m1:".length) ?? "—";
+  await tx.update(generatedDocumentsTable).set({
+    sources: JSON.stringify([...sources.filter((x) => !x.startsWith("tpl-m1:")), link]),
+    correlationId: draft.correlationId, updatedAt: toDbDatetime(new Date().toISOString()) ?? undefined,
+  }).where(and(eq(generatedDocumentsTable.id, existing.id), eq(generatedDocumentsTable.organizationId, draft.organizationId)));
+  await recordProcessEvent({
+    organizationId: draft.organizationId, processId: draft.subjectId, eventType: "change", actor: String(draft.actorUserId),
+    summary: `Minuta ${kind.toUpperCase()} recomposta pelo modelo com texto idêntico; passa a se apoiar na composição vigente (${previous} → ${draft.generationManifestId}): fontes ou documentos oficiais referenciados mudaram — revise antes de emitir.`,
+    // único POR REVINCULAÇÃO (X → Y → X → Y pode revincular ao MESMO M1 mais de uma vez); o retry da mesma transação converge.
+    refId: existing.id, correlationId: draft.correlationId, idempotencyKey: `tpl-relink:${previous}>${draft.generationManifestId}@${String(existing.updatedAt)}`,
+  }, tx);
+  return true;
 }
 
 /** RECOMPOSIÇÃO governada do rascunho `origem:template` existente (já bloqueado FOR UPDATE pelo chamador). */
@@ -94,7 +132,7 @@ async function recomposeExisting(
     throw new TRPCError({ code: "CONFLICT", message: "O rascunho mudou desde o carregamento — recarregue e revise antes de recompor." });
   }
   const last = (await tx.select({
-    operation: generatedDocumentEditsTable.operation, actorUserId: generatedDocumentEditsTable.actorUserId,
+    id: generatedDocumentEditsTable.id, operation: generatedDocumentEditsTable.operation, actorUserId: generatedDocumentEditsTable.actorUserId,
     newContentHash: generatedDocumentEditsTable.newContentHash, createdAt: generatedDocumentEditsTable.createdAt,
   }).from(generatedDocumentEditsTable).where(and(
     eq(generatedDocumentEditsTable.organizationId, draft.organizationId), eq(generatedDocumentEditsTable.processId, draft.subjectId), eq(generatedDocumentEditsTable.kind, kind)))
@@ -113,7 +151,9 @@ async function recomposeExisting(
   };
   await applyDraftContentMutationTx(tx, {
     organizationId: draft.organizationId, processId: draft.subjectId, kind, actorUserId: draft.actorUserId, doc, operation: "template_compose",
-    expectedState: { type: "present", contentHash: replace.expectedContentHash }, idempotencyKey: `tplc_${draft.generationManifestId}`.slice(0, 64),
+    // A chave é única POR RECOMPOSIÇÃO (M1 + última linha do ledger do rascunho, lida sob lock): voltar ao MESMO M1 (X → Y → X → Y…) é uma
+    // mutação nova e legítima e nunca colide; o retry do mesmo pedido converge antes daqui (rascunho já vinculado ⇒ no-op).
+    expectedState: { type: "present", contentHash: replace.expectedContentHash }, idempotencyKey: `tplc_${draft.generationManifestId}_e${last?.id ?? 0}`.slice(0, 64),
     correlationId: draft.correlationId, reason: `Recomposição governada por modelo institucional (${draft.generationManifestId}); o conteúdo anterior permanece no histórico.`,
   });
 }

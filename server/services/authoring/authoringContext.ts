@@ -23,7 +23,7 @@
 import { getProcess, listIntelligentItems } from "../../db/procurement";
 import { getLatestCatmatDecisionsForItems } from "../../db/catmatGovernance";
 import {
-  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview,
+  AUTHORITATIVE_ITEMS_CONTRACT_VERSION, computeItemEstimates, renderAuthoritativeItemsBlock, formatQuantityOrReview, quoteCountText,
   fictitiousQuotesReviewText, suspectedQuotesReviewText, type AuthoritativeItemInput, type AuthoritativeItemsEstimate,
 } from "../../domain/authoritativeItems";
 import { formatBRL, reaisToCents } from "../../domain/money";
@@ -252,7 +252,7 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
       const flag = src.sourceState !== "current" ? " · [REVISAR: fonte da pesquisa alterada após a decisão]" : "";
       const fict = (r.fictitiousQuoteCount ? ` · ${fictitiousQuotesReviewText(r.fictitiousQuoteCount)}` : "")
         + (r.suspectedQuoteCount ? ` · ${suspectedQuotesReviewText(r.suspectedQuoteCount)}` : "");
-      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${r.quoteCount} cotação(ões) válida(s)${catalog}${flag}${fict}`);
+      lines.push(`- Item ${r.index}: ${r.description || "[item sem descrição]"} — ${canonicalQuantityText(r, canonical !== null, undefinedQty)}${canonical && src.lotCode ? ` · lote ${src.lotCode}` : ""} · ${quoteCountText(r.quoteCount, r.fictitiousQuoteCount, r.suspectedQuoteCount)}${catalog}${flag}${fict}`);
       for (const q of sortQuotes(src.quotes)) {
         const bm = [q.brand.trim(), q.model.trim()].filter(Boolean).join(" / ");
         lines.push(`  - ${q.supplier.trim() || "Fornecedor não identificado"}${bm ? ` (${bm})` : ""}: ${q.valueCents !== null && q.valueCents > 0 ? formatBRL(q.valueCents) : "sem preço"}`);

@@ -13,8 +13,9 @@
  */
 import { TRPCError } from "@trpc/server";
 import { getOfficialDocument } from "./documentEngineService";
+import { listVersions } from "../db/officialDocuments";
 import { exportDocument, formatBrazilianDateTime } from "./documentExportService";
-import { logActivity } from "./activityLogService";
+import { logActivity, PLATFORM_ADMIN_ACTOR_ROLE } from "./activityLogService";
 import { recordOfficialArtifact } from "./officialDocumentLifecycleService";
 import {
   institutionalIdentityFromMetadataOrLive,
@@ -22,6 +23,7 @@ import {
 } from "./institutionalIdentityService";
 import type { OfficialFormat } from "../domain/officialDocument";
 import { serviceLogger } from "./observabilityService";
+import { resolveConsolidatedEdital, type ConsolidatedEditalSource } from "./editalConsolidatedExportService";
 
 const log = serviceLogger("officialDocumentExportAdapter");
 
@@ -112,6 +114,13 @@ export async function exportOfficialDocument(params: {
   /** "inline" para impressão (visualizar no navegador), "attachment" para baixar. */
   disposition?: "attachment" | "inline";
   correlationId?: string;
+  /** Pós-homologação (Frente C) — export sob acesso TÉCNICO da plataforma (`ctx.platformAdminAccess`): marcado na trilha, nunca ato do órgão. */
+  platformTechnicalAccess?: boolean;
+  /**
+   * F2 — Edital COMPLETO: o Anexo I recebe o TR oficial integral fixado no M2 desta versão (`resolveConsolidatedEdital`, fail-closed).
+   * Mesmo pipeline (renderizadores, armazenamento, ledger de artefatos, auditoria); só o conteúdo renderizado e o nome do arquivo mudam.
+   */
+  consolidated?: boolean;
 }): Promise<{
   url: string; format: OfficialFormat; fileName: string;
   /** SEM-043 — sha256 dos bytes exportados (DOCX ≠ PDF; registrado no ledger `official_document_artifacts`). */
@@ -150,6 +159,14 @@ export async function exportOfficialDocument(params: {
     });
   }
   const identityFingerprint = institutionalIdentityFingerprint(identity);
+  // M8 P3.3 — a linhagem numera snapshots técnicos e emissões na mesma sequência (1ª emissão costuma ser v2). Para a versão EMITIDA,
+  // o cabeçalho informa o ordinal da emissão (contado na própria linhagem, só leitura) ao lado da revisão técnica. Nada é renumerado.
+  // Só o processo licitatório (ETP/TR/Edital): outros domínios (parecer — NEW-007 —, contratos, contratação direta) mantêm o cabeçalho.
+  const emissionNumber = doc.status === "emitido" && doc.businessDomain === "processo_licitatorio"
+    ? (await listVersions(doc.lineageId, params.organizationId)).filter((v) => v.status === "emitido" && v.version <= doc.version).length
+    : 0;
+  // F2 — Edital completo: conteúdo DERIVADO (o documento oficial não muda). Recusa explícita se a fonte fixada não for verificável.
+  const bundle: ConsolidatedEditalSource | null = params.consolidated ? await resolveConsolidatedEdital(doc, params.organizationId) : null;
   const statusLabel = STATUS_LABELS[doc.status] ?? doc.status.toUpperCase();
   const statusSlug = STATUS_SLUGS[doc.status] ?? doc.status;
 
@@ -158,27 +175,29 @@ export async function exportOfficialDocument(params: {
   const procRef = metaString(doc.metadata, ["processNumber", "numero", "numeroProcesso", "contractNumber", "numeroContrato"]);
   const object = metaString(doc.metadata, ["object", "objeto"]);
   const refForName = procRef ? procRef.replace(/\//g, "-") : "";
+  const typeSlug = bundle ? "EDITAL_COMPLETO" : doc.documentType.toUpperCase();
   const downloadBaseName = refForName
-    ? `${doc.documentType.toUpperCase()}_${refForName}_${statusSlug}_v${doc.version}`
-    : `${doc.documentType.toUpperCase()}_${statusSlug}_v${doc.version}`;
+    ? `${typeSlug}_${refForName}_${statusSlug}_v${doc.version}`
+    : `${typeSlug}_${statusSlug}_v${doc.version}`;
 
   const exported = await exportDocument({
     organizationId: params.organizationId,
-    content: doc.content, // conteúdo persistido, renderizado FIELMENTE
-    baseName: `${doc.documentType}_${doc.lineageId}_v${doc.version}`, // chave interna (linhagem, não UUID sensível)
+    content: bundle ? bundle.content : doc.content, // conteúdo persistido (ou Edital + TR oficial fixado), renderizado FIELMENTE
+    baseName: `${bundle ? "edital_completo" : doc.documentType}_${doc.lineageId}_v${doc.version}`, // chave interna (linhagem, não UUID sensível)
     downloadBaseName,
     format: params.format,
     scope: doc.businessDomain,
     disposition: params.disposition ?? "attachment",
     meta: {
       organizationName: identity.organizationName || undefined,
-      documentTitle: TYPE_TITLES[doc.documentType] ?? doc.title,
+      documentTitle: bundle ? "Edital — completo, com anexos" : TYPE_TITLES[doc.documentType] ?? doc.title,
       processNumber: procRef,
       object,
       statusLabel,
       isDraft: doc.status !== "emitido", // só "emitido" é versão oficial finalizada
       draftNoticeLabel: statusLabel,
       version: doc.version,
+      ...(emissionNumber > 0 ? { emissionNumber } : {}),
       exportedAtLabel: formatBrazilianDateTime(new Date()),
       // Bloco de assinatura institucional a partir do snapshot imutável — presente apenas
       // quando o ato foi assinado (ex.: Parecer emitido); undefined para os demais.
@@ -193,7 +212,8 @@ export async function exportOfficialDocument(params: {
   const recorded = await recordOfficialArtifact({
     doc, format: params.format, artifactHash: exported.artifactHash, sizeBytes: exported.sizeBytes,
     mimeType: exported.mimeType, storageKey: exported.key, identityFingerprint,
-    actorUserId: params.userId, correlationId: params.correlationId,
+    actorUserId: params.userId, correlationId: params.correlationId, platformTechnicalAccess: params.platformTechnicalAccess,
+    ...(bundle ? { bundleNote: `Edital completo com o Termo de Referência oficial incorporado (documento ${bundle.tr.documentId}, revisão técnica v${bundle.tr.version}, sha256:${bundle.tr.contentHash})` } : {}),
   });
 
   // Auditoria (leitura) — sem conteúdo integral; sem nova versão/evento de lifecycle.
@@ -201,6 +221,7 @@ export async function exportOfficialDocument(params: {
     organizationId: params.organizationId,
     userId: params.userId,
     action: "exportou documento oficial",
+    ...(params.platformTechnicalAccess ? { actorRole: PLATFORM_ADMIN_ACTOR_ROLE } : {}),
     entityType: "official_document",
     correlationId: params.correlationId,
     details: {
@@ -212,6 +233,11 @@ export async function exportOfficialDocument(params: {
       artifactHash: exported.artifactHash, artifactSizeBytes: exported.sizeBytes,
       artifactId: recorded.artifact?.id ?? null, artifactReused: recorded.artifact ? !recorded.created : null,
       sourceContentHash: recorded.artifact?.sourceContentHash ?? null, sourceReplayHash: doc.replayHash,
+      // F2 — proveniência do pacote consolidado: TR oficial EXATO incorporado (pin do M2 desta versão do Edital).
+      ...(bundle ? {
+        consolidated: true, issuanceManifestId: bundle.issuanceManifestId, trDocumentId: bundle.tr.documentId, trLineageId: bundle.tr.lineageId,
+        trVersion: bundle.tr.version, trContentHash: bundle.tr.contentHash,
+      } : {}),
     },
   });
 

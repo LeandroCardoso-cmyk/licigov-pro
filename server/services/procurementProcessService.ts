@@ -11,7 +11,8 @@ import { createHash } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { assertKernelAccess } from "./kernelAccessService";
 import { generateOfficialDocument } from "./documentEngineService";
-import { generateStructuredAuthoring, generateEditalAuthoring } from "./authoring/structuredAuthoringService";
+import { generateStructuredAuthoring, generateEditalAuthoring, type TrConfirmedParams } from "./authoring/structuredAuthoringService";
+import type { BudgetAllocationBlock } from "../domain/institutionalTemplates/budgetAllocation";
 import { AuthoringContractError } from "../domain/authoring/authoringSchema";
 import { authoringFailureGuidance } from "../domain/authoring/authoringGuidance";
 import { resolveEditalSources } from "./authoring/editalContext";
@@ -123,6 +124,8 @@ export function generatePayloadHash(p: {
   sourcesDigest?: string;
   /** CONTEXT_REUSE 2.0 — digest dos Parâmetros estruturados do TR (só entra no hash quando existe; sem eles o hash é o anterior). */
   trParams?: string;
+  /** LICIGOV-FAST PR-2 — digest dos Dados orçamentários do processo (só entra no hash quando o modelo os usa; sem eles o hash é o anterior). */
+  budget?: string;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -137,6 +140,7 @@ export function generatePayloadHash(p: {
       pl: p.platform ?? null,
       src: p.sourcesDigest ?? null,
       ...(p.trParams ? { trp: p.trParams } : {}),
+      ...(p.budget ? { bud: p.budget } : {}),
     }))
     .digest("hex");
 }
@@ -182,7 +186,7 @@ async function runReplaySafeGeneration<T>(
     return { result: reviveCached(check.response), replayed: true };
   }
   if (check.status === "processing") {
-    throw new TRPCError({ code: "CONFLICT", message: "Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
+    throw new TRPCError({ code: "CONFLICT", message: "GENERATION_IN_PROGRESS: Geração idêntica já está em processamento para esta chave — aguarde a conclusão." });
   }
   // status "new" ou "failed": executa (cognição fora da transação; persistência atômica dentro).
   try {
@@ -347,6 +351,7 @@ export async function generateDFDDraft(params: {
 // C.4B.3A/C.4B.3B — operações de EDIÇÃO governada (idempotency op por tipo de write).
 const DFD_SAVE_OP = "procurement.dfd.save";       // edição manual do DFD (C.4B.3A)
 const DRAFT_EDIT_OP = "procurement.draft.edit";   // edição humana de ETP/TR/Edital (C.4B.3B)
+const SLOT_RESOLUTION_EDIT_OP = "procurement.draft.slot_resolution"; // E2: resolução humana de trecho pendente do modelo (Edital)
 
 /**
  * C.4B.3A/C.4B.3B — Runner ÚNICO de WRITE GOVERNADO de conteúdo do rascunho (DFD save + human edit de
@@ -863,6 +868,28 @@ export async function saveReviewableDraft(params: {
 }
 
 /**
+ * E2 — Edição governada do rascunho do Edital que RESOLVE um trecho pendente de modelo (slot de IA): mesmo runner/ledger da edição humana
+ * (`human_edit`, CAS, idempotência, último ator substantivo), com linhagem em `reason` e a decisão de resolução gravada em `afterPersist`,
+ * NA MESMA TRANSAÇÃO (tudo-ou-nada: sem decisão, a edição não fica). O conteúdo é montado pelo serviço de resolução (nunca pelo cliente).
+ */
+export async function applyTemplateSlotResolutionEdit(params: {
+  organizationId: number; processId: string; content: string; reason: string;
+  actorUserId: number; expectedContentHash: string; idempotencyKey: string; correlationId: string;
+  afterPersist: (tx: ProcurementExecutor, document: GeneratedDocument) => Promise<void>;
+}): Promise<{ document: GeneratedDocument; replayed: boolean }> {
+  const existing = await getGeneratedDocumentByKind(params.processId, params.organizationId, "edital");
+  if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Rascunho inexistente — gere o documento antes de editar." });
+  return runGovernedDraftEdit({
+    op: SLOT_RESOLUTION_EDIT_OP, operation: "human_edit", timelineSummary: "EDITAL: trecho pendente do modelo resolvido por pessoa (rascunho).",
+    organizationId: params.organizationId, processId: params.processId, kind: "edital",
+    title: existing.title, sources: ["edicao_humana"], content: params.content,
+    actorUserId: params.actorUserId, expectedContentHash: params.expectedContentHash,
+    idempotencyKey: params.idempotencyKey, correlationId: params.correlationId,
+    reason: params.reason, afterPersist: params.afterPersist,
+  });
+}
+
+/**
  * PR-09 (SEM-014) — Estado de PARTIDA da regeneração de ETP/TR/Edital, resolvido ANTES de qualquer reserva de
  * idempotência ou cognição (recusa ⇒ zero chamadas de IA, zero writes):
  *   - `expectedContentHash` (opcional) = o hash que o humano VIU; divergente do vigente ⇒ CONFLICT (a
@@ -949,7 +976,12 @@ export async function generateDocument(params: {
   expectedContentHash?: string;
   invoke?: (prompt: string) => Promise<string>;
   /** CONTEXT_REUSE 2.0 — bloco determinístico dos Parâmetros estruturados do TR (os MESMOS fatos que o Edital consome). Só TR. */
-  structuredParams?: { block: string; digest: string } | null;
+  structuredParams?: TrConfirmedParams | null;
+  /**
+   * LICIGOV-FAST PR-2 — Dados orçamentários do processo (dotação/fonte DECLARADAS uma vez; os MESMOS que o Edital consome). Só TR. Ausentes
+   * ⇒ pendência INFORMATIVA: o bloco traz o marcador governado (nunca `[REVISAR]`), o TR é gerado e a emissão não é bloqueada por isso.
+   */
+  budgetAllocation?: BudgetAllocationBlock | null;
 }): Promise<{ document: GeneratedDocument; replayed: boolean }> {
   // Regra de arquitetura: acesso ao Kernel só via kernelAccessService.
   assertKernelAccess(DOMAIN, "institutional_rag");
@@ -988,6 +1020,7 @@ export async function generateDocument(params: {
     object: params.object, approvedItems: approved, sourcesDigest: sourceContext.sourcesDigest,
     // Só entra no hash quando EXISTE parâmetro estruturado (processos sem eles mantêm exatamente o hash anterior).
     ...(params.kind === "tr" && params.structuredParams ? { trParams: params.structuredParams.digest } : {}),
+    ...(params.kind === "tr" && params.budgetAllocation ? { budget: params.budgetAllocation.digest } : {}),
   });
 
   // C.4B.3A + PR-09 — estado de PARTIDA capturado ANTES da idempotência e da cognição (sentinel de ausência
@@ -1017,6 +1050,10 @@ export async function generateDocument(params: {
         actorUserId: params.actorUserId,
         invoke: params.invoke,
         sourceContext,
+        // M8 pós-homologação — os parâmetros CONFIRMADOS entram na autoria (antes só eram anexados depois): a IA não pede de novo
+        // o que o servidor já informou. O bloco determinístico continua anexado abaixo como autoridade; o digest já está no payloadHash.
+        confirmedParams: params.kind === "tr" ? params.structuredParams ?? null : null,
+        budgetAllocation: params.kind === "tr" ? params.budgetAllocation ?? null : null,
       }).catch((err: unknown) => {
         // Homologação visual M8: a recusa fail-closed continua — só o motivo vira orientação operacional
         // (o que faltou, onde complementar, próxima ação; rascunho ≠ emissão oficial). Nada é gravado.
@@ -1025,9 +1062,13 @@ export async function generateDocument(params: {
         }
         throw err;
       });
-      const content = params.kind === "tr" && params.structuredParams
+      const withParams = params.kind === "tr" && params.structuredParams
         ? `${authoring.content.replace(/\s+$/, "")}\n\n${params.structuredParams.block}\n`
         : authoring.content;
+      // LICIGOV-FAST PR-2 — bloco determinístico dos Dados orçamentários do processo (declarado × pendente × não aplicável).
+      const content = params.kind === "tr" && params.budgetAllocation
+        ? `${withParams.replace(/\s+$/, "")}\n\n${params.budgetAllocation.block}\n`
+        : withParams;
 
       const doc = createGeneratedDocument({
         organizationId: params.organizationId,
@@ -1041,6 +1082,7 @@ export async function generateDocument(params: {
           `evidencias:${authoring.evidences.length}`,
           ...sourceContext.lineageMarkers,
           ...(params.kind === "tr" && params.structuredParams ? [`trparams:${params.structuredParams.digest}`] : []),
+          ...(params.kind === "tr" && params.budgetAllocation ? [`orcamento:${params.budgetAllocation.digest}`] : []),
         ],
         authorUserId: params.actorUserId,
         lastSubstantiveActorUserId: params.actorUserId,
@@ -1449,6 +1491,16 @@ export async function getAuthoringSourceState(params: {
     approvedItems: number; pendingItems: number; quoteCount: number;
     pricedItems: number; unpricedItems: number; confirmedClassifications: number; pendingClassifications: number;
     estimatedGlobalTotalCents: number;
+    /** M8 — das `quoteCount`, quantas são de fonte FICTÍCIA (importadas, mas não constituem pesquisa de preços oficial). */
+    fictitiousQuoteCount: number;
+    /** M8 — itens cujo preço de referência está SUSPENSO (fictícia, fonte alterada ou unidade divergente): não entram no total. */
+    priceSuspendedItems: number;
+    /** M8 — dos suspensos, quantos por cotação fictícia (`FICTITIOUS_SOURCE`). */
+    fictitiousPriceItems: number;
+    /** M8 — itens sem quantidade informada (fora do total; nunca "0"). */
+    unknownQuantityItems: number;
+    /** M8 — itens cujo preço no total é DEMONSTRATIVO (cotação fictícia admitida só em homologação sintética autorizada). */
+    demonstrativePriceItems: number;
   };
   /** R9 / SEM-047 — fontes que mudaram (vazio no modo legado sem `srcd:` e quando nada mudou). */
   changedSources: Array<{ key: SourceKey; label: string }>;
@@ -1463,6 +1515,13 @@ export async function getAuthoringSourceState(params: {
     confirmedClassifications: ctx.estimate.confirmedClassificationCount,
     pendingClassifications: ctx.estimate.pendingClassificationCount,
     estimatedGlobalTotalCents: ctx.estimate.globalTotalCents,
+    // M8 — projeção (sem cálculo novo): o MESMO `estimate` que monta o quadro do documento. Distingue "valor indisponível"
+    // (nenhum item com preço de referência) de total zero e de cotação importada que não serve de referência.
+    fictitiousQuoteCount: ctx.estimate.fictitiousQuoteCount,
+    priceSuspendedItems: ctx.estimate.rows.filter((r) => !!r.priceBlockedReason).length,
+    fictitiousPriceItems: ctx.estimate.rows.filter((r) => r.priceBlockedReason === "FICTITIOUS_SOURCE").length,
+    unknownQuantityItems: ctx.estimate.unknownQuantityItemCount,
+    demonstrativePriceItems: ctx.estimate.rows.filter((r) => (r.fictitiousQuoteCount ?? 0) > 0 && !r.priceBlockedReason && r.averagePriceCents > 0).length,
   };
   const base = { currentDigest: ctx.sourcesDigest, usedSources: ctx.usedSources, missing: ctx.missing, summary };
   if (!existing || !existing.content.trim()) return { state: "never_generated", storedDigest: null, ...base, changedSources: [] };

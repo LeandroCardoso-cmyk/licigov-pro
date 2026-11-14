@@ -40,6 +40,8 @@ describe("classificação do catálogo BLL", () => {
       if (v.name.startsWith("pos.")) expect(c.class, v.name).toBe("POST_AWARD");
       else if ((AUTHORITY_OWNED_PATHS[v.source] ?? []).includes(v.path)) expect(c.class, v.name).toBe("CANONICAL");
       else if (PROJECTION_BY_VARIABLE[v.name]) expect(["CANONICAL", "TR_PROJECTION"], v.name).toContain(c.class);
+      // LICIGOV-FAST PR-2: dotação/fonte (requiredWhen não SRP) são informação orçamentária DERIVADA do processo — nunca digitadas no Edital.
+      else if (v.name === "julgamento.dotacaoOrcamentaria" || v.name === "julgamento.fonteRecursos") expect(c).toMatchObject({ class: "CANONICAL", rule: "DERIVED" });
       else if (v.requiredWhen) expect(c.class, v.name).toBe("CONDITIONAL");
       else if (c.rule === "ORG_ROLE") expect(c.class, v.name).toBe("ORG_PROFILE");
       else if (c.rule === "TR_PARAM") expect(c.class, v.name).toBe("TR_PROJECTION");

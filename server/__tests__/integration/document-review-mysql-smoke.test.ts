@@ -10,6 +10,7 @@
  * Só roda com DATABASE_URL.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { seedRealMembership, removeRealMemberships } from "../helpers/smokeInstitutionalMembership";
 import mysql from "mysql2/promise";
 import { runMigrations } from "../../bootstrap";
 import { decideDocumentReview, listDocumentReviewDecisions } from "../../services/documentReviewService";
@@ -73,10 +74,13 @@ describe.skipIf(!DB)("PR C.2B — Revisão/aprovação documental (MySQL real)",
     conn = await mysql.createConnection(DB!);
     await runMigrations(conn);
     procA = await seedProcess(ORG_A);
+    // SECURITY-02 — o emissor/revisor é membro REAL e ativo do órgão (o guard relê organization_members).
+    await seedRealMembership(conn, ORG_A, REVIEWER);
   }, 300_000);
 
   afterAll(async () => {
     if (!conn) return;
+    await removeRealMemberships(conn, ORG_A, [REVIEWER]).catch(() => {});
     for (const org of [ORG_A, ORG_B]) {
       await conn.execute("DELETE FROM document_review_decisions WHERE organizationId = ?", [org]).catch(() => {});
       await conn.execute("DELETE FROM documents WHERE organizationId = ?", [org]).catch(() => {});

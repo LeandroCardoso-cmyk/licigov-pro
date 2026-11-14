@@ -235,7 +235,10 @@ describe.skipIf(!DB)("Piloto Edital — E2E integrado A+B+C (MySQL real, dados s
     expect(tables).toBeGreaterThanOrEqual(5);
     const docx = await renderInstitutionalDOCX(model);
     const xml = readZipEntry(docx, "word/document.xml") ?? "";
-    expect(xml.split("<w:tbl>").length - 1).toBe(tables);
+    // F3.1 — encerramentos/assinaturas são tabelas de LAYOUT sem bordas; as de DADOS continuam exatamente as do Markdown.
+    const dataTables = xml.split("<w:tbl>").slice(1).map((t) => t.slice(0, t.indexOf("</w:tblPr>")))
+      .filter((t) => !/<w:tblBorders>(?:(?!<\/w:tblBorders>).)*w:val="none"/s.test(t)).length;
+    expect(dataTables).toBe(tables);
     expect(xml).not.toContain("<m:oMath");
     const plain = xml.replace(/<[^>]+>/g, "|");
     for (const f of ["Preço unitário (R$)", "Preço total (R$)", "R$ 25,50", "R$ 3.760,00"]) expect(plain, f).toContain(f);

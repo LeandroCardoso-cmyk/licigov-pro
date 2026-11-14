@@ -4,7 +4,7 @@ import PrepFieldControl from "./PrepFieldControl";
 import DecisionFieldset from "./DecisionFieldset";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import {
-  buildDefaultsEdit, buildPlatform, buildRoles, changedPlatforms, defaultAsPrepField, changedRoles, emptyRoleForm, platformToForm, profileAsPrepView, roleToForm, withoutDefault,
+  buildDefaultsEdit, buildPlatform, buildRoles, changedPlatforms, defaultAsPrepField, changedRoles, emptyRoleForm, platformToForm, profileAsPrepView, profileCompletenessSummary, roleToForm, withoutDefault,
   type PlatformForm, type ProfileStateView, type RoleAssignmentView, type RoleForm,
 } from "@/lib/contextReuse";
 import {
@@ -138,9 +138,10 @@ export default function LicitacoesProfilePanel() {
     <section id="perfil-licitacoes" aria-label="Configuração única do órgão" className="space-y-5">
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">
-          Configuração única do órgão (papéis, políticas, plataforma e padrões): informada UMA vez e reutilizada em todo Edital; nunca digitada de novo por processo. {state.summary.pendingCount > 0
-            ? <strong className="text-amber-700 dark:text-amber-300">{state.summary.pendingCount} {state.summary.pendingCount === 1 ? "campo pendente" : "campos pendentes"}</strong>
-            : <strong className="text-emerald-700 dark:text-emerald-300">Perfil completo (revisão {state.revision})</strong>}
+          Configuração única do órgão (papéis, políticas, plataforma e padrões): informada UMA vez e reutilizada em todo Edital; nunca digitada de novo por processo. {(() => {
+            const sum = profileCompletenessSummary(state);
+            return <strong data-profile-completeness={sum.tone} className={sum.tone === "complete" ? "text-emerald-700 dark:text-emerald-300" : sum.tone === "pending" ? "text-amber-700 dark:text-amber-300" : "font-normal text-muted-foreground"}>{sum.text}</strong>;
+          })()}
         </p>
         <p className="text-xs text-muted-foreground">Nada é inferido: o Prefeito não é presumido autoridade competente, e o último processo nunca é copiado. Cada papel é uma designação sua, com ato e vigência.</p>
       </header>
@@ -210,7 +211,11 @@ export default function LicitacoesProfilePanel() {
         <div key={sec.source} className="space-y-3" aria-label={SOURCE_TITLE[sec.source] ?? sec.source}>
           <h3 className="text-sm font-semibold">{SOURCE_TITLE[sec.source] ?? sec.source}</h3>
           {sec.fields.map((f) => (
-            <PrepFieldControl key={f.path} field={f} value={edits[sec.source]?.[f.path] ?? toValue(f)} error={plan.errors[sec.source]?.[f.path]} disabled={busy} onChange={(v) => onEdit(sec.source, f, v)} />
+            <div key={f.path}>
+              <PrepFieldControl field={f} value={edits[sec.source]?.[f.path] ?? toValue(f)} error={plan.errors[sec.source]?.[f.path]} disabled={busy} onChange={(v) => onEdit(sec.source, f, v)} />
+              {/* A4 — política condicional: quando é exigida (nenhum valor é sugerido nem atribuído). */}
+              {f.reason && !f.hasValue && <p className={`mt-1 text-xs ${f.status === "PENDING" ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`} data-conditional-reason={f.name}>{f.reason}</p>}
+            </div>
           ))}
         </div>
       ))}

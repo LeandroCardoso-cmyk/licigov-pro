@@ -126,6 +126,26 @@ export function resolveEditalFormValues<M extends string, F extends string, P ex
   return { modality, form, platform };
 }
 
+/**
+ * C2 — escopo a REGISTRAR (sobrevive ao recarregamento): só antes da 1ª geração (sem parâmetros persistidos nem minuta composta),
+ * só com escolha explícita da pessoa, completa e diferente da já registrada. null ⇒ nada a registrar.
+ */
+export function editalScopeToRecord<M extends string, F extends string, P extends string>(input: {
+  readonly effective: EditalParamValues<M, F, P>;
+  readonly proposed: EditalParamValues<M, F, P>;
+  readonly persisted: unknown;
+  readonly composed: unknown;
+  readonly recorded: EditalParamValues<M, F, P> | null | undefined;
+}): { modality: M; form: F; platform: P | null } | null {
+  const { effective: e, proposed: p, recorded: r } = input;
+  if (input.persisted || input.composed) return null;
+  if (p.modality === null && p.form === null && p.platform === null) return null;
+  if (!editalParamsComplete(e) || !e.modality || !e.form) return null;
+  const platform = e.form === "eletronico" ? e.platform : null;
+  if (r && r.modality === e.modality && r.form === e.form && (r.platform ?? null) === (platform ?? null)) return null;
+  return { modality: e.modality, form: e.form, platform };
+}
+
 /** Os valores efetivos diferem dos persistidos? (troca de parâmetro = ação explícita, atual × proposto). */
 export function editalParamsDiffer<M extends string, F extends string, P extends string>(
   effective: EditalParamValues<M, F, P>,
@@ -192,4 +212,33 @@ export function editalTextOverwrites(
 /** Campos persistidos ainda NULL ⇒ exibidos como "requer revisão" (a minuta leva [REVISAR]). */
 export function editalTextPendingReview(persisted: Partial<EditalTextParams> | null | undefined): Array<keyof EditalTextParams> {
   return TEXT_KEYS.filter((k) => !(persisted?.[k] ?? null));
+}
+
+// ─── Pós-homologação (Frente A) — parâmetros do Edital ainda não gravados ──────────────────────
+
+/**
+ * Há escolha da pessoa no formulário do Edital que ainda NÃO está gravada (e se perderia ao sair)?
+ *  - modalidade/forma/plataforma: só com escolha explícita (hidratação nunca conta) e diferente da base gravada — parâmetros
+ *    do rascunho > minuta composta > escopo registrado. Escolha incompleta ou cujo registro falhou/não foi permitido conta.
+ *  - critério/regime (caminho legado, sem modelo vinculado): texto digitado que seria enviado na geração.
+ *  - objeto: alterado pela pessoa em relação ao último usado (do processo ou da última geração).
+ */
+export function editalUnsavedParameters<M extends string, F extends string, P extends string>(input: {
+  readonly effective: EditalParamValues<M, F, P>;
+  readonly proposed: EditalParamValues<M, F, P>;
+  readonly baseline: EditalParamValues<M, F, P> | null | undefined;
+  readonly proposedText: EditalTextParams;
+  readonly persistedText: Partial<EditalTextParams> | null | undefined;
+  readonly textEditable: boolean;
+  readonly objectEdited: boolean;
+  readonly object: string;
+  readonly objectBaseline: string;
+}): boolean {
+  const { effective: e, proposed: p, baseline: b } = input;
+  const touched = p.modality !== null || p.form !== null || p.platform !== null;
+  const coreUnsaved = touched && (!b || e.modality !== b.modality || e.form !== b.form
+    || (e.form === "eletronico" ? e.platform ?? null : null) !== (b.form === "eletronico" ? b.platform ?? null : null));
+  const textUnsaved = input.textEditable && Object.keys(editalTextProposal(input.proposedText, input.persistedText)).length > 0;
+  const objectUnsaved = input.objectEdited && input.object.trim() !== input.objectBaseline.trim();
+  return coreUnsaved || textUnsaved || objectUnsaved;
 }

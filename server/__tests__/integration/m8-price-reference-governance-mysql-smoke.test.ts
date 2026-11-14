@@ -234,6 +234,11 @@ describe.skipIf(!DB)("M8 — governança dos preços de referência (MySQL estri
     expect(document.content).toContain("1 item(ns) sem preço de referência não entram no total");
     const auth = await resolveDocumentAuthoringContext({ organizationId: ORG_R, processId: pidLegacy, kind: "tr", object: OBJ });
     expect(auth.authoritativeBlock).toContain(FICTITIOUS_PRICE_CELL_TEXT); // quadro autoritativo (TR) — célula suspensa
+    // M8 (pós-homologação visual) — o resumo de fontes distingue a cotação fictícia e o item suspenso (mesmo `estimate` do quadro).
+    const src = await (await caller(U.owner, ORG_R)).procurementProcess.authoringSourceState({ processId: pidLegacy, kind: "tr", object: OBJ });
+    expect(src.summary).toMatchObject({ pricedItems: 1, unpricedItems: 1, priceSuspendedItems: 1, fictitiousPriceItems: 1, estimatedGlobalTotalCents: 2000 });
+    expect(src.summary.fictitiousQuoteCount).toBeGreaterThan(0);
+    expect(src.summary.fictitiousQuoteCount).toBeLessThan(src.summary.quoteCount);
     const hash = await stripReviewMarkers(U.owner, ORG_R, pidLegacy, "strip-leg");
     const em = await caller(U.emitter, ORG_R);
     const summary = await em.procurementProcess.officialSummary({ processId: pidLegacy, kind: "etp" });
@@ -268,6 +273,11 @@ describe.skipIf(!DB)("M8 — governança dos preços de referência (MySQL estri
     expect(ctx.priceContext.estimatedTotalCents).toBeNull();
     const after = (await c.procurementItems.workspace({ processId: pid })).items[0] as any;
     expect(after.priceBlockedReason).toBe("FICTITIOUS_SOURCE");
+    // M8 (pós-homologação visual) — nenhum item com preço de referência: o resumo expõe o motivo (a UI mostra "indisponível", não R$ 0,00).
+    const src = await c.procurementProcess.authoringSourceState({ processId: pid, kind: "tr", object: OBJ });
+    expect(src.summary).toMatchObject({ pricedItems: 0, estimatedGlobalTotalCents: 0, fictitiousPriceItems: src.summary.unpricedItems });
+    expect(src.summary.fictitiousPriceItems).toBeGreaterThan(0);
+    expect(src.summary.fictitiousQuoteCount).toBe(src.summary.quoteCount);
   });
 
   it("[26,27,28] oficial emitido com fonte real permanece intacto; proveniência alterada depois ⇒ nova emissão recusada; replay converge", { timeout: 120_000 }, async () => {
@@ -353,6 +363,9 @@ describe.skipIf(!DB)("M8 — governança dos preços de referência (MySQL estri
     const auth = await resolveDocumentAuthoringContext({ organizationId: ORG_H, processId: pid, kind: "tr", object: OBJ });
     expect(auth.authoritativeBlock).not.toContain(FICTITIOUS_PRICE_CELL_TEXT);
     expect(auth.authoritativeBlock).toContain(fictitiousQuotesReviewText(2)); // [37] continua demonstrativo e marcado
+    // M8 (pós-homologação) — o resumo de fontes sinaliza o valor DEMONSTRATIVO no total (a UI não o marca como referência válida).
+    const src = await (await caller(U.ownerH, ORG_H)).procurementProcess.authoringSourceState({ processId: pid, kind: "tr", object: OBJ });
+    expect(src.summary).toMatchObject({ pricedItems: 1, fictitiousPriceItems: 0, priceSuspendedItems: 0, demonstrativePriceItems: 1, fictitiousQuoteCount: 2 });
     const hash = await stripReviewMarkers(U.ownerH, ORG_H, pid, "strip-hom");
     const ok = await (await caller(U.emitterH, ORG_H)).procurementProcess.promoteOfficial({ processId: pid, kind: "etp", idempotencyKey: K("emit-hom"), expectedContentHash: hash });
     expect(ok.promoted).toBe(true); // [38] jornada de homologação continua operacional

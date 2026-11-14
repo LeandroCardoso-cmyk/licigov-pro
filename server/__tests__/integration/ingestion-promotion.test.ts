@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TRPCError } from "@trpc/server";
 
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — fonte autoritativa da autoridade institucional: o fixture é um MEMBRO REAL com o mesmo papel do contexto.
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: "manager", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn().mockResolvedValue({
     organizationId: 1,
     membership: { id: 1, organizationId: 1, userId: 1, role: "manager", invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },

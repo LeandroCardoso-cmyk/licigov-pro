@@ -22,6 +22,7 @@ import {
   TEMPLATE_HASH_VERSION, TEMPLATE_ID_RE, manifestRevisionIssues, templateCanonicalJson, validateManifest,
   type AiNarrativeRef, type AnnexRef, type CanonicalRevalidationRecord, type CompositionManifest, type ConditionalDecisionRef,
   type DeferredPublicationRef, type GenerationManifest, type HashVersion, type HumanEditRef, type IssuanceManifest, type LateBoundRef, type LifecycleBinding, type ManifestSourceRef, type OfficialDocumentReference,
+  type SlotResolutionsRecord,
 } from "../../domain/institutionalTemplates";
 import { TemplatePersistenceError } from "./errors";
 import { isDuplicateKey, isForeignKeyViolation, requireReader, type TemplatesContext, type TemplatesReader, type TemplatesTx } from "./executor";
@@ -40,6 +41,8 @@ interface ManifestBody {
   readonly lateBound?: readonly LateBoundRef[];
   readonly deferredPublication?: readonly DeferredPublicationRef[];
   readonly lifecycleBindings?: readonly LifecycleBinding[];
+  /** E2 — registro versionado das resoluções humanas de slot (só ISSUANCE; ausente nos M2 anteriores). */
+  readonly slotResolutions?: SlotResolutionsRecord;
 }
 
 const corrupt = (why: string) => new TemplatePersistenceError("PERSISTED_RECORD_CORRUPT", `manifest persistido inválido: ${why}`);
@@ -53,14 +56,19 @@ export interface StoredManifest {
 }
 export interface PersistedManifest extends StoredManifest { readonly created: boolean }
 
-function bodyOf(m: CompositionManifest): ManifestBody {
+/** Corpo persistido (`body_json`) do manifest — exportado para o teste de ida e volta (M2 com e sem resoluções E2). */
+export function bodyOf(m: CompositionManifest): ManifestBody {
   const common = {
     sources: m.sources, conditionalDecisions: m.conditionalDecisions, aiNarratives: m.aiNarratives, annexes: m.annexes,
     ...(m.lateBound && m.lateBound.length > 0 ? { lateBound: m.lateBound } : {}),
     ...(m.deferredPublication && m.deferredPublication.length > 0 ? { deferredPublication: m.deferredPublication } : {}),
   };
   return m.stage === "ISSUANCE"
-    ? { ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation, ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}) }
+    ? {
+      ...common, humanEditRefs: m.humanEditRefs, canonicalRevalidation: m.canonicalRevalidation,
+      ...(m.lifecycleBindings && m.lifecycleBindings.length > 0 ? { lifecycleBindings: m.lifecycleBindings } : {}),
+      ...(m.slotResolutions !== undefined ? { slotResolutions: m.slotResolutions } : {}),
+    }
     : common;
 }
 
@@ -91,6 +99,7 @@ export function rowsToManifest(row: DocumentCompositionManifestRow, refRows: rea
       ...common, stage: "ISSUANCE", derivedFromManifestId: row.derivedFromManifestId, documentContentHash: row.documentContentHash,
       humanEditRefs: body.humanEditRefs, canonicalRevalidation: body.canonicalRevalidation,
       ...(body.lifecycleBindings && body.lifecycleBindings.length > 0 ? { lifecycleBindings: body.lifecycleBindings } : {}),
+      ...(body.slotResolutions !== undefined ? { slotResolutions: body.slotResolutions } : {}),
     };
   } else {
     throw corrupt(`estágio desconhecido (${row.stage})`);

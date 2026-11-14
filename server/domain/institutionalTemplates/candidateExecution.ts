@@ -7,6 +7,8 @@
  * 2. Atribuição: o ator registrado é o usuário AUTENTICADO (credencial do próprio sistema), nunca um id digitado; a autoridade declarada em arquivo
  *    é amarrada a esse usuário (um `decidedByUserId` divergente é recusado).
  */
+import { decidedByMatchesRecorder } from "../institutionalDecision";
+
 /** Autoridade declarada (forma estrutural idêntica à do ledger institucional; o domínio não importa serviços). */
 export interface DeclaredAuthorityShape {
   readonly decidedByName: string;
@@ -52,7 +54,9 @@ export function bindAuthorityToExecutor(authority: Record<string, unknown>, auth
     if (typeof authority[k] !== "string" || !(authority[k] as string).trim()) throw new Error(`authority-file: campo obrigatório ausente: ${k}`);
   }
   const declared = authority.decidedByUserId;
-  if (declared !== undefined && declared !== null && declared !== authenticatedUserId) {
+  // Mesma regra do ledger (`decidedByMatchesRecorder`, institutionalDecision.ts) — uma só definição do vínculo autoridade × executor.
+  const bound = declared === undefined || declared === null || (typeof declared === "number" && decidedByMatchesRecorder(declared, authenticatedUserId));
+  if (!bound) {
     throw new Error("authority-file: decidedByUserId difere do usuário autenticado (a autoridade declarada precisa ser a de quem executa)");
   }
   return { ...(authority as unknown as DeclaredAuthorityShape), decidedByUserId: authenticatedUserId };

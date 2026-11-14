@@ -36,7 +36,9 @@ export interface ReusedValue {
 
 export type ReuseProblemCode =
   | "ROLE_MISSING" | "ROLE_STALE" | "DEFAULT_INCOMPATIBLE" | "TR_PARAM_INVALID" | "TR_PARAM_CONFLICT"
-  | "PLATFORM_MISSING" | "ITEMS_MISSING" | "ITEMS_AMBIGUOUS" | "ITEMS_INVALID" | "BUDGET_DATE_MISSING" | "SCHEDULE_BASE_MISSING";
+  | "PLATFORM_MISSING" | "ITEMS_MISSING" | "ITEMS_AMBIGUOUS" | "ITEMS_INVALID" | "BUDGET_DATE_MISSING" | "SCHEDULE_BASE_MISSING"
+  /** LICIGOV-FAST PR-2 — informação orçamentária do processo ainda não registrada: pendência INFORMATIVA (não bloqueia). */
+  | "BUDGET_ALLOCATION_PENDING";
 /** `fix` = onde a pessoa resolve (a origem da autoridade), nunca o Edital. */
 export interface ReuseProblem { readonly name: string; readonly kind: ReuseKind; readonly code: ReuseProblemCode; readonly reason: string; readonly role?: RoleKey; readonly fix?: EntryPoint }
 
@@ -117,6 +119,15 @@ export function buildContextReuse(input: ReuseInputs): ContextReuse {
         if (typeof stored === "string" && isIsoDate(stored)) {
           values.set(v.name, { kind: "BUDGET", value: stored, origin: { label: "Pesquisa de Preços (data-base registrada)", ref: { baseDate: stored, revision: input.processRecord?.revision ?? 0, hash: (input.processRecord?.hash ?? "").slice(0, 12) } } });
         } else problem("BUDGET", "BUDGET_DATE_MISSING", "Data-base do orçamento não registrada.", "PRICE_RESEARCH");
+        return;
+      }
+      case "BUDGET_ALLOCATION": {
+        // LICIGOV-FAST PR-2: dotação/fonte DECLARADAS uma vez no processo (mesmo caminho do registro governado em que a CertameConfig as
+        // gravava: valores anteriores continuam válidos). Declarado por pessoa autorizada ≠ verificado na contabilidade.
+        const stored = storedAt(catalog, input.processRecord, v.name);
+        if (typeof stored === "string" && stored.trim() !== "") {
+          values.set(v.name, { kind: "BUDGET", value: stored, origin: { label: "Dados orçamentários do processo (declarado)", ref: { revision: input.processRecord?.revision ?? 0, hash: (input.processRecord?.hash ?? "").slice(0, 12) } } });
+        } else problem("BUDGET", "BUDGET_ALLOCATION_PENDING", "Ainda não informada — pendência informativa (não impede gerar nem emitir o documento).", "PROCESS_BUDGET");
         return;
       }
       case "EMISSION_DATE":

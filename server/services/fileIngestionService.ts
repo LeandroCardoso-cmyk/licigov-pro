@@ -5,11 +5,12 @@
  * Idempotent: mesmo arquivo + mesmo sessionId não cria duplicata.
  * Tenant-safe: organizationId obrigatório em todas as operações.
  */
-import { eq, and, ne, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createHash } from "crypto";
 import { getDb } from "../db/connection";
-import { importSessions, processes, procurementProcessesTable } from "../../drizzle/schema";
+import { activityLogs, importSessions, processes, procurementProcessesTable } from "../../drizzle/schema";
+import { getOrganizationMemberNames } from "../db/organizations";
 import { serviceLogger } from "./observabilityService";
 import { logActivity } from "./activityLogService";
 import {
@@ -185,6 +186,88 @@ export async function listImportSessions(
   return db.select().from(importSessions)
     .where(eq(importSessions.organizationId, organizationId))
     .limit(limit);
+}
+
+// ─── M8 (homologação visual) — histórico SOMENTE LEITURA das sessões de ingestão de um processo ─────────────────
+
+export interface ImportSessionHistoryEntry {
+  id: number;
+  importType: string | null;
+  status: string;
+  sourceFileName: string;
+  sourceSize: number | null;
+  /** Prefixo do sha256 do arquivo de origem (identifica a evidência sem expor a chave de armazenamento). */
+  checksumPrefix: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+  uploadedBy: { userId: number; name: string | null };
+  /** Aprovação registrada na trilha de auditoria (`import_session_approved`); null quando não há registro. */
+  approval: { userId: number; name: string | null; at: string } | null;
+  /** Promoção registrada na sessão; `researchId` é a Pesquisa de Preços gerada (vínculo com as cotações). */
+  promotion: { userId: number | null; name: string | null; at: string | null; researchId: string | null; status: string | null } | null;
+}
+
+const isoOrNull = (d: Date | string | null | undefined): string | null =>
+  d == null ? null : (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
+
+/**
+ * Sessões de ingestão (qualquer estado, inclusive concluídas/rejeitadas) de UM processo canônico do tenant, mais recentes
+ * primeiro, paginadas por limit/offset. Só exibe o que está REGISTRADO: sessão (envio/promoção) e trilha de auditoria
+ * (aprovação). O processo deve pertencer ao tenant (qualquer ciclo de vida: histórico não some com o arquivamento).
+ * Não expõe chave de armazenamento, conteúdo do arquivo nem dados de outro processo/tenant.
+ */
+export async function listProcessImportSessionHistory(
+  organizationId: number, procurementProcessId: string, page: { limit: number; offset: number },
+): Promise<{ sessions: ImportSessionHistoryEntry[]; hasMore: boolean }> {
+  const db = await getDb();
+  if (!db) return { sessions: [], hasMore: false };
+  const proc = await db.select({ id: procurementProcessesTable.id }).from(procurementProcessesTable)
+    .where(and(eq(procurementProcessesTable.id, procurementProcessId), eq(procurementProcessesTable.organizationId, organizationId)))
+    .limit(1);
+  if (proc.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado nesta organização." });
+
+  // Índice (organizationId, procurementProcessId) + PK: ordenação por id desc sem filesort.
+  const rows = await db.select().from(importSessions)
+    .where(and(eq(importSessions.organizationId, organizationId), eq(importSessions.procurementProcessId, procurementProcessId)))
+    .orderBy(desc(importSessions.id))
+    .limit(page.limit + 1).offset(page.offset);
+  const hasMore = rows.length > page.limit;
+  const pageRows = rows.slice(0, page.limit);
+  if (pageRows.length === 0) return { sessions: [], hasMore: false };
+
+  const ids = pageRows.map((r) => r.id);
+  const approvals = await db.select({ entityId: activityLogs.entityId, userId: activityLogs.userId, createdAt: activityLogs.createdAt })
+    .from(activityLogs)
+    .where(and(
+      eq(activityLogs.organizationId, organizationId),
+      eq(activityLogs.entityType, "import_session"),
+      eq(activityLogs.action, "import_session_approved"),
+      inArray(activityLogs.entityId, ids),
+    ))
+    .orderBy(desc(activityLogs.id));
+  const approvalBySession = new Map<number, { userId: number; at: string }>();
+  for (const a of approvals) {
+    if (a.entityId != null && !approvalBySession.has(a.entityId)) approvalBySession.set(a.entityId, { userId: a.userId, at: isoOrNull(a.createdAt)! });
+  }
+  const names = await getOrganizationMemberNames(organizationId, [
+    ...pageRows.map((r) => r.uploadedBy), ...pageRows.map((r) => r.promotedByUserId ?? 0), ...[...approvalBySession.values()].map((a) => a.userId),
+  ]);
+  const sessions = pageRows.map((r): ImportSessionHistoryEntry => {
+    const ap = approvalBySession.get(r.id) ?? null;
+    const promoted = r.promotedAt != null || r.promotionRef != null || r.promotedByUserId != null;
+    return {
+      id: r.id, importType: r.importType ?? null, status: r.status, sourceFileName: r.sourceFileName,
+      sourceSize: r.sourceSize ?? null, checksumPrefix: r.checksum ? r.checksum.slice(0, 12) : null,
+      createdAt: isoOrNull(r.createdAt)!, finishedAt: isoOrNull(r.finishedAt),
+      uploadedBy: { userId: r.uploadedBy, name: names.get(r.uploadedBy) ?? null },
+      approval: ap ? { userId: ap.userId, name: names.get(ap.userId) ?? null, at: ap.at } : null,
+      promotion: promoted ? {
+        userId: r.promotedByUserId ?? null, name: r.promotedByUserId ? names.get(r.promotedByUserId) ?? null : null,
+        at: isoOrNull(r.promotedAt), researchId: r.promotionRef ?? null, status: r.promotionStatus ?? null,
+      } : null,
+    };
+  });
+  return { sessions, hasMore };
 }
 
 /**

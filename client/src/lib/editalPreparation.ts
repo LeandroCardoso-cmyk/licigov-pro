@@ -7,6 +7,8 @@
  * servidor substitui a seção declarada) e planeja o "Salvar preparação": uma confirmação de UX, várias escritas SEQUENCIAIS pelas
  * autoridades existentes, cada uma com idempotência própria e CAS encadeado. A validação final é sempre do servidor.
  */
+import { LICITACOES_PROFILE_PATH } from "@/utils/orgPermissions";
+
 /** Espelho da DSL de condições do servidor (`Cond2`). Só para mostrar/ocultar AO VIVO; a autoridade final é o composer. */
 export type Cond =
   | { op: "eq" | "ne"; var: string; value: string | number | boolean }
@@ -41,12 +43,16 @@ export type FieldStatus =
   | "AUTO" | "ORG_REUSED" | "DECIDED" | "PENDING" | "OPTIONAL" | "AWAITING" | "UPSTREAM" | "ORG_DEFAULT" | "PENDING_TR" | "PROFILE_INCOMPLETE"
   | "PENDING_SOURCE" | "CANONICAL_UNRESOLVED" | "HIDDEN_CONDITIONAL" | "HIDDEN_POST_AWARD"
   /** Dado de PUBLICAÇÃO diferido ainda sem valor: nunca decisão pendente nem bloqueio da composição. */
-  | "DEFERRED";
+  | "DEFERRED"
+  /** LICIGOV-FAST PR-2: informação do processo ainda não registrada (ex.: dotação) — pendência INFORMATIVA, nunca bloqueio. */
+  | "CONTENT_PENDING"
+  /** LICIGOV-FAST PR-2: dispensável nesta configuração (ex.: dotação em registro de preços), com o fundamento na origem. */
+  | "NOT_APPLICABLE";
 export type AuthorityClass =
   | "EXISTING_CANONICAL" | "ORG_ROLE_PROFILE" | "ORG_POLICY_PROFILE" | "PLATFORM_PROFILE" | "UPSTREAM_PROCESS" | "UPSTREAM_DFD" | "UPSTREAM_ETP" | "UPSTREAM_ITEMS"
   | "UPSTREAM_PRICE_RESEARCH" | "UPSTREAM_TR" | "CERTAME_CONFIG" | "CERTAME_SCHEDULE" | "LIFECYCLE_SYSTEM" | "CONDITIONAL" | "POST_AWARD";
 /** Onde a pessoa resolve um dado que falta (a ORIGEM da autoridade — nunca o Edital). */
-export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
+export type EntryPoint = "NONE" | "TR_SECTION" | "ORG_PROFILE" | "PLATFORM_PROFILE" | "ITEMS" | "PRICE_RESEARCH" | "PROCESS_BUDGET" | "ORG_REGISTRY" | "REQUESTING_UNIT" | "CERTAME_CONFIG";
 export type PreparationClass = "CANONICAL" | "ORG_PROFILE" | "TR_PROJECTION" | "PROCESS_DECISION" | "CONDITIONAL" | "POST_AWARD";
 export interface PrepOrigin { label: string; ref?: Readonly<Record<string, string | number>> }
 export interface PrepField {
@@ -84,6 +90,8 @@ export interface UpstreamView {
   profilePending: { name: string; description: string; reason: string; role?: string }[];
   /** Pendências NA ORIGEM (Perfil da plataforma, Itens, Pesquisa de Preços, cadastro): cada uma com o `fix` (onde resolver). */
   sourcePending: { name: string; description: string; reason: string; fix: EntryPoint }[];
+  /** LICIGOV-FAST PR-2 — pendências INFORMATIVAS (não bloqueiam a geração nem a emissão; o documento traz o marcador governado). */
+  contentPending?: { name: string; description: string; reason: string; fix: EntryPoint; providedBy: string; neededBefore?: "CONTRACTING" | "PUBLICATION" }[];
 }
 export interface PreparationStateView {
   status: "READY_FOR_PREPARATION"; revisionId: string; catalogVersion: string;
@@ -106,6 +114,8 @@ export interface PreparationStateView {
 export const DURATION_UNIT_LABEL: Record<string, string> = {
   minute: "minuto(s)", hour: "hora(s)", day: "dia(s)", businessDay: "dia(s) útil(eis)", month: "mês(es)", year: "ano(s)",
 };
+/** Unidades do contrato de duração do catálogo (espelho de `DURATION_UNITS` em server/domain/institutionalTemplates/variableCatalog2.ts). */
+export const DURATION_UNITS = ["minute", "hour", "day", "businessDay", "month", "year"] as const;
 
 export const SOURCE_TITLE: Record<string, string> = {
   IDENTITY: "Identidade do órgão", POLICY: "Política do órgão", PROCESS: "Dados do processo", TR: "Dados do TR", CERTAME_CONFIG: "Configuração do certame",
@@ -139,7 +149,8 @@ export function scalarToText(type: string, value: unknown): string {
 export function toFormValue(f: Pick<PrepField, "type" | "itemType" | "columns">, value: unknown): FormValue {
   if (f.type === "duration") {
     const d = value as { amount?: number; unit?: string } | undefined;
-    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "day" };
+    // Sem unidade registrada ⇒ nenhuma unidade presumida: "dia(s)" silencioso gravava, p.ex., a etapa de lances em dias.
+    return { amount: d && typeof d.amount === "number" ? String(d.amount) : "", unit: d?.unit ?? "" };
   }
   if (f.type === "list") return Array.isArray(value) ? value.map((v) => scalarToText(f.itemType ?? "string", v)).join("\n") : "";
   if (f.type === "table") {
@@ -192,6 +203,8 @@ export function parseField(f: PrepField, form: FormValue | undefined): ParseResu
     if (!d.amount?.trim()) return okv(undefined);
     const n = parseDecimal(d.amount);
     if (n === null || !Number.isInteger(n) || n < 0) return err("Informe a quantidade (número inteiro).");
+    if (!d.unit) return err("Escolha a unidade.");
+    if (!(DURATION_UNITS as readonly string[]).includes(d.unit)) return err("Escolha uma das unidades.");
     return okv({ amount: n, unit: d.unit });
   }
   if (f.type === "list") {
@@ -259,12 +272,13 @@ export interface FixAction { label: string; href?: string; stage?: StageTarget }
 /** Ação (deep-link) para resolver um dado NA ORIGEM da autoridade — o Edital nunca recebe a digitação. */
 export function fixAction(entry: EntryPoint | undefined): FixAction | null {
   switch (entry) {
-    case "PLATFORM_PROFILE": return { label: "Configurar Perfil da plataforma", href: "/configuracoes#perfil-licitacoes" };
-    case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: "/configuracoes#perfil-licitacoes" };
+    case "PLATFORM_PROFILE": return { label: "Configurar Perfil da plataforma", href: LICITACOES_PROFILE_PATH };
+    case "ORG_PROFILE": return { label: "Abrir o Perfil de Licitações", href: LICITACOES_PROFILE_PATH };
     case "ORG_REGISTRY": return { label: "Corrigir cadastro do órgão", href: "/configuracoes" };
     case "REQUESTING_UNIT": return { label: "Corrigir unidade requisitante", stage: "dfd" };
     case "ITEMS": return { label: "Abrir Itens da contratação", stage: "contract_items" };
     case "PRICE_RESEARCH": return { label: "Corrigir na Pesquisa de Preços", stage: "price" };
+    case "PROCESS_BUDGET": return { label: "Informar nos Dados orçamentários do processo", stage: "price" };
     case "TR_SECTION": return { label: "Abrir o TR", stage: "tr" };
     default: return null;
   }
@@ -359,6 +373,91 @@ export function livePendingItems(state: PreparationStateView, edits: Readonly<Re
   return state.sections.flatMap((section) => section.fields
     .filter((f) => f.editable && live.get(f.name)?.status === "PENDING" && !live.get(f.name)?.edited)
     .map((field) => ({ section, field })));
+}
+
+/**
+ * Decisões a DESENHAR no bloco de decisões deste certame. Diferente de `livePendingItems` (que CONTA o que falta), a lista é ancorada
+ * no status do SERVIDOR: um campo pendente continua na tela enquanto a pessoa digita, troca a unidade ou corrige o valor — só sai depois
+ * de registrado (o servidor passa a devolvê-lo como DECIDED). Condicionais entram/saem AO VIVO conforme a decisão que as ativa.
+ */
+export function liveDecisionItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return parentFirst(state.sections.flatMap((section) => section.fields
+    .filter((f) => {
+      const s = live.get(f.name)?.status;
+      if (!f.editable || s === undefined || s === "HIDDEN_CONDITIONAL") return false;
+      // Opcional que uma condição tornou obrigatório: sai da lista de opcionais e fica aqui (com ou sem valor digitado).
+      return f.status === "PENDING" || f.status === "HIDDEN_CONDITIONAL" || (f.status === "OPTIONAL" && s !== "OPTIONAL");
+    })
+    .map((field) => ({ section, field }))));
+}
+
+/**
+ * Ordem de APRESENTAÇÃO: a decisão condicional aparece logo DEPOIS da decisão que a ativa (quando esta está na mesma lista), em vez de
+ * na ordem alfabética do servidor — ao escolher o modo "aberto", a duração da etapa surge abaixo do seletor, não acima dele.
+ * Estável; ciclos ou controlador fora da lista ⇒ ordem original.
+ */
+function parentFirst(items: readonly PendingItem[]): PendingItem[] {
+  const names = new Set(items.map((i) => i.field.name));
+  const parentOf = (i: PendingItem) => i.field.requiredWhenVariables.find((v) => v !== i.field.name && names.has(v));
+  const children = new Map<string, PendingItem[]>();
+  const roots: PendingItem[] = [];
+  for (const i of items) {
+    const p = parentOf(i);
+    if (p) children.set(p, [...(children.get(p) ?? []), i]); else roots.push(i);
+  }
+  const out: PendingItem[] = []; const seen = new Set<PendingItem>();
+  const visit = (i: PendingItem) => {
+    if (seen.has(i)) return;
+    seen.add(i); out.push(i);
+    for (const c of children.get(i.field.name) ?? []) visit(c);
+  };
+  roots.forEach(visit);
+  for (const i of items) if (!seen.has(i)) out.push(i);
+  return out;
+}
+
+/** Decisões JÁ REGISTRADAS deste processo que continuam editáveis (revisão/correção explícita, mesmo fluxo governado de gravação). */
+export function liveRegisteredItems(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): PendingItem[] {
+  const live = liveStatuses(state, edits);
+  return state.sections.flatMap((section) => section.fields
+    .filter((f) => section.scope === "PROCESS" && f.editable && f.status === "DECIDED" && !f.completionPolicy && live.get(f.name)?.status !== "HIDDEN_CONDITIONAL")
+    .map((field) => ({ section, field })));
+}
+
+/**
+ * D-01 — apresentação por FAMÍLIA: a condicional fica logo abaixo da decisão que a ativa, mesmo quando a ativadora já está REGISTRADA
+ * ou é uma decisão OPCIONAL (antes, a filha pendente caía no bloco de pendências, acima, e o bloco de registradas seguia a ordem
+ * alfabética do servidor). Cada item vai para o bloco da sua ativadora RAIZ (pendências × registradas × opcionais), na ordem
+ * pai→filhos. As três listas continuam disjuntas (nenhuma decisão aparece duas vezes); só a apresentação muda — a contagem de
+ * pendências segue em `livePendingItems`. `attached` = decisões ainda não registradas exibidas no bloco da ativadora (registradas ou
+ * opcionais), para sinalizá-las e abrir o bloco.
+ */
+export function liveDecisionGroups(state: PreparationStateView, edits: Readonly<Record<string, SectionEdits>>): { decisions: PendingItem[]; registered: PendingItem[]; optional: PendingItem[]; attached: ReadonlySet<string> } {
+  const pending = liveDecisionItems(state, edits);
+  const registered = liveRegisteredItems(state, edits);
+  const optional = liveOptionalItems(state, edits);
+  const blockOf = new Map<string, "registered" | "optional">([
+    ...registered.map((i) => [i.field.name, "registered"] as const),
+    ...optional.map((i) => [i.field.name, "optional"] as const),
+  ]);
+  const ordered = parentFirst([...registered, ...pending, ...optional]);
+  const byName = new Map(ordered.map((i) => [i.field.name, i] as const));
+  const parentOf = (i: PendingItem) => i.field.requiredWhenVariables.find((v) => v !== i.field.name && byName.has(v));
+  const rootOf = (i: PendingItem): PendingItem => {
+    let cur = i; const seen = new Set<string>([i.field.name]);
+    for (let p = parentOf(cur); p && !seen.has(p); p = parentOf(cur)) { seen.add(p); cur = byName.get(p)!; }
+    return cur;
+  };
+  const pendingNames = new Set(pending.map((i) => i.field.name));
+  const out = { decisions: [] as PendingItem[], registered: [] as PendingItem[], optional: [] as PendingItem[] };
+  const attached = new Set<string>();
+  for (const i of ordered) {
+    const block = blockOf.get(rootOf(i).field.name) ?? "decisions";
+    out[block].push(i);
+    if (block !== "decisions" && pendingNames.has(i.field.name)) attached.add(i.field.name);
+  }
+  return { ...out, attached };
 }
 
 /** Decisões opcionais ao vivo (as que ainda não têm valor e não estão ocultas). */
@@ -473,6 +572,15 @@ export function generateReady(bound: boolean, hasTrPin: boolean, preflight: Pref
 }
 
 export interface DeviationView { blockId: string; kind: "INCLUDED_BLOCK_REMOVED" | "EXCLUDED_BLOCK_INSERTED"; acknowledged: boolean }
+/** E2 — trecho pendente do modelo (slot de IA sem narrativa) e a resolução humana dele (estado calculado pelo servidor). */
+export interface SlotView {
+  slotKey: string; label: string; state: "PENDING" | "RESOLVED" | "STALE"; reason: string | null;
+  inline: boolean; declaredNoneAllowed: boolean; declaredNoneText: string | null;
+  revision: number; resolution: "HUMAN_TEXT" | "DECLARED_NONE" | null; resolvedByName: string | null; resolvedAt: string | null;
+  currentText: string | null;
+  /** Entorno do trecho no documento (onde e como o texto entra). Ausente em respostas anteriores. */
+  context?: { before: string; after: string } | null;
+}
 export interface ReviewStateView {
   composedByTemplate: boolean; generationManifestId?: string; templateRevisionId?: string;
   unresolvedMarkers: { count: number; slots: readonly string[]; samples: readonly string[] };
@@ -480,8 +588,26 @@ export interface ReviewStateView {
   /** Campos de SISTEMA do ciclo de vida (ex.: data de emissão): informativo; atribuídos no ato oficial da emissão. */
   lateBound?: readonly { variable: string; label: string; message: string }[];
   aiNarratives: readonly { slotKey: string; executionId: string; humanAccepted: boolean }[];
+  /** E2 — ausente em respostas anteriores à resolução por trecho (o painel cai no aviso genérico de marcadores). */
+  slots?: readonly SlotView[];
   revalidation: { status: "PASSED" | "BLOCKED"; issues: readonly { code: string; path: string; message: string }[] };
 }
+
+/** Trechos do modelo ainda sem resolução humana válida (pendentes ou desatualizados). */
+export const openSlots = (r: Pick<ReviewStateView, "slots"> | undefined): SlotView[] => (r?.slots ?? []).filter((s) => s.state !== "RESOLVED");
+
+/**
+ * Marcadores [REVISAR] que NÃO são trechos de redação supervisionada (dados não informados): os de trecho são tratados por slot.
+ * Sem a lista de trechos (resposta antiga) todos os marcadores contam.
+ */
+export const dataMarkerCount = (r: Pick<ReviewStateView, "unresolvedMarkers" | "slots">): number =>
+  r.slots ? Math.max(0, r.unresolvedMarkers.count - r.unresolvedMarkers.slots.length) : r.unresolvedMarkers.count;
+
+export const SLOT_STATE_LABEL: Record<SlotView["state"], string> = {
+  PENDING: "Pendente",
+  RESOLVED: "Resolvido por pessoa",
+  STALE: "Alterado após a resolução",
+};
 
 export const DEVIATION_LABEL: Record<DeviationView["kind"], string> = {
   INCLUDED_BLOCK_REMOVED: "Bloco do modelo removido ou substituído no texto",
@@ -491,15 +617,86 @@ export const DEVIATION_LABEL: Record<DeviationView["kind"], string> = {
 export const pendingDeviations = (r: Pick<ReviewStateView, "structuralDeviations"> | undefined): DeviationView[] =>
   (r?.structuralDeviations ?? []).filter((d) => !d.acknowledged);
 
+/**
+ * M8 (homologação visual) — origem legível de uma variável do modelo (`vars.<NAMESPACE>.<campo>`), para orientar ONDE corrigir.
+ * Mapa fechado e curto: variável sem rótulo cai no rótulo do namespace; namespace desconhecido ⇒ "dado do processo".
+ */
+const VARIABLE_LABELS: Readonly<Record<string, string>> = {
+  "BUDGET.valorEstimado": "valor estimado da contratação — corrija na Pesquisa de Preços (cotações válidas e divulgação do orçamento)",
+};
+const NAMESPACE_LABELS: Readonly<Record<string, string>> = {
+  BUDGET: "orçamento — corrija na Pesquisa de Preços",
+  ITEMS: "itens da contratação — corrija em Itens da contratação",
+  PROCESS: "dados do processo",
+  ORG: "perfil institucional do órgão",
+  CERTAME_CONFIG: "configuração do certame — corrija na Preparação do Edital",
+  TR: "Termo de Referência oficial",
+};
+export function variableOriginLabel(path: string): string {
+  const name = path.replace(/^vars\./, "");
+  return VARIABLE_LABELS[name] ?? NAMESPACE_LABELS[name.split(".")[0]] ?? "dado do processo";
+}
+
+/**
+ * Texto OPERACIONAL de uma pendência da revalidação do modelo (o código/caminho técnico é preservado à parte, para
+ * auditoria). Nunca expõe termos internos ("requiredWhen", "fontes canônicas", nomes de variável) como orientação.
+ */
+export function revalidationIssueMessage(i: { code: string; path: string; message: string }): string {
+  switch (i.code) {
+    case "SOURCE_CHANGED":
+      return "Os dados do processo mudaram depois da composição desta minuta: use \"Gerar novamente\" para recompô-la com os dados atuais (o texto anterior fica no histórico) e revise antes da emissão.";
+    case "COMPOSITION_DRIFT":
+      // Inclui a atualização da APRESENTAÇÃO do modelo (ex.: M8 P2.1 — referência do Anexo I sem id/hash): minutas compostas antes dela.
+      return "O texto não corresponde mais ao que o modelo institucional compõe hoje (os dados ou a apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir.";
+    case "MISSING_REQUIRED":
+      return `Falta uma informação obrigatória para este modelo: ${variableOriginLabel(i.path)}.`;
+    case "VALUE_TYPE_INVALID":
+      return `Uma informação do processo está em formato inválido para este modelo: ${variableOriginLabel(i.path)}.`;
+    case "REFERENCE_NOT_PINNED":
+      return "A minuta não está vinculada à versão exata do TR oficial: selecione o TR oficial e componha novamente.";
+    case "CROSS_TENANT_REFERENCE":
+      return "A minuta referencia um documento que não pertence a este órgão: componha novamente.";
+    case "AI_SLOT_UNRESOLVED":
+      return "Há trecho do modelo sem redação ou declaração registrada por pessoa: resolva-o no painel de revisão (apagar o marcador não basta).";
+    case "AI_SLOT_RESOLUTION_STALE":
+      return "Um trecho do modelo foi alterado depois de resolvido: registre novamente a redação atual no painel de revisão.";
+    default:
+      return "Pendência na revalidação do modelo institucional (veja os detalhes técnicos).";
+  }
+}
+
+/**
+ * Recomposição governada disponível para ESTA minuta? (o servidor é a autoridade e reaplica a regra; aqui só decide se o hash visto é enviado)
+ *  - a revisão vinculada tem a capability de dados de publicação diferidos (Revisão 2); ou
+ *  - R3: a revalidação acusa `SOURCE_CHANGED` — os dados do processo mudaram depois da composição (vale para a Revisão 1).
+ */
+export function canRecomposeDraft(prep: Pick<PreparationStateView, "capabilities"> | null | undefined, review: ReviewStateView | null | undefined): boolean {
+  if (prep?.capabilities?.governedDraftRecomposition) return true;
+  return !!review?.composedByTemplate && review.revalidation.status === "BLOCKED" && review.revalidation.issues.some((i) => i.code === "SOURCE_CHANGED");
+}
+
 /** Resumo de prontidão para emitir: nada além de informar — a autoridade final é a revalidação do backend na emissão. */
-export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolean; blockers: string[] } {
-  if (!r || !r.composedByTemplate) return { ready: true, blockers: [] };
+export function reviewReadiness(r: ReviewStateView | undefined): { ready: boolean; blockers: string[]; technical: string[] } {
+  if (!r || !r.composedByTemplate) return { ready: true, blockers: [], technical: [] };
   const blockers: string[] = [];
-  if (r.unresolvedMarkers.count > 0) blockers.push(`${r.unresolvedMarkers.count} marcador(es) [REVISAR] pendente(s) no texto.`);
+  const technical: string[] = [];
+  const open = openSlots(r).length;
+  if (open > 0) blockers.push(`${open} trecho(s) do modelo aguardando redação ou declaração de pessoa responsável.`);
+  const dataMarkers = dataMarkerCount(r);
+  if (dataMarkers > 0) blockers.push(`${dataMarkers} marcador(es) [REVISAR] pendente(s) no texto.`);
   const pend = pendingDeviations(r).length;
   if (pend > 0) blockers.push(`${pend} desvio(s) estrutural(is) sem reconhecimento humano.`);
-  if (r.revalidation.status === "BLOCKED") for (const i of r.revalidation.issues) if (i.code !== "STRUCTURAL_DEVIATION_UNACKNOWLEDGED") blockers.push(i.message);
-  return { ready: blockers.length === 0, blockers };
+  if (r.revalidation.status === "BLOCKED") {
+    for (const i of r.revalidation.issues) {
+      if (i.code === "STRUCTURAL_DEVIATION_UNACKNOWLEDGED") continue;
+      // Trechos do modelo: já contados acima (por slot); o detalhe técnico continua disponível.
+      if ((i.code === "AI_SLOT_UNRESOLVED" || i.code === "AI_SLOT_RESOLUTION_STALE") && r.slots) { technical.push(`${i.code} · ${i.path} — ${i.message}`); continue; }
+      const text = revalidationIssueMessage(i);
+      if (!blockers.includes(text)) blockers.push(text);
+      technical.push(`${i.code} · ${i.path} — ${i.message}`);
+    }
+  }
+  return { ready: blockers.length === 0, blockers, technical };
 }
 
 export interface AckOutcome { blockId: string; ok: boolean; error?: string }

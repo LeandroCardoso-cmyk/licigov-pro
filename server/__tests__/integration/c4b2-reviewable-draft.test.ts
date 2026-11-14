@@ -38,6 +38,18 @@ describe("C.4B.2 — reviewableDraft (leitura canônica reload-safe)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(procDb.getProcess).mockResolvedValue(mockProcess as any);
+    vi.mocked(procDb.listIntelligentItems).mockResolvedValue([]);
+  });
+
+  it("pós-M8: priceNotice aditivo — item com cotação fictícia ⇒ aviso; falha na leitura dos itens ⇒ null (o rascunho nunca deixa de abrir)", async () => {
+    vi.mocked(procDb.getGeneratedDocumentByKind).mockResolvedValue(draftRow("tr", "# tr\nx") as any);
+    const caller = procurementProcessRouter.createCaller(makeContext(mockUser));
+    vi.mocked(procDb.listIntelligentItems).mockResolvedValue([{ status: "aprovado", fictitiousQuoteCount: 2 }] as any);
+    expect((await caller.reviewableDraft({ processId: mockProcess.id, kind: "tr" })).draft?.priceNotice).toMatch(/^VALORES DEMONSTRATIVOS — 1 item\(ns\)/);
+    vi.mocked(procDb.listIntelligentItems).mockRejectedValue(new Error("db"));
+    const r = await caller.reviewableDraft({ processId: mockProcess.id, kind: "tr" });
+    expect(r.draft?.content).toBe("# tr\nx");
+    expect(r.draft?.priceNotice).toBeNull();
   });
 
   it.each(["etp", "tr", "edital"] as const)("%s: retorna conteúdo EXATO + hash (draftContentHash)", async (kind) => {

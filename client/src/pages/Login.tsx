@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { APP_DESCRIPTION, APP_LOGO, APP_TITLE } from "@/const";
 import { isSafeReturnTo } from "@/utils/safeReturnTo";
+import { browserStorage, clearSessionScopedState } from "@/_core/sessionState";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -16,6 +18,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   // PR A.1 — se o usuário chegou aqui via redirect de sessão expirada (ex.: no meio do aceite de
   // um convite), volta para lá depois de logar em vez de sempre ir para /dashboard.
@@ -24,6 +27,10 @@ export default function Login() {
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: () => {
+      // M8 — nova sessão = novo usuário/tenant: nenhum dado em cache da sessão anterior (capabilities, processos,
+      // organização) é reaproveitado. Tudo é relido com a sessão nova; o backend continua autorizando cada leitura.
+      clearSessionScopedState(browserStorage());
+      queryClient.removeQueries();
       utils.auth.me.invalidate();
       navigate(destination);
     },

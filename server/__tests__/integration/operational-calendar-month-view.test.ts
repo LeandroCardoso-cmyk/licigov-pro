@@ -5,7 +5,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildMonthGrid, listForMonthSelection, monthGridRange } from "@shared/operationalCalendar";
 
-vi.mock("../../db/procurement", () => ({ listProcesses: async () => [] }));
+vi.mock("../../db/procurement", () => ({ listProcesses: async () => [], listActiveProcessRefsByIds: async () => [] }));
+// Sem registros governados de processo neste cenário: nenhuma sessão derivada da Configuração do certame.
+vi.mock("../../db/institutionalDecisions", () => ({ listCurrentDecisionsBySubjectType: async () => [] }));
 vi.mock("../../db/directProcurement", () => ({ listDirectProcurementWorkspaces: async () => [] }));
 vi.mock("../../db/contractWorkspace", () => ({ listContractWorkspaces: async () => [], countContractAddendaByOrg: async () => 0 }));
 vi.mock("../../db/legalOpinionWorkspace", () => ({ listLegalOpinionWorkspaces: async () => [] }));

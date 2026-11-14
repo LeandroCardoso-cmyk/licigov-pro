@@ -34,10 +34,16 @@ describe("ingestionRouter — tenant-safe e gated por feature flag", () => {
     // viewer não muta). Contrato superado: contar só `tenantProcedure` subestimava as procedures. Agora conta
     // AMBAS as declarações e exige ≥ 1 guarda de flag por procedure (exceto getCapabilities, que reporta o
     // estado da flag em vez de lançar) — mais forte que o mínimo fixo anterior (7).
+    // M8 (homologação visual): `listSessionHistory` é a 2ª exceção EXPLÍCITA — leitura da evidência já registrada
+    // (histórico), consultável depois que a ingestão é desligada; não envia, revisa nem promove nada.
+    const UNGATED_READS = ["getCapabilities", "listSessionHistory"];
     const decls = ROUTER.match(/^\s{2}\w+: (?:tenantProcedure|orgRoleProcedure\("\w+"\))/gm) ?? [];
     const gates = (ROUTER.match(/await assertCanonicalIngestionEnabled\(/g) ?? []).length;
     expect(decls.length).toBeGreaterThanOrEqual(7);
-    expect(gates).toBeGreaterThanOrEqual(decls.length - 1);
+    expect(gates).toBeGreaterThanOrEqual(decls.length - UNGATED_READS.length);
+    // As exceções são LEITURAS (tenantProcedure), nunca mutações.
+    for (const name of UNGATED_READS) expect(ROUTER).toMatch(new RegExp(`^\\s{2}${name}: tenantProcedure`, "m"));
+    expect(ROUTER).toMatch(/listSessionHistory: tenantProcedure[\s\S]*?\.query\(/);
   });
 });
 

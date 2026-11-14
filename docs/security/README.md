@@ -1,5 +1,8 @@
 # LiciGov Pro — Segurança e RBAC
 
+> **Incidente Railway (out/2026):** auditoria, inventário sanitizado, runbook de rotação e roadmap em
+> [`incident-2026-10/`](./incident-2026-10/AUDIT_REPORT.md).
+
 > Documentação de segurança: multi-tenant, RBAC, autenticação e proteção de dados.
 > Atualizado em: 2026-05-27
 

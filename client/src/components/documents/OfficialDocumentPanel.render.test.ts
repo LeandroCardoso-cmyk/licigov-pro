@@ -16,6 +16,7 @@ vi.mock("@/lib/trpc", () => ({
       exportInstitutional: { useMutation: mutation },
       preview: { useQuery: () => ({ data: undefined, isLoading: false }) },
     },
+    procurementProcess: { exportConsolidatedEdital: { useMutation: mutation } },
   },
 }));
 vi.mock("sonner", () => ({ toast: { success: () => {}, error: () => {} } }));
@@ -53,5 +54,15 @@ describe("OfficialDocumentPanel — emitidas × snapshots técnicos (homologaç�
     expect(html).toContain("Doc x1");
     expect(html).toContain("· gerado");
     expect(html).not.toContain("technical-snapshots");
+  });
+
+  it("F2: 'Edital completo' só em versão emitida do Edital com consolidatedEdital; demais tipos sem o botão", () => {
+    st.docs = [doc({ id: "ed1", documentType: "edital", status: "emitido" })];
+    const html = render({ requireStatusForExport: "emitido", documentType: "edital", consolidatedEdital: true });
+    expect(mainList(html)).toContain("Edital completo — DOCX");
+    expect(mainList(html)).toContain("Edital completo — PDF");
+    expect(mainList(html)).toContain("Só o Edital:");
+    st.docs = [doc({ id: "e2", version: 2, status: "emitido" })];
+    expect(render({ requireStatusForExport: "emitido", documentType: "etp" })).not.toContain("Edital completo");
   });
 });

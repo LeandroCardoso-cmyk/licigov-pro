@@ -189,7 +189,7 @@ export const legalOpinionWorkspaceRouter = router({
       } catch (e) {
         // Preserva códigos institucionais (CONFLICT etc.); só o inesperado vira BAD_REQUEST.
         if (e instanceof TRPCError) throw e;
-        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha ao assinar." });
+        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha ao assinar.", cause: e });
       }
     }),
 
@@ -205,7 +205,7 @@ export const legalOpinionWorkspaceRouter = router({
         });
         return { success: true, workspaceId: result.workspace.id, responseId: result.responseId, status: "RETURNED" as const };
       } catch (e) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha ao devolver." });
+        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Falha ao devolver.", cause: e });
       }
     }),
 

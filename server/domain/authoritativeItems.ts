@@ -108,6 +108,20 @@ export function suspectedQuotesReviewText(n: number): string {
   return `[REVISAR: ${n} cotação(ões) possivelmente demonstrativa(s) (marcação de importação anterior) — confira a fonte antes de usar o valor.]`;
 }
 
+/**
+ * Pós-M8 — texto da CONTAGEM de cotações. Sem fonte fictícia/suspeita, mantém exatamente o texto histórico ("N cotação(ões)
+ * válida(s)" = com preço, as que compõem a média). Com fonte fictícia/sintética ou suspeita, a contagem é de cotações REGISTRADAS
+ * e a natureza delas é dita (nunca chamadas de "válidas"): a média continua calculada como antes; só a descrição muda.
+ */
+export function quoteCountText(quoteCount: number, fictitiousQuoteCount = 0, suspectedQuoteCount = 0): string {
+  if (fictitiousQuoteCount <= 0 && suspectedQuoteCount <= 0) return `${quoteCount} cotação(ões) válida(s)`;
+  const kinds = [
+    fictitiousQuoteCount > 0 ? `${fictitiousQuoteCount} de fonte fictícia/sintética (demonstrativa)` : null,
+    suspectedQuoteCount > 0 ? `${suspectedQuoteCount} possivelmente demonstrativa(s)` : null,
+  ].filter(Boolean).join(" e ");
+  return `${quoteCount} cotação(ões) registrada(s), das quais ${kinds}`;
+}
+
 export function computeItemEstimates(items: readonly AuthoritativeItemInput[], opts: { preserveOrder?: boolean } = {}): AuthoritativeItemsEstimate {
   const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
@@ -198,8 +212,9 @@ export function renderAuthoritativeItemsBlock(
       : `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`)
     : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
-  // Risco A (hardening P0): conta só cotações VÁLIDAS — as que entraram efetivamente na média.
-  lines.push(`- Baseado em ${estimate.quoteCount} cotação(ões) válida(s) em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
+  // Risco A (hardening P0): cotações com preço (as que entram na média). Pós-M8: com fonte fictícia/suspeita, "registradas" e a
+  // natureza explícita — uma cotação fictícia nunca é chamada de válida (texto inalterado sem elas).
+  lines.push(`- Baseado em ${quoteCountText(estimate.quoteCount, estimate.fictitiousQuoteCount, estimate.suspectedQuoteCount)} em ${estimate.itemCount} item(ns) ${canonical ? "da contratação" : "aprovado(s)"}.`);
   if (estimate.fictitiousQuoteCount > 0) {
     lines.push(`- ${fictitiousQuotesReviewText(estimate.fictitiousQuoteCount)}`);
   }

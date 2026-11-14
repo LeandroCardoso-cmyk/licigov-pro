@@ -77,3 +77,15 @@ export function validateFile(file: FileLike, caps: IngestionCapabilities): FileV
 /** MIME a declarar para conteúdo colado (texto) — roteia para o parser CSV/texto real. */
 export const PASTED_CONTENT_MIME = "text/csv";
 export const PASTED_CONTENT_FILENAME = "conteudo-colado.csv";
+
+/**
+ * M8 — a retomada (`ingestion.getActiveSession`) só roda com a capability canônica habilitada, processo definido e nenhuma
+ * sessão já adotada. Capability ainda carregando ⇒ `false` (espera; nunca dispara a consulta que o backend recusaria com 403).
+ */
+export function shouldQueryActiveSession(input: {
+  readonly ingestionEnabled: boolean;
+  readonly procurementProcessId: string;
+  readonly sessionId: number | null;
+}): boolean {
+  return input.ingestionEnabled && !!input.procurementProcessId && input.sessionId == null;
+}

@@ -10,7 +10,9 @@
  *  - HUMAN_EDIT_LINEAGE_INVALID: o conteúdo emitido difere do composto sem cadeia de edições humanas que o explique;
  *  - PROTECTED_NODE_MISSING: valor canônico ou referência oficial do texto composto foi removido/alterado na edição;
  *  - STRUCTURAL_DEVIATION_UNACKNOWLEDGED: bloco condicional incluído removido (ou excluído inserido) sem reconhecimento;
- *  - AI_NARRATIVE_NOT_ACCEPTED: narrativa de IA do M1 sem aceite humano exato (slot + execução + hash do texto).
+ *  - AI_NARRATIVE_NOT_ACCEPTED: narrativa de IA do M1 sem aceite humano exato (slot + execução + hash do texto);
+ *  - AI_SLOT_UNRESOLVED / AI_SLOT_RESOLUTION_STALE (E2): slot pendente do texto composto sem resolução humana registrada, ou com
+ *    resolução que não corresponde mais ao trecho emitido (apagar `[REVISAR]` nunca equivale a revisão).
  * O M2 é DERIVADO do M1 (INSERT-only; o M1 nunca é reescrito) com `documentContentHash`, `humanEditRefs` e o registro
  * da revalidação (`checkedAt` fora de qualquer hash). Id do M2 determinístico ⇒ retry da transação não duplica efeito.
  */
@@ -21,6 +23,7 @@ import {
   type AiNarrativeRef, type CanonicalRevalidationRecord, type GenerationManifest, type HumanEditRef, type IssuanceManifest,
 } from "./manifest";
 import { lateBoundTamperIssues, type LifecycleBinding } from "./lifecycleLateBound";
+import { evaluateSlotResolutions, pendingSlotMark, slotResolutionRefs, type SlotResolutionRecord, type SlotResolutionRef } from "./slotResolution";
 import { templateHash } from "./semanticHash";
 import { isSha256, type OrgId, type Sha256, type TemplateIssueCode } from "./types";
 
@@ -35,7 +38,9 @@ export type RevalidationIssueCode =
   | "PROTECTED_NODE_MISSING"
   | "STRUCTURAL_DEVIATION_UNACKNOWLEDGED"
   | "AI_NARRATIVE_NOT_ACCEPTED"
-  | "LATE_BOUND_TAMPERED";
+  | "LATE_BOUND_TAMPERED"
+  | "AI_SLOT_UNRESOLVED"
+  | "AI_SLOT_RESOLUTION_STALE";
 
 export interface RevalidationIssue {
   readonly code: RevalidationIssueCode;
@@ -89,6 +94,11 @@ export interface RevalidationInput {
   readonly humanEdits: readonly HumanEditLink[];
   readonly aiAcceptances: readonly AiNarrativeAcceptance[];
   readonly acknowledgments: readonly StructuralDeviationAcknowledgment[];
+  /**
+   * E2 — resoluções humanas registradas dos slots pendentes (ledger). Ausente = nenhuma: todo slot pendente do texto composto bloqueia
+   * (fail-closed).
+   */
+  readonly slotResolutions?: readonly SlotResolutionRecord[];
   /** Metadado operacional (fora dos hashes). */
   readonly checkedAt: string;
 }
@@ -99,6 +109,8 @@ export interface RevalidationPassed {
   readonly humanEditRefs: readonly HumanEditRef[];
   /** Narrativas do M1 com o aceite humano conferido (`humanAccepted = true`). */
   readonly acceptedNarratives: readonly AiNarrativeRef[];
+  /** E2 — slots pendentes resolvidos por pessoa, conferidos contra o conteúdo emitido (registrados no M2; vazio ⇒ campo ausente). */
+  readonly slotResolutions: readonly SlotResolutionRef[];
 }
 
 export type RevalidationOutcome =
@@ -128,6 +140,22 @@ export function changedAuthorities(m1: GenerationManifest, current: GenerationMa
   }
   if (m1.identityFingerprint !== current.identityFingerprint) out.push("identity");
   return out;
+}
+
+/**
+ * R3 (gate do PR #342) — RECOMPOSIÇÃO POR ATUALIZAÇÃO DAS FONTES. Para revisões SEM a capability de dados de publicação diferidos (ex.: Revisão 1),
+ * a recomposição governada do rascunho só é permitida quando a minuta ficou DESATUALIZADA pelas fontes do próprio processo — exatamente a
+ * condição que a revalidação da emissão recusa como `SOURCE_CHANGED`:
+ *  - existe M1 anterior do rascunho, do MESMO órgão, da MESMA revisão exata do modelo (id + hash semântico) — troca de revisão não entra aqui;
+ *  - alguma fonte/autoridade mudou entre o M1 anterior e a composição atual (`changedAuthorities`, a mesma regra da revalidação).
+ * Sem mudança de fonte o comportamento legado permanece (rascunho diferente ⇒ CONFLICT). As demais garantias são as da recomposição existente
+ * (origem modelo, nada emitido/aprovado, CAS do conteúdo visto, confirmação de edição humana, histórico append-only). Pura e determinística.
+ */
+export function sourceRefreshRecompositionAllowed(previous: GenerationManifest | null | undefined, next: GenerationManifest): boolean {
+  if (!previous || previous.stage !== "GENERATION") return false;
+  if (previous.organizationId !== next.organizationId) return false;
+  if (previous.templateRevisionId !== next.templateRevisionId || previous.templateSemanticHash !== next.templateSemanticHash) return false;
+  return changedAuthorities(previous, next).length > 0;
 }
 
 /** Cadeia de edições: começa no texto composto, é contígua e termina exatamente no conteúdo emitido. */
@@ -163,15 +191,31 @@ export interface StructuralDeviationStatus {
 /**
  * Desvios estruturais de blocos condicionais entre o texto COMPOSTO e o conteúdo a emitir, com o estado do reconhecimento humano.
  * Fonte ÚNICA da regra: a emissão (`revalidateForIssuance`) e a inspeção de revisão da UI usam exatamente esta função.
+ * E2: a âncora é cortada no primeiro marcador `[REVISAR` (`deviationAnchor`) — preencher o marcador não é desvio estrutural.
  * Âncoras podem se repetir em OUTROS trechos (ex.: título de tabela igual em ramos diferentes): a comparação é por OCORRÊNCIAS contra
  * a própria composição — remoção = menos ocorrências que o composto; inserção = mais ocorrências que o composto.
  */
+/**
+ * Âncora efetiva para detectar desvio: o primeiro trecho LITERAL da âncora fora de marcadores `[REVISAR…]` (marcador é texto destinado a ser
+ * substituído pela pessoa — redigir o trecho pendente ou informar o dado nunca é "remover o bloco"). Âncora que começa no marcador usa o
+ * texto depois dele (fail-closed: o bloco continua detectável); âncora só de marcador ⇒ sem âncora.
+ */
+export function deviationAnchor(anchor: string | null): string | null {
+  if (!anchor) return null;
+  for (const piece of anchor.split(/\[REVISAR[^\]]*\]?/)) {
+    const t = piece.trim();
+    if (t.length >= 3) return t;
+  }
+  return null;
+}
+
 export function structuralDeviationStatus(
   blocks: readonly { readonly blockId: string; readonly includedAnchor: string | null; readonly excludedAnchor: string | null }[],
   composedText: string, issuedContent: string, acknowledgments: readonly StructuralDeviationAcknowledgment[],
 ): StructuralDeviationStatus[] {
   const out: StructuralDeviationStatus[] = [];
-  for (const b of blocks) {
+  for (const raw of blocks) {
+    const b = { blockId: raw.blockId, includedAnchor: deviationAnchor(raw.includedAnchor), excludedAnchor: deviationAnchor(raw.excludedAnchor) };
     const found: StructuralDeviationKind[] = [];
     if (b.includedAnchor && countOccurrences(issuedContent, b.includedAnchor) < countOccurrences(composedText, b.includedAnchor)) found.push("INCLUDED_BLOCK_REMOVED");
     if (b.excludedAnchor && b.excludedAnchor !== b.includedAnchor && countOccurrences(issuedContent, b.excludedAnchor) > countOccurrences(composedText, b.excludedAnchor)) found.push("EXCLUDED_BLOCK_INSERTED");
@@ -221,7 +265,7 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
   // 3. Mesmas fontes ⇒ mesma composição (determinismo do composer, decisões condicionais e narrativas).
   if (re.composedOutputHash !== m1.composedOutputHash || templateHash(cur.conditionalDecisions) !== templateHash(m1.conditionalDecisions)
       || templateHash(cur.aiNarratives) !== templateHash(m1.aiNarratives)) {
-    return { ok: false, issues: [{ code: "COMPOSITION_DRIFT", path: "composedOutputHash", message: "as mesmas fontes não reproduzem o texto composto do M1" }] };
+    return { ok: false, issues: [{ code: "COMPOSITION_DRIFT", path: "composedOutputHash", message: "a composição atual não reproduz o texto registrado no M1 (dados, narrativas ou apresentação do modelo mudaram desde a composição) — recomponha a minuta pelo modelo e revise antes de emitir" }] };
   }
 
   // 4. Edição humana: cadeia explícita até o conteúdo emitido.
@@ -254,6 +298,19 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
     return { ...n, humanAccepted: !!acc };
   });
 
+  // 8. E2 — slots pendentes do texto composto: cada um exige resolução HUMANA registrada e coerente com o trecho emitido.
+  const slotChecks = evaluateSlotResolutions({
+    organizationId: input.organizationId, manifestId: m1.id, composedText: re.content.text, issuedContent: input.issuedContent,
+    resolutions: input.slotResolutions ?? [],
+  });
+  for (const c of slotChecks) {
+    // Marcador AINDA no texto: a trava de marcadores pendentes da emissão (UNRESOLVED_MARKERS / EMISSION_REVIEW_MARKERS) já recusa e a tela
+    // lista o trecho como pendente; aqui a regra acusa o que só ela vê — marcador REMOVIDO sem resolução e resolução desatualizada.
+    if (c.state === "PENDING" && input.issuedContent.includes(pendingSlotMark(c.slotKey))) continue;
+    if (c.state === "PENDING") issues.push({ code: "AI_SLOT_UNRESOLVED", path: `aiSlots.${c.slotKey}`, message: `trecho "${c.label}" sem resolução humana registrada (${c.reason}) — emissão bloqueada` });
+    else if (c.state === "STALE") issues.push({ code: "AI_SLOT_RESOLUTION_STALE", path: `aiSlots.${c.slotKey}`, message: `trecho "${c.label}": ${c.reason} — emissão bloqueada` });
+  }
+
   if (issues.length) return { ok: false, issues };
 
   const checkedAuthorities = [
@@ -278,6 +335,7 @@ export function revalidateForIssuance(input: RevalidationInput): RevalidationOut
       documentContentHash,
       humanEditRefs: input.humanEdits.map((e) => ({ editRef: e.editRef, resultingContentHash: e.resultingContentHash })),
       acceptedNarratives,
+      slotResolutions: slotResolutionRefs(slotChecks),
     },
   };
 }
@@ -305,6 +363,7 @@ export function buildIssuanceManifest(
       lifecycleBindings,
       humanEditRefs: passed.humanEditRefs,
       canonicalRevalidation: passed.record,
+      slotResolutions: passed.slotResolutions,
     },
   );
 }

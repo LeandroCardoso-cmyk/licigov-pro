@@ -11,6 +11,9 @@ import {
   createInstitutionalRequest,
   transition,
   assignTo,
+  requestRoutingViolation,
+  requiresGovernedLegalOpinionFlow,
+  LEGAL_OPINION_GOVERNED_FLOW,
   type InstitutionalRequest,
   type BusinessDomainCode,
   type RequestType,
@@ -19,6 +22,8 @@ import {
 import {
   createInstitutionalResponse,
   signResponse,
+  classifyLegalOpinionProvenance,
+  type LegalOpinionProvenance,
   type ResponseType,
   type ResponseStatus,
   type SignatureMethod,
@@ -30,8 +35,16 @@ import { createRequestTimelineEntry, type RequestEventType } from "../domain/req
 import {
   insertRequest, getRequest, updateRequestStatus,
   insertResponse, insertAssignment, insertRequestTimelineEntry, countTimeline,
-  insertNotification, insertDocumentReference, listDocumentReferences, listRequestTimeline,
+  insertNotification, insertDocumentReference, listDocumentReferences, listRequestTimeline, getResponseForRequest,
 } from "../db/institutionalRequests";
+import { getLegalOpinionWorkspaceByRequest, getLegalOpinionDraftByWorkspace } from "../db/legalOpinionWorkspace";
+
+/** NEW-007 — o caminho genérico nunca trata solicitação jurídica (defesa em profundidade; o router recusa antes). */
+function assertGenericPathAllowed(req: InstitutionalRequest): void {
+  if (requiresGovernedLegalOpinionFlow(req)) {
+    throw new Error(`${LEGAL_OPINION_GOVERNED_FLOW}: solicitação de parecer jurídico é tratada no módulo Parecer Jurídico (procurador designado).`);
+  }
+}
 
 /** Registra um evento na timeline da solicitação, calculando a ordem. */
 async function recordEvent(params: {
@@ -81,9 +94,9 @@ export async function requestInstitutionalReview(params: {
   documents?: Array<{ documentId: string; title?: string; version?: number; snapshotSource?: string }>;
   correlationId: string;
 }): Promise<ReviewResult> {
-  if (params.sourceDomain === params.destinationDomain) {
-    throw new Error("Origem e destino não podem ser o mesmo domínio.");
-  }
+  // NEW-007 — roteamento coerente ANTES de gravar (tipo jurídico só com destino Parecer Jurídico).
+  const violation = requestRoutingViolation(params);
+  if (violation) throw new Error(violation);
 
   // 1) Cria e encaminha (NEW → PENDING)
   const created = createInstitutionalRequest({
@@ -134,6 +147,7 @@ export async function requestInstitutionalReview(params: {
 export async function receiveRequest(id: string, orgId: number, userId: number): Promise<InstitutionalRequest> {
   const req = await getRequest(id, orgId);
   if (!req) throw new Error("Solicitação não encontrada.");
+  assertGenericPathAllowed(req);
   const received = assignTo(transition(req, "RECEIVED"), userId);
   await updateRequestStatus(received.id, orgId, "RECEIVED", userId, received.updatedAt);
   await recordEvent({ request: received, eventType: "received", actor: String(userId), summary: "Solicitação recebida pelo domínio de destino.", idKey: "lifecycle" });
@@ -205,9 +219,15 @@ export async function respondRequest(params: {
   sign?: SignatureMethod;
   signedAt?: string;
   correlationId: string;
+  /** NEW-007 — só `returnOpinion` (fluxo governado do procurador designado) responde solicitação jurídica. */
+  authority?: "legal_opinion_workspace";
 }): Promise<{ request: InstitutionalRequest; responseId: string }> {
   const req = await getRequest(params.id, params.organizationId);
   if (!req) throw new Error("Solicitação não encontrada.");
+  if (params.authority !== "legal_opinion_workspace") assertGenericPathAllowed(req);
+  // Transições validadas ANTES de gravar a resposta (estado incompatível ⇒ nenhuma escrita).
+  const completed = transition(req.status === "IN_PROGRESS" ? req : transition(req, "IN_PROGRESS"), "COMPLETED");
+  const returned = transition(completed, "RETURNED");
 
   let response = createInstitutionalResponse({
     requestId: req.id, organizationId: params.organizationId, responder: params.responder,
@@ -223,11 +243,9 @@ export async function respondRequest(params: {
     await recordEvent({ request: req, eventType: "signed", actor: String(params.responder), summary: `Resposta assinada (${response.signatureMethod}).`, refId: response.id });
   }
 
-  const completed = transition(req.status === "IN_PROGRESS" ? req : transition(req, "IN_PROGRESS"), "COMPLETED");
   await updateRequestStatus(completed.id, params.organizationId, "COMPLETED", completed.assignedTo, completed.updatedAt);
 
   // Devolve automaticamente ao domínio de origem
-  const returned = transition(completed, "RETURNED");
   await updateRequestStatus(returned.id, params.organizationId, "RETURNED", returned.assignedTo, returned.updatedAt);
   await recordEvent({ request: returned, eventType: "returned", actor: "kernel", summary: `Devolvida automaticamente ao domínio ${req.sourceDomain}.`, refId: req.sourceDomain });
 
@@ -243,10 +261,44 @@ export async function respondRequest(params: {
 export async function archiveRequest(id: string, orgId: number, userId: number): Promise<InstitutionalRequest> {
   const req = await getRequest(id, orgId);
   if (!req) throw new Error("Solicitação não encontrada.");
+  assertGenericPathAllowed(req);
   const archived = transition(req, "ARCHIVED");
   await updateRequestStatus(archived.id, orgId, "ARCHIVED", archived.assignedTo, archived.updatedAt);
   await recordEvent({ request: archived, eventType: "archived", actor: String(userId), summary: "Solicitação arquivada." });
   return archived;
+}
+
+type StoredResponse = NonNullable<Awaited<ReturnType<typeof getResponseForRequest>>>;
+
+export interface LegalOpinionReadResult {
+  /** Parecer jurídico governado (só com origem comprovada); null caso contrário. */
+  readonly response: (StoredResponse & { readonly governedLegalOpinion: true }) | null;
+  /** Resposta institucional SEM origem governada (histórico preservado, nunca promovido a parecer). */
+  readonly institutionalResponse: (StoredResponse & { readonly governedLegalOpinion: false }) | null;
+  readonly legalOpinion: LegalOpinionProvenance;
+  readonly documents: Awaited<ReturnType<typeof listDocumentReferences>>;
+}
+
+/**
+ * NEW-007 — ponto ÚNICO de leitura do parecer pelos consumidores (Contratos, Contratação Direta). A resposta só é entregue como
+ * parecer quando a origem governada é comprovada (`classifyLegalOpinionProvenance`); o resto vem como resposta institucional.
+ * Somente leitura, escopo do tenant.
+ */
+export async function readLegalOpinionForConsumer(requestId: string, orgId: number, expectedSourceDomain?: BusinessDomainCode): Promise<LegalOpinionReadResult> {
+  const [request, stored, documents, workspace] = await Promise.all([
+    getRequest(requestId, orgId), getResponseForRequest(requestId, orgId), listDocumentReferences(requestId, orgId),
+    getLegalOpinionWorkspaceByRequest(requestId, orgId),
+  ]);
+  const draft = workspace ? await getLegalOpinionDraftByWorkspace(workspace.id, orgId) : null;
+  const response = request ? stored : null;
+  const legalOpinion = classifyLegalOpinionProvenance({ request, expectedSourceDomain, response, workspace, draft });
+  const governed = legalOpinion.status === "GOVERNED_LEGAL_OPINION";
+  return {
+    response: response && governed ? { ...response, governedLegalOpinion: true } : null,
+    institutionalResponse: response && !governed ? { ...response, governedLegalOpinion: false } : null,
+    legalOpinion,
+    documents: request ? documents : [],
+  };
 }
 
 export { listDocumentReferences };

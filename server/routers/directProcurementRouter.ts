@@ -22,7 +22,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
-import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure, institutionalProcedure } from "../_core/trpc";
 import {
   createDirectProcurementWorkspace, setDirectStage, markDirectPublished, deriveDirectProcurementStatus, describeFlagChange,
   setProcedureType, setLegalBasis,
@@ -449,7 +449,7 @@ export const directProcurementRouter = router({
    * PISO TÉCNICO de quem registra (NEW-005) — a competência jurídica da autoridade NÃO é validada pelo sistema
    * (R4.2 pendente ⇒ `authorityValidation = NOT_VALIDATED_POLICY_PENDING`).
    */
-  ratify: orgRoleProcedure("manager")
+  ratify: institutionalProcedure("manager")
     .input(z.object({
       workspaceId: z.string().min(1),
       decision: z.enum(["ratificado", "nao_ratificado"]),
@@ -492,7 +492,7 @@ export const directProcurementRouter = router({
 
   // NEW-005 — PUBLICATION: piso técnico manager+ (mesma ressalva do ratify: autoridade competente = PR-07).
   // SEM-060 — EFEITO REAL (rótulo da UI = efeito): gera as publicações E move o processo para a etapa PUBLICATION.
-  publish: orgRoleProcedure("manager")
+  publish: institutionalProcedure("manager")
     .input(z.object({
       workspaceId: z.string().min(1),
       /** R9 / SEM-064 — opt-in: extrato do contrato REGISTRADO e vinculado (sem contrato ⇒ recusa estável, zero escritas). */
@@ -513,7 +513,7 @@ export const directProcurementRouter = router({
     }),
 
   // NEW-005 — WORKFLOW_CONFIGURATION: muda exigências do fluxo (ex.: requiresLegalOpinion) ⇒ piso manager+.
-  configureFlags: orgRoleProcedure("manager")
+  configureFlags: institutionalProcedure("manager")
     .input(z.object({ workspaceId: z.string().min(1), usesDFD: z.boolean().optional(), requiresPriceResearch: z.boolean().optional(), requiresProposalCollection: z.boolean().optional(), requiresLegalOpinion: z.boolean().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

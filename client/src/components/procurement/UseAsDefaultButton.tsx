@@ -30,7 +30,7 @@ export default function UseAsDefaultButton({ name, description, type, value, pro
   const [decision, setDecision] = useState<DecisionFormState>(() => emptyDecisionForm(today()));
   const [showErrors, setShowErrors] = useState(false);
   const [key, setKey] = useState<string>(() => crypto.randomUUID());
-  const profile = trpc.procurementProcess.licitacoesProfile.useQuery({ processId } as never, { enabled: open });
+  const profile = trpc.procurementProcess.licitacoesProfile.useQuery({ processId, contextual: false } as never, { enabled: open });   // só padrões/revisão: sem leitura contextual (A4/C2)
   const record = trpc.institutionalTemplates.governed.recordLicitacoesProfile.useMutation();
   const state = profile.data?.status === "READY" ? profile.data : null;
   const existing = !!state?.defaults.find((d: DefaultViewModel) => d.name === name && d.hasValue);

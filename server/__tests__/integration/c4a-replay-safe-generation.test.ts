@@ -273,7 +273,8 @@ describe("C.4A — replay-safe semantics (generateDocument, ETP/TR)", () => {
 
   it("status processing (em voo) → CONFLICT, sem cognição nem persistência", async () => {
     checkIdempotency.mockResolvedValue({ status: "processing" });
-    await expect(call()).rejects.toMatchObject({ code: "CONFLICT" });
+    // M8: prefixo estável — o cliente ACOMPANHA o rascunho (não mostra erro nem reenvia); demais CONFLICTs seguem erro.
+    await expect(call()).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringMatching(/^GENERATION_IN_PROGRESS: /) });
     expect(authoring.generateStructuredAuthoring).not.toHaveBeenCalled();
     expect(procDb.applyDraftContentMutationTx).not.toHaveBeenCalled();
   });

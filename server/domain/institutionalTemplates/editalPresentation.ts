@@ -17,6 +17,23 @@ export const VARIABLE_PRESENTATION: Readonly<Record<string, VariablePresentation
     label: "Sistema de Registro de Preços (SRP)",
     question: "Esta contratação utilizará Sistema de Registro de Preços?",
   }),
+  // F2 (homologação H5) — a descrição do catálogo publicado ("Adesão à Ata de Registro de Preços (padrão: veda)") sugeria uma decisão do órgão
+  // que não existe: o compositor não aplica "padrão" algum (sem registro, a minuta traz a pendência). Rótulo NEUTRO; o valor registrado
+  // (admite/veda), quando houver, continua exibido como tal. O catálogo, o hash semântico e os documentos não mudam (só apresentação).
+  "decisao.adesaoAta": Object.freeze({
+    label: "Adesão à Ata de Registro de Preços",
+    question: "O órgão admite ou veda a adesão à Ata por órgãos e entidades não participantes? Decisão do órgão: nenhuma opção é presumida.",
+  }),
+  // LICIGOV-FAST PR-2 (substitui a orientação P3.4 da M8): dotação e fonte são informação orçamentária do PROCESSO, declaradas uma única vez
+  // nos "Dados orçamentários do processo" e consumidas pelo TR e pelo Edital (o Edital não pergunta de novo). Ausentes não bloqueiam.
+  "julgamento.dotacaoOrcamentaria": Object.freeze({
+    label: "Dotação orçamentária",
+    question: "Informe a dotação orçamentária uma única vez, nos Dados orçamentários do processo: o TR e o Edital usam o mesmo registro. Enquanto não for informada, os documentos podem ser gerados e emitidos com a pendência indicada.",
+  }),
+  "julgamento.fonteRecursos": Object.freeze({
+    label: "Fonte de recursos",
+    question: "Informe a fonte de recursos junto da dotação, nos Dados orçamentários do processo (registro único para o TR e o Edital).",
+  }),
 });
 
 export const presentationOf = (variable: string): VariablePresentation | undefined => VARIABLE_PRESENTATION[variable];

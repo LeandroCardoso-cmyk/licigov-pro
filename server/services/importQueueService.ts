@@ -41,7 +41,7 @@ import {
   commitReextraction, releaseReextraction, ReextractionAbortedError, commitProvenanceRevalidation, recordProvenanceRevalidationNotApplied,
 } from "./importReprocessService";
 import { buildProvenanceScanEvidence, hasFileCoverageGap, type ProvenanceScanOrigin } from "../domain/quoteProvenance";
-import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE } from "../domain/importReprocess";
+import { PROVENANCE_REVALIDATION_BLOCKER_MESSAGE, REEXTRACTION_STAGE, reextractionLeaseOf } from "../domain/importReprocess";
 
 const log = serviceLogger("ImportQueueService");
 
@@ -56,6 +56,8 @@ export interface ReextractionRequest {
   reason:        string;
   /** Estágio anterior à reserva (devolvido se a reextração não for aplicada). */
   previousStage: string | null;
+  /** Token da reserva (dono): só ele aplica ou devolve a reextração. */
+  leaseToken:    string;
 }
 
 /** M8 (P1-C) — revalidação da análise de proveniência do arquivo original (não toca no staging nem nas revisões). */
@@ -458,9 +460,12 @@ async function processReextractJob(job: ImportJob): Promise<void> {
   };
   const release = async (code: string, message: string) => {
     await releaseReextraction({
-      sessionId: job.sessionId, organizationId: job.organizationId, previousStage: req.previousStage,
+      sessionId: job.sessionId, organizationId: job.organizationId, previousStage: req.previousStage, leaseToken: req.leaseToken,
       actorUserId: req.actorUserId, correlationId, code, message,
-    }).catch(() => {});
+    }).catch((err) => {
+      // A liberação nunca derruba o worker, mas a falha fica registrada (a reserva vence sozinha em 15 min).
+      log.error("import_reextraction_release_failed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId, code, error: err instanceof Error ? err.message : String(err) });
+    });
     finish("failed", code);
   };
 
@@ -469,6 +474,12 @@ async function processReextractJob(job: ImportJob): Promise<void> {
     if (!session || session.status !== "awaiting_review" || session.stage !== REEXTRACTION_STAGE) {
       finish("failed", "SESSION_STATE_CHANGED");
       log.warn("reextraction_skipped_state_changed", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
+      return;
+    }
+    if (reextractionLeaseOf(session.extractionSummary)?.token !== req.leaseToken) {
+      // A reserva foi retomada por outro pedido: este job não aplica nem devolve nada (o dono atual decide).
+      finish("failed", "LEASE_LOST");
+      log.warn("reextraction_skipped_lease_lost", { jobId: job.jobId, sessionId: job.sessionId, organizationId: job.organizationId });
       return;
     }
     const buffer = await storageGetBytes(job.storageKey);
@@ -503,7 +514,7 @@ async function processReextractJob(job: ImportJob): Promise<void> {
     const scan = provenanceScanFor(result, session, buffer, parser.parserType, parser.capabilities.parserVersion, "reextraction");
     const summary: ExtractionSummary = { ...result.summary, ...(lineage ? { extraction: lineage } : {}), ...(scan ? { provenanceScan: scan } : {}) };
     const committed = await commitReextraction({
-      sessionId: job.sessionId, organizationId: job.organizationId, actorUserId: req.actorUserId, reason: req.reason,
+      sessionId: job.sessionId, organizationId: job.organizationId, leaseToken: req.leaseToken, actorUserId: req.actorUserId, reason: req.reason,
       correlationId, items: result.items, parserVersion: parser.capabilities.parserVersion,
       outcomeStage: OUTCOME_STAGE[outcome], warnings: result.warnings, summary,
     });

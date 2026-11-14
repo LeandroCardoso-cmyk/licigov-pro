@@ -1,6 +1,10 @@
 import React from "react";
 import { toast } from "sonner";
 import { trpc } from "../../lib/trpc";
+import {
+  actorLabel, DOCUMENT_KIND_LABELS, draftSituationLabel, formatDateTimeBR, latestOfficialSummary, overviewModalityText,
+  officialVersionLabel, processStatusLabel, stageLabel,
+} from "../../lib/processDocumentStatus";
 
 /**
  * ProcessOverview — REAL (wired to tRPC).
@@ -9,19 +13,6 @@ import { trpc } from "../../lib/trpc";
  * status, documentos gerados e eventos recentes. É a tela de leitura/revisão do
  * andamento — não um formulário.
  */
-
-const STAGE_LABELS: Record<string, string> = {
-  NEW_PROCESS: "Novo Processo",
-  DFD: "DFD",
-  ETP: "ETP",
-  PRICE_RESEARCH: "Pesquisa de Preços",
-  ITEM_WORKSPACE: "Workspace de Itens",
-  TR: "Termo de Referência",
-  NOTICE: "Edital",
-  REVIEW: "Revisão",
-  ISSUED: "Emitido",
-  ARCHIVED: "Arquivado",
-};
 
 const PROCESS_STATUS_CLASSES: Record<string, string> = {
   rascunho: "bg-muted text-foreground",
@@ -51,6 +42,8 @@ export default function ProcessOverview({
     { processId },
     { enabled: !!processId },
   );
+  // Escopo do Edital já escolhido (fato próprio, só leitura) — evita "Modalidade: —" quando o processo não a registra.
+  const scopeQuery = trpc.procurementProcess.editalScopeSelection.useQuery({ processId }, { enabled: !!processId });
 
   // Exportação DOCX/PDF via o núcleo comum (documentExportService) — abre a URL
   // assinada retornada. Reutilizável por outros módulos pelo mesmo padrão.
@@ -86,6 +79,9 @@ export default function ProcessOverview({
   }
 
   const { process, items, timeline, documents } = data;
+  const officialVersions = data.officialVersions ?? {};
+  const officialEmissions = data.officialEmissions ?? {};
+  const latestOfficial = latestOfficialSummary(officialVersions, officialEmissions);
   const counts: Record<string, number> = {};
   for (const it of items) {
     counts[it.status] = (counts[it.status] ?? 0) + 1;
@@ -111,18 +107,26 @@ export default function ProcessOverview({
               "bg-muted text-foreground"
             }`}
           >
-            {process.status}
+            {processStatusLabel(process.status)}
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-1 text-indigo-700 dark:text-indigo-300">
-            Etapa: {STAGE_LABELS[process.currentStage] ?? process.currentStage}
+          {latestOfficial && (
+            <span className="rounded-md bg-green-100 dark:bg-green-900 px-2 py-1 font-medium text-green-700 dark:text-green-300">
+              {latestOfficial}
+            </span>
+          )}
+          <span
+            className="rounded-md bg-indigo-50 dark:bg-indigo-950 px-2 py-1 text-indigo-700 dark:text-indigo-300"
+            title="Marco administrativo registrado no processo. Não acompanha a elaboração dos documentos — veja a situação de cada documento abaixo."
+          >
+            Etapa registrada: {stageLabel(process.currentStage)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
-            Modalidade: {process.modality || "—"}
+            Modalidade: {overviewModalityText(process.modality, scopeQuery.data?.scope?.modality)}
           </span>
           <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
-            Copilotos: {process.activeCopilots.length}
+            Assistentes de IA: {process.activeCopilots.length}
           </span>
         </div>
       </div>
@@ -148,9 +152,12 @@ export default function ProcessOverview({
 
       {/* Documentos */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-3 font-semibold text-foreground">
-          Documentos gerados
+        <h2 className="mb-1 font-semibold text-foreground">
+          Documentos do processo
         </h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Rascunho é o texto em elaboração; versão emitida é oficial e imutável. Exportar gera o arquivo e registra o evento.
+        </p>
         {documents.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhum documento ainda.</p>
         ) : (
@@ -162,15 +169,20 @@ export default function ProcessOverview({
                 exportDoc.variables?.kind === d.kind &&
                 exportDoc.variables?.format === fmt;
               return (
-                <li key={d.id} className="flex items-center justify-between gap-3 py-2">
+                <li key={d.id} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   <div className="min-w-0">
                     <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-xs font-medium uppercase text-muted-foreground">
-                      {d.kind}
+                      {DOCUMENT_KIND_LABELS[d.kind] ?? d.kind}
                     </span>
                     <span className="text-sm text-foreground">{d.title}</span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{d.status}</span>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                    {officialVersionLabel(officialVersions, d.kind, officialEmissions) && (
+                      <span className="rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300" title={officialVersions[d.kind] ? `Revisão técnica v${officialVersions[d.kind]}` : undefined}>
+                        {officialVersionLabel(officialVersions, d.kind, officialEmissions)}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{draftSituationLabel(d.status)}</span>
                     {exportable &&
                       (["docx", "pdf"] as const).map((fmt) => (
                         <button
@@ -206,8 +218,7 @@ export default function ProcessOverview({
                 <div>
                   <p className="text-foreground">{e.summary}</p>
                   <p className="text-xs text-muted-foreground">
-                    {e.actor} ·{" "}
-                    {new Date(e.createdAt).toLocaleString("pt-BR")}
+                    {actorLabel(e.actorName, e.actor)} · {formatDateTimeBR(e.createdAt)}
                   </p>
                 </div>
               </li>

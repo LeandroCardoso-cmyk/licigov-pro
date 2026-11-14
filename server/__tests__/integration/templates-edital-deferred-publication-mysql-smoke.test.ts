@@ -20,6 +20,9 @@ import { useGlobalFixtureLock } from "../helpers/globalFixtureLock";
 
 const tenant = vi.hoisted(() => ({ org: 1, role: "owner" as string }));
 vi.mock("../../services/tenantService", () => ({
+  // SECURITY-02 — a autoridade institucional é lida da fonte autoritativa (getMembership): o ator do router destes cenários
+  // é MEMBRO REAL do órgão com o papel do contexto (a releitura transacional da emissão continua no MySQL real).
+  getMembership: vi.fn(async (userId: number, organizationId: number) => ({ id: 1, organizationId, userId, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() })),
   resolveTenantForUser: vi.fn(async () => ({
     organizationId: tenant.org,
     membership: { id: 1, organizationId: tenant.org, userId: 1, role: tenant.role, invitedBy: null, ativo: true, createdAt: new Date(), updatedAt: new Date() },
@@ -71,6 +74,7 @@ import {
 import {
   BLL, U_EDITOR, U_MANAGER, cleanupOrgs, ctxOf, decision, markTemplateOrgLegacy, seedExtraProcess, seedOfficialTr, seedWorld, type World,
 } from "../helpers/institutionalTemplatesE2eWorld";
+import { resolvePendingSlotsForTest } from "../helpers/slotResolutionFixture";
 
 const R2 = getModelPackageVersion(BLL.modelKey, "1.0.2-draft")!;
 const DB = process.env.DATABASE_URL;
@@ -192,6 +196,7 @@ async function fillTrueDecisions(p: P): Promise<string[]> {
 async function reviewAndIssue(p: P): Promise<{ m1: string; officialId: string }> {
   const ra = await gen(p);
   expect(ra.generationMode).toBe("INSTITUTIONAL_TEMPLATE");
+  await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
   const draft = (await rows("SELECT content FROM generated_documents WHERE organization_id = ? AND process_id = ? AND kind = 'edital'", [p.org, p.w.processId]))[0];
   const human = draft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.");
   await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft.content), idempotencyKey: key("edit") });
@@ -412,6 +417,7 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     const p = await readyTenant("p5");
     await fillTrueDecisions(p);
     await gen(p);
+    await resolvePendingSlotsForTest(p.org, p.w.processId, U_EDITOR, key("slots"));
     const draft = (await draftText(p))!;
     const human = draft.replace(/\[REVISAR[^\]]*\]/g, "Texto redigido e conferido pela equipe.") + "\n\nObservação humana sintética.";
     await proc(p.org, "operator", U_EDITOR).saveReviewableDraft({ processId: p.w.processId, kind: "edital", content: human, expectedContentHash: draftContentHash(draft), idempotencyKey: key("edit") });
@@ -471,7 +477,7 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
   const composeRows = async (p: P) => Number((await rows("SELECT COUNT(*) n FROM generated_document_edits WHERE organization_id = ? AND process_id = ? AND operation = 'template_compose'", [p.org, p.w.processId]))[0].n);
   const m1Count = async (p: P) => Number((await rows("SELECT COUNT(*) n FROM document_composition_manifests WHERE organization_id = ? AND stage = 'GENERATION'", [p.org]))[0].n);
 
-  it("CAP1–CAP5 + REVISION_1_BEHAVIOR_BEFORE_AFTER — Revisão 1 vinculada: SEM a capability; rascunho diferente ⇒ CONFLICT legado, mesmo com hash correto/confirmReplace; nada sobrescrito", async () => {
+  it("CAP1–CAP5 + REVISION_1_BEHAVIOR_BEFORE_AFTER — Revisão 1: SEM a capability; sem hash ⇒ CONFLICT legado; hash obsoleto recusado; fonte alterada + hash visto ⇒ recomposição governada (R3, PR #342)", async () => {
     const p = await readyTenant("cap1", 1);
     // estado/Preparação da Revisão 1 = semântica congelada: dados de publicação CONTINUAM pendências do certame, sem diferidos, sem capability
     const before = await getState(p);
@@ -500,13 +506,13 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     expect(textA).not.toContain(PLACEHOLDER);
     const baseRows = await composeRows(p); const baseM1 = await m1Count(p);
 
-    // novo conteúdo ⇒ rascunho existente DIFERENTE da nova composição
+    // novo conteúdo de ORIGEM ⇒ a minuta fica desatualizada pelas fontes (mesma revisão exata)
     await fillPublication(p, ["processo.numeroPregao"], { "processo.numeroPregao": "7777" });
     const legacy = /já existe rascunho para este processo e tipo com outro conteúdo/;
-    await expect(callGen(p, { idempotencyKey: key("c1"), expectedContentHash: draftContentHash(textA) })).rejects.toThrow(legacy);                         // CAP1/CAP3
-    await expect(callGen(p, { idempotencyKey: key("c2"), expectedContentHash: draftContentHash(textA), confirmReplace: true })).rejects.toThrow(legacy);      // CAP2
-    await expect(callGen(p, { idempotencyKey: key("c4"), expectedContentHash: "0".repeat(64) })).rejects.toThrow(legacy);                                  // CAP4
-    await expect(callGen(p, { idempotencyKey: key("c4b"), expectedContentHash: "0".repeat(64), confirmReplace: true })).rejects.toThrow(legacy);
+    await expect(callGen(p, { idempotencyKey: key("c0") })).rejects.toThrow(legacy);                                                                          // sem hash ⇒ legado
+    const stale = /O rascunho mudou desde o carregamento/;
+    await expect(callGen(p, { idempotencyKey: key("c4"), expectedContentHash: "0".repeat(64) })).rejects.toThrow(stale);                                  // CAP4: hash obsoleto (CAS)
+    await expect(callGen(p, { idempotencyKey: key("c4b"), expectedContentHash: "0".repeat(64), confirmReplace: true })).rejects.toThrow(stale);
     expect(await draftText(p)).toBe(textA);                                                           // nada sobrescrito
     expect(await composeRows(p)).toBe(baseRows);                                                      // nenhum template_compose novo
     expect(await m1Count(p)).toBe(baseM1);                                                            // nenhum M1 novo
@@ -520,7 +526,16 @@ describe.skipIf(!DB)("Dados de publicação diferidos (MySQL real)", () => {
     expect(again.replayed).toBe(true);
     expect(await draftText(p)).toBe(textA);
     expect(await composeRows(p)).toBe(baseRows);
-    METRICS.CAP_R1 = { capability: false, PROCESS_DECISIONS_TOTAL_REV1: 13, legacyConflictPreserved: true };
+
+    // R3 (PR #342) — fonte alterada de novo + hash VISTO ⇒ recomposição governada na Revisão 1 (nova versão; anterior no histórico; capability inalterada)
+    await fillPublication(p, ["processo.numeroPregao"], { "processo.numeroPregao": "7777" });
+    const b = await callGen(p, { idempotencyKey: key("c1"), expectedContentHash: draftContentHash(textA) });
+    expect(b.generationManifestId).not.toBe(a.generationManifestId);
+    expect(await draftText(p)).toContain("7777");
+    expect(await composeRows(p)).toBe(baseRows + 1);
+    expect(await m1Count(p)).toBe(baseM1 + 1);
+    expect((await getState(p)).capabilities).toEqual({ governedDraftRecomposition: false });
+    METRICS.CAP_R1 = { capability: false, PROCESS_DECISIONS_TOTAL_REV1: 13, legacyConflictWithoutHash: true, sourceRefreshRecomposition: true };
   }, 300_000);
 
   it("CAP-R2 — Revisão 2: a capability é exposta pela preparação (derivada do catálogo) e habilita a recomposição; o cliente não consegue habilitá-la na Revisão 1 (servidor decide)", async () => {
