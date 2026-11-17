@@ -1,5 +1,38 @@
 # Roadmap de remediação — pontuação reconciliada
 
+## Atualização de 17/11/2026 — Release #356 implantada em produção (sem recálculo)
+
+- **#356** (RC `staging` → `main`) foi mergeada em 14/11/2026 (`559ab3e8`). CI 5/5 no registro da release. Deploy de produção `c67b3754` SUCCESS, com predeploy `db:release:predeploy` e healthcheck `/readyz` aprovados. Detalhes em [LOTE_CREDENCIAIS_2026-11.md](./LOTE_CREDENCIAIS_2026-11.md) (atualização de 17/11).
+- **Implantação técnica ≠ homologação funcional em produção:** nenhuma verificação funcional da #356 em produção está registrada aqui, e a produção continua não homologada.
+- **4A:** #319 continua em draft, com conflitos; o SheetJS (`xlsx ^0.18.5`) segue em `main` e `staging`, então o critério continua não atendido. A **#337** é uma release antiga a reavaliar, já que o conteúdo que ela promovia entrou pela #356, e não foi encerrada.
+- **P0 geral: aberto.** Pontuação não recalculada, por falta de evidência nova nos critérios pendentes e de decisão do Owner.
+
+## Atualização de 05/11/2026 — lote de credenciais concluído
+
+**Lote: 16/16 itens (100% somente do checklist delimitado). P0 geral: aberto.** Evidência consolidada e fontes em [LOTE_CREDENCIAIS_2026-11.md](./LOTE_CREDENCIAIS_2026-11.md). A publicação documental não autoriza merge, deploy, novas chamadas pagas ou novos envios de e-mail.
+
+| Frente / critério original | Evidência nova e limite |
+|---|---|
+| 1A/1B — inventário e dependências | Contas e consumidores LiciGov mapeados; comparações de variáveis SincroSaúde registradas, com cobertura limitada aos ambientes verificados. |
+| 2A — credenciais / consumidores | MySQL regularizado em rodada anterior; D2/D3 aplicados e aceitos. Gemini/AWS/Brevo novos em uso; antigos excluídos por confirmação do Owner. Não é certificação universal de consumidores externos desconhecidos. |
+| 2B — revogação e logs | Revogação e validação funcional concluídas para o escopo. **Critério ainda parcial:** falta a revisão histórica dos logs de acesso/consumo disponíveis no período do incidente. |
+| 3A/3B — identidade e permissões | Admin real de staging recuperado, senha salva e login confirmado pelo Owner. MFA/administradores/recuperação/OAuth/contas de serviço e escopos gerais continuam pendentes conforme o inventário, sem inferir regularização global. |
+| 4A — dependências | #319 e #337 continuam sem liberação; decidir pela evidência de cada PR. Nenhuma mudança de dependência neste bloco documental. |
+| 4B/5A/7A — ambiente e testes | Validações sintéticas D2 e seis verificações D3 aceitas; produção por confirmação manual do Owner. Não equivalem à homologação completa do produto ou do isolamento entre tenants. |
+| 5B — OAuth/MCP | Aplicabilidade limitada conforme inventário histórico; não houve alteração OAuth/MCP nesta etapa. |
+| 6A/6B — operação | Novo projeto Gemini de produção vinculado ao billing por confirmação do Owner. Situação de todo Cloud/Workspace e encerramento/transferência formal SincroSaúde ainda exigem evidência própria. |
+| 7B — encerramento | Evidência consolidada, com limitações explícitas; P0 geral continua aberto. Recuperação MySQL comprovada anteriormente com drills delimitados. |
+
+**Não repetir ações já concluídas:** `digital_signatures` de produção retornou zero registros na consulta do Owner em 01/11; staging também retornou zero na coleta anterior. A pendência de contar registros atuais está encerrada nessas datas. Não se presume ausência histórica de dados apagados.
+
+**Orçamento:** nove e-mails comprometidos — sintético 2 (2), sintético 1 (2), produção após D3 (1), entrega pós-desativação Brevo em ambos os ambientes (2), admin real de staging (2). Aviso final de alteração não teve recebimento confirmado separadamente. Nenhum novo envio autorizado.
+
+**Limitações mantidas:** rejeição programática de sessão JWT antiga não demonstrada; `AI_MAX_ATTEMPTS=1` em staging; objetos sintéticos retidos coerentes com os registros; segredo de migrations no mesmo serviço do runtime; restore com verificações mínimas e VERIFY_CA sem hostname; alcance limitado da comparação de consumidores SincroSaúde. Não repetir rotações para preencher lacunas históricas.
+
+**Pontuação global:** não recalculada nesta publicação. A matriz e as pontuações abaixo são o checkpoint histórico de 25/10, não uma avaliação atual. O 100% do lote não substitui os pesos/critérios do incidente. #319/#337 e homologação de produção permanecem sujeitos a decisão própria.
+
+## Histórico — checkpoint de 25/10/2026 (preservado)
+
 > **Versão v2 (25/10/2026, noite).** Referência: o `ROADMAP.md` **original** do Owner ("Roadmap de
 > regularização — LiciGov Pro", 25/10/2026), recebido nesta execução. A v1 desta pasta usava critérios
 > **reconstruídos** (o original não estava disponível); pesos iguais, critérios diferentes — os totais da v1
