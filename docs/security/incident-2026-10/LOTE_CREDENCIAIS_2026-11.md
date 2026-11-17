@@ -5,6 +5,22 @@
 > Legenda: **[E]** evidência do executor (GitHub, Railway: deploys, logs e *nomes* de variáveis; execução sintética em staging) · **[O]** confirmação manual do Owner · **[L]** limitação registrada.
 > **Este documento não encerra o incidente P0 nem a auditoria geral.** Também não libera a #337 nem a #319.
 
+## Atualização de 17/11/2026 — Release #356 em produção (acréscimo; §1–§7 e histórico inalterados)
+
+| Item | Registro | Fonte |
+|---|---|---|
+| Release #356 (RC `staging` → `main`) | Merge em 14/11/2026 21:40Z; `main` = `559ab3e8dca3ec3ea69971e9425faafbfa0c8cb4`. Incorpora em `main` o conteúdo de `staging` (incluindo #317, #338 e o motor documental F1–F3.1), com os hotfixes #321, #339 e #340 preservados | [E] (GitHub) |
+| CI | 5/5 no HEAD da release | [O] (registro da release; não reconferido job a job pelo executor) |
+| Deploy de produção | `c67b3754-cb66-4ac3-a5db-306058690a8a` SUCCESS (21:59Z); o anterior `3aafeef4` foi para REMOVED | [E] (Railway) |
+| Predeploy | `db:release:predeploy` (migrations + reference data replay-safe, sem ativação), concluído em 72 ms. Esse é o comando de `railway.json`, o que encerra a dúvida da release sobre qual pre-deploy roda | [E] (log) |
+| Boot e healthcheck | "Schema validado … sem mutação em runtime" e "Servidor pronto". `railway.json` define `healthcheckPath: /readyz`; o deploy só fica SUCCESS depois desse healthcheck | [E] (log/config) |
+| **Implantação técnica × homologação funcional** | O registro acima comprova **implantação técnica**. **Não** há, nesta evidência, homologação funcional nem jurídica da #356 em produção: a homologação humana da release cobre a F3.1 em staging (processo sintético), e as demais mudanças têm testes automatizados e passagem por staging. **Produção continua não homologada** | — |
+| `ai-models.yml` | Ausente em `main` depois da #356; ainda presente em `staging` (só disparo manual) | [E] |
+| #337 | **Release antiga a reavaliar** (draft, base `main@9ea5bcd`, head `f8db7fb`, conflitos). O conteúdo de `staging` que ela promovia foi incorporado pela #356. Não foi encerrada: fechar, substituir ou manter é decisão do Owner | [E] (GitHub) |
+| #319 | **Aberta em draft, com conflitos** (base `staging@95cb7d5`, desatualizada; head `eab8a69c`). Não foi integrada em `staging` nem na #356; `xlsx ^0.18.5` (SheetJS) continua em `main` e `staging`. O critério 4A segue não atendido | [E] (GitHub/código) |
+| Base desta PR (#341) | Revalidada contra `staging@084363f5`: os 13 commits novos (#342–#355) não alteram estes três arquivos; o diff continua restrito a eles | [E] |
+| P0 geral | **Aberto.** Nenhum percentual recalculado | — |
+
 ## 1. Estado final do lote (05/11/2026)
 
 | Frente | Estado final | Fonte |
@@ -91,9 +107,9 @@ Escopo: os itens D1, D2 e D3 do lote, as rotações/revogações de Gemini, AWS 
 | Logs de acesso/consumo do período do incidente (critério 2B) | Revisar uso por chave no Google Cloud (Gemini), no CloudTrail/S3 (ou registrar a inexistência de data events) e os logs da Brevo, no período exposto | Revisão registrada por provedor, com achados ou ausência fundamentada |
 | Identidade e permissões (critérios 3A/3B) | 2FA das 2 contas do Workspace; administradores e recuperação; apps OAuth, contas de serviço e escopos (Google/GitHub/Railway) | Inventário revisado e corrigido, com evidência do console |
 | Confirmações operacionais (critérios 6A/6B) | Faturamento regular do Google Cloud/Workspace do LiciGov; encerramento/transferência formal da frente SincroSaúde | Documento ou captura do provedor; dependências compartilhadas resolvidas |
-| Dependências (critério 4A) | #319 (`xlsx`) segue em draft, sem liberação; #337 NO-GO | Decisão do Owner sobre cada PR, com CI e validação em staging |
-| Produção não homologada (M8 aceita só em staging) | Conforme `roadmap/PRODUCT_ROADMAP.md` (ressalvas M8, M3/M6/M7) | Homologação de produção aceita pelo Owner |
-| Integração da evidência documental | Publicar em branch nova e revisar a PR draft para staging (§6) | Documentos revisados e integração autorizada; não implica encerrar P0 |
+| Dependências (critério 4A) | #319 (`xlsx`) segue em draft, com conflitos e sem liberação (SheetJS ainda em `main`/`staging`); #337 NO-GO, release antiga a reavaliar depois da #356 (atualização de 17/11) | Decisão do Owner sobre cada PR, com CI e validação em staging |
+| Produção não homologada (M8 aceita só em staging; #356 implantada tecnicamente em 14/11) | Conforme `roadmap/PRODUCT_ROADMAP.md` (ressalvas M8, M3/M6/M7) | Homologação de produção aceita pelo Owner |
+| Integração da evidência documental | PR #341 (draft para `staging`) publicada; revisão e decisão de integração (§6) | Documentos revisados e integração autorizada; não implica encerrar P0 |
 
 ## 6. Preservação e publicação documental
 
@@ -103,6 +119,7 @@ Escopo: os itens D1, D2 e D3 do lote, as rotações/revogações de Gemini, AWS 
 - Arquivos: este relatório, `docs/security/incident-2026-10/ROADMAP.md` e `roadmap/PRODUCT_ROADMAP.md`. A integração permanece sujeita a revisão; a publicação não altera as branches acompanhadas pelos ambientes.
 - A cópia entregue ao Owner foi preservada localmente antes dos ajustes. O antigo commit `1ce4c6c` foi relatado pelo executor como apenas local; ele não é usado como base nem se afirma sua publicação.
 - O executor relatou bloqueio automático de um push anterior; o motivo efetivo não foi fornecido. Esta publicação usa o escopo novo expressamente autorizado, sem reescrever a branch antiga.
+- Reconciliação de 17/11/2026: o conteúdo do commit local `1ce4c6c` foi comparado com esta PR e está coberto por ela (esta versão é mais completa e corrige a contagem de e-mails e a pendência de assinaturas). Nenhuma informação relevante ficou fora. O commit não foi enviado e foi descartado só localmente.
 
 ## 7. Reconciliação das assinaturas e dos critérios gerais
 

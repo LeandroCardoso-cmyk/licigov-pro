@@ -16,6 +16,10 @@ O lote de credenciais está concluído: **16/16 itens (100% desse checklist)**, 
 
 A publicação destes documentos em branch própria/PR draft não homologa produção, não altera os percentuais M0–M9 ou o global de produto de **91,25%**, não libera #319/#337 e não modifica as ressalvas da M8. [Roadmap do incidente](../docs/security/incident-2026-10/ROADMAP.md).
 
+**Atualização de 17/11/2026 — Release #356.** Mergeada em `main` em 14/11 (`559ab3e8`) e implantada em produção (deploy `c67b3754` SUCCESS, predeploy e healthcheck aprovados; CI 5/5 no registro da release).
+- É **implantação técnica**, não homologação funcional em produção: a produção continua não homologada, e as ressalvas da M8 e os percentuais (global **91,25%**) não mudam.
+- A #337 passa a ser release antiga a reavaliar; a #319 segue em draft, com conflitos, e o SheetJS continua no código. O P0 geral continua aberto.
+
 ## Ciclo atual (out/2026) — Jornadas institucionais completas
 
 Mudança de estratégia do Owner: entregar **jornadas utilizáveis de ponta a ponta**, reutilizando a arquitetura

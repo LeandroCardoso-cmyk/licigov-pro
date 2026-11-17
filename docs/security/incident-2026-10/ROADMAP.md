@@ -1,5 +1,12 @@
 # Roadmap de remediação — pontuação reconciliada
 
+## Atualização de 17/11/2026 — Release #356 implantada em produção (sem recálculo)
+
+- **#356** (RC `staging` → `main`) foi mergeada em 14/11/2026 (`559ab3e8`). CI 5/5 no registro da release. Deploy de produção `c67b3754` SUCCESS, com predeploy `db:release:predeploy` e healthcheck `/readyz` aprovados. Detalhes em [LOTE_CREDENCIAIS_2026-11.md](./LOTE_CREDENCIAIS_2026-11.md) (atualização de 17/11).
+- **Implantação técnica ≠ homologação funcional em produção:** nenhuma verificação funcional da #356 em produção está registrada aqui, e a produção continua não homologada.
+- **4A:** #319 continua em draft, com conflitos; o SheetJS (`xlsx ^0.18.5`) segue em `main` e `staging`, então o critério continua não atendido. A **#337** é uma release antiga a reavaliar, já que o conteúdo que ela promovia entrou pela #356, e não foi encerrada.
+- **P0 geral: aberto.** Pontuação não recalculada, por falta de evidência nova nos critérios pendentes e de decisão do Owner.
+
 ## Atualização de 05/11/2026 — lote de credenciais concluído
 
 **Lote: 16/16 itens (100% somente do checklist delimitado). P0 geral: aberto.** Evidência consolidada e fontes em [LOTE_CREDENCIAIS_2026-11.md](./LOTE_CREDENCIAIS_2026-11.md). A publicação documental não autoriza merge, deploy, novas chamadas pagas ou novos envios de e-mail.
