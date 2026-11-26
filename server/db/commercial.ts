@@ -39,6 +39,15 @@ export async function findRecentPendingProposalRequest(params: {
   return rows[0]?.id ?? null;
 }
 
+/** COM-01 — reenvio de solicitação pendente: atualiza os dados informados (só enquanto `pending`). */
+export async function refreshPendingProposalRequest(id: number, data: Omit<InsertProposalRequest, "id" | "status" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(proposalRequests)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(proposalRequests.id, id), eq(proposalRequests.status, "pending")));
+}
+
 export async function getProposalRequestById(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

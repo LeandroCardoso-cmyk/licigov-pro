@@ -80,7 +80,13 @@ export const commercialRouter = router({
         responsavelEmail: proposalInput.responsavelEmail,
         since: new Date(Date.now() - PROPOSAL_DEDUP_WINDOW_MS),
       });
-      if (existingId !== null) return { proposalId: existingId };
+      if (existingId !== null) {
+        // Reenvio corrige/complementa a solicitação pendente — nada informado pelo solicitante é descartado.
+        await db.refreshPendingProposalRequest(existingId, {
+          ...proposalInput, planName: plan.name, planPrice: plan.price,
+        });
+        return { proposalId: existingId };
+      }
 
       const proposalId = await db.createProposalRequest({
         ...proposalInput,

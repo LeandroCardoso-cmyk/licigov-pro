@@ -152,6 +152,10 @@ describe.skipIf(!DB)("LAUNCH-READY Lane B — MySQL real", { timeout: 30000 }, (
         responsavelEmail: `LRB-RESP-${stamp}@TESTE.LOCAL`,
       }));
       expect(again.proposalId).toBe(first.proposalId);
+      const updated = await caller.commercial.create(input({ observacoes: "Complemento do reenvio" }));
+      expect(updated.proposalId).toBe(first.proposalId);
+      const [obs] = await conn.execute<mysql.RowDataPacket[]>(`SELECT observacoes FROM proposal_requests WHERE id = ?`, [first.proposalId]);
+      expect(obs[0].observacoes).toBe("Complemento do reenvio");
       const other = await caller.commercial.create(input({ responsavelEmail: `lrb-outro-${stamp}@teste.local` }));
       expect(other.proposalId).not.toBe(first.proposalId);
 

@@ -55,9 +55,22 @@ A implantação do núcleo não depende dos itens planejados. Não usar percentu
 - E-mail de convite diz sempre "Aceitar convite e criar minha conta", inclusive para quem já tem conta (`acceptExisting`).
 - `Dashboard.tsx` navega para `/processo/:id` (redireciona a `/processos`, perde o id) — legado.
 - Procedures administrativas de `commercialRouter` usam checagem inline de admin (equivalente a `adminProcedure`); padronizar.
+- Reativação de módulo devolve `activationDate` novo (resposta), não o armazenado — cosmético.
+- `history.back()` em Privacidade/Termos pode voltar a um referrer externo — cosmético.
 - Deduplicação comercial não é atômica sob duas submissões simultâneas idênticas (mitigado por botão desabilitado + rate limit por IP); unicidade forte exigiria migration.
 - `licensed_modules` sem índice único (org, domínio) — a correção é por aplicação; índice exige migration.
 - `m8-emission-provenance-race-mysql-smoke` teve timeout de hook (10s) sob execução serial carregada; passa isolado — fora do delta.
+
+## 6b. Auditoria independente (read-only, sobre o delta consolidado)
+
+Resultado: **nenhum P0, nenhum P1**. Verificado: nenhum consumidor das mutações de licença (cliente, billing/Stripe,
+seeds, onboarding) quebra; `platformLicensingProcedure` só passa após `resolveTenant` (header obrigatório + auditoria
+fail-closed) e membro do órgão sempre tem `platformAdminAccess=false`; `registrationStatus` não vaza além do booleano;
+Register/Login fail-closed; consulta de dedup parametrizada; `DraftReviewNotice` fiel a `documentPromotionService`;
+alegações das páginas legais conferidas (backup diário `db-backup.yml`, bcrypt, GA condicional, S3 `us-east-1`,
+`platformsRouter.publish` sem integração). P2 corrigidos na mesma execução: reenvio da proposta pendente agora
+**atualiza** os dados informados (antes o complemento era descartado) e "cifrada por hash" → "hash, não reversível".
+Demais P2 no backlog acima (unicidade (org, domínio) e dedup atômica exigem migration — fora do escopo autorizado).
 
 ## 7. Evidências, SHAs, PR e CI
 

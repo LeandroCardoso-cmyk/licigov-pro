@@ -3195,8 +3195,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/PrivacyPolicy.tsx": {
-    "mtime": 1795712886.3796716,
-    "ast_hash": "8d98f2b47e4fa33fa8372ca169e5acde",
+    "mtime": 1795713855.624346,
+    "ast_hash": "ceda194a74f5839f230054feb23e9b74",
     "semantic_hash": ""
   },
   "client/src/pages/ProcessDetails.tsx": {
@@ -6935,8 +6935,8 @@
     "semantic_hash": ""
   },
   "server/db/commercial.ts": {
-    "mtime": 1795713616.4730241,
-    "ast_hash": "bdfbe9a96d4e8df44296f677665a2247",
+    "mtime": 1795713855.6284268,
+    "ast_hash": "a489c09e037c335e2eac2d0c3c5e52e7",
     "semantic_hash": ""
   },
   "server/db/connection.ts": {
@@ -8705,8 +8705,8 @@
     "semantic_hash": ""
   },
   "server/routers/commercialRouter.ts": {
-    "mtime": 1795712842.6417587,
-    "ast_hash": "c460235b038307ff5ceff7d474544a61",
+    "mtime": 1795713855.6257725,
+    "ast_hash": "0564b376c88a6276fa77ca540d7a4afa",
     "semantic_hash": ""
   },
   "server/routers/companyDocumentsRouter.ts": {
@@ -15885,8 +15885,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/launch-ready-lane-b-mysql-smoke.test.ts": {
-    "mtime": 1795713082.2423794,
-    "ast_hash": "c210fbd3a5a9b8e811e21042c0cdf9f0",
+    "mtime": 1795713855.6308448,
+    "ast_hash": "d623a738a97165adc8fd6cea4160baa2",
     "semantic_hash": ""
   },
   "server/__tests__/unit/launch-ready-lane-b.test.ts": {
@@ -15895,8 +15895,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/LAUNCH_READY_LANE_B_HANDOFF.md": {
-    "mtime": 1795713744.2824187,
-    "ast_hash": "f6626b32d3dfe3740e6c8bd45d1b1b39",
+    "mtime": 1795713908.4357333,
+    "ast_hash": "03aa878651152ef425f5535024990ff1",
     "semantic_hash": ""
   },
   "docs/legal/PRIVACY_TERMS_LAUNCH_READY_DRAFT.md": {

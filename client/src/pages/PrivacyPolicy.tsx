@@ -33,7 +33,7 @@ export default function PrivacyPolicy() {
             <ul>
               <li>Nome completo</li>
               <li>Endereço de e-mail</li>
-              <li>Credenciais de acesso (e-mail e senha; a senha é armazenada apenas de forma cifrada por hash)</li>
+              <li>Credenciais de acesso (e-mail e senha; a senha é armazenada apenas como hash, não reversível)</li>
               <li>Data e hora de acesso</li>
             </ul>
 
