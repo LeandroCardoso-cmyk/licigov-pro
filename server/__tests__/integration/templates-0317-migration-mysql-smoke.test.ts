@@ -48,8 +48,13 @@ const dump = async (c: mysql.Connection, t: string) => JSON.stringify(await rows
 /** Assinatura estrutural (colunas + índices + FKs) das tabelas SELECIONADAS. */
 /** Tabelas criadas por migrations POSTERIORES (0318 — marco de transição da Governance V2): fora do que esta migration promete preservar. */
 const LATER_MIGRATION_TABLES = ["template_governance_transitions"];
-/** Coluna acrescentada por migration POSTERIOR (0319 — proveniência das cotações; aditiva, anulável, sem índice/FK): fora do que esta migration promete preservar. */
-const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')";
+/**
+ * Colunas alteradas por migrations POSTERIORES, fora do que esta migration promete preservar:
+ *  - 0319 — proveniência das cotações (coluna nova, aditiva, anulável, sem índice/FK);
+ *  - 0320 — LR-02 LAUNCH-READY: `proposal_requests.planSlug/planName/planPrice` só perdem NOT NULL (sem índice/FK, sem dado alterado).
+ */
+const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')"
+  + " AND NOT (TABLE_NAME = 'proposal_requests' AND COLUMN_NAME IN ('planSlug', 'planName', 'planPrice'))";
 async function signature(c: mysql.Connection, tables: string[] | "EXISTING"): Promise<string> {
   const filter = tables === "EXISTING" ? `NOT IN (${inList([...NEW, LATER_MIGRATION_TABLES].flat())})` : `IN (${inList(tables)})`;
   const cols = await rows(c, `SELECT TABLE_NAME t, COLUMN_NAME c, COLUMN_TYPE ty, IS_NULLABLE n, COLUMN_DEFAULT d, COLLATION_NAME k, EXTRA e, GENERATION_EXPRESSION g

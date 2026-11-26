@@ -22,5 +22,5 @@ export function missingOfficialKinds(official: Readonly<Record<IssuableKind, unk
 export function processIssueRefusalMessage(missing: readonly IssuableKind[]): string | null {
   if (missing.length === 0) return null;
   const reasons = missing.map((k) => `${LABEL[k]} sem versão OFICIAL emitida`).join("; ");
-  return `${PROCESS_ISSUE_REQUIRES_EMITTED_DOCUMENTS}: o processo só é marcado como emitido depois da emissão OFICIAL do ETP, do TR e do Edital (revisão de terceiro/SoD) — pendente: ${reasons}.`;
+  return `${PROCESS_ISSUE_REQUIRES_EMITTED_DOCUMENTS}: o processo só é marcado como emitido depois da emissão OFICIAL do ETP, do TR e do Edital (emissão interna por gestor do órgão) — pendente: ${reasons}.`;
 }

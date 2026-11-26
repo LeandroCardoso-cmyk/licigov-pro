@@ -2,6 +2,7 @@ import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
+import { throwLegacyEndpointDisabled } from "../services/legacyEndpointGuard";
 
 export const billingRouter = router({
   getPlans: publicProcedure
@@ -41,46 +42,17 @@ export const billingRouter = router({
       return await getUserLimitsInfo(ctx.user.id);
     }),
 
+  /**
+   * LICIGOV-LAUNCH-READY LR-07 — checkout por usuário (Stripe, teste grátis automático de 30 dias) RETIRADO da jornada
+   * comercial ativa por decisão do Owner: o cliente é a organização pública, licenciada por proposta e procedimento
+   * administrativo fora do LiciGov Pro. Nenhuma sessão de checkout/cliente Stripe é criada. O código Stripe
+   * (`stripeService`, webhooks, tabelas) é preservado — não apagado.
+   */
   createCheckoutSession: protectedProcedure
-    .input(z.object({
-      planSlug: z.string(),
-      successUrl: z.string(),
-      cancelUrl: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const { createStripeCustomer, createCheckoutSession } = await import('../services/stripeService');
-
-      const plan = await db.getSubscriptionPlanBySlug(input.planSlug);
-      if (!plan || !plan.stripePriceId) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Plano não encontrado' });
-      }
-
-      let subscription = await db.getUserSubscription(ctx.user.id);
-      let customerId = subscription?.stripeCustomerId;
-
-      if (!customerId) {
-        const customer = await createStripeCustomer({
-          email: ctx.user.email || '',
-          name: ctx.user.name || '',
-          metadata: { userId: ctx.user.id.toString() },
-        });
-        customerId = customer.id;
-      }
-
-      const session = await createCheckoutSession({
-        customerId,
-        priceId: plan.stripePriceId,
-        successUrl: input.successUrl,
-        cancelUrl: input.cancelUrl,
-        trialDays: 30,
-        metadata: {
-          userId: ctx.user.id.toString(),
-          planId: plan.id.toString(),
-        },
-      });
-
-      return { sessionUrl: session.url };
-    }),
+    .input(z.object({ planSlug: z.string(), successUrl: z.string(), cancelUrl: z.string() }))
+    .mutation(({ ctx }) => throwLegacyEndpointDisabled(
+      "billing.createCheckoutSession", "LR-07", ctx, "Solicitar proposta (/solicitar-proposta)",
+    )),
 
   cancelSubscription: protectedProcedure
     .input(z.object({ immediately: z.boolean().optional() }))

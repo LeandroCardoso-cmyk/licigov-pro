@@ -63,9 +63,13 @@ export function registerIngestionUploadRoute(app: Express): void {
       const user = await sdk.authenticateRequest(req).catch(() => null);
       if (!user) return void res.status(401).json({ error: "Não autenticado." });
 
-      const { organizationId: orgId, membership } = await resolveTenantForUser(user.id, req);
+      const { organizationId: orgId, membership, organizationActive } = await resolveTenantForUser(user.id, req);
       if (!membership || !membership.ativo || !orgId) {
         return void res.status(403).json({ error: "Sem acesso à organização." });
+      }
+      // LAUNCH-READY DELTA-02 — órgão desativado é somente leitura também na rota REST de upload (mesma regra do resolveTenant).
+      if (organizationActive === false) {
+        return void res.status(403).json({ error: "Esta organização está desativada: o acesso é somente leitura (ORGANIZATION_INACTIVE)." });
       }
       // P0 piloto — upload é MUTAÇÃO: mesmo papel mínimo da createSession (operator). Viewer não envia.
       if (membership.role === "viewer") {

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -15,6 +15,9 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
+  const registrationStatus = trpc.auth.registrationStatus.useQuery(undefined, { staleTime: 5 * 60_000, retry: false });
+  // PRD-04 — enquanto não confirmado pelo servidor, trata como desabilitado (fail-closed, igual ao backend).
+  const registrationEnabled = registrationStatus.data?.publicRegistrationEnabled === true;
 
   const registerMutation = trpc.auth.register.useMutation({
     onSuccess: () => {
@@ -54,6 +57,26 @@ export default function Register() {
         </CardHeader>
 
         <CardContent className="space-y-6 pb-8">
+          {!registrationEnabled ? (
+            <div className="space-y-4 text-sm text-muted-foreground" data-testid="register-disabled">
+              <p>
+                {registrationStatus.isLoading
+                  ? "Verificando disponibilidade do cadastro…"
+                  : "O cadastro público não está disponível. O acesso ao LiciGov Pro é feito por convite enviado pelo administrador do seu órgão."}
+              </p>
+              {!registrationStatus.isLoading && (
+                <div className="flex flex-col gap-2">
+                  <Link href="/login" className={buttonVariants({ className: "w-full" })}>
+                    Já tenho conta — Entrar
+                  </Link>
+                  <Link href="/solicitar-proposta" className={buttonVariants({ variant: "outline", className: "w-full" })}>
+                    Meu órgão ainda não usa — Solicitar demonstração
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nome completo</Label>
@@ -115,8 +138,12 @@ export default function Register() {
           </p>
 
           <p className="text-xs text-center text-muted-foreground px-4">
-            Ao criar sua conta, você concorda com nossos Termos de Serviço e Política de Privacidade
+            Ao criar sua conta, você concorda com os{" "}
+            <Link href="/termos" className="underline">Termos de Uso</Link> e a{" "}
+            <Link href="/privacidade" className="underline">Política de Privacidade</Link>.
           </p>
+          </>
+          )}
         </CardContent>
       </Card>
     </div>

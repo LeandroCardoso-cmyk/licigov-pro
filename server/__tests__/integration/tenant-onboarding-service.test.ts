@@ -10,12 +10,12 @@ import type { Organization, InstitutionalInvitation } from "../../../drizzle/sch
 
 vi.mock("../../db/connection", () => ({ getDb: vi.fn() }));
 vi.mock("../../db/organizations", () => ({ getOrganizationBySlug: vi.fn() }));
-vi.mock("../../services/invitationService", () => ({ createInvitation: vi.fn() }));
+vi.mock("../../services/invitationService", () => ({ createInvitation: vi.fn(), tenantOnboardingEvidenceHolds: vi.fn() }));
 vi.mock("../../services/activityLogService", () => ({ logActivity: vi.fn() }));
 
 import { getDb } from "../../db/connection";
 import { getOrganizationBySlug } from "../../db/organizations";
-import { createInvitation } from "../../services/invitationService";
+import { createInvitation, tenantOnboardingEvidenceHolds } from "../../services/invitationService";
 import { logActivity } from "../../services/activityLogService";
 import { onboardTenant } from "../../services/tenantOnboardingService";
 
@@ -23,6 +23,7 @@ const getDbMock = vi.mocked(getDb);
 const getOrganizationBySlugMock = vi.mocked(getOrganizationBySlug);
 const createInvitationMock = vi.mocked(createInvitation);
 const logActivityMock = vi.mocked(logActivity);
+const evidenceMock = vi.mocked(tenantOnboardingEvidenceHolds);
 
 function makeOrg(overrides: Partial<Organization> = {}): Organization {
   return {
@@ -54,16 +55,15 @@ function makeFakeDb() {
 beforeEach(() => {
   vi.clearAllMocks();
   createInvitationMock.mockResolvedValue(makeInvitation());
+  evidenceMock.mockResolvedValue(true);
 });
 
 describe("tenantOnboardingService · idempotência", () => {
-  it("slug já existe com a MESMA entrada (nome+cnpj) → retorna o resumo existente, sem criar nada novo", async () => {
+  it("slug já existe com a MESMA entrada (nome+cnpj) → nunca reinsere o órgão; o estado é inspecionado (LR-01, ver smoke MySQL)", async () => {
     getOrganizationBySlugMock.mockResolvedValue(makeOrg({ nome: BASE_INPUT.nome, cnpj: null }));
-    const result = await onboardTenant(BASE_INPUT);
-    expect(result.alreadyExisted).toBe(true);
-    expect(result.organizationId).toBe(700099);
+    getDbMock.mockResolvedValue(null as never);
+    await expect(onboardTenant(BASE_INPUT)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     expect(createInvitationMock).not.toHaveBeenCalled();
-    expect(getDbMock).not.toHaveBeenCalled();
   });
 
   it("slug já existe com entrada DIFERENTE (nome não bate) → CONFLICT/TENANT_ALREADY_EXISTS", async () => {
@@ -94,6 +94,26 @@ describe("tenantOnboardingService · caminho feliz", () => {
       expect.objectContaining({ organizationId: 700099, email: BASE_INPUT.firstAdminEmail, role: "owner" })
     );
     expect(logActivityMock).toHaveBeenCalledWith(expect.objectContaining({ action: "tenant.onboarded", organizationId: 700099 }));
+    // LR-01 — evidência ANTES do convite (o aceite exige a evidência).
+    expect(logActivityMock.mock.invocationCallOrder[0]).toBeLessThan(createInvitationMock.mock.invocationCallOrder[0]);
+    expect(result.state).toBe("created");
+  });
+
+  it("LR-01 — falha do convite após o INSERT → erro explícito e recuperável (nunca sucesso falso)", async () => {
+    getOrganizationBySlugMock.mockResolvedValue(null);
+    const { db } = makeFakeDb();
+    getDbMock.mockResolvedValue(db as never);
+    createInvitationMock.mockRejectedValue(new Error("db down"));
+    await expect(onboardTenant(BASE_INPUT)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("Repita a operação") });
+  });
+
+  it("LR-01 — evidência não confirmada → nenhum convite 'morto' é emitido", async () => {
+    getOrganizationBySlugMock.mockResolvedValue(null);
+    const { db } = makeFakeDb();
+    getDbMock.mockResolvedValue(db as never);
+    evidenceMock.mockResolvedValue(false);
+    await expect(onboardTenant(BASE_INPUT)).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(createInvitationMock).not.toHaveBeenCalled();
   });
 
   it("ER_DUP_ENTRY no insert (corrida rara) → CONFLICT/TENANT_ALREADY_EXISTS, não erro cru", async () => {

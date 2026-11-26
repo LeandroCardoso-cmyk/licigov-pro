@@ -15,6 +15,10 @@ export const authRouter = router({
   // PR A.1 — nunca mais a linha completa de `users` (passwordHash/signaturePassword) ao cliente.
   me: publicProcedure.query(opts => (opts.ctx.user ? sanitizeUser(opts.ctx.user) : null)),
 
+  // LICIGOV-LAUNCH-READY PRD-04 — a tela de login só oferece "Criar conta" quando o cadastro público está de fato
+  // habilitado (fail-closed: default false). Expõe apenas o booleano já implícito na recusa de `register`.
+  registrationStatus: publicProcedure.query(() => ({ publicRegistrationEnabled: ALLOW_PUBLIC_REGISTRATION })),
+
   register: publicProcedure
     .use(rateLimitMiddleware("login"))
     .input(

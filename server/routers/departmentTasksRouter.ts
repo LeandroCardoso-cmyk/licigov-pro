@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, tenantProcedure } from "../_core/trpc";
+import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
@@ -19,7 +19,9 @@ export const departmentTasksRouter = router({
     return await db.listTasksForOrganization(ctx.organizationId);
   }),
 
-  create: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  create: orgRoleProcedure("operator")
     .input(
       z.object({
         title: z.string(),
@@ -36,10 +38,12 @@ export const departmentTasksRouter = router({
         ...input,
         organizationId: ctx.organizationId,
         createdBy: ctx.user.id,
-      } as any);
+      } as unknown as Parameters<typeof db.createTask>[0]);
     }),
 
-  update: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  update: orgRoleProcedure("operator")
     .input(
       z.object({
         id: z.number(),
@@ -55,7 +59,7 @@ export const departmentTasksRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...updateData } = input;
-      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData as any);
+      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData as unknown as Parameters<typeof db.updateTaskForOrganization>[2]);
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.update",
@@ -69,7 +73,9 @@ export const departmentTasksRouter = router({
       return { success: true };
     }),
 
-  delete: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  delete: orgRoleProcedure("operator")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const ok = await db.deleteTaskForOrganization(input.id, ctx.organizationId);
@@ -110,7 +116,9 @@ export const departmentTasksRouter = router({
       return await db.listTaskCommentsForOrganization(input.taskId, ctx.organizationId);
     }),
 
-  addComment: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  addComment: orgRoleProcedure("operator")
     .input(
       z.object({
         taskId: z.number(),
@@ -153,7 +161,8 @@ export const departmentTasksRouter = router({
   // Storage Service (S3) com chave interna segura; (4) persiste a referência de
   // forma tenant-scoped; (5) compensa (remove o objeto) se a gravação falhar,
   // evitando arquivo/registro órfão; (6) audita o evento.
-  addAttachment: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  addAttachment: orgRoleProcedure("operator")
     .input(
       z.object({
         taskId: z.number(),
@@ -244,7 +253,9 @@ export const departmentTasksRouter = router({
       return { success: true, id: attachmentId };
     }),
 
-  deleteAttachment: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  deleteAttachment: orgRoleProcedure("operator")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const ok = await db.deleteTaskAttachmentForOrganization(input.id, ctx.organizationId);
@@ -283,7 +294,9 @@ export const departmentTasksRouter = router({
       return process;
     }),
 
-  linkProcess: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  linkProcess: orgRoleProcedure("operator")
     .input(
       z.object({
         taskId: z.number(),

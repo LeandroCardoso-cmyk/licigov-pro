@@ -4,7 +4,7 @@
  * Mesmo motor da ingestão (sessão, upload multipart, fila, parser real PDF/DOCX) — sem pipeline paralelo.
  * Passos visíveis: 1) enviar arquivo → 2) revisar o texto extraído (edição humana; original preservado)
  * → 3) aprovar o conteúdo revisado → 4) promover a RASCUNHO do processo (ou substituir o rascunho atual,
- * com confirmação + motivo). Nada é oficial: a emissão continua exigindo revisão de terceiro (SoD).
+ * com confirmação + motivo). Nada é oficial: só a emissão interna (gestor do órgão) cria a versão oficial.
  * Sem IA na importação. PDF digitalizado (só imagem) é recusado com orientação (sem OCR nesta versão).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -246,7 +246,7 @@ export function DocumentImportPanel({ kind, processId, defaultOpen = false, onPr
               <AlertTitle>{label} importado é o rascunho do processo</AlertTitle>
               <AlertDescription>
                 {staging.promotionMode === "replace" ? "O rascunho anterior foi substituído (preservado no histórico). " : ""}
-                Revise e edite abaixo; a emissão oficial exige revisão de um terceiro. Você pode importar outro arquivo se necessário.
+                Revise e edite abaixo; a versão oficial só existe após a emissão interna por servidor com papel de gestor. Você pode importar outro arquivo se necessário.
               </AlertDescription>
             </Alert>
           )}

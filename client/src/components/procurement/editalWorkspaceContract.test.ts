@@ -32,7 +32,8 @@ describe("P0 · EditalWorkspace (caminho vivo canônico)", () => {
   });
 
   it("preserva revisão humana obrigatória e tratamento de loading/erro sem perder estado", () => {
-    expect(SRC).toContain("Revisão obrigatória");
+    // LAUNCH-READY PRD-02 — o aviso "Revisão obrigatória." vive no componente único DraftReviewNotice.
+    expect(SRC).toContain("<DraftReviewNotice");
     expect(SRC).toContain("generateNotice.isPending");
     expect(SRC).toContain("generateNotice.isError");
   });

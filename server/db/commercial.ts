@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
   proposalRequests, companyDocuments,
   InsertProposalRequest, InsertCompanyDocument,
@@ -10,6 +10,51 @@ export async function createProposalRequest(data: InsertProposalRequest) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(proposalRequests).values(data);
   return result[0].insertId;
+}
+
+/**
+ * COM-01 (LICIGOV-LAUNCH-READY) — deduplicação proporcional da manifestação de interesse: mesma solicitação
+ * (CNPJ em qualquer das grafias aceitas + e-mail do responsável) ainda pendente e recente ⇒ reaproveita a existente
+ * em vez de criar outra linha (reenvio, duplo clique, retry de rede). Consulta parametrizada.
+ */
+export async function findRecentPendingProposalRequest(params: {
+  cnpjVariants: string[];
+  responsavelEmail: string;
+  since: Date;
+}): Promise<number | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (params.cnpjVariants.length === 0) return null;
+  const rows = await db
+    .select({ id: proposalRequests.id })
+    .from(proposalRequests)
+    .where(and(
+      inArray(proposalRequests.orgaoCnpj, params.cnpjVariants),
+      eq(proposalRequests.responsavelEmail, params.responsavelEmail),
+      eq(proposalRequests.status, "pending"),
+      gte(proposalRequests.createdAt, params.since),
+    ))
+    .orderBy(desc(proposalRequests.id))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/** COM-01 — reenvio de solicitação pendente: só ACRESCENTA observações novas (nunca sobrescreve dados registrados). */
+export async function appendPendingProposalNotes(id: number, notes: string | null | undefined) {
+  const extra = (notes ?? "").trim();
+  if (!extra) return;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ observacoes: proposalRequests.observacoes, status: proposalRequests.status })
+    .from(proposalRequests).where(eq(proposalRequests.id, id)).limit(1);
+  const current = rows[0];
+  if (!current || current.status !== "pending") return;
+  const prev = (current.observacoes ?? "").trim();
+  if (prev.includes(extra)) return;
+  const merged = (prev ? `${prev}\n\n[Complemento] ${extra}` : extra).slice(0, 8000);
+  await db.update(proposalRequests)
+    .set({ observacoes: merged, updatedAt: new Date() })
+    .where(and(eq(proposalRequests.id, id), eq(proposalRequests.status, "pending")));
 }
 
 export async function getProposalRequestById(id: number) {
@@ -73,7 +118,7 @@ export async function getCompanyDocumentsByType(type: string) {
   return await db
     .select()
     .from(companyDocuments)
-    .where(eq(companyDocuments.type, type as any))
+    .where(eq(companyDocuments.type, type as InsertCompanyDocument["type"]))
     .orderBy(desc(companyDocuments.version));
 }
 

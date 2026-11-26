@@ -4,11 +4,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2, FileCheck, Building2 } from "lucide-react";
 import { APP_TITLE } from "@/const";
+
+/** COM-01 — mensagem de erro legível (o erro de validação do schema chega como JSON técnico). */
+function proposalErrorMessage(error: unknown): string {
+  const data = (error as { data?: { code?: string; zodError?: unknown } } | null)?.data;
+  const message = error instanceof Error ? error.message : "";
+  if (data?.code === "TOO_MANY_REQUESTS") return "Muitas solicitações em pouco tempo. Aguarde alguns minutos e tente novamente.";
+  if (data?.zodError || message.trim().startsWith("[")) {
+    return "Verifique os campos obrigatórios: UF com 2 letras, CEP com 8 dígitos, telefone com DDD e e-mail válido.";
+  }
+  return message || "Não foi possível enviar a solicitação. Tente novamente.";
+}
 
 export default function SolicitarProposta() {
   const [step, setStep] = useState<"form" | "success">("form");
@@ -24,7 +34,6 @@ export default function SolicitarProposta() {
     responsavelCargo: "",
     responsavelEmail: "",
     responsavelTelefone: "",
-    planSlug: "",
     observacoes: "",
     // Honeypot anti-bot: nunca visível/preenchível por um usuário humano (ver estilo abaixo).
     website: "",
@@ -35,13 +44,13 @@ export default function SolicitarProposta() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // COM-01 — sucesso SÓ depois da persistência confirmada pelo servidor; erro de validação vira orientação legível.
     try {
       await createProposalMutation.mutateAsync(formData);
       setStep("success");
-      toast.success("Solicitação enviada com sucesso!");
+      toast.success("Solicitação recebida.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao enviar solicitação";
-      toast.error(message);
+      toast.error(proposalErrorMessage(error));
     }
   };
 
@@ -54,21 +63,16 @@ export default function SolicitarProposta() {
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <FileCheck className="w-8 h-8 text-green-600" />
               </div>
-              <CardTitle className="text-3xl text-green-700">Solicitação Enviada com Sucesso!</CardTitle>
-              <CardDescription className="text-lg mt-2">
-                Sua solicitação foi registrada. Nossa equipe entrará em contato com a proposta comercial
-                e os próximos passos para o seu órgão.
+              <CardTitle className="text-3xl text-green-700">Solicitação recebida</CardTitle>
+              <CardDescription className="text-lg mt-2" data-testid="proposal-success-message">
+                Solicitação recebida. Nossa equipe entrará em contato para apresentar a plataforma e esclarecer as
+                condições comerciais. A eventual contratação observará os procedimentos legais aplicáveis ao órgão.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
-                <h3 className="font-semibold text-lg mb-2">Próximos Passos</h3>
-                <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                  <li>Nossa equipe entrará em contato com a proposta comercial personalizada</li>
-                  <li>Realize o processo de empenho conforme legislação vigente</li>
-                  <li>Após aprovação, entre em contato para ativação da assinatura</li>
-                  <li>Aguarde até 48h para liberação do acesso à plataforma</li>
-                </ol>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-sm text-muted-foreground">
+                Esta solicitação é uma manifestação de interesse: não gera obrigação contratual, decisão administrativa
+                nem compromisso de aquisição para o órgão.
               </div>
 
               <div className="text-center pt-4">
@@ -91,9 +95,10 @@ export default function SolicitarProposta() {
             <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
               <Building2 className="w-8 h-8 text-blue-600" />
             </div>
-            <CardTitle className="text-3xl">Solicitar Proposta Comercial</CardTitle>
+            <CardTitle className="text-3xl">Solicitar demonstração e proposta</CardTitle>
             <CardDescription className="text-lg mt-2">
-              Preencha os dados abaixo para receber uma proposta personalizada do {APP_TITLE}
+              Informe os dados do órgão para que nossa equipe apresente o {APP_TITLE} e esclareça as condições
+              comerciais. O envio não gera obrigação nem compromisso de aquisição.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -210,44 +215,16 @@ export default function SolicitarProposta() {
                 </div>
               </div>
 
-              {/* Plano Desejado */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">Plano Desejado</h3>
-                <div>
-                  <Label htmlFor="planSlug">Selecione o Plano *</Label>
-                  <Select
-                    required
-                    value={formData.planSlug}
-                    onValueChange={(value) => setFormData({ ...formData, planSlug: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um plano" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="municipal-basico">
-                        Municipal Básico - R$ 399/mês (até 15 mil habitantes)
-                      </SelectItem>
-                      <SelectItem value="municipal-intermediario">
-                        Municipal Intermediário - R$ 999/mês (15-50 mil habitantes)
-                      </SelectItem>
-                      <SelectItem value="municipal-completo">
-                        Municipal Completo - R$ 2.499/mês (acima de 50 mil habitantes)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
               {/* Observações */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">Observações (Opcional)</h3>
+                <h3 className="text-lg font-semibold border-b pb-2">Necessidades do órgão (opcional)</h3>
                 <div>
                   <Label htmlFor="observacoes">Informações Adicionais</Label>
                   <Textarea
                     id="observacoes"
                     value={formData.observacoes}
                     onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                    placeholder="Alguma informação adicional que deseja compartilhar?"
+                    placeholder="Ex.: número estimado de usuários, módulos de interesse (licitações, contratos, contratação direta), melhor horário para contato."
                     rows={4}
                   />
                 </div>

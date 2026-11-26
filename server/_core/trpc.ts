@@ -76,8 +76,43 @@ function parsePlatformAdminOrganizationId(headerValue: unknown): number | null {
   return parsed;
 }
 
+/**
+ * DELTA-02 — mutations que só EXPORTAM conteúdo existente (registram trilha de exportação, sem emissão nem alteração).
+ * ATENÇÃO: o critério é o NOME da procedure. Nunca nomeie `export*` uma procedure que emita, versione ou altere conteúdo.
+ */
+const READ_ONLY_EXPORT_LEAF = /^export[A-Z]/;
+
+/** LR-06 — código estável da recusa de mutação em organização desativada. */
+export const ORGANIZATION_INACTIVE = "ORGANIZATION_INACTIVE";
+
+/**
+ * LR-06 (LICIGOV-LAUNCH-READY) — organização desativada (`organizations.ativo = false`) é SOMENTE LEITURA para os membros do
+ * órgão em TODA mutação resolvida por tenant (`tenantProcedure` e derivados, inclusive atos institucionais), no upload REST
+ * (`ingestionUploadRoute`) e nos aceites de convite (DELTA-02). Exportação de conteúdo existente (`export*`) continua permitida.
+ * Consultas e históricos
+ * continuam acessíveis (nada é apagado nem ocultado). Antes, o estado era ignorado por toda a resolução de tenant. Acesso
+ * TÉCNICO do admin de plataforma (tenant explícito + auditoria fail-closed) é preservado — inclusive para reativação/licença.
+ * Semântica mínima e reversível; suspensão por inadimplência ou regra contratual NÃO é inferida aqui (decisão do Owner).
+ */
+function assertOrganizationWritable(
+  organization: { ativo?: boolean | null } | null | undefined,
+  p: { type: string; path: string; userId: number; organizationId: number; correlationId?: string },
+): void {
+  if (p.type !== "mutation" || !organization || organization.ativo !== false) return;
+  // DELTA-02 — exportação de conteúdo EXISTENTE (procedures `export*`) é leitura: não emite, não altera conteúdo nem pratica ato.
+  if (READ_ONLY_EXPORT_LEAF.test(p.path.split(".").pop() ?? "")) return;
+  structuredLog({
+    level: "warn", service: "rbac", operation: "organization_inactive_mutation_denied",
+    procedure: p.path, userId: p.userId, organizationId: p.organizationId, correlationId: p.correlationId,
+  });
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: `Esta organização está desativada: o acesso é somente leitura (${ORGANIZATION_INACTIVE}).`,
+  });
+}
+
 const resolveTenant = t.middleware(async opts => {
-  const { ctx, next, path } = opts;
+  const { ctx, next, path, type } = opts;
 
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
@@ -148,7 +183,7 @@ const resolveTenant = t.middleware(async opts => {
   }
 
   // Usuários normais: resolver via tenantService
-  const { organizationId, membership } = await resolveTenantForUser(
+  const { organizationId, membership, organizationActive } = await resolveTenantForUser(
     ctx.user.id,
     ctx.req,
   );
@@ -159,6 +194,11 @@ const resolveTenant = t.middleware(async opts => {
       message: "Você não tem acesso a esta organização.",
     });
   }
+
+  // LR-06 — estado do órgão já veio na consulta da membership (nenhuma chamada extra ao banco).
+  assertOrganizationWritable(organizationActive === false ? { ativo: false } : null, {
+    type, path, userId: ctx.user.id, organizationId, correlationId: ctx.correlationId,
+  });
 
   return next({
     ctx: {
@@ -215,6 +255,22 @@ export function assertOrgRoleAtLeast(ctx: OrgRoleCheckContext, minRole: OrgRole,
     code: "FORBIDDEN",
     message: `Esta ação requer papel mínimo '${minRole}' na organização.`,
   });
+}
+
+/**
+ * LR-05 (LICIGOV-LAUNCH-READY) — piso CONDICIONAL de ato institucional, avaliado sobre o papel PERSISTIDO (relido por
+ * `institutionalProcedure`), nunca sobre a projeção. Usado quando a mesma rota cobre rascunho (operator) e mudança de estado
+ * institucional (manager+), conforme a matriz NEW-006. Recusa logada (mesma trilha `rbac/org_role_denied`).
+ */
+export function assertInstitutionalRoleAtLeast(
+  ctx: OrgRoleCheckContext & { institutionalAuthority?: { role: OrgRole } | null },
+  minRole: OrgRole,
+  operation: string,
+): void {
+  assertOrgRoleAtLeast(
+    { ...ctx, orgMembership: ctx.institutionalAuthority ? { role: ctx.institutionalAuthority.role } : null },
+    minRole, operation,
+  );
 }
 
 export function orgRoleProcedure(minRole: OrgRole) {

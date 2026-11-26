@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { tenantProcedure, router, institutionalProcedure } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast, orgRoleProcedure } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
 import { checkContractExpirationsForOrganization, getExpirationSummaryForOrganization } from "../services/contractNotifications";
@@ -58,7 +58,8 @@ export const contractsRouter = router({
   /**
    * Criar novo contrato
    */
-  create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+  // LR-05 — NEW-006: criação em rascunho = operator; nascer em estado institucional (≠ draft) = manager.
+  create: institutionalProcedure("operator") // SECURITY-02 — ato com efeito contratual: membership REAL
     .input(
       z.object({
         number: z.string(),
@@ -84,6 +85,7 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      if (input.status !== "draft") assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.create");
       return audited("create", ctx, async () => {
         const contract = await db.createContract({
           ...input,
@@ -132,7 +134,8 @@ export const contractsRouter = router({
   /**
    * Atualizar contrato
    */
-  update: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+  // LR-05 — NEW-006: edição = operator; mudança de status institucional = manager.
+  update: institutionalProcedure("operator") // SECURITY-02 — ato com efeito contratual: membership REAL
     .input(
       z.object({
         id: z.number(),
@@ -156,6 +159,12 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // LR-05 — fora de rascunho (estado ATUAL ou pedido), qualquer alteração do instrumento é ato de manager+ (inclui
+      // rebaixar status ou mudar valor/vigência sem aditivo). Contrato de outro órgão ⇒ null ⇒ segue ao NOT_FOUND abaixo.
+      const currentContract = await db.getContractByIdForOrganization(input.id, ctx.organizationId);
+      if ((currentContract && currentContract.status !== "draft") || (input.status !== undefined && input.status !== "draft")) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.update");
+      }
       return audited("update", ctx, async () => {
         const { id, ...data } = input;
         const contract = await db.updateContractForOrganization(id, ctx.organizationId, data);
@@ -181,7 +190,8 @@ export const contractsRouter = router({
     /**
      * Criar aditivo
      */
-    create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: aditivo altera o instrumento (valor/vigência) = manager.
+    create: institutionalProcedure("manager") // SECURITY-02 — ato com efeito contratual: membership REAL
       .input(
         z.object({
           contractId: z.number(),
@@ -308,7 +318,8 @@ export const contractsRouter = router({
     /**
      * Criar apostilamento
      */
-    create: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: apostilamento é instrumento formal = manager.
+    create: institutionalProcedure("manager") // SECURITY-02 — ato com efeito contratual: membership REAL
       .input(
         z.object({
           contractId: z.number(),
@@ -367,7 +378,8 @@ export const contractsRouter = router({
     /**
      * Criar documento
      */
-    create: institutionalProcedure("viewer") // SECURITY-02 — pode nascer `final`: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: documento em rascunho = operator; nascer `final` = manager.
+    create: institutionalProcedure("operator") // SECURITY-02 — pode nascer `final`: membership REAL
       .input(
         z.object({
           contractId: z.number(),
@@ -380,6 +392,7 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+      if (input.status === "final") assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.documents.create");
         return audited("documents.create", ctx, async () => {
           const document = await db.createContractDocumentForOrganization(input, ctx.organizationId);
           if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
@@ -408,7 +421,8 @@ export const contractsRouter = router({
     /**
      * Atualizar documento
      */
-    update: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: edição = operator; tornar `final` = manager.
+    update: institutionalProcedure("operator") // SECURITY-02 — ato com efeito contratual: membership REAL
       .input(
         z.object({
           id: z.number(),
@@ -419,6 +433,11 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+      // LR-05 — documento fora de rascunho (atual ou pedido) só muda com manager+.
+      const currentDocStatus = await db.getContractDocumentStatusForOrganization(input.id, ctx.organizationId);
+      if ((currentDocStatus !== null && currentDocStatus !== "draft") || (input.status !== undefined && input.status !== "draft")) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.documents.update");
+      }
         return audited("documents.update", ctx, async () => {
           const { id, ...data } = input;
           const document = await db.updateContractDocumentForOrganization(id, ctx.organizationId, data);
@@ -510,7 +529,8 @@ export const contractsRouter = router({
     /**
      * Gerar Minuta de Contrato
      */
-    generateMinuta: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateMinuta: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateMinuta", ctx, async () => {
@@ -557,7 +577,8 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Aditivo
      */
-    generateAmendment: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateAmendment: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number(), amendmentId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateAmendment", ctx, async () => {
@@ -619,7 +640,8 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Apostilamento
      */
-    generateApostille: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateApostille: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number(), apostilleId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateApostille", ctx, async () => {
@@ -681,7 +703,8 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Rescisão
      */
-    generateRescission: institutionalProcedure("viewer") // SECURITY-02 — ato com efeito contratual: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: rescisão encerra o contrato (status `terminated`) = manager.
+    generateRescission: institutionalProcedure("manager") // SECURITY-02 — ato com efeito contratual: membership REAL
       .input(
         z.object({
           contractId: z.number(),

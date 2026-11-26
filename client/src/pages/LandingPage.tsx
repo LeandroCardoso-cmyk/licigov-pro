@@ -34,7 +34,7 @@ const CAPACIDADES: { titulo: string; itens: string[] }[] = [
       "ETP — Estudo Técnico Preliminar",
       "Termo de Referência",
       "Editais e minutas",
-      "Contratações diretas",
+      "Contratações diretas (dispensa e inexigibilidade)",
     ],
   },
   {
@@ -43,7 +43,12 @@ const CAPACIDADES: { titulo: string; itens: string[] }[] = [
   },
   {
     titulo: "Catálogos e padrões",
-    itens: ["CATMAT", "CATSER", "Modelos institucionais", "Consulta normativa"],
+    // LR-07 — sem anunciar busca completa CATMAT/CATSER nem recurso sujeito a flag como oferta geral.
+    itens: [
+      "Apoio à classificação CATMAT/CATSER",
+      "Modelos institucionais (habilitáveis por órgão)",
+      "Consulta normativa com fontes governadas",
+    ],
   },
   {
     titulo: "Inteligência e governança",
@@ -60,7 +65,7 @@ const FLUXO: { n: string; nome: string; desc: string; artigo: string }[] = [
   { n: "01", nome: "DFD", desc: "Formaliza a demanda", artigo: "Art. 12, VII" },
   { n: "02", nome: "ETP", desc: "Estuda a viabilidade", artigo: "Art. 18" },
   { n: "03", nome: "TR", desc: "Referencia o objeto", artigo: "Art. 6º, XXIII" },
-  { n: "04", nome: "Edital", desc: "Publica com segurança", artigo: "Art. 25" },
+  { n: "04", nome: "Edital", desc: "Prepara a minuta a partir do processo", artigo: "Art. 25" },
   { n: "05", nome: "Contrato", desc: "Formaliza a execução", artigo: "Art. 89" },
   { n: "06", nome: "Aditivos", desc: "Gerencia alterações", artigo: "Art. 124" },
 ];
@@ -152,7 +157,7 @@ export default function LandingPage() {
             <h1 className="lgv-hero-h1">Todo o seu departamento de licitações, organizado em uma só plataforma.</h1>
             <p className="lgv-hero-sub">
               O LiciGov Pro acompanha toda a jornada da contratação pública — do planejamento à gestão dos Contratos
-              Administrativos e Termos Aditivos. Menos retrabalho, documentos padronizados e segurança jurídica, com
+              Administrativos e Termos Aditivos. Menos retrabalho, documentos padronizados e mais segurança jurídica, com
               apoio <b>supervisionado, explicável e auditável</b>.
             </p>
             <div className="lgv-hero-cta">
@@ -419,7 +424,7 @@ export default function LandingPage() {
             <span className="lgv-eyebrow" style={{ marginBottom: 14, display: "inline-block" }}>
               Consulta normativa
             </span>
-            <h2 className="lgv-h2">Perguntou, a norma responde.</h2>
+            <h2 className="lgv-h2">Pergunte e receba a resposta com a fundamentação.</h2>
             <p className="lgv-lead" style={{ maxWidth: "58ch" }}>
               Uma ferramenta institucional de consulta técnica — não apenas um chatbot. O LiciGov Pro utiliza as fontes
               governadas disponíveis no contexto do órgão e apresenta fundamentação e referências rastreáveis,
@@ -481,7 +486,7 @@ export default function LandingPage() {
           </h2>
           <p>
             Cada decisão de produto nasce da prática real do serviço público — não de suposições. É essa vivência que
-            torna o LiciGov Pro rigoroso na forma e seguro no conteúdo.
+            orienta o LiciGov Pro a cuidar da forma e do conteúdo de cada documento.
           </p>
         </div>
       </section>

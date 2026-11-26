@@ -24,7 +24,8 @@ export default function Admin() {
   const { data: processesData } = trpc.processes.list.useQuery();
   const { data: directContractsData } = trpc.directContracts.list.useQuery({ type: undefined, status: undefined, year: undefined });
   const { data: contractsOverview } = trpc.contracts.analytics.getOverview.useQuery();
-  const { data: proposalsData } = (trpc as any).proposals?.list?.useQuery?.() ?? { data: undefined };
+  // LR-03 — o router `proposals` nunca existiu (contagens sempre 0); a fonte real é `commercial.list` (admin de plataforma).
+  const { data: proposalsData } = trpc.commercial.list.useQuery(undefined, { retry: false });
 
   const promoteToAdminMutation = trpc.admin.promoteToAdmin.useMutation({
     onSuccess: () => { toast.success("Usuário promovido a administrador!"); setPromotingUserId(null); refetch(); },
@@ -69,7 +70,7 @@ export default function Admin() {
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
             Painel de Administração
           </h1>
-          <p className="text-gray-600 text-lg">Gerencie usuários, assinaturas, propostas e documentos do sistema</p>
+          <p className="text-gray-600 text-lg">Gerencie usuários, organizações, solicitações comerciais e documentos do sistema</p>
         </div>
 
         <AdminStatsGrid
@@ -81,15 +82,15 @@ export default function Admin() {
           expiredContracts={contractsOverview?.expired ?? 0}
         />
 
-        {/* Gestão de Assinaturas */}
+        {/* Gestão Comercial (modelo institucional — LR-03/LR-07) */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-blue-600" />Gestão de Assinaturas
+            <DollarSign className="h-6 w-6 text-blue-600" />Gestão Comercial
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { href: "/gestao-comercial", title: "Assinaturas", desc: "Visualize e gerencie todas as assinaturas (Stripe + Empenho)", Icon: TrendingUp, gradient: "from-blue-500 to-blue-600", border: "hover:border-blue-300", sub: "Total de propostas", count: proposalsData?.length ?? 0 },
-              { href: "/admin/propostas", title: "Propostas", desc: "Gerencie solicitações, registre empenhos e ative assinaturas", Icon: FileText, gradient: "from-purple-500 to-purple-600", border: "hover:border-purple-300", sub: "Pendentes", count: proposalsData?.filter((p: any) => p.status === "pendente").length ?? 0 },
+              { href: "/admin/organizacoes", title: "Organizações", desc: "Concessão de acesso por órgão: criação da organização e convite do administrador", Icon: TrendingUp, gradient: "from-blue-500 to-blue-600", border: "hover:border-blue-300", sub: "Solicitações (total)", count: proposalsData?.length ?? 0 },
+              { href: "/admin/propostas", title: "Propostas", desc: "Solicitações de demonstração e proposta (manifestações de interesse)", Icon: FileText, gradient: "from-purple-500 to-purple-600", border: "hover:border-purple-300", sub: "Recebidas", count: proposalsData?.filter((p: { status: string }) => p.status === "pending").length ?? 0 },
               { href: "/admin/documentos", title: "Documentos", desc: "Gerencie certidões e documentos da empresa", Icon: FileText, gradient: "from-orange-500 to-orange-600", border: "hover:border-orange-300", sub: "Gestão de docs", count: null as number | null },
             ].map(({ href, title, desc, Icon, gradient, border, sub, count }) => (
               <Card key={href} className={`cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all border-2 ${border}`} onClick={() => setLocation(href)}>

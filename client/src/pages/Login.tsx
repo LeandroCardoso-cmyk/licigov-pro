@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
+  const registrationStatus = trpc.auth.registrationStatus.useQuery(undefined, { staleTime: 5 * 60_000, retry: false });
 
   // PR A.1 — se o usuário chegou aqui via redirect de sessão expirada (ex.: no meio do aceite de
   // um convite), volta para lá depois de logar em vez de sempre ir para /dashboard.
@@ -112,15 +113,28 @@ export default function Login() {
             </Button>
           </form>
 
-          <p className="text-sm text-center text-muted-foreground">
-            Não tem conta?{" "}
-            <a href="/register" className="text-primary hover:underline font-medium">
-              Criar conta
-            </a>
-          </p>
+          {/* PRD-04 — cadastro público é fail-closed (ALLOW_PUBLIC_REGISTRATION=false por padrão): o acesso nasce de
+              convite do administrador do órgão. Só oferece "Criar conta" quando o servidor confirma que está habilitado. */}
+          {registrationStatus.data?.publicRegistrationEnabled ? (
+            <p className="text-sm text-center text-muted-foreground">
+              Não tem conta?{" "}
+              <Link href="/register" className="text-primary hover:underline font-medium">
+                Criar conta
+              </Link>
+            </p>
+          ) : (
+            <p className="text-sm text-center text-muted-foreground" data-testid="login-access-by-invite">
+              O acesso é feito por convite do administrador do seu órgão. Seu órgão ainda não usa o LiciGov Pro?{" "}
+              <Link href="/solicitar-proposta" className="text-primary hover:underline font-medium">
+                Solicitar demonstração
+              </Link>
+            </p>
+          )}
 
           <p className="text-xs text-center text-muted-foreground px-4">
-            Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade
+            Ao continuar, você concorda com os{" "}
+            <Link href="/termos" className="underline">Termos de Uso</Link> e a{" "}
+            <Link href="/privacidade" className="underline">Política de Privacidade</Link>.
           </p>
         </CardContent>
       </Card>

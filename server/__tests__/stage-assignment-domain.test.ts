@@ -56,8 +56,10 @@ describe("boundary transacional de assignStage (guarda estática)", () => {
 
   it("o router delega assignStage ao boundary transacional e não grava atribuição fora dele", () => {
     const src = read("server/routers/collaborationRouter.ts");
-    const start = src.indexOf("assignStage: tenantProcedure");
-    const body = src.slice(start, src.indexOf("unassignStage: tenantProcedure"));
+    // LAUNCH-READY DELTA-01 — piso NEW-006 (operator) sobre o tenant; o contrato do boundary é o mesmo.
+    const start = src.indexOf('assignStage: orgRoleProcedure("operator")');
+    const body = src.slice(start, src.indexOf('unassignStage: orgRoleProcedure("operator")'));
+    expect(start).toBeGreaterThan(0);
     expect(body).toContain("assignStageAtomically(");
     for (const forbidden of ["db.createNotification(", "logActivity(", "db.upsertStageAssignment(", "db.insert"]) {
       expect(body, forbidden).not.toContain(forbidden);

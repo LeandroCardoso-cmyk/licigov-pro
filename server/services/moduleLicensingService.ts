@@ -51,8 +51,8 @@ export async function activateModule(params: {
     licensedFeatures: params.licensedFeatures,
     correlationId: params.correlationId,
   });
-  await upsertLicensedModule(module);
-  return { module, missingDependencies };
+  const persisted = await upsertLicensedModule(module);
+  return { module: persisted ?? module, missingDependencies };
 }
 
 export async function deactivateModule(organizationId: number, businessDomainCode: BusinessDomainCode): Promise<boolean> {

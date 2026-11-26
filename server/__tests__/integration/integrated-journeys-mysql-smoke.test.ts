@@ -430,7 +430,7 @@ describe.skipIf(!DB)("J1-BLL — DFD → ETP → TR (emitido) → Edital BLL Rev
       structuredProposed: (trParamsBefore.fields as any[]).filter((f) => f.active && f.proposal).length,
       structuredFilledByAutomation: trTyped.length, structuredConfirmedNames: trTyped, usedSources: trCtx.usedSources, missing: trCtx.missing,
     };
-    // Revisão humana do TR (marcadores [REVISAR] resolvidos por um editor) → emissão oficial por terceiro (SoD).
+    // Revisão humana do TR (marcadores [REVISAR] resolvidos por um editor) → emissão interna por gestor.
     const human = trDraft.content.replace(/\[REVISAR[^\]]*\]/g, "Texto conferido pela equipe.");
     if (human !== trDraft.content) {
       await (await caller(UB.editor, ORG_BLL)).procurementProcess.saveReviewableDraft({ processId: pid, kind: "tr", content: human, expectedContentHash: draftContentHash(trDraft.content), idempotencyKey: key("tr-edit") });

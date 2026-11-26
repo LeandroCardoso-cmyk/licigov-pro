@@ -45,14 +45,16 @@ A membership é relida da fonte autoritativa **a cada ato**. Não há cache, e o
 - **Contratos:**
   - `contractWorkspace.registerInForceContract`, `createAddendum`, `createApostille`;
   - `updateContract`, quando o **status** muda.
-- **Rotas legadas ativas**, com membership real e o piso legado inalterado:
-  - `contracts.create/update/amendments.create/apostilles.create/documents.create/documents.update/generation.generateRescission`;
-  - `directContracts.update/documents.create/documents.update`.
+- **Rotas legadas ativas**, com membership real e piso da matriz NEW-006 (LICIGOV-LAUNCH-READY LR-05, nov/2026 — antes `viewer`):
+  - `contracts.amendments.create`, `contracts.apostilles.create`, `contracts.generation.generateRescission` → **manager**;
+  - `contracts.create` → operator (manager se nascer em status ≠ `draft`); `contracts.update` → operator (manager se mudar status ≠ `draft`);
+  - `contracts.documents.create/update` e `directContracts.documents.create/update` → operator (manager para `final`);
+  - `directContracts.update` → operator (manager para status além de `draft`/`pending_approval`).
 - **Outras:**
   - `ingestion.promoteSession`;
   - `institutionalRequest.respond`;
-  - `workspace.approveDecision`;
-  - `operationRecord.registerMilestone/setPublication`.
+  - `workspace.approveDecision` → **manager** (LR-05);
+  - `operationRecord.registerMilestone/setPublication` → operator (LR-05: registro DECLARADO de ato externo, como `complete/reopen`).
 - **CLI** `scripts/edital-pilot-harness.ts` (modo staging): passos de decisão exigem membership real `manager` ou acima.
 - **Parecer Jurídico:** inalterado. O NEW-007 (`legalOpinionAuthorityService`) já exigia membership real e atribuição.
 
@@ -86,7 +88,9 @@ A **emissão** de ETP, TR e Edital (`promoteOfficialDocument`) cria a versão im
 
 ## Fora do escopo (decisão do Owner)
 
-- **Lacunas de RBAC anteriores:** viewer nas rotas legadas de contratos e em `moduleLicensing`.
+- ~~Lacunas de RBAC anteriores: viewer nas rotas legadas de contratos e em `moduleLicensing`~~ — resolvidas na missão
+  LICIGOV-LAUNCH-READY (LR-05 e SEC-04/LR-04). Mutações em `tenantProcedure` puro fora desses routers (tarefas, workspace,
+  colaboração etc.) seguem listadas como backlog no handoff da Lane B.
 - **Gestão de contas na plataforma:** `adminRouter.promoteToAdmin`.
 - **Identidade institucional** (`documentSettings.save`, `organizations.update`): configuração técnica, sem mudança.
 - **Revisão histórica:** atos já registrados por admins de plataforma; somente leitura.

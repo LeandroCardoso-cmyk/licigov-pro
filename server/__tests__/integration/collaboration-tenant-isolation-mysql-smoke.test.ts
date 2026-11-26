@@ -52,7 +52,7 @@ describe.skipIf(!DB)("R1 / SEM-001 — collaboration tenant isolation (MySQL rea
     aNew = await user("a-new"); multi = await user("multi");
     bTarget = await user("b-target"); bHist = await user("b-hist"); bOwner = await user("b-owner");
     admin = await user("admin", "admin");
-    await member(ORG_A, aOwner, "owner"); await member(ORG_A, aMember); await member(ORG_A, aOutsider, "viewer");
+    await member(ORG_A, aOwner, "owner"); await member(ORG_A, aMember); await member(ORG_A, aOutsider, "operator"); // LAUNCH-READY DELTA-01: outsider com papel de elaborar (o viewer é recusado antes, pelo piso NEW-006)
     await member(ORG_A, aNew); await member(ORG_A, multi); await member(ORG_B, multi);
     await member(ORG_B, bTarget); await member(ORG_B, bHist); await member(ORG_B, bOwner, "owner");
 
@@ -211,6 +211,23 @@ describe.skipIf(!DB)("R1 / SEM-001 — collaboration tenant isolation (MySQL rea
     expect((await errOf(() => viewer.collaboration.assignStage({ processId: pA, docType: "ata", assignedUserId: aMember }))).code).toBe("FORBIDDEN");
     expect(await members(pA, aOutsider)).toBe(0);
     expect(await activityOf(pA)).toBe(before);
+
+    // LAUNCH-READY DELTA-01 — viewer do órgão: recusa pelo piso NEW-006 IDÊNTICA para processo existente e inexistente
+    // (não revela existência do processo) e nada é gravado.
+    const [vr] = await conn.execute<mysql.ResultSetHeader>(`INSERT INTO users (openId, name, email, role) VALUES (?, ?, ?, 'user')`,
+      [`r1-a-viewer-${stamp}`, "Viewer A", email("a-viewer")]);
+    try {
+      await conn.execute(`INSERT INTO organization_members (organizationId, userId, role, ativo) VALUES (?, ?, 'viewer', 1)`, [ORG_A, vr.insertId]);
+      const orgViewer = await caller(vr.insertId, ORG_A);
+      const onExisting = await errOf(() => orgViewer.collaboration.addMember({ processId: pA, userEmail: email("a-new"), permission: "viewer" }));
+      const onMissing = await errOf(() => orgViewer.collaboration.addMember({ processId: 999999999, userEmail: email("a-new"), permission: "viewer" }));
+      expect(onExisting.code).toBe("FORBIDDEN");
+      expect(onMissing).toEqual(onExisting);
+      expect(await activityOf(pA)).toBe(before);
+    } finally {
+      await conn.execute(`DELETE FROM organization_members WHERE userId = ?`, [vr.insertId]);
+      await conn.execute(`DELETE FROM users WHERE id = ?`, [vr.insertId]);
+    }
   }, 30000);
 
   // ── Leituras não expõem associações históricas cross-tenant ────────────────────

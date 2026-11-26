@@ -217,3 +217,43 @@ entre em contato com o administrador da sua organização imediatamente.
     text,
   };
 }
+
+// ─── Nova manifestação de interesse comercial (aviso INTERNO à equipe comercial) ──────────────
+
+/**
+ * LICIGOV-LAUNCH-READY LR-08 — conteúdo MÍNIMO: identifica o órgão e aponta para a gestão comercial autenticada.
+ * Nenhum dado pessoal do responsável (nome, e-mail, telefone) sai no e-mail — fica no sistema, sob controle de acesso.
+ */
+export interface CommercialProposalReceivedEmailParams {
+  proposalId: number;
+  orgaoNome: string;
+  orgaoCidade: string;
+  orgaoEstado: string;
+  adminUrl: string;
+}
+
+export function buildCommercialProposalReceivedEmail(params: CommercialProposalReceivedEmailParams): EmailContent {
+  const local = `${params.orgaoCidade}/${params.orgaoEstado}`;
+  const bodyHtml = `
+<h1 style="margin:0 0 16px 0;font-size:20px;color:#111827;">Nova solicitação de demonstração/proposta</h1>
+<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;">
+Solicitação nº <strong>${params.proposalId}</strong> registrada por <strong>${escapeHtml(params.orgaoNome)}</strong> (${escapeHtml(local)}).
+</p>
+<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;">
+Os dados de contato estão disponíveis na Gestão Comercial do LiciGov Pro (acesso restrito à administração da plataforma):
+<a href="${escapeHtml(params.adminUrl)}">${escapeHtml(params.adminUrl)}</a>
+</p>
+<p style="margin:16px 0 0 0;color:#6b7280;font-size:13px;">
+A solicitação é manifestação de interesse: não gera obrigação contratual nem compromisso de aquisição para o órgão.
+</p>`;
+  const text = [
+    `Nova solicitação de demonstração/proposta nº ${params.proposalId}: ${params.orgaoNome} (${local}).`,
+    `Dados de contato na Gestão Comercial (acesso restrito): ${params.adminUrl}`,
+    "A solicitação é manifestação de interesse: não gera obrigação contratual nem compromisso de aquisição para o órgão.",
+  ].join("\n");
+  return {
+    subject: `Nova solicitação comercial — ${params.orgaoNome}`,
+    html: renderLayout({ preheader: "Nova manifestação de interesse registrada.", bodyHtml }),
+    text,
+  };
+}

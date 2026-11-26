@@ -51,6 +51,10 @@ Fluxo principal de documentos: **DFD → ETP → TR → Edital**
 - Sistema tributário, de RH ou patrimonial
 - Portal completo de compras
 - Plataforma completa de pregão eletrônico
+- Publicação automatizada no PNCP ou em plataformas de disputa (registro declarado de publicação é permitido)
+- Aplicativo nativo Android/iOS (acesso por web responsiva/PWA)
+- Banco de preços próprio ou integração comercial com bancos de preços
+- Checkout automatizado, assinatura individual por usuário, gestão de empenho/liquidação/pagamento
 
 ## Stack
 - **Frontend:** React 19 + TypeScript + Vite 7 + TailwindCSS 4 + wouter (roteamento) + TanStack Query + Radix UI / shadcn + TipTap (editor) + Recharts
@@ -63,7 +67,7 @@ Fluxo principal de documentos: **DFD → ETP → TR → Edital**
 - **IA:** multi-provider via `server/_core/llm.ts` — default Gemini 2.5 Flash (`@google/generative-ai`); Claude e OpenAI preparados (ver `docs/architecture/AI_PROVIDER_CONFIG.md`)
 - **Auth:** JWT em cookie HTTP-only via `jose` + bcrypt (email/senha próprio)
 - **E-mail transacional:** Brevo (convites e recuperação de senha) — provider `console`/`fake` em dev
-- **Billing:** Stripe (`billingRouter`)
+- **Billing:** Stripe (`billingRouter`) — **legado preservado, desativado na jornada comercial** (checkout por usuário recusado; decisão de 26/11/2026). Modelo vigente: licenciamento institucional por organização (`docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md`)
 - **Config:** leitura de env centralizada em `server/config/*` (nunca `process.env` direto)
 - **Package manager:** pnpm (`pnpm@10.4.1`)
 - **Runtime dev:** `tsx watch`; build de produção com `vite build` + `esbuild`

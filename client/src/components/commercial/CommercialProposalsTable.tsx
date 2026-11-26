@@ -4,26 +4,51 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Loader2, CheckCircle, Search } from "lucide-react";
+import { FileText, Search } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-interface Props {
-  proposals: any[];
-  activateIsPending: boolean;
-  onRegisterEmpenho: (proposal: any) => void;
-  onActivate: (id: number) => void;
+/** Status reais de `proposal_requests.status` (antes a tela filtrava por "approved"/"rejected", que não existem). */
+export type ProposalStatus = "pending" | "documents_sent" | "empenho_received" | "activated" | "cancelled";
+
+const STATUS_LABEL: Record<ProposalStatus, string> = {
+  pending: "Recebida",
+  documents_sent: "Proposta enviada",
+  empenho_received: "Empenho registrado",
+  activated: "Concluída",
+  cancelled: "Cancelada",
+};
+
+export interface CommercialProposalRow {
+  id: number;
+  orgaoNome: string;
+  orgaoCidade: string;
+  orgaoEstado: string;
+  responsavelNome: string;
+  responsavelEmail: string;
+  planSlug: string | null;
+  planName: string | null;
+  status: ProposalStatus;
+  numeroEmpenho: string | null;
+  createdAt: string | Date;
 }
 
-export function CommercialProposalsTable({ proposals, activateIsPending, onRegisterEmpenho, onActivate }: Props) {
+interface Props {
+  proposals: CommercialProposalRow[];
+  onRegisterEmpenho: (proposal: CommercialProposalRow) => void;
+}
+
+/**
+ * LICIGOV-LAUNCH-READY LR-03 — a ação "Ativar Assinatura" foi REMOVIDA: enviava o id da proposta como id de usuário e criava
+ * assinatura para um usuário arbitrário. A concessão de acesso é por organização (Administração › Organizações).
+ */
+export function CommercialProposalsTable({ proposals, onRegisterEmpenho }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | ProposalStatus>("all");
 
   const filtered = proposals.filter((p) => {
-    const matchesSearch =
-      !searchTerm ||
-      p.orgaoNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.responsavelNome.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = !q || p.orgaoNome.toLowerCase().includes(q) || p.responsavelNome.toLowerCase().includes(q);
     return matchesSearch && (filterStatus === "all" || p.status === filterStatus);
   });
 
@@ -39,13 +64,13 @@ export function CommercialProposalsTable({ proposals, activateIsPending, onRegis
             className="pl-10"
           />
         </div>
-        <Select value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)}>
-          <SelectTrigger className="w-full md:w-[180px]"><SelectValue /></SelectTrigger>
+        <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | ProposalStatus)}>
+          <SelectTrigger className="w-full md:w-[200px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="approved">Aprovado</SelectItem>
-            <SelectItem value="rejected">Rejeitado</SelectItem>
+            {(Object.keys(STATUS_LABEL) as ProposalStatus[]).map((s) => (
+              <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -56,7 +81,7 @@ export function CommercialProposalsTable({ proposals, activateIsPending, onRegis
             <TableRow>
               <TableHead>Órgão</TableHead>
               <TableHead>Responsável</TableHead>
-              <TableHead>Plano</TableHead>
+              <TableHead>Preferência informada</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Data</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -78,36 +103,20 @@ export function CommercialProposalsTable({ proposals, activateIsPending, onRegis
                       <div className="text-sm text-muted-foreground">{proposal.responsavelEmail}</div>
                     </div>
                   </TableCell>
-                  <TableCell><Badge variant="outline">{proposal.planName}</Badge></TableCell>
                   <TableCell>
-                    {proposal.status === "pending" ? (
-                      <Badge variant="secondary">Pendente</Badge>
-                    ) : proposal.status === "approved" ? (
-                      <Badge variant="default" className="bg-green-600">Aprovado</Badge>
-                    ) : (
-                      <Badge variant="destructive">Rejeitado</Badge>
-                    )}
+                    <Badge variant="outline">{proposal.planName ?? proposal.planSlug ?? "—"}</Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      {format(new Date(proposal.createdAt), "dd/MM/yyyy", { locale: ptBR })}
-                    </div>
+                    <Badge variant={proposal.status === "cancelled" ? "destructive" : "secondary"}>{STATUS_LABEL[proposal.status]}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">{format(new Date(proposal.createdAt), "dd/MM/yyyy", { locale: ptBR })}</div>
                   </TableCell>
                   <TableCell className="text-right space-x-2">
-                    {proposal.status === "pending" && !proposal.empenhoNumero && (
+                    {proposal.status !== "cancelled" && !proposal.numeroEmpenho && (
                       <Button variant="outline" size="sm" onClick={() => onRegisterEmpenho(proposal)}>
                         <FileText className="w-4 h-4 mr-1" />
-                        Registrar Empenho
-                      </Button>
-                    )}
-                    {proposal.empenhoNumero && proposal.status === "pending" && (
-                      <Button variant="default" size="sm" onClick={() => onActivate(proposal.id)} disabled={activateIsPending}>
-                        {activateIsPending ? (
-                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                        )}
-                        Ativar Assinatura
+                        Registrar empenho (registro interno)
                       </Button>
                     )}
                   </TableCell>
@@ -116,7 +125,7 @@ export function CommercialProposalsTable({ proposals, activateIsPending, onRegis
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Nenhuma proposta encontrada
+                  Nenhuma solicitação encontrada
                 </TableCell>
               </TableRow>
             )}

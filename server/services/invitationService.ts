@@ -122,6 +122,18 @@ async function bootstrapEvidenceHolds(
 }
 
 /**
+ * LICIGOV-LAUNCH-READY LR-01 — leitura (sem escrita) da EVIDÊNCIA de bootstrap usada pelo aceite/reenvio, exposta ao onboarding
+ * para que ele nunca entregue um convite `owner` que o aceite recusaria (evidência ausente ⇒ convite "morto").
+ */
+export async function tenantOnboardingEvidenceHolds(p: { organizationId: number; grantorUserId: number; email: string }): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  return bootstrapEvidenceHolds(db, {
+    organizationId: p.organizationId, grantorUserId: p.grantorUserId, emailNormalized: normalizeInvitationEmail(p.email),
+  });
+}
+
+/**
  * SECURITY-02 — bootstrap `owner` SERIALIZADO: trava a organização (FOR UPDATE) e, sob a trava, exige órgão sem nenhum membro ativo
  * (leitura travada) e a evidência do onboarding. Dois aceites concorrentes de convites `owner` do mesmo órgão se serializam na trava
  * da organização: o segundo vê o titular já criado e é recusado.
@@ -188,6 +200,12 @@ async function assertGrantAuthority(p: {
 
 /** No ACEITE: o convite só vale se quem o emitiu AINDA é autoridade real (ou é o bootstrap `owner` de órgão vazio). */
 async function assertInvitationStillGranted(row: InstitutionalInvitation, acceptingUserId: number | null, correlationId?: string): Promise<void> {
+  // LAUNCH-READY DELTA-02 — órgão desativado não recebe NOVOS vínculos institucionais (aceite novo ou de conta existente).
+  const org = await getOrganizationById(row.organizationId);
+  if (org && org.ativo === false) {
+    log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "organization_inactive", correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: "Esta organização está desativada: novos vínculos não são aceitos (ORGANIZATION_INACTIVE)." });
+  }
   if (acceptingUserId !== null && acceptingUserId === row.createdByUserId) {
     log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "self_grant", correlationId });
     throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });

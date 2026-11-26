@@ -285,3 +285,25 @@ Registro, **não** atestação: o incidente **não** está encerrado (§10 conti
 - Artefatos locais temporários de rodadas anteriores (`jwt.txt`, `localpw.txt`, no scratchpad efêmero da sessão de
   desenvolvimento, apontando para ambiente local) foram **excluídos** sem leitura do conteúdo — declarado, não verificado por
   terceiros. Excluir arquivo **não** revoga credencial: as rotações P0 (§6) continuam pendentes e prioritárias.
+
+## 13. Reconciliação declarada pelo Owner (26/11/2026 — LICIGOV-LAUNCH-READY, FINAL CLOSURE)
+Registro **sanitizado** das informações **declaradas pelo Owner** ao enviar a missão de fechamento. A atestação atualizada completa
+da Lane A **não** foi disponibilizada a esta sessão: nada abaixo foi verificado por esta sessão, e cada linha preserva a natureza da
+evidência informada. **O incidente não está declarado encerrado e não há classificação SECURITY_READY.**
+
+| Item | Situação declarada | Natureza da evidência (como informada) |
+|---|---|---|
+| MySQL produção e staging | rotações comprovadas | segundo a Lane A (documento não anexado a esta sessão) |
+| `JWT_SECRET` | rotação atestada | atestação do Owner, corroborada por redeploys |
+| Gemini | chave rotacionada | evidência no painel do provedor (declarada) |
+| Brevo | chave rotacionada | evidência no painel do provedor (declarada) |
+| Senha administrativa | alterada | atestação do Owner |
+| Tokens e demais acessos | providências concluídas | reportado pelo Owner (sem detalhamento) |
+| AWS | **risco residual ACEITO pelo Owner, a qualificar** | aceite de risco ≠ prova de revogação de credencial possivelmente exposta |
+| Google Workspace 2FA | **pendente de confirmação** | — |
+| Isolamento do bucket S3 staging × produção | **não comprovado** | — |
+| Proxy TCP público do MySQL | **não comprovada a proteção** | §11 registrou proxy ATIVO em staging |
+| Organização 1 | Prefeitura real (Moreira Sales); processos até 26/11/2026 declarados fictícios, para homologação; sem uso operacional até essa data | declaração do Owner. Continua **protegida**: sem testes mutáveis; não se presume ausência de dados pessoais reais nas contas de usuários |
+
+Pendência de integração documental: anexar a atestação sanitizada da Lane A (§10 continua a ser o local de preenchimento formal).
+Comunicação ao controlador e avaliação jurídica permanecem em trilha separada da engenharia.

@@ -461,9 +461,11 @@ export const proposalRequests = mysqlTable("proposal_requests", {
   responsavelEmail: varchar("responsavelEmail", { length: 320 }).notNull(),
   responsavelTelefone: varchar("responsavelTelefone", { length: 20 }).notNull(),
   // Plano solicitado
-  planSlug: varchar("planSlug", { length: 50 }).notNull(),
-  planName: varchar("planName", { length: 100 }).notNull(),
-  planPrice: int("planPrice").notNull(), // Preço em centavos
+  // LR-02 (LICIGOV-LAUNCH-READY, migration 0320) — a manifestação de interesse NÃO depende de plano/preço/seed: anuláveis.
+  // Linhas antigas mantêm os valores gravados; novas solicitações não gravam plano nem preço.
+  planSlug: varchar("planSlug", { length: 50 }),
+  planName: varchar("planName", { length: 100 }),
+  planPrice: int("planPrice"), // Preço em centavos (legado)
   // Status da solicitação
   status: mysqlEnum("status", ["pending", "documents_sent", "empenho_received", "activated", "cancelled"])
     .default("pending")

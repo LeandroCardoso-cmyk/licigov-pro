@@ -28,8 +28,13 @@ const urlFor = (dbName: string): string => { const u = new URL(DB!); u.pathname 
 type Row = mysql.RowDataPacket;
 const rows = async (c: mysql.Connection, sql: string, a: unknown[] = []) => (await c.query<Row[]>(sql, a))[0];
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-/** Coluna acrescentada por migration POSTERIOR (0319 — proveniência das cotações; aditiva, anulável, sem índice/FK): fora do que esta migration promete preservar. */
-const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')";
+/**
+ * Colunas alteradas por migrations POSTERIORES, fora do que esta migration promete preservar:
+ *  - 0319 — proveniência das cotações (coluna nova, aditiva, anulável, sem índice/FK);
+ *  - 0320 — LR-02 LAUNCH-READY: `proposal_requests.planSlug/planName/planPrice` só perdem NOT NULL (sem índice/FK, sem dado alterado).
+ */
+const LATER_COLUMN_FILTER = " AND NOT (TABLE_NAME = 'price_research_items' AND COLUMN_NAME = 'provenance_kind')"
+  + " AND NOT (TABLE_NAME = 'proposal_requests' AND COLUMN_NAME IN ('planSlug', 'planName', 'planPrice'))";
 const signature = async (c: mysql.Connection): Promise<string> => JSON.stringify([
   await rows(c, `SELECT TABLE_NAME t, COLUMN_NAME c, COLUMN_TYPE ty, IS_NULLABLE n, COLUMN_DEFAULT d, EXTRA e FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> 'template_governance_transitions'${LATER_COLUMN_FILTER} ORDER BY TABLE_NAME, ORDINAL_POSITION`),
