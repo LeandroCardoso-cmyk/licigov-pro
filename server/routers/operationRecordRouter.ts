@@ -40,7 +40,8 @@ function checkSchedule(value: { eventDate?: string; eventEndDate?: string; event
 
 export const operationRecordRouter = router({
   /** Cadastro Rápido / registro manual (legado ou externo, parte ou processo completo). */
-  createRecord: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  createRecord: orgRoleProcedure("operator")
     .input(z.object({
       recordType: z.enum(RECORD_TYPES),
       origin: z.enum(ORIGINS).optional(),
@@ -66,7 +67,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Ajusta a agenda de um registro existente sem recriá-lo. */
-  setSchedule: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  setSchedule: orgRoleProcedure("operator")
     .input(z.object({ recordId: z.string().length(20), ...scheduleFields }).superRefine(checkSchedule))
     .mutation(async ({ input, ctx }) => {
       const result = await updateRecordSchedule({
@@ -79,7 +81,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Importação Assistida de processo/contrato legado (PDF/DOCX → texto → confirmação). */
-  importLegacy: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  importLegacy: orgRoleProcedure("operator")
     .input(z.object({ recordType: z.enum(RECORD_TYPES), rawText: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -127,7 +130,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Gera automaticamente o evento de vencimento + alertas (90/60/30/15/7 dias). */
-  registerExpiration: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  registerExpiration: orgRoleProcedure("operator")
     .input(z.object({ kind: z.enum(EXPIRATION_KINDS), referenceId: z.string().min(1), title: z.string().min(1), expirationDate: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -136,7 +140,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Cria um evento manual do calendário. */
-  createEvent: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  createEvent: orgRoleProcedure("operator")
     .input(z.object({ eventType: z.enum(EVENT_TYPES), title: z.string().trim().min(1).max(500), eventDate: z.string().refine(validLocalDate, "Data inválida."), eventTime: z.string().refine(v => !v || validLocalTime(v), "Horário inválido.").optional(), referenceType: z.string().optional(), referenceId: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -189,7 +194,9 @@ export const operationRecordRouter = router({
       return { settings: settings ?? { orgaoOficialName: "Órgão Oficial do Município", jornalName: "Jornal de Grande Circulação", portalName: "Portal Eletrônico" } };
     }),
 
-  updateSettings: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: manager.
+
+  updateSettings: orgRoleProcedure("manager")
     .input(z.object({ orgaoOficialName: z.string().min(1), jornalName: z.string().min(1), portalName: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

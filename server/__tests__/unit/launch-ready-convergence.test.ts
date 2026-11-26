@@ -65,3 +65,20 @@ describe("LR-07/LR-03 — superfícies desativadas no servidor (sem apagar Strip
     expect(read("services/stripeService.ts").length).toBeGreaterThan(0);
   });
 });
+
+describe("DELTA-02 — superfícies fora do tenantProcedure respeitam órgão desativado", () => {
+  const read = (p: string) => readFileSync(path.resolve(__dirname, "../..", p), "utf8");
+  it("upload REST recusa quando organizationActive === false (antes de consumir o corpo)", () => {
+    const src = read("routes/ingestionUploadRoute.ts");
+    const guard = src.indexOf("organizationActive === false");
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(src.indexOf("busboy({"));
+  });
+  it("aceites de convite (novo e conta existente) passam pelo guarda de órgão desativado", () => {
+    const src = read("services/invitationService.ts");
+    expect(src).toMatch(/async function assertInvitationStillGranted[\s\S]{0,400}org\.ativo === false/);
+  });
+  it("exportação (export*) é a única exceção de mutation em órgão desativado", () => {
+    expect(read("_core/trpc.ts")).toMatch(/const READ_ONLY_EXPORT_LEAF = \/\^export\[A-Z\]\//);
+  });
+});

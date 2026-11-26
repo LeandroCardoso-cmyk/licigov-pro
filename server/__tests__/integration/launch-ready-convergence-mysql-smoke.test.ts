@@ -54,6 +54,8 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
     const orgs = [ORG_A, ORG_B, ORG_C, ...onboardedOrgIds];
     const ph = orgs.map(() => "?").join(",");
     await del(`DELETE FROM contracts WHERE organizationId IN (${ph})`, orgs);
+    await del(`DELETE FROM tasks WHERE organizationId IN (${ph})`, orgs);
+    await del(`DELETE FROM operational_settings WHERE organization_id IN (${ph})`, orgs);
     await del(`DELETE FROM licensed_modules WHERE organization_id IN (${ph})`, orgs);
     await del(`DELETE FROM email_outbox WHERE organizationId IN (${ph})`, orgs);
     await del(`DELETE FROM email_outbox WHERE idempotencyKey LIKE 'commercial_proposal:%' AND recipient = ?`, [`comercial-${stamp}@teste.local`]);
@@ -331,6 +333,52 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
       const row = (await q(`SELECT organizationId, notes FROM contracts WHERE id = ?`, [id]))[0];
       expect(row.organizationId).toBe(ORG_A);
       expect(row.notes ?? null).not.toBe("x");
+    });
+  });
+
+  // ── DELTA-01 ─────────────────────────────────────────────────────────────────
+  describe("DELTA-01 — mutações de negócio restantes seguem NEW-006", () => {
+    it("viewer recusado em tarefas, workspace, parâmetros, geração de minuta, contratação direta, registros operacionais", async () => {
+      const v = await caller(users.viewer);
+      const calls: Array<() => Promise<unknown>> = [
+        () => v.tasks.create({} as never),
+        () => v.departmentTasks.create({} as never),
+        () => v.workspace.createWorkspace({} as never),
+        () => v.editalParameters.save({} as never),
+        () => v.contracts.generation.generateMinuta({} as never),
+        () => v.directContracts.create({} as never),
+        () => v.operationRecord.createRecord({} as never),
+        () => v.collaboration.addMember({} as never),
+        () => v.platforms.publish({} as never),
+      ];
+      for (const call of calls) await expect(call()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("operator elabora (tarefa criada); configuração institucional exige manager; exportação segue liberada ao viewer", async () => {
+      const task = await (await caller(users.operator)).tasks.create({ title: "Tarefa sintética", type: "geral", priority: "media", assignedTo: users.operator });
+      expect(task).toBeTruthy();
+      await expect((await caller(users.operator)).operationRecord.updateSettings({ orgaoOficialName: "A", jornalName: "B", portalName: "C" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect((await caller(users.manager)).operationRecord.updateSettings({ orgaoOficialName: "A", jornalName: "B", portalName: "C" })).resolves.toBeTruthy();
+      const exp = await (await caller(users.viewer)).tasks.exportExcel({} as never).then(() => "ok", (e: { code?: string }) => String(e.code));
+      expect(exp).not.toBe("FORBIDDEN");
+    });
+  });
+
+  // ── DELTA-02 ─────────────────────────────────────────────────────────────────
+  describe("DELTA-02 — órgão desativado: exportação liberada, novo vínculo recusado", () => {
+    it("exportação (export*) não é bloqueada; aceite de convite em órgão desativado é recusado sem criar vínculo", async () => {
+      const m = await caller(users.managerC);
+      const exp = await m.tasks.exportExcel({} as never).then(() => "ok", (e: { code?: string; message?: string }) => `${e.code}:${e.message}`);
+      expect(exp).not.toContain("ORGANIZATION_INACTIVE");
+
+      const { generateOpaqueToken, hashOpaqueToken } = await import("../../services/security/opaqueTokens");
+      const { acceptExistingInvitation } = await import("../../services/invitationService");
+      const token = generateOpaqueToken();
+      const email = `lrc-nomember-${stamp}@teste.local`;
+      await q(`INSERT INTO institutional_invitations (organizationId, emailNormalized, role, status, tokenHash, activeKey, expiresAt, createdByUserId)
+        VALUES (?, ?, 'operator', 'pending', ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY), ?)`, [ORG_C, email, hashOpaqueToken(token), `lrc-ak-${stamp}`, users.managerC]);
+      await expect(acceptExistingInvitation({ token, userId: users.nomember, userEmail: email })).rejects.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("ORGANIZATION_INACTIVE") });
+      expect((await q(`SELECT COUNT(*) n FROM organization_members WHERE organizationId = ? AND userId = ?`, [ORG_C, users.nomember]))[0].n).toBe(0);
     });
   });
 

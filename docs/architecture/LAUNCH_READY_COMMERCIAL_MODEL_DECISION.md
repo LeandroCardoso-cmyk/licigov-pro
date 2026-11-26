@@ -44,7 +44,12 @@ O LiciGov Pro é a camada cognitiva e operacional das contratações públicas �
 
 Não foram definidos preços, não foi criado motor de pagamentos nem ERP comercial.
 
-## 3. Inconsistências identificadas (para alinhamento do Owner — NÃO alteradas aqui)
+## 3. Inconsistências identificadas — ALINHADAS em 26/11/2026 (FINAL CLOSURE, DELTA-04)
+
+> Alinhamento estritamente documental autorizado pelo Owner: `PRODUCT_NORTH_STAR.md` (decisão 13 em "Decisões Arquiteturais
+> Consolidadas", nota em "Publicações", "O Que NÃO Fazemos", "Future Evolution"), `roadmap/PRODUCT_ROADMAP.md` (nota de topo,
+> P2, Sprints 7 e 8 — históricos preservados, percentuais inalterados), `CLAUDE.md` (Stack/Billing e "O que NÃO É") e
+> `PAINEL_ADMIN_PROPOSTAS.md` (marcado como histórico superado). A tabela abaixo é mantida como registro do que foi alinhado.
 
 | Documento | Trecho | Situação |
 |---|---|---|

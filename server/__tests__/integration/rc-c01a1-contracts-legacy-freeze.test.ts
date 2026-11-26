@@ -91,13 +91,15 @@ describe("RC-C0.1A.1 — Congelamento do contractsRouter legado (pós-isolamento
     const ausentes = CONTRACTS_ROUTER_ENDPOINTS_BASELINE.filter(name => {
       const leaf = name.split(".").pop()!;
       // SECURITY-02 — atos com efeito contratual passaram a institutionalProcedure (membership REAL); LR-05 (LAUNCH-READY) elevou
-      // o piso de "viewer" para a matriz NEW-006 ("operator"/"manager"). O congelamento é de SUPERFÍCIE (nenhum endpoint novo).
-      return !new RegExp(`\\b${leaf}:\\s*(tenantProcedure\\b|institutionalProcedure\\("(viewer|operator|manager)"\\))`).test(src);
+      // o piso de "viewer" para a matriz NEW-006 ("operator"/"manager"); DELTA-01 levou `generation.*` a orgRoleProcedure("operator").
+      // O congelamento é de SUPERFÍCIE (nenhum endpoint novo).
+      return !new RegExp(`\\b${leaf}:\\s*(tenantProcedure\\b|institutionalProcedure\\("(viewer|operator|manager)"\\)|orgRoleProcedure\\("(operator|manager)"\\))`).test(src);
     });
     expect(ausentes, `endpoint(s) do baseline não encontrado(s): ${ausentes.join(", ")}`).toEqual([]);
 
     // Nenhuma procedure nova: total de declarações "<nome>: tenantProcedure" não excede o baseline.
-    const totalDeclared = (src.match(/:\s*(tenantProcedure\b|institutionalProcedure\("viewer"\))/g) ?? []).length;
+    // Conta TODOS os tipos de procedure do router (tenant, institucional e piso NEW-006) — o guarda não enfraquece com LR-05/DELTA-01.
+    const totalDeclared = (src.match(/:\s*(tenantProcedure\b|institutionalProcedure\("\w+"\)|orgRoleProcedure\("\w+"\))/g) ?? []).length;
     expect(totalDeclared, "número de procedures do router cresceu além do baseline (23)").toBeLessThanOrEqual(CONTRACTS_ROUTER_ENDPOINTS_BASELINE.length);
 
     // Nenhuma procedure voltou a usar protectedProcedure (regressão de segurança).

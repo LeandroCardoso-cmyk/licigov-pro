@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast, orgRoleProcedure } from "../_core/trpc";
 import * as db from "../db";
 import { generateContractMinuta, generateAmendmentTerm, generateApostilleTerm, generateRescissionTerm } from "../services/contractDocuments";
 import { checkContractExpirationsForOrganization, getExpirationSummaryForOrganization } from "../services/contractNotifications";
@@ -529,7 +529,8 @@ export const contractsRouter = router({
     /**
      * Gerar Minuta de Contrato
      */
-    generateMinuta: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateMinuta: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateMinuta", ctx, async () => {
@@ -576,7 +577,8 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Aditivo
      */
-    generateAmendment: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateAmendment: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number(), amendmentId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateAmendment", ctx, async () => {
@@ -638,7 +640,8 @@ export const contractsRouter = router({
     /**
      * Gerar Termo de Apostilamento
      */
-    generateApostille: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateApostille: orgRoleProcedure("operator")
       .input(z.object({ contractId: z.number(), apostilleId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         return audited("generation.generateApostille", ctx, async () => {

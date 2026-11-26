@@ -18,7 +18,7 @@ import { getEstimatedActiveValueCents } from "../db/directContractsValueKpi";
 import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import { runDirectContractShadow } from "../services/directContractShadowService";
 import type { DirectContractDocType } from "../domain/directContractShadow";
-import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast, orgRoleProcedure } from "../_core/trpc";
 import {
   getLegalArticles,
   getLegalArticleById,
@@ -91,7 +91,8 @@ export const directContractsRouter = router({
   
   assistant: router({
     // Sugerir artigo legal baseado na situação
-    suggestArticle: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    suggestArticle: orgRoleProcedure("operator")
       .input(
         z.object({
           situation: z.string().min(20),
@@ -109,7 +110,8 @@ export const directContractsRouter = router({
 
     // Gerar justificativa inicial — A3-RD1: dual-input GOVERNADO (canonicalLocator) OU LEGADO (articleId),
     // mutuamente exclusivos (IDs nunca misturados). Governado tem precedência.
-    generateJustification: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generateJustification: orgRoleProcedure("operator")
       .input(
         z
           .object({
@@ -187,7 +189,8 @@ export const directContractsRouter = router({
   // A3-RD1: enquadramento em DOIS DOMÍNIOS DISJUNTOS (exatamente-um; IDs nunca misturados):
   //   GOVERNED -> canonicalLocator (+ asOfDate/referenceSetVersion) resolvido no reference set ativo;
   //   LEGACY   -> legalArticleId (catálogo legado). Refine estrito: ambos/nenhum → FAIL-CLOSED.
-  create: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  create: orgRoleProcedure("operator")
     .input(z.object({
       number: z.string(),
       year: z.number(),
@@ -523,7 +526,8 @@ export const directContractsRouter = router({
   // ========================================
   
   quotations: router({
-    create: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    create: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
         supplierName: z.string(),
@@ -610,7 +614,9 @@ export const directContractsRouter = router({
         return await listQuotations(input.directContractId);
       }),
     
-    update: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    
+    update: orgRoleProcedure("operator")
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -633,7 +639,8 @@ export const directContractsRouter = router({
   
   generate: router({
     // Gerar Termo de Dispensa
-    termoDispensa: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    termoDispensa: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
       }))
@@ -677,7 +684,8 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Termo de Inexigibilidade
-    termoInexigibilidade: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    termoInexigibilidade: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
       }))
@@ -721,7 +729,8 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Minuta de Contrato
-    minutaContrato: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    minutaContrato: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
       }))
@@ -765,7 +774,8 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Planilha de Cotação
-    planilhaCotacao: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    planilhaCotacao: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
       }))
@@ -823,7 +833,8 @@ export const directContractsRouter = router({
       }),
     
     // Gerar Mapa Comparativo
-    mapaComparativo: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    mapaComparativo: orgRoleProcedure("operator")
       .input(z.object({
         directContractId: z.number(),
       }))
@@ -888,7 +899,8 @@ export const directContractsRouter = router({
   
   presential: router({
     // Gerar pacote completo (ZIP)
-    generatePackage: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    generatePackage: orgRoleProcedure("operator")
       .input(z.object({
         contractId: z.number(),
         includeDocuments: z.boolean().optional(),
@@ -1137,7 +1149,8 @@ export const directContractsRouter = router({
   
   checklist: router({
     // Salvar progresso de um passo
-    saveProgress: tenantProcedure
+    // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+    saveProgress: orgRoleProcedure("operator")
       .input(z.object({
         contractId: z.number(),
         stepNumber: z.number(),

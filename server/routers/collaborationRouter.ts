@@ -1,4 +1,4 @@
-import { tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router, orgRoleProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
@@ -145,7 +145,8 @@ function reportHiddenRows(ctx: TenantCtx, procedure: string, processId: number, 
 }
 
 export const collaborationRouter = router({
-  addMember: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  addMember: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       userEmail: z.string().email(),
@@ -188,7 +189,9 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  removeMember: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  removeMember: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       userId: z.number(),
@@ -214,7 +217,9 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  updatePermission: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  updatePermission: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       userId: z.number(),
@@ -272,7 +277,9 @@ export const collaborationRouter = router({
       };
     }),
 
-  updateFunctionalRole: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  updateFunctionalRole: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       userId: z.number(),
@@ -291,7 +298,9 @@ export const collaborationRouter = router({
       return { success: true };
     }),
 
-  assignStage: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  assignStage: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),
@@ -327,7 +336,9 @@ export const collaborationRouter = router({
       return { success: true, changed };
     }),
 
-  unassignStage: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  unassignStage: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       docType: z.enum(["dfd", "etp", "tr", "edital", "contrato", "ata", "parecer"]),

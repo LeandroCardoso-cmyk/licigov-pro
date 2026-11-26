@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router, orgRoleProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   createTask,
@@ -22,7 +22,8 @@ export const taskRouter = router({
   /**
    * Criar nova tarefa
    */
-  create: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  create: orgRoleProcedure("operator")
     .input(
       z.object({
         title: z.string().min(1).max(200),
@@ -116,7 +117,8 @@ export const taskRouter = router({
   /**
    * Atualizar tarefa
    */
-  update: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  update: orgRoleProcedure("operator")
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -164,7 +166,8 @@ export const taskRouter = router({
   /**
    * Excluir tarefa (admin only)
    */
-  delete: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  delete: orgRoleProcedure("operator")
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       // Verificar se é admin
@@ -194,7 +197,8 @@ export const taskRouter = router({
   /**
    * Atualizar status da tarefa (para Kanban drag & drop)
    */
-  updateStatus: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  updateStatus: orgRoleProcedure("operator")
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -270,7 +274,7 @@ export const taskRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const buffer = await generateTasksExcelReport(ctx.organizationId, input);
-      const base64 = Buffer.from(buffer as any).toString("base64");
+      const base64 = Buffer.from(buffer as unknown as ArrayBuffer).toString("base64");
       return {
         data: base64,
         filename: `tarefas-${new Date().toISOString().split('T')[0]}.xlsx`,

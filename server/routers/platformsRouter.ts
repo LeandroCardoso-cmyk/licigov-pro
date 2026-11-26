@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, tenantProcedure, router } from "../_core/trpc";
+import { protectedProcedure, tenantProcedure, router, orgRoleProcedure } from "../_core/trpc";
 import * as db from "../db";
 import { resolveInstitutionalIdentity } from "../services/institutionalIdentityService";
 import { requireOwnedProcessInTenant } from "../services/legacyProcessAccess";
@@ -63,7 +63,8 @@ export const platformsRouter = router({
   /**
    * Vincular plataforma a um processo
    */
-  updateProcessPlatform: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  updateProcessPlatform: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       platformId: z.number().nullable(),
@@ -172,7 +173,8 @@ export const platformsRouter = router({
    * Criar publicação em plataforma (Nível 3 - Futuro)
    * Preparado mas não implementado ainda
    */
-  publish: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  publish: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       platformId: z.number(),

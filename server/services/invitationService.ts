@@ -200,6 +200,12 @@ async function assertGrantAuthority(p: {
 
 /** No ACEITE: o convite só vale se quem o emitiu AINDA é autoridade real (ou é o bootstrap `owner` de órgão vazio). */
 async function assertInvitationStillGranted(row: InstitutionalInvitation, acceptingUserId: number | null, correlationId?: string): Promise<void> {
+  // LAUNCH-READY DELTA-02 — órgão desativado não recebe NOVOS vínculos institucionais (aceite novo ou de conta existente).
+  const org = await getOrganizationById(row.organizationId);
+  if (org && org.ativo === false) {
+    log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "organization_inactive", correlationId });
+    throw new TRPCError({ code: "FORBIDDEN", message: "Esta organização está desativada: novos vínculos não são aceitos (ORGANIZATION_INACTIVE)." });
+  }
   if (acceptingUserId !== null && acceptingUserId === row.createdByUserId) {
     log.warn("invitation_accept_denied", { organizationId: row.organizationId, invitationId: row.id, reason: "self_grant", correlationId });
     throw new TRPCError({ code: "FORBIDDEN", message: SELF_GRANT_MESSAGE });

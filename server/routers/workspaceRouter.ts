@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, tenantProcedure, institutionalProcedure } from "../_core/trpc";
+import { router, tenantProcedure, institutionalProcedure, orgRoleProcedure } from "../_core/trpc";
 import {
   createCognitiveWorkspace,
   transitionStatus,
@@ -45,7 +45,8 @@ async function requireWorkspace(id: string, orgId: number) {
 }
 
 export const workspaceRouter = router({
-  createWorkspace: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  createWorkspace: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.string().min(1),
       workspaceType: z.enum(WORKSPACE_TYPES),
@@ -87,7 +88,9 @@ export const workspaceRouter = router({
       return { workspace, tasks, timeline, decisions, risks };
     }),
 
-  updateWorkspace: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  updateWorkspace: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       status: z.enum(["draft", "active", "in_review", "awaiting_approval", "completed", "archived"]).optional(),
@@ -107,7 +110,9 @@ export const workspaceRouter = router({
       return { workspace: ws };
     }),
 
-  assignCopilot: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  assignCopilot: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), copilotType: z.enum(COPILOT_TYPES) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -122,7 +127,9 @@ export const workspaceRouter = router({
       return { workspace: ws };
     }),
 
-  orchestrate: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  orchestrate: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       request: z.string().min(1),
@@ -145,7 +152,9 @@ export const workspaceRouter = router({
       return result;
     }),
 
-  createTask: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  createTask: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       taskType: z.enum(TASK_TYPES),
@@ -168,7 +177,9 @@ export const workspaceRouter = router({
       return { task };
     }),
 
-  concludeTask: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  concludeTask: orgRoleProcedure("operator")
     .input(z.object({ workspaceId: z.string().min(1), taskId: z.string().min(1), taskType: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -183,7 +194,9 @@ export const workspaceRouter = router({
       return { success: true, taskId: input.taskId, status: "done" as const };
     }),
 
-  createDecision: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+
+  createDecision: orgRoleProcedure("operator")
     .input(z.object({
       workspaceId: z.string().min(1),
       title: z.string().min(1),

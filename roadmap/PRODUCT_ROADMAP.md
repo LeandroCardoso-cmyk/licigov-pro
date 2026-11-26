@@ -5,6 +5,10 @@
 
 > Fonte de verdade da filosofia: [`docs/architecture/PRODUCT_NORTH_STAR.md`](../docs/architecture/PRODUCT_NORTH_STAR.md).
 > Regras de execução: `CLAUDE.md` (LICIGOV-FAST). Roadmaps por domínio em `docs/business-domains/*/roadmap.md`.
+> **Decisões estratégicas de 26/11/2026** (sem PNCP automatizado, sem app nativo, sem banco de preços próprio, sem checkout/assinatura
+> por usuário, licenciamento institucional por organização, sem gestão de empenho/pagamento): ver
+> [`docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md`](../docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md).
+> Percentuais e históricos abaixo não foram alterados.
 
 ---
 
@@ -474,7 +478,7 @@ Processos sintéticos `9992/2026` e `8828/2026` preservados como evidência.
 - Templates próprios e derivados para DFD/ETP/TR/contrato/aditivo (pacotes no mesmo motor).
 
 ### P2
-- Integrações adicionais (PNCP, CATMAT/CATSER ampliado, assinatura digital).
+- Integrações adicionais (PNCP, CATMAT/CATSER ampliado, assinatura digital). _Atualização 26/11/2026 (decisão do Owner): PNCP somente como consulta a fonte oficial e registro declarado de publicação — sem publicação automatizada; CATMAT/CATSER permanece estratégico. Ver `docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md`._
 - Ampliação de modelos por prefeitura.
 - Inteligência contextual avançada.
 - Refinamentos operacionais.
@@ -558,12 +562,15 @@ LiciGov Pro é o sistema de gestão de licitações públicas mais avançado do 
 - QR Code de autenticidade
 
 ### Sprint 7 — Integrações Governamentais
+> _Registro histórico. Decisão de 26/11/2026: publicação automatizada no PNCP/plataformas de disputa e integração com sistemas
+> administrativos/contábeis (SIAFI/SIAPE) estão **fora da estratégia**; permanece a consulta a fontes oficiais._
 - PNCP (Portal Nacional de Contratações Públicas)
 - ComprasNet
 - Diário Oficial Eletrônico
 - SIAFI/SIAPE (federal)
 
 ### Sprint 8 — Mobile + Offline
+> _Registro histórico. Decisão de 26/11/2026: sem aplicativo nativo — acesso por web responsiva com evolução para PWA (não bloqueia o lançamento)._
 - App mobile para revisão de documentos
 - Modo offline com sincronização
 - Notificações push de prazos

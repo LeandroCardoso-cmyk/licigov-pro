@@ -1,4 +1,4 @@
-import { tenantProcedure, router } from "../_core/trpc";
+import { tenantProcedure, router, orgRoleProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
@@ -22,7 +22,8 @@ async function assertProcessInOrg(processId: number, organizationId: number) {
 }
 
 export const editalParametersRouter = router({
-  save: tenantProcedure
+  // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
+  save: orgRoleProcedure("operator")
     .input(z.object({
       processId: z.number(),
       modalidade: z.string().optional(),

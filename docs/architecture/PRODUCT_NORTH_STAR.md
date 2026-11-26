@@ -100,7 +100,10 @@ Não implementamos:
 - tesouraria;
 - execução orçamentária;
 - arrecadação;
-- protocolo administrativo.
+- protocolo administrativo;
+- gestão de empenho, liquidação e pagamento (decisão de 26/11/2026);
+- checkout automatizado ou cobrança por usuário;
+- banco de preços próprio.
 
 Estas responsabilidades permanecem nos sistemas oficiais da Administração.
 
@@ -316,6 +319,9 @@ PNCP é padrão.
 
 Os demais veículos deverão ser configuráveis por município.
 
+> Decisão do Owner (26/11/2026): o LiciGov Pro **registra** de forma declarada o status e a data das publicações externas
+> (PNCP e demais veículos). **Não publica** automaticamente no PNCP nem em plataformas de disputa.
+
 ---
 
 # Processos Legados
@@ -357,7 +363,7 @@ A arquitetura deverá estar preparada para:
 - Apple Calendar;
 - Outlook;
 - ICS;
-- Mobile;
+- Mobile (via web responsiva / PWA — sem aplicativo nativo, decisão de 26/11/2026);
 - BI;
 - Analytics;
 - Dashboards avançados.
@@ -409,6 +415,17 @@ Toda implementação deverá preservar:
 11. Contratos geram eventos automaticamente.
 
 12. Toda funcionalidade nova deverá passar pela Regra de Ouro.
+
+13. **Decisões estratégicas do Owner (26/11/2026)** — registro completo em `docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md`:
+    - sem publicação automatizada no PNCP ou em plataformas de disputa; o registro declarado de publicações externas continua permitido;
+    - a consulta a fontes oficiais (fundamentação normativa, CATMAT/CATSER) permanece estratégica;
+    - sem aplicativo nativo: web responsiva e evolução para PWA;
+    - sem banco de preços próprio nem integração comercial com bancos de preços; pesquisa de preços, importação, tratamento e
+      proveniência das cotações permanecem estratégicas;
+    - sem checkout automatizado nem assinatura comercial individual por usuário: licenciamento institucional por organização
+      (proposta → procedimento administrativo do órgão, fora da plataforma → concessão administrativa de acesso);
+    - Stripe permanece apenas como código legado, desativado na jornada comercial;
+    - sem gestão de empenho, liquidação e pagamento.
 
 ---
 

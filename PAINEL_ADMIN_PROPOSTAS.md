@@ -1,5 +1,10 @@
 # 🔐 Painel Admin de Propostas - LiciGov Pro
 
+> ⚠️ **Documento histórico — superado em 26/11/2026 (LICIGOV-LAUNCH-READY).** A "ativação de assinatura" a partir da proposta foi
+> **desativada** (`commercial.activateSubscription` recusa; a tela usava o id da proposta como id de usuário). O acesso é concedido
+> por organização (Administração › Organizações: criação do órgão + convite do administrador; licença por módulo pelo admin de
+> plataforma). Ver `docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md`.
+
 ## 📋 Visão Geral
 
 O painel de administração de propostas é **exclusivo para o dono da solução** (você) e permite gerenciar todo o fluxo de solicitações de propostas comerciais, desde a solicitação até a ativação da assinatura.
