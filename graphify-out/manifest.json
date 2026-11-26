@@ -13710,8 +13710,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0316-migration-mysql-smoke.test.ts": {
-    "mtime": 1795712603.602351,
-    "ast_hash": "38e1d65101fa8f4b6808b2f99916797b",
+    "mtime": 1795719546.3885093,
+    "ast_hash": "8e4068465d0b33e133e54c4ccd3d3c32",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-integration-mysql-smoke.test.ts": {
@@ -14040,8 +14040,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0317-migration-mysql-smoke.test.ts": {
-    "mtime": 1795712603.602351,
-    "ast_hash": "8eb9fe7eec6108f2935617a827481998",
+    "mtime": 1795719546.3890157,
+    "ast_hash": "21e92f294e09d502c660cb6b2e14329a",
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-edital-bll-e2e-mysql-smoke.test.ts": {
@@ -14885,8 +14885,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/templates-0318-migration-mysql-smoke.test.ts": {
-    "mtime": 1795712603.602351,
-    "ast_hash": "3a4b403c3c66295a174920ada8222b8f",
+    "mtime": 1795719546.3895285,
+    "ast_hash": "f61a657877dd5ee904655db404d14e24",
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-governance-v2-transition.test.ts": {
@@ -15930,8 +15930,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/LAUNCH_READY_CONVERGENCE_HANDOFF.md": {
-    "mtime": 1795719399.5467448,
-    "ast_hash": "3622c33df4169634d0b57e4ba3928870",
+    "mtime": 1795719962.6289997,
+    "ast_hash": "31905199e208b9739489f22b96213f18",
     "semantic_hash": ""
   }
 }
