@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "client/src/App.tsx": {
-    "mtime": 1795712602.698351,
-    "ast_hash": "867d79b3d4dee67a76f6469226b289a4",
+    "mtime": 1795716965.593484,
+    "ast_hash": "ac93be36c2abf942b6457e52efd8b920",
     "semantic_hash": ""
   },
   "client/src/_core/hooks/useAuth.ts": {
@@ -635,8 +635,8 @@
     "semantic_hash": ""
   },
   "client/src/components/commercial/CommercialProposalsTable.tsx": {
-    "mtime": 1795712602.7086897,
-    "ast_hash": "df8e1da027fbc3f19fa34e4e1c1484f8",
+    "mtime": 1795716999.354602,
+    "ast_hash": "8ceeaa2e74d43b9987ad3770730f0b9a",
     "semantic_hash": ""
   },
   "client/src/components/commercial/RegisterEmpenhoDialog.tsx": {
@@ -3005,8 +3005,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Admin.tsx": {
-    "mtime": 1795712602.7490988,
-    "ast_hash": "d5c05f87f7180cdf91ea9e6543fa5f15",
+    "mtime": 1795717968.049745,
+    "ast_hash": "225d5f64f9e28e3ce59e005a758564f8",
     "semantic_hash": ""
   },
   "client/src/pages/AdminDocuments.tsx": {
@@ -3015,8 +3015,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/AdminOrganizacoes.tsx": {
-    "mtime": 1795712602.7490988,
-    "ast_hash": "066366b4602ecd4435f757ea19560c31",
+    "mtime": 1795717126.915382,
+    "ast_hash": "5dee47058a5d94113c6676f542a0b205",
     "semantic_hash": ""
   },
   "client/src/pages/AdminPlatforms.tsx": {
@@ -3045,8 +3045,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/CommercialManagement.tsx": {
-    "mtime": 1795712602.7490988,
-    "ast_hash": "61e6a79b63d6a6bf79b66ddee685102f",
+    "mtime": 1795716999.3777838,
+    "ast_hash": "047a1a88c8eaa83c790139360f159723",
     "semantic_hash": ""
   },
   "client/src/pages/ComponentShowcase.tsx": {
@@ -3125,8 +3125,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/LandingPage.tsx": {
-    "mtime": 1795712753.8361964,
-    "ast_hash": "273b7271bda10b96ca35c6c8f74260c2",
+    "mtime": 1795717359.5631044,
+    "ast_hash": "60df8536113b9d88eba3661cd78cd92d",
     "semantic_hash": ""
   },
   "client/src/pages/LegalOpinionDetails.tsx": {
@@ -3190,8 +3190,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/Plans.tsx": {
-    "mtime": 1795712602.7490988,
-    "ast_hash": "63fc8f9365f2d1bd243cd085dfaa6b65",
+    "mtime": 1795717126.89972,
+    "ast_hash": "07d352884aaad68c5c487b973f1e0ee2",
     "semantic_hash": ""
   },
   "client/src/pages/PrivacyPolicy.tsx": {
@@ -3230,8 +3230,8 @@
     "semantic_hash": ""
   },
   "client/src/pages/SolicitarProposta.tsx": {
-    "mtime": 1795713099.4319692,
-    "ast_hash": "686c1e8d61fb40b65d6ee32c16397045",
+    "mtime": 1795716973.0519774,
+    "ast_hash": "c7bdd6fa5d81d5f67965ee6e06f75b34",
     "semantic_hash": ""
   },
   "client/src/pages/Templates.tsx": {
@@ -5120,8 +5120,8 @@
     "semantic_hash": ""
   },
   "drizzle/meta/_journal.json": {
-    "mtime": 1795712603.322351,
-    "ast_hash": "f5482cf690afea278fb37ddc2a17b8a8",
+    "mtime": 1795716897.986596,
+    "ast_hash": "2b0907f10eb80494e1dece5908b17694",
     "semantic_hash": ""
   },
   "drizzle/relations.ts": {
@@ -5130,8 +5130,8 @@
     "semantic_hash": ""
   },
   "drizzle/schema.ts": {
-    "mtime": 1795712603.3230617,
-    "ast_hash": "1a3975629765577f9d158c25cbff49e7",
+    "mtime": 1795716891.2356875,
+    "ast_hash": "86695e10c5807e8c186b4d75ccec1754",
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
@@ -5140,8 +5140,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1795713134.5445645,
-    "ast_hash": "280b29a37a71d0ac0ae3cb085cdfddcc",
+    "mtime": 1795717611.3790567,
+    "ast_hash": "891764c3385b7f0200ecd2c9dd8453e7",
     "semantic_hash": ""
   },
   "railway.json": {
@@ -6125,8 +6125,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-c01a1-contracts-legacy-freeze.test.ts": {
-    "mtime": 1795712603.586351,
-    "ast_hash": "64eae43ed861aee8255d1a6ed871272e",
+    "mtime": 1795717950.3228655,
+    "ast_hash": "2d0b9727d9180d0fdd70486fec8a9c73",
     "semantic_hash": ""
   },
   "server/__tests__/integration/rc-legal-sec-001-legal-opinions-freeze.test.ts": {
@@ -6530,8 +6530,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/tenant-onboarding-service.test.ts": {
-    "mtime": 1795712603.606351,
-    "ast_hash": "9511df7203f559a7486cfd7bcb40efa5",
+    "mtime": 1795717571.4761555,
+    "ast_hash": "cb902ba65e92323e64ff68246279d33f",
     "semantic_hash": ""
   },
   "server/__tests__/integration/tr-canonical-generation-guard.test.ts": {
@@ -6810,8 +6810,8 @@
     "semantic_hash": ""
   },
   "server/_core/trpc.ts": {
-    "mtime": 1795712603.6223958,
-    "ast_hash": "e19093161e2f2c369572e5c822f3cb18",
+    "mtime": 1795717889.660559,
+    "ast_hash": "c036227919594789799aa2683e898023",
     "semantic_hash": ""
   },
   "server/_core/types/cookie.d.ts": {
@@ -6860,8 +6860,8 @@
     "semantic_hash": ""
   },
   "server/config/email.ts": {
-    "mtime": 1795712603.6235847,
-    "ast_hash": "4eea4d57ee528b2b4cb24b0f0749150e",
+    "mtime": 1795716885.6898875,
+    "ast_hash": "30ed4eb34a64dd66f487c2f25091bb9f",
     "semantic_hash": ""
   },
   "server/config/env.ts": {
@@ -6905,8 +6905,8 @@
     "semantic_hash": ""
   },
   "server/db/businessDomains.ts": {
-    "mtime": 1795713060.797263,
-    "ast_hash": "1f371f8212ede1f225d82acc50f9fd24",
+    "mtime": 1795717163.6612802,
+    "ast_hash": "3fb53f5a82c47728d559971c873061dc",
     "semantic_hash": ""
   },
   "server/db/catmatGovernance.ts": {
@@ -8670,8 +8670,8 @@
     "semantic_hash": ""
   },
   "server/routers/billingRouter.ts": {
-    "mtime": 1795712603.6531389,
-    "ast_hash": "08e80b811f906201dd7452edc10a5a77",
+    "mtime": 1795716957.6514723,
+    "ast_hash": "6c65e8ea453c4ab5680c1430177076bf",
     "semantic_hash": ""
   },
   "server/routers/businessDomainRouter.ts": {
@@ -8705,8 +8705,8 @@
     "semantic_hash": ""
   },
   "server/routers/commercialRouter.ts": {
-    "mtime": 1795713855.6257725,
-    "ast_hash": "0564b376c88a6276fa77ca540d7a4afa",
+    "mtime": 1795717968.0491908,
+    "ast_hash": "5cb5c9519550121ecb419763d54295c0",
     "semantic_hash": ""
   },
   "server/routers/companyDocumentsRouter.ts": {
@@ -8730,8 +8730,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
-    "mtime": 1795712603.6531389,
-    "ast_hash": "bdabfeceae4a6a9e7e1c6c87b45f29b8",
+    "mtime": 1795717316.8672733,
+    "ast_hash": "ff3705dee09999f198a2b4edff739137",
     "semantic_hash": ""
   },
   "server/routers/copilotGovernanceRouter.ts": {
@@ -8760,8 +8760,8 @@
     "semantic_hash": ""
   },
   "server/routers/directContractsRouter.ts": {
-    "mtime": 1795712603.6531389,
-    "ast_hash": "bbcf50008aaa8958587cc14249ffd65f",
+    "mtime": 1795717316.8645773,
+    "ast_hash": "de4202f1f47531324bb1a8e4fd423770",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
@@ -8880,8 +8880,8 @@
     "semantic_hash": ""
   },
   "server/routers/moduleLicensingRouter.ts": {
-    "mtime": 1795712720.8758056,
-    "ast_hash": "b22e6ee16e1a7b0d3ab68567eebe32f9",
+    "mtime": 1795717163.6635733,
+    "ast_hash": "5287078cf6896899768d956ae1eb9331",
     "semantic_hash": ""
   },
   "server/routers/notificationsRouter.ts": {
@@ -8900,8 +8900,8 @@
     "semantic_hash": ""
   },
   "server/routers/operationRecordRouter.ts": {
-    "mtime": 1795712603.6531389,
-    "ast_hash": "84c3a2526fda5576a93468960e271a05",
+    "mtime": 1795717269.0181286,
+    "ast_hash": "9fe263417f3272b3dd2b32030978bbcc",
     "semantic_hash": ""
   },
   "server/routers/organizationsRouter.ts": {
@@ -9020,8 +9020,8 @@
     "semantic_hash": ""
   },
   "server/routers/workspaceRouter.ts": {
-    "mtime": 1795712603.654351,
-    "ast_hash": "f4d9fead0acda92459cf6e667f8cd3f7",
+    "mtime": 1795717269.0177329,
+    "ast_hash": "7da5217286476b22d903211b61683e15",
     "semantic_hash": ""
   },
   "server/routes/ingestionUploadRoute.ts": {
@@ -9640,13 +9640,13 @@
     "semantic_hash": ""
   },
   "server/services/email/emailDispatcher.ts": {
-    "mtime": 1795712603.666797,
-    "ast_hash": "405ecd56aedac59d9d33e036653325a1",
+    "mtime": 1795716885.6840665,
+    "ast_hash": "677b233f94cecafc617eb7ef5f9c1b83",
     "semantic_hash": ""
   },
   "server/services/email/emailOutboxService.ts": {
-    "mtime": 1795712603.666797,
-    "ast_hash": "0c3d5588bd14aa0cfcdb63b6e0bd3d91",
+    "mtime": 1795716885.6736996,
+    "ast_hash": "45230021e344be9da124cdb885c17955",
     "semantic_hash": ""
   },
   "server/services/email/fakeProvider.ts": {
@@ -9660,8 +9660,8 @@
     "semantic_hash": ""
   },
   "server/services/email/templates.ts": {
-    "mtime": 1795712603.666797,
-    "ast_hash": "8820a58e80161127d74a82536b404c7c",
+    "mtime": 1795716885.6465955,
+    "ast_hash": "bfa59c2fafd9a7dcd4b261af46c4fddc",
     "semantic_hash": ""
   },
   "server/services/emailService.ts": {
@@ -9885,8 +9885,8 @@
     "semantic_hash": ""
   },
   "server/services/invitationService.ts": {
-    "mtime": 1795712604.2620516,
-    "ast_hash": "4a93cc1f2c7b9bb3bbfe9a72fc2f8d77",
+    "mtime": 1795717026.1239944,
+    "ast_hash": "00395a82fd07c3a702d9e4cd0e6e8e82",
     "semantic_hash": ""
   },
   "server/services/itemAnalyticsService.ts": {
@@ -10405,13 +10405,13 @@
     "semantic_hash": ""
   },
   "server/services/tenantOnboardingService.ts": {
-    "mtime": 1795712604.2665615,
-    "ast_hash": "817719137b4975e45bad78ed71a09e4b",
+    "mtime": 1795717061.4238617,
+    "ast_hash": "8a714222ace67e4dc08e1c11d47054cd",
     "semantic_hash": ""
   },
   "server/services/tenantService.ts": {
-    "mtime": 1795712604.2665615,
-    "ast_hash": "5392a9e5e523c63142614ab6e879d38a",
+    "mtime": 1795717889.657596,
+    "ast_hash": "2d1e489cc5554b544b13764292290e2a",
     "semantic_hash": ""
   },
   "server/services/tokenBudgetService.ts": {
@@ -13755,8 +13755,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-t2-schema-guard.test.ts": {
-    "mtime": 1795712603.614351,
-    "ast_hash": "b091298c54992f040f99b0a38c3a6549",
+    "mtime": 1795716916.883991,
+    "ast_hash": "23b8c757f3eb742b1623a0d362a02b0a",
     "semantic_hash": ""
   },
   "server/db/institutionalTemplates/bindings.ts": {
@@ -14890,8 +14890,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/institutional-templates-governance-v2-transition.test.ts": {
-    "mtime": 1795712603.612253,
-    "ast_hash": "618361049734f2d8361f22b1fbd176d4",
+    "mtime": 1795716916.8820221,
+    "ast_hash": "5c8386c613fe9a200277c9a80b50d3fd",
     "semantic_hash": ""
   },
   "server/db/templateGovernanceTransition.ts": {
@@ -15650,8 +15650,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/INSTITUTIONAL_AUTHORITY_CONTRACT.md": {
-    "mtime": 1795712603.274351,
-    "ast_hash": "52d184ad703d46b8372bd05885888ca0",
+    "mtime": 1795717416.0260494,
+    "ast_hash": "81c39a37e475545ba3b7cd0dca9e7902",
     "semantic_hash": ""
   },
   "server/__tests__/integration/security02-bootstrap-owner-mysql-smoke.test.ts": {
@@ -15880,8 +15880,8 @@
     "semantic_hash": ""
   },
   "client/src/launch-ready-lane-b.test.ts": {
-    "mtime": 1795713124.382382,
-    "ast_hash": "8e8bbe36287b92ec1e5c80542c1e0dd5",
+    "mtime": 1795717602.3588922,
+    "ast_hash": "30ed3f9bef6f0bebadf12082a8adf0eb",
     "semantic_hash": ""
   },
   "server/__tests__/integration/launch-ready-lane-b-mysql-smoke.test.ts": {
@@ -15900,8 +15900,33 @@
     "semantic_hash": ""
   },
   "docs/legal/PRIVACY_TERMS_LAUNCH_READY_DRAFT.md": {
-    "mtime": 1795712923.63037,
-    "ast_hash": "b3fbf44138ee6fdc115e88f2ca4ff115",
+    "mtime": 1795717404.1121478,
+    "ast_hash": "f202a69da89591fc88e87190327fbdb2",
+    "semantic_hash": ""
+  },
+  "drizzle/0320_proposal_requests_plan_optional.sql": {
+    "mtime": 1795716903.668552,
+    "ast_hash": "d3581232861d6f06dfe015e706afeb78",
+    "semantic_hash": ""
+  },
+  "drizzle/meta/0320_snapshot.json": {
+    "mtime": 1795716897.986596,
+    "ast_hash": "e386c5532b0ea880ba8d821501a1f932",
+    "semantic_hash": ""
+  },
+  "server/__tests__/integration/launch-ready-convergence-mysql-smoke.test.ts": {
+    "mtime": 1795717950.3245049,
+    "ast_hash": "8648afbe120929d12e7fadf98280b40a",
+    "semantic_hash": ""
+  },
+  "server/__tests__/unit/launch-ready-convergence.test.ts": {
+    "mtime": 1795717593.6649508,
+    "ast_hash": "756ac26165eb0f3c1cc8917d22af48c2",
+    "semantic_hash": ""
+  },
+  "docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md": {
+    "mtime": 1795717387.9546254,
+    "ast_hash": "190493556846e95a3b21db90a580a0b8",
     "semantic_hash": ""
   }
 }
