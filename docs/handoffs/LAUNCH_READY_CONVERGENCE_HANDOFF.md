@@ -58,6 +58,7 @@
 | `pnpm build` | PASS |
 | `pnpm test` (modo CI, sem banco) | PASS — 496 arquivos / 9.027 testes (139 arquivos MySQL pulados por desenho) |
 | Job "Smoke MySQL + Isolamento" reproduzido (60 passos, banco recriado do zero) | PASS — 60/60 (antes das correções P2) |
+| Passo multi-arquivo da CI (33 smokes de templates/migrations) | 1ª CI (`ec7b47a`) **FALHOU**: smokes das migrations 0316/0317/0318 comparam a assinatura do schema após a cadeia completa e não excluíam colunas alteradas pela 0320 (o runner local não extraíra passos `run:` multilinha). Correção: filtro de colunas POSTERIORES estendido (mesmo precedente da 0319). Local: **33/33 arquivos, 269 testes PASS** |
 | Smokes MySQL afetados após correções P2 (27 arquivos) | PASS — 262 testes; revalidação final 4 arquivos / 57 testes |
 | Novo `launch-ready-convergence-mysql-smoke` (no `test:smoke:security`) | PASS — cobre falha intermediária/órfão, convite morto, falha de e-mail, concorrência, has_members, permissões; proposta sem plano; aviso; IDs coincidentes/divergentes/replay; papéis; tenant cruzado; órgão desativado |
 | Graphify | atualizado com a toolchain fixada, em commit SEPARADO do código |
