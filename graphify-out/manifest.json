@@ -15938,5 +15938,10 @@
     "mtime": 1795721381.2311661,
     "ast_hash": "35e5a7921092829b3706ba57a1ecee46",
     "semantic_hash": ""
+  },
+  "docs/handoffs/LAUNCH_READY_FINAL_CLOSURE_HANDOFF.md": {
+    "mtime": 1795722802.4112506,
+    "ast_hash": "0afe9220cf7535f4e7bd9cf2162e358b",
+    "semantic_hash": ""
   }
 }
