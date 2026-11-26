@@ -6810,8 +6810,8 @@
     "semantic_hash": ""
   },
   "server/_core/trpc.ts": {
-    "mtime": 1795717889.660559,
-    "ast_hash": "c036227919594789799aa2683e898023",
+    "mtime": 1795718870.5058057,
+    "ast_hash": "bb626e7b83b1e2909401b4a6e4252e0b",
     "semantic_hash": ""
   },
   "server/_core/types/cookie.d.ts": {
@@ -6935,8 +6935,8 @@
     "semantic_hash": ""
   },
   "server/db/commercial.ts": {
-    "mtime": 1795713855.6284268,
-    "ast_hash": "a489c09e037c335e2eac2d0c3c5e52e7",
+    "mtime": 1795718870.5049956,
+    "ast_hash": "c10b6989559e84295778efebb52c3f96",
     "semantic_hash": ""
   },
   "server/db/connection.ts": {
@@ -6950,8 +6950,8 @@
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
-    "mtime": 1795712603.6243248,
-    "ast_hash": "321a65235ba001a17c101d84b16aa0b6",
+    "mtime": 1795719056.6867466,
+    "ast_hash": "2a3c63df7533fd87a6ccfd208595ef98",
     "semantic_hash": ""
   },
   "server/db/copilots.ts": {
@@ -6965,8 +6965,8 @@
     "semantic_hash": ""
   },
   "server/db/directContracts.ts": {
-    "mtime": 1795712603.6243248,
-    "ast_hash": "815e880e944a2a691aaabebe8e7098e2",
+    "mtime": 1795718870.5040479,
+    "ast_hash": "70844d88f9836474dc9d0b8506548c81",
     "semantic_hash": ""
   },
   "server/db/directProcurement.ts": {
@@ -8705,8 +8705,8 @@
     "semantic_hash": ""
   },
   "server/routers/commercialRouter.ts": {
-    "mtime": 1795717968.0491908,
-    "ast_hash": "5cb5c9519550121ecb419763d54295c0",
+    "mtime": 1795718870.504804,
+    "ast_hash": "a38902e55214ba6607f5125595343035",
     "semantic_hash": ""
   },
   "server/routers/companyDocumentsRouter.ts": {
@@ -8730,8 +8730,8 @@
     "semantic_hash": ""
   },
   "server/routers/contractsRouter.ts": {
-    "mtime": 1795717316.8672733,
-    "ast_hash": "ff3705dee09999f198a2b4edff739137",
+    "mtime": 1795718833.4713607,
+    "ast_hash": "0a3338ed8419fdeb39a7d5ba8f6020e5",
     "semantic_hash": ""
   },
   "server/routers/copilotGovernanceRouter.ts": {
@@ -8760,8 +8760,8 @@
     "semantic_hash": ""
   },
   "server/routers/directContractsRouter.ts": {
-    "mtime": 1795717316.8645773,
-    "ast_hash": "de4202f1f47531324bb1a8e4fd423770",
+    "mtime": 1795718870.5034235,
+    "ast_hash": "978311c899b3dc285c35b82fc8f8b5c9",
     "semantic_hash": ""
   },
   "server/routers/directProcurementRouter.ts": {
@@ -8880,8 +8880,8 @@
     "semantic_hash": ""
   },
   "server/routers/moduleLicensingRouter.ts": {
-    "mtime": 1795717163.6635733,
-    "ast_hash": "5287078cf6896899768d956ae1eb9331",
+    "mtime": 1795718870.5055554,
+    "ast_hash": "145ade13c3ad4de248e3a40389174e66",
     "semantic_hash": ""
   },
   "server/routers/notificationsRouter.ts": {
@@ -10410,8 +10410,8 @@
     "semantic_hash": ""
   },
   "server/services/tenantService.ts": {
-    "mtime": 1795717889.657596,
-    "ast_hash": "2d1e489cc5554b544b13764292290e2a",
+    "mtime": 1795718833.470249,
+    "ast_hash": "695d45da29073bff6cba6471755602e3",
     "semantic_hash": ""
   },
   "server/services/tokenBudgetService.ts": {
@@ -15915,8 +15915,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/integration/launch-ready-convergence-mysql-smoke.test.ts": {
-    "mtime": 1795717950.3245049,
-    "ast_hash": "8648afbe120929d12e7fadf98280b40a",
+    "mtime": 1795718870.5063846,
+    "ast_hash": "48e819d2aed05cadcbb7c2d11562f957",
     "semantic_hash": ""
   },
   "server/__tests__/unit/launch-ready-convergence.test.ts": {
@@ -15927,6 +15927,11 @@
   "docs/architecture/LAUNCH_READY_COMMERCIAL_MODEL_DECISION.md": {
     "mtime": 1795717387.9546254,
     "ast_hash": "190493556846e95a3b21db90a580a0b8",
+    "semantic_hash": ""
+  },
+  "docs/handoffs/LAUNCH_READY_CONVERGENCE_HANDOFF.md": {
+    "mtime": 1795719399.5467448,
+    "ast_hash": "3622c33df4169634d0b57e4ba3928870",
     "semantic_hash": ""
   }
 }
