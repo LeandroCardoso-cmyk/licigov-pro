@@ -28,9 +28,18 @@
 | **PRD-05** | `NotificationBell` e `PublicationLogs` (vivo em `/admin/publication-logs`) navegavam para `/process/:id` (inexistente → NotFound); Dashboard executivo anunciava "credenciamento" em Contratação Direta (enum só `dispensa`/`inexigibilidade`) | Rotas legadas; copy | Navegação para `/processos` (o id é do cadastro legado `processes`, sem deep link no fluxo canônico); "Dispensa e inexigibilidade". `any` pré-existentes nesses arquivos tipados (gate de lint) | `client/src/components/NotificationBell.tsx`, `client/src/pages/PublicationLogs.tsx`, `client/src/pages/ExecutiveDashboard.tsx` |
 | **COM-01** | Sucesso orientava "Realize o processo de empenho" e prometia "liberação em até 48h" (sem respaldo no servidor); sem proteção contra duplicidade; erro de validação aparecia como JSON técnico | Copy legado; insert simples | Mensagem sugerida pelo Owner + "manifestação de interesse… não gera obrigação contratual, decisão administrativa nem compromisso de aquisição"; sucesso só após persistência (já era `await`); **deduplicação**: mesma solicitação pendente (CNPJ em qualquer grafia + e-mail normalizado) em 24h devolve a existente, mesma resposta (não revela existência); erro legível (validação/rate limit). Preços, planos e fluxo administrativo **inalterados** | `client/src/pages/SolicitarProposta.tsx`, `server/routers/commercialRouter.ts`, `server/db/commercial.ts` |
 
-## 3. Testes e gates (estado final da árvore)
+## 3. Testes e gates (estado final da árvore, MySQL 8 descartável local)
 
-Preenchido na seção 7 (evidências) com números reais.
+| Gate | Resultado |
+|---|---|
+| `pnpm check` (tsc) | PASS |
+| `eslint --max-warnings 0` nos arquivos alterados | PASS (any pré-existentes tipados) |
+| `pnpm build` | PASS |
+| `db:migrate:release` do zero | PASS |
+| `pnpm test:smoke:security` (inclui o novo smoke Lane B) | PASS — 42 arquivos / 428 testes (rodada em árvore estável; a 1ª rodada teve 1 falha por edição concorrente do teste durante a execução, sem relação com o código) |
+| Testes afetados (65 arquivos) | 880/880 após atualizar `editalWorkspaceContract.test.ts` ao componente único; `m8-emission-provenance-race` timeout de hook sob carga, PASS isolado |
+| Suíte completa `vitest run` | delegada à CI (gate `test`) |
+| Graphify | atualizado pelo hook de pre-commit em cada commit; `.graphify_root` restaurado (não versionado) |
 
 ## 4. Release e comercial — o que pode ser ofertado (sem ativar flags)
 
@@ -74,4 +83,18 @@ Demais P2 no backlog acima (unicidade (org, domínio) e dedup atômica exigem mi
 
 ## 7. Evidências, SHAs, PR e CI
 
-(preenchido ao final da entrega)
+| Item | Valor |
+|---|---|
+| Branch | `launch-ready/product-remediation` (push autorizado) |
+| Commits de código | `6803078` (entrega), `a3b1e1f` (P2 da auditoria) + commit deste handoff |
+| PR | LeandroCardoso-cmyk/licigov-pro#357 → `staging` (sem merge — não autorizado) |
+| CI | acompanhar no PR; falhas pertencentes ao escopo serão corrigidas na própria branch |
+| Working tree | limpa após o commit |
+
+## 8. Próxima etapa de convergência
+
+1. Integrador final aplica achados impeditivos comprovados das Lanes A e C sobre `launch-ready/product-remediation`
+   (ou sobre `staging` após o merge do #357 pelo Owner), sem reabrir os pacotes acima.
+2. SEC-04: se a Lane A trouxer outros routers com mutação comercial em `tenantProcedure` puro, reaplicar o padrão
+   `platformLicensingProcedure` (admin de plataforma + tenant explícito auditado).
+3. Owner: decisões da seção 5; depois, merge em `staging` e homologação integrada com tenant sintético.
