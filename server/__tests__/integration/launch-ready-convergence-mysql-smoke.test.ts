@@ -359,8 +359,8 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
       expect(task).toBeTruthy();
       await expect((await caller(users.operator)).operationRecord.updateSettings({ orgaoOficialName: "A", jornalName: "B", portalName: "C" })).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect((await caller(users.manager)).operationRecord.updateSettings({ orgaoOficialName: "A", jornalName: "B", portalName: "C" })).resolves.toBeTruthy();
-      const exp = await (await caller(users.viewer)).tasks.exportExcel({} as never).then(() => "ok", (e: { code?: string }) => String(e.code));
-      expect(exp).not.toBe("FORBIDDEN");
+      // Entrada válida (filtros opcionais): a exportação precisa CONCLUIR para o viewer, não só "não ser FORBIDDEN".
+      await expect((await caller(users.viewer)).tasks.exportExcel(undefined)).resolves.toMatchObject({ data: expect.any(String) });
     });
   });
 
@@ -368,8 +368,7 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
   describe("DELTA-02 — órgão desativado: exportação liberada, novo vínculo recusado", () => {
     it("exportação (export*) não é bloqueada; aceite de convite em órgão desativado é recusado sem criar vínculo", async () => {
       const m = await caller(users.managerC);
-      const exp = await m.tasks.exportExcel({} as never).then(() => "ok", (e: { code?: string; message?: string }) => `${e.code}:${e.message}`);
-      expect(exp).not.toContain("ORGANIZATION_INACTIVE");
+      await expect(m.tasks.exportExcel(undefined)).resolves.toMatchObject({ data: expect.any(String) });
 
       const { generateOpaqueToken, hashOpaqueToken } = await import("../../services/security/opaqueTokens");
       const { acceptExistingInvitation } = await import("../../services/invitationService");

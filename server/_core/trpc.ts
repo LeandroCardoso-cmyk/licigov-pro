@@ -76,7 +76,10 @@ function parsePlatformAdminOrganizationId(headerValue: unknown): number | null {
   return parsed;
 }
 
-/** DELTA-02 — mutations que só EXPORTAM conteúdo existente (registram trilha de exportação, sem emissão nem alteração). */
+/**
+ * DELTA-02 — mutations que só EXPORTAM conteúdo existente (registram trilha de exportação, sem emissão nem alteração).
+ * ATENÇÃO: o critério é o NOME da procedure. Nunca nomeie `export*` uma procedure que emita, versione ou altere conteúdo.
+ */
 const READ_ONLY_EXPORT_LEAF = /^export[A-Z]/;
 
 /** LR-06 — código estável da recusa de mutação em organização desativada. */
