@@ -29,6 +29,7 @@ import {
   resolveEditalTextValues, editalTextProposal, editalTextOverwrites, editalTextPendingReview, type EditalTextParams,
   editalUnsavedParameters,
 } from "./regenerationGuard";
+import { DraftReviewNotice } from "./DraftReviewNotice";
 
 const SOURCE_LABELS: Record<string, string> = {
   tr: "Termo de Referência (TR)", etp: "Estudo Técnico Preliminar (ETP)",
@@ -399,7 +400,7 @@ export default function EditalWorkspace({
         {form === "presencial" ? (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <strong>Justificativa sujeita à revisão.</strong> Confira a motivação da forma presencial
-            incluída na minuta e complete-a com os fatos do processo antes da aprovação.
+            incluída na minuta e complete-a com os fatos do processo antes da emissão.
           </div>
         ) : form === "eletronico" ? (
           <label className="flex flex-col text-sm sm:max-w-xs">
@@ -594,7 +595,7 @@ export default function EditalWorkspace({
           {sourceState.data?.state === "source_changed" && (
             <div className="mb-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-800 dark:text-orange-300" role="alert">
               <strong>Documentos-base alterados.</strong> Os documentos-base deste Edital (DFD/ETP/TR/itens/parâmetros)
-              foram alterados após a geração da minuta. Revise ou regenere antes da aprovação.
+              foram alterados após a geração da minuta. Revise ou regenere antes da emissão.
               {/* R9 / SEM-047 — lista O QUE mudou (minutas antigas, sem marcador por fonte, mostram só o aviso). */}
               {(sourceState.data.changedSources ?? []).length > 0 && (
                 <span className="mt-1 block">Mudou: {sourceState.data.changedSources.map((c) => c.label).join(", ")}.</span>
@@ -604,10 +605,7 @@ export default function EditalWorkspace({
 
           <PublicationPendingNotice pending={publicationPendingView} variant="drafting" />
           <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
-            emissão oficial exige revisão de um terceiro (SoD).
-          </div>
+          <DraftReviewNotice />
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
             {/* C.4B.3B — edição humana governada do rascunho persistido. */}

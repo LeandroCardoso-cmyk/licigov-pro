@@ -15,6 +15,7 @@ import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
 import AuthoringSourcesSummary from "./AuthoringSourcesSummary";
 import { domainErrorMessage } from "@/lib/domainErrorMessage";
+import { DraftReviewNotice } from "./DraftReviewNotice";
 
 /**
  * TRWorkspace — REAL (wired to tRPC).
@@ -24,7 +25,7 @@ import { domainErrorMessage } from "@/lib/domainErrorMessage";
  *     classificação confirmada); quantidades/preços/totais entram por quadro gerado pelo sistema;
  *   - "Importar TR existente": a Secretaria já tem o TR — importado, revisado, aprovado e promovido a
  *     rascunho (o Edital reaproveita da mesma forma que um TR gerado).
- * Toda saída exige revisão humana; a emissão oficial exige revisão de terceiro (SoD).
+ * Toda saída exige revisão humana; a emissão interna exige papel de gestor (ver DraftReviewNotice / documentPromotionService).
  */
 
 export type TRWorkspaceProps = {
@@ -159,10 +160,7 @@ export default function TRWorkspace({ processId = "", startWithImport = false, o
           {/* A2 — explicabilidade mínima de fundamentação (estado + nº de evidências reais). */}
           <GroundingNotice grounding={reviewable.data?.draft?.grounding ?? null} content={draft.content} />
           <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana) — gerado com base no
-            processo ou importado. Edite e salve; a emissão oficial exige revisão de um terceiro (SoD).
-          </div>
+          <DraftReviewNotice origin="Gerado com base no processo ou importado." />
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
             {/* C.4B.3B — edição humana governada do rascunho persistido. */}

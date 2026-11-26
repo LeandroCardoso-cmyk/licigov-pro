@@ -9,7 +9,7 @@ export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8">
-        <Button variant="ghost" onClick={() => setLocation("/configuracoes")} className="mb-6">
+        <Button variant="ghost" onClick={() => (window.history.length > 1 ? window.history.back() : setLocation("/"))} className="mb-6">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
@@ -17,12 +17,15 @@ export default function PrivacyPolicy() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Política de Privacidade</CardTitle>
-            <p className="text-sm text-muted-foreground">Última atualização: Janeiro de 2025 • Versão 1.0</p>
+            <p className="text-sm text-muted-foreground">Última atualização: Janeiro de 2025 • Versão 1.0 — com correções factuais de novembro de 2026</p>
+            {/* PRD-03 (LICIGOV-LAUNCH-READY) — só correções factuais (login próprio, localização dos provedores, medidas de
+                segurança verificáveis, provedores). A versão institucional completa é minuta em revisão
+                (docs/legal/PRIVACY_TERMS_LAUNCH_READY_DRAFT.md) e só substitui este texto após aprovação humana competente. */}
           </CardHeader>
           <CardContent className="prose prose-sm dark:prose-invert max-w-none">
             <h2>1. Introdução</h2>
             <p>
-              Esta Política de Privacidade descreve como o LiciGov Pro coleta, usa e protege suas informações pessoais em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).
+              Esta Política de Privacidade descreve como o LiciGov Pro coleta, usa e protege suas informações pessoais com base na Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).
             </p>
 
             <h2>2. Informações que Coletamos</h2>
@@ -30,7 +33,7 @@ export default function PrivacyPolicy() {
             <ul>
               <li>Nome completo</li>
               <li>Endereço de e-mail</li>
-              <li>Método de login (OAuth)</li>
+              <li>Credenciais de acesso (e-mail e senha; a senha é armazenada apenas de forma cifrada por hash)</li>
               <li>Data e hora de acesso</li>
             </ul>
 
@@ -78,7 +81,7 @@ export default function PrivacyPolicy() {
             <ul>
               <li>Com seu consentimento explícito</li>
               <li>Para cumprir obrigações legais</li>
-              <li>Com provedores de serviços essenciais (hospedagem, análise) sob acordos de confidencialidade</li>
+              <li>Com provedores de serviços essenciais à operação da plataforma — hospedagem e banco de dados, armazenamento de arquivos, envio de e-mails transacionais, processamento de pagamentos e provedores de inteligência artificial utilizados na geração assistida de conteúdo</li>
               <li>Em caso de fusão, aquisição ou venda de ativos</li>
             </ul>
 
@@ -87,10 +90,11 @@ export default function PrivacyPolicy() {
               Implementamos medidas técnicas e organizacionais apropriadas para proteger seus dados pessoais contra acesso não autorizado, alteração, divulgação ou destruição, incluindo:
             </p>
             <ul>
-              <li>Criptografia de dados em trânsito e em repouso</li>
-              <li>Controles de acesso baseados em funções</li>
-              <li>Monitoramento e auditoria de segurança</li>
-              <li>Backups regulares</li>
+              <li>Comunicação criptografada (HTTPS) entre o navegador e a plataforma</li>
+              <li>Senhas armazenadas apenas como hash</li>
+              <li>Controles de acesso baseados em funções e isolamento dos dados de cada órgão</li>
+              <li>Registros de auditoria das operações relevantes</li>
+              <li>Cópias de segurança periódicas do banco de dados</li>
             </ul>
 
             <h2>7. Seus Direitos sob a LGPD</h2>
@@ -111,12 +115,12 @@ export default function PrivacyPolicy() {
 
             <h2>9. Transferência Internacional de Dados</h2>
             <p>
-              Seus dados são armazenados em servidores localizados no Brasil. Caso haja transferência internacional, garantiremos proteções adequadas conforme exigido pela LGPD.
+              Alguns provedores utilizados pela plataforma (por exemplo, de hospedagem, armazenamento de arquivos e inteligência artificial) podem tratar dados em servidores localizados fora do Brasil. Nesses casos, a transferência deve observar as hipóteses e salvaguardas previstas na LGPD.
             </p>
 
             <h2>10. Cookies</h2>
             <p>
-              Utilizamos cookies essenciais para autenticação e funcionamento do serviço. Você pode gerenciar preferências de cookies através das configurações do navegador.
+              Utilizamos cookies essenciais para autenticação e funcionamento do serviço. Quando habilitada no ambiente, a medição de uso (Google Analytics) também pode utilizar cookies. Você pode gerenciar preferências de cookies através das configurações do navegador.
             </p>
 
             <h2>11. Menores de Idade</h2>

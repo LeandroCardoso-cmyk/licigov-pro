@@ -13,6 +13,7 @@ import { domainErrorMessage } from "@/lib/domainErrorMessage";
 import { generationFollowUp, useGenerationFollowUp } from "./generationFollowUp";
 import GenerationFollowUpNotice from "./GenerationFollowUpNotice";
 import { isHumanEditRefusal, needsReplaceConfirmation, planRegeneration } from "./regenerationGuard";
+import { DraftReviewNotice } from "./DraftReviewNotice";
 
 /**
  * ETPWorkspace — REAL (wired to tRPC).
@@ -158,10 +159,7 @@ export default function ETPWorkspace({ processId = "", startWithImport = false, 
           {/* A2 — explicabilidade mínima de fundamentação (estado + nº de evidências reais). */}
           <GroundingNotice grounding={reviewable.data?.draft?.grounding ?? null} content={draft.content} />
           <DemonstrativePriceNotice notice={reviewable.data?.draft?.priceNotice} />
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <strong>Revisão obrigatória.</strong> Rascunho editável (revisão humana). Edite e salve; a
-            emissão oficial exige revisão de um terceiro (segregação de deveres).
-          </div>
+          <DraftReviewNotice />
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-semibold text-foreground">{draft.title}</h2>
             {/* C.4B.3B — edição humana governada do rascunho persistido. */}

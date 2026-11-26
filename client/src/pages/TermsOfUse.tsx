@@ -9,7 +9,7 @@ export default function TermsOfUse() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8">
-        <Button variant="ghost" onClick={() => setLocation("/configuracoes")} className="mb-6">
+        <Button variant="ghost" onClick={() => (window.history.length > 1 ? window.history.back() : setLocation("/"))} className="mb-6">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
@@ -27,12 +27,12 @@ export default function TermsOfUse() {
 
             <h2>2. Descrição do Serviço</h2>
             <p>
-              O LiciGov Pro é uma plataforma de automação de processos licitatórios que utiliza inteligência artificial para gerar documentos técnicos (ETP, TR, DFD e Editais) baseados na Lei 14.133/21.
+              O LiciGov Pro é uma plataforma de automação de processos licitatórios que apoia a elaboração de documentos técnicos (DFD, ETP, TR, minutas de Editais, entre outros) com base na Lei 14.133/21, inclusive com geração assistida por inteligência artificial. O conteúdo gerado é sempre editável e sujeito à revisão e decisão do servidor competente; a plataforma não publica documentos em portais oficiais nem substitui parecer jurídico ou ato da autoridade competente.
             </p>
 
             <h2>3. Cadastro e Conta</h2>
             <p>
-              Para utilizar o serviço, você deve criar uma conta fornecendo informações precisas e completas. Você é responsável por manter a confidencialidade de sua conta e senha e por todas as atividades que ocorram em sua conta.
+              O acesso ao serviço é concedido a usuários vinculados a um órgão contratante, em regra por convite do administrador do órgão, mediante informações precisas e completas. Você é responsável por manter a confidencialidade de sua conta e senha e por todas as atividades que ocorram em sua conta.
             </p>
 
             <h2>4. Uso Aceitável</h2>

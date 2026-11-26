@@ -23,7 +23,7 @@ import { LayoutDashboard, Gauge, FileText, FileCheck, Scale, ScrollText, HelpCir
 const SHORTCUTS: Array<{ icon: typeof Gauge; label: string; desc: string; path: string }> = [
   { icon: Gauge, label: "Centro de Operações", desc: "Pendências, painel, calendário e caixa", path: "/centro-operacoes" },
   { icon: FileText, label: "Processo Licitatório", desc: "DFD → ETP → Pesquisa → Itens → TR → Edital", path: "/processos" },
-  { icon: FileCheck, label: "Contratação Direta", desc: "Dispensa, inexigibilidade, credenciamento", path: "/contratacao-direta" },
+  { icon: FileCheck, label: "Contratação Direta", desc: "Dispensa e inexigibilidade", path: "/contratacao-direta" },
   { icon: Scale, label: "Parecer Jurídico", desc: "Caixa institucional e elaboração", path: "/parecer" },
   { icon: ScrollText, label: "Contratos", desc: "Contratos e aditivos", path: "/contratos" },
   { icon: HelpCircle, label: "Tirar Dúvidas", desc: "Apoio sobre a Lei 14.133/2021", path: "/tirar-duvidas" },

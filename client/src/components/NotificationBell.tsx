@@ -41,13 +41,14 @@ export function NotificationBell() {
     },
   });
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: { id: number; isRead?: boolean | number | null; processId?: number | null }) => {
     if (!notification.isRead) {
       markAsReadMutation.mutate({ notificationId: notification.id });
     }
     
     if (notification.processId) {
-      navigate(`/process/${notification.processId}`);
+      // PRD-05 — `/process/:id` não existe; o id é do cadastro legado (`processes`), sem deep link no fluxo canônico.
+      navigate("/processos");
       setOpen(false);
     }
   };

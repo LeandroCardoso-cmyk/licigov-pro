@@ -5,6 +5,20 @@ import { validateCNPJ } from "../services/cnpjValidator";
 import { rateLimitMiddleware } from "../services/rateLimiter";
 import { TRPCError } from "@trpc/server";
 
+/** COM-01 — janela de deduplicação da solicitação comercial pendente. */
+export const PROPOSAL_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Grafias equivalentes do mesmo CNPJ (como digitado, só dígitos, com máscara) — o cadastro histórico guarda como digitado. */
+export function cnpjLookupVariants(raw: string): string[] {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  const variants = new Set<string>([trimmed, digits]);
+  if (digits.length === 14) {
+    variants.add(`${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`);
+  }
+  return Array.from(variants).filter((v) => v.length > 0);
+}
+
 export const commercialRouter = router({
   // PR 0 (Security Emergency Closure): fluxo de captação comercial pública da landing
   // (`/solicitar-proposta`) — permanece PÚBLICO por design (não há tenant nesta etapa).
@@ -56,7 +70,17 @@ export const commercialRouter = router({
         });
       }
 
-      const { website: _website, ...proposalInput } = input;
+      const { website: _website, ...rawInput } = input;
+      const proposalInput = { ...rawInput, responsavelEmail: rawInput.responsavelEmail.trim().toLowerCase() };
+
+      // COM-01 — manifestação de interesse idempotente: reenvio da mesma solicitação pendente (mesmo CNPJ + e-mail,
+      // janela de 24h) devolve a existente. A resposta é a mesma do caso novo (não revela existência a terceiros).
+      const existingId = await db.findRecentPendingProposalRequest({
+        cnpjVariants: cnpjLookupVariants(input.orgaoCnpj),
+        responsavelEmail: proposalInput.responsavelEmail,
+        since: new Date(Date.now() - PROPOSAL_DEDUP_WINDOW_MS),
+      });
+      if (existingId !== null) return { proposalId: existingId };
 
       const proposalId = await db.createProposalRequest({
         ...proposalInput,

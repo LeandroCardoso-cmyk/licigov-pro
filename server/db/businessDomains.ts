@@ -8,6 +8,7 @@
 
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "./connection";
+import { toDbDatetime } from "./institutionalConsultations";
 import {
   businessDomainsTable,
   domainWorkspacesTable,
@@ -79,12 +80,28 @@ export async function getDomainWorkspace(organizationId: number, businessDomainC
 export async function upsertLicensedModule(module: LicensedModule): Promise<LicensedModule | null> {
   const db = await getDb();
   if (!db) return null;
+  // LAUNCH-READY SEC-04 — (1) `created_at` é DATETIME(3): ISO com "T"/"Z" era recusado pelo MySQL real (toda ativação
+  // falhava fora de mocks); (2) sem unicidade (org, domínio) no schema e com `id` aleatório, reativar criava linha
+  // duplicada e a leitura (`limit 1`) podia devolver a desativada. Reativação atualiza a linha existente.
+  const existing = await db.select({ id: licensedModulesTable.id }).from(licensedModulesTable)
+    .where(and(eq(licensedModulesTable.organizationId, module.organizationId), eq(licensedModulesTable.businessDomainCode, module.businessDomainCode)))
+    .limit(1);
+  if (existing[0]) {
+    await db.update(licensedModulesTable)
+      .set({
+        plan: module.plan, active: module.active ? 1 : 0, activationDate: module.activationDate,
+        expirationDate: module.expirationDate, licensedFeatures: JSON.stringify(module.licensedFeatures),
+        correlationId: module.correlationId,
+      })
+      .where(eq(licensedModulesTable.id, existing[0].id));
+    return { ...module, id: existing[0].id };
+  }
   await db.insert(licensedModulesTable).values({
     id: module.id, organizationId: module.organizationId, businessDomainCode: module.businessDomainCode,
     plan: module.plan, active: module.active ? 1 : 0, activationDate: module.activationDate,
     expirationDate: module.expirationDate, licensedFeatures: JSON.stringify(module.licensedFeatures),
-    correlationId: module.correlationId, createdAt: module.createdAt,
-  }).onDuplicateKeyUpdate({ set: { plan: module.plan, active: module.active ? 1 : 0, expirationDate: module.expirationDate } });
+    correlationId: module.correlationId, createdAt: toDbDatetime(module.createdAt) ?? undefined,
+  });
   return module;
 }
 

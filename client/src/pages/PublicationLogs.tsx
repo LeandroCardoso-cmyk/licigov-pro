@@ -26,6 +26,18 @@ import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, FileText, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import type React from "react";
+
+/** Linha exibida no log de publicações (o endpoint legado não tipa o retorno). */
+type PublicationLogRow = {
+  id: number;
+  createdAt: string | Date;
+  processId: number;
+  process?: { name?: string | null } | null;
+  platform?: { name?: string | null } | null;
+  status: string;
+  externalId?: string | null;
+};
 import { useLocation } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -61,11 +73,11 @@ export default function PublicationLogs() {
   const { data: platforms } = trpc.platforms.list.useQuery();
   const { data: publications, isLoading, refetch } = trpc.platforms.listPublications.useQuery({
     platformId: selectedPlatform === "all" ? undefined : parseInt(selectedPlatform),
-    status: selectedStatus === "all" ? undefined : selectedStatus as any,
+    status: selectedStatus === "all" ? undefined : (selectedStatus as "pending" | "processing" | "published" | "failed" | "scheduled"),
   });
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; label: string }> = {
+    const variants: Record<string, { variant: React.ComponentProps<typeof Badge>["variant"]; label: string }> = {
       pending: { variant: "outline", label: "Pendente" },
       processing: { variant: "secondary", label: "Processando" },
       published: { variant: "default", label: "Publicado" },
@@ -180,7 +192,7 @@ export default function PublicationLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(publications as any[]).map((pub) => (
+                  {(publications as unknown as PublicationLogRow[]).map((pub) => (
                     <TableRow key={pub.id}>
                       <TableCell>
                         {new Date(pub.createdAt).toLocaleDateString("pt-BR", {
@@ -203,9 +215,9 @@ export default function PublicationLogs() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/process/${pub.processId}`)}
+                          onClick={() => navigate("/processos")}
                         >
-                          Ver Processo
+                          Ver processos
                         </Button>
                       </TableCell>
                     </TableRow>
