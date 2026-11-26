@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2, FileCheck, Building2 } from "lucide-react";
@@ -35,7 +34,6 @@ export default function SolicitarProposta() {
     responsavelCargo: "",
     responsavelEmail: "",
     responsavelTelefone: "",
-    planSlug: "",
     observacoes: "",
     // Honeypot anti-bot: nunca visível/preenchível por um usuário humano (ver estilo abaixo).
     website: "",
@@ -217,44 +215,16 @@ export default function SolicitarProposta() {
                 </div>
               </div>
 
-              {/* Plano Desejado */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">Plano Desejado</h3>
-                <div>
-                  <Label htmlFor="planSlug">Selecione o Plano *</Label>
-                  <Select
-                    required
-                    value={formData.planSlug}
-                    onValueChange={(value) => setFormData({ ...formData, planSlug: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha um plano" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="municipal-basico">
-                        Municipal Básico - R$ 399/mês (até 15 mil habitantes)
-                      </SelectItem>
-                      <SelectItem value="municipal-intermediario">
-                        Municipal Intermediário - R$ 999/mês (15-50 mil habitantes)
-                      </SelectItem>
-                      <SelectItem value="municipal-completo">
-                        Municipal Completo - R$ 2.499/mês (acima de 50 mil habitantes)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
               {/* Observações */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-b pb-2">Observações (Opcional)</h3>
+                <h3 className="text-lg font-semibold border-b pb-2">Necessidades do órgão (opcional)</h3>
                 <div>
                   <Label htmlFor="observacoes">Informações Adicionais</Label>
                   <Textarea
                     id="observacoes"
                     value={formData.observacoes}
                     onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                    placeholder="Alguma informação adicional que deseja compartilhar?"
+                    placeholder="Ex.: número estimado de usuários, módulos de interesse (licitações, contratos, contratação direta), melhor horário para contato."
                     rows={4}
                   />
                 </div>

@@ -146,7 +146,8 @@ export const operationRecordRouter = router({
 
   /** Registra um marco externo (certame, homologação, assinatura). */
   // SECURITY-02 — declarar marco oficial (homologação, assinatura…) é registro EM NOME do órgão: membership REAL (piso inalterado).
-  registerMilestone: institutionalProcedure("viewer")
+  // LR-05 — registro DECLARADO de marco externo (o ato ocorreu fora do sistema): operator, como complete/reopen deste router.
+  registerMilestone: institutionalProcedure("operator")
     .input(z.object({ referenceType: z.string().min(1), referenceId: z.string().min(1), milestoneType: z.enum(MILESTONE_TYPES), date: z.string().optional(), time: z.string().optional(), result: z.string().optional(), observation: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
@@ -163,7 +164,8 @@ export const operationRecordRouter = router({
     }),
 
   /** Atualiza status/data de uma publicação (status + data apenas). */
-  setPublication: institutionalProcedure("viewer") // SECURITY-02 — status de publicação oficial: membership REAL (piso inalterado)
+  // LR-05 — registro DECLARADO do status de publicação externa: operator (a publicação é ato fora do LiciGov Pro).
+  setPublication: institutionalProcedure("operator") // SECURITY-02 — status de publicação oficial: membership REAL
     .input(z.object({ referenceType: z.string().min(1), referenceId: z.string().min(1), channel: z.enum(CHANNELS), status: z.enum(PUB_STATUSES), date: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;

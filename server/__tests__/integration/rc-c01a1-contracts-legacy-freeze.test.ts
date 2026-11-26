@@ -90,8 +90,9 @@ describe("RC-C0.1A.1 — Congelamento do contractsRouter legado (pós-isolamento
     // Cada endpoint do baseline precisa existir nominalmente no source.
     const ausentes = CONTRACTS_ROUTER_ENDPOINTS_BASELINE.filter(name => {
       const leaf = name.split(".").pop()!;
-      // SECURITY-02 — atos com efeito contratual passaram a institutionalProcedure("viewer") (membership REAL; piso inalterado).
-      return !new RegExp(`\\b${leaf}:\\s*(tenantProcedure\\b|institutionalProcedure\\("viewer"\\))`).test(src);
+      // SECURITY-02 — atos com efeito contratual passaram a institutionalProcedure (membership REAL); LR-05 (LAUNCH-READY) elevou
+      // o piso de "viewer" para a matriz NEW-006 ("operator"/"manager"). O congelamento é de SUPERFÍCIE (nenhum endpoint novo).
+      return !new RegExp(`\\b${leaf}:\\s*(tenantProcedure\\b|institutionalProcedure\\("(viewer|operator|manager)"\\))`).test(src);
     });
     expect(ausentes, `endpoint(s) do baseline não encontrado(s): ${ausentes.join(", ")}`).toEqual([]);
 

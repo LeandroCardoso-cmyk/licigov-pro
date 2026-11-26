@@ -36,6 +36,20 @@ const EMPTY_FORM = {
   firstAdminEmail: "",
 };
 
+/** LR-01 — resultado do onboarding por estado (antes: só "já existia", sem recuperação do convite). */
+const ONBOARD_STATE_TOAST = {
+  created: "Organização criada e convite enviado ao 1º administrador.",
+  pending_invitation: "Organização já registrada — o convite do 1º administrador continua pendente (nada novo foi criado).",
+  recovered: "Implantação recuperada: novo convite emitido ao 1º administrador.",
+  has_members: "Organização já possui vínculos — nenhum convite de titular foi emitido.",
+} as const;
+const ONBOARD_STATE_DETAIL = {
+  created: "criada. O convite foi enviado ao e-mail informado.",
+  pending_invitation: "já registrada; o convite do 1º administrador segue pendente.",
+  recovered: "implantação incompleta recuperada; um novo convite foi enviado ao e-mail informado.",
+  has_members: "já possui vínculos; a gestão de usuários é feita pelo administrador do órgão.",
+} as const;
+
 export default function AdminOrganizacoes() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -44,15 +58,15 @@ export default function AdminOrganizacoes() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [slugTouched, setSlugTouched] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<{ organizationName: string; alreadyExisted: boolean } | null>(null);
+  const [success, setSuccess] = useState<{ organizationName: string; state: "created" | "pending_invitation" | "recovered" | "has_members" } | null>(null);
   const [flagOrg, setFlagOrg] = useState<{ id: number; nome: string } | null>(null);
 
   const orgsQuery = trpc.organizations.adminList.useQuery(undefined, { enabled: user?.role === "admin" });
 
   const onboardMutation = trpc.tenantOnboarding.create.useMutation({
     onSuccess: (result) => {
-      setSuccess({ organizationName: result.organizationName, alreadyExisted: result.alreadyExisted });
-      toast.success(result.alreadyExisted ? "Organização já existia — nenhum convite novo foi enviado." : "Organização criada e convite enviado ao 1º administrador.");
+      setSuccess({ organizationName: result.organizationName, state: result.state });
+      toast.success(ONBOARD_STATE_TOAST[result.state]);
       setForm(EMPTY_FORM);
       setSlugTouched(false);
       utils.organizations.adminList.invalidate();
@@ -183,9 +197,7 @@ export default function AdminOrganizacoes() {
               {error && <p className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</p>}
               {success && (
                 <p className="text-sm text-foreground bg-primary/10 p-3 rounded-md">
-                  {success.alreadyExisted
-                    ? `"${success.organizationName}" já existia — nenhuma alteração foi feita.`
-                    : `"${success.organizationName}" criada. O convite foi enviado ao e-mail informado.`}
+                  {`"${success.organizationName}": ${ONBOARD_STATE_DETAIL[success.state]}`}
                 </p>
               )}
 

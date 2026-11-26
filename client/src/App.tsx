@@ -24,7 +24,6 @@ import Admin from "./pages/Admin";
 import TermsOfUse from "./pages/TermsOfUse";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 // import AuditLogs from "./pages/AuditLogs";
-import Plans from "./pages/Plans";
 import SolicitarProposta from "./pages/SolicitarProposta";
 // import AdminSubscriptions from "./pages/AdminSubscriptions";
 import CommercialManagement from "./pages/CommercialManagement";
@@ -260,7 +259,9 @@ function Router() {
       <Route path={"/termos"} component={TermsOfUse} />
       <Route path={"/privacidade"} component={PrivacyPolicy} />
       {/* <Route path={"/audit-logs"} component={AuditLogsRoute} /> */}
-      <Route path={"/planos"} component={Plans} />
+      {/* LR-07 — checkout por usuário, "Assinar agora", teste grátis e SLA saíram da jornada comercial ativa (modelo
+          institucional: proposta → procedimento do órgão → concessão administrativa). Links antigos caem na proposta. */}
+      <Route path={"/planos"} component={() => <Redirect to="/solicitar-proposta" replace />} />
       <Route path={"/solicitar-proposta"} component={SolicitarProposta} />
       {/* PR B — Rotas de teste/debug (/test, /test2, /test3, /test4) removidas da
               aplicação: caem no NotFound, fora de qualquer experiência institucional. */}

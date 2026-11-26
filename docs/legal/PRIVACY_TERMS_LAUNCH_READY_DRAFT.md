@@ -20,6 +20,36 @@
 | Termos: "você deve criar uma conta" | Cadastro público desabilitado por padrão (`ALLOW_PUBLIC_REGISTRATION=false`); acesso por convite | Acesso por vínculo ao órgão/convite |
 | Termos: IA "gera documentos" | Conteúdo editável, revisão humana; não publica em portais; não substitui parecer | Descrição alinhada ao North Star |
 
+## Convergência LR-09 (26/11/2026) — localização, papéis, provedores e decisões faltantes
+
+**Localização dos dados — não comprovada.** Há duas informações e nenhuma prova suficiente:
+- relatório operacional da Lane A aponta a infraestrutura Railway na região **asia-southeast1** (aplicação e MySQL — a confirmar no painel do provedor);
+- o código usa **us-east-1** apenas como **padrão** de `AWS_S3_REGION` (`server/config/aws.ts`) — padrão não é a região efetiva;
+- possível bucket S3 compartilhado entre staging e produção (pendência de infraestrutura, Lane A).
+Até a confirmação, a política diz apenas que provedores podem tratar dados **fora do Brasil**, sem nomear regiões.
+
+| Tratamento / finalidade | Dados | Papel proposto (HIPÓTESE — validar juridicamente) | Provedores envolvidos |
+|---|---|---|---|
+| Conteúdo dos processos (DFD/ETP/TR/Edital, contratos, pareceres, cotações) | inseridos pelo órgão, podem conter dados de servidores, fornecedores e terceiros | Órgão = controlador; empresa = operadora | Railway (app/MySQL), AWS S3 (arquivos), provedor de IA (trechos de contexto) |
+| Contas, autenticação, papéis, convites | nome, e-mail, hash de senha, vínculo, IP, logs | A definir (empresa controladora da conta da plataforma × órgão controlador do vínculo institucional) | Railway, Brevo (e-mails transacionais) |
+| Auditoria e segurança | trilhas de ação, correlationId, IP | Empresa e órgão, conforme a finalidade (segurança da plataforma × prestação de contas do órgão) | Railway; backups cifrados (GitHub Actions, retenção 14 dias — Lane A) |
+| Relacionamento comercial (`/solicitar-proposta`) | dados do órgão e do responsável (nome, cargo, e-mail, telefone) | Empresa = controladora | Railway; Brevo (aviso interno SEM dados pessoais do responsável — LR-08) |
+| Medição de uso | identificadores de navegação | Empresa = controladora | Google Analytics **somente** se `VITE_GA_MEASUREMENT_ID` estiver no build — confirmar uso em produção e base legal/consentimento |
+| IA supervisionada | trechos do contexto do processo | Operadora (em nome do órgão) | Gemini (padrão); Claude/OpenAI apenas preparados — confirmar quais estão ativos em produção e seus termos de retenção/treinamento |
+| Pagamentos (legado) | — | — | Stripe: checkout por usuário DESATIVADO (LR-07); confirmar se há dados legados a declarar |
+
+### Decisões e informações que faltam ao Owner (lista fechada para publicar)
+1. Razão social, CNPJ, endereço e canal de contato do titular (e-mail/formulário) — hoje "sistema de suporte" não existe como canal público.
+2. Encarregado (DPO): nome ou forma de contato.
+3. Regiões efetivas: aplicação, MySQL, bucket(s) S3 de produção e backups.
+4. Qualificação controlador/operador por tratamento (tabela acima) — parecer jurídico.
+5. Provedores de IA habilitados em produção + termos de retenção/treinamento.
+6. Política de retenção por categoria (contas, logs técnicos, auditoria, solicitações comerciais, backups — Lane A: 14 dias no GitHub).
+7. Google Analytics em produção: sim/não; se sim, base legal e mecanismo de consentimento.
+8. Atendimento de direitos: exportação e exclusão por autoatendimento estão desativadas — definir o procedimento por solicitação (prazo, responsável).
+9. Comunicação ao controlador/ANPD relativa ao incidente reportado pela Lane A: **avaliação jurídica separada** desta minuta (não é decisão de engenharia).
+10. Data de vigência e versão de publicação; aprovação jurídica formal.
+
 ## Campos pendentes (não inventar — decisão/insumo do Owner e do jurídico)
 
 - `[PENDENTE: razão social da empresa responsável pelo LiciGov Pro]`

@@ -34,7 +34,7 @@ const CAPACIDADES: { titulo: string; itens: string[] }[] = [
       "ETP — Estudo Técnico Preliminar",
       "Termo de Referência",
       "Editais e minutas",
-      "Contratações diretas",
+      "Contratações diretas (dispensa e inexigibilidade)",
     ],
   },
   {
@@ -43,7 +43,12 @@ const CAPACIDADES: { titulo: string; itens: string[] }[] = [
   },
   {
     titulo: "Catálogos e padrões",
-    itens: ["CATMAT", "CATSER", "Modelos institucionais", "Consulta normativa"],
+    // LR-07 — sem anunciar busca completa CATMAT/CATSER nem recurso sujeito a flag como oferta geral.
+    itens: [
+      "Apoio à classificação CATMAT/CATSER",
+      "Modelos institucionais (habilitáveis por órgão)",
+      "Consulta normativa com fontes governadas",
+    ],
   },
   {
     titulo: "Inteligência e governança",

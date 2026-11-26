@@ -120,3 +120,29 @@ describe("COM-01 — solicitação de proposta é manifestação de interesse", 
     expect(page).toMatch(/await createProposalMutation\.mutateAsync\(formData\);\s*setStep\("success"\)/);
   });
 });
+
+describe("Convergência LR-03/LR-07 — jornada comercial institucional", () => {
+  it("/planos não exibe checkout: rota e página redirecionam para a proposta", () => {
+    const app = read("client/src/App.tsx");
+    expect(app).toMatch(/path=\{"\/planos"\} component=\{\(\) => <Redirect to="\/solicitar-proposta" replace \/>\}/);
+    const plans = read("client/src/pages/Plans.tsx");
+    expect(plans).not.toMatch(/useMutation|<Button|billing\./);
+    expect(plans).toContain('<Redirect to="/solicitar-proposta" replace />');
+  });
+  it("proposta sem seleção de plano/preço de seed", () => {
+    const page = read("client/src/pages/SolicitarProposta.tsx");
+    expect(page).not.toMatch(/R\$ \d|planSlug|municipal-basico/);
+  });
+  it("gestão comercial sem 'Ativar Assinatura' e sem proposal.id como user.id", () => {
+    const mgmt = read("client/src/pages/CommercialManagement.tsx");
+    const table = read("client/src/components/commercial/CommercialProposalsTable.tsx");
+    expect(mgmt).not.toMatch(/activateSubscription|userId: proposalId/);
+    expect(table).not.toMatch(/onActivate|<CheckCircle/);
+    expect(mgmt).toContain("/admin/organizacoes");
+  });
+  it("landing não anuncia busca completa CATMAT/CATSER nem recurso sob flag como oferta geral", () => {
+    const landing = read("client/src/pages/LandingPage.tsx");
+    expect(landing).toContain("Apoio à classificação CATMAT/CATSER");
+    expect(landing).toContain("Modelos institucionais (habilitáveis por órgão)");
+  });
+});

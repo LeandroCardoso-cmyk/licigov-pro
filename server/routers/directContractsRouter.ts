@@ -18,7 +18,7 @@ import { getEstimatedActiveValueCents } from "../db/directContractsValueKpi";
 import { legalPolicyMarker } from "../domain/legalReviewPolicy";
 import { runDirectContractShadow } from "../services/directContractShadowService";
 import type { DirectContractDocType } from "../domain/directContractShadow";
-import { tenantProcedure, router, institutionalProcedure } from "../_core/trpc";
+import { tenantProcedure, router, institutionalProcedure, assertInstitutionalRoleAtLeast } from "../_core/trpc";
 import {
   getLegalArticles,
   getLegalArticleById,
@@ -348,7 +348,8 @@ export const directContractsRouter = router({
       return directContract;
     }),
   
-  update: institutionalProcedure("viewer") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL (piso legado inalterado)
+  // LR-05 — NEW-006: edição = operator; status além de rascunho/envio para aprovação = manager.
+  update: institutionalProcedure("operator") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL
     .input(z.object({
       id: z.number(),
       data: z.object({
@@ -368,6 +369,7 @@ export const directContractsRouter = router({
       }),
     }))
     .mutation(async ({ input, ctx }) => {
+      if (input.data.status !== undefined && input.data.status !== "draft" && input.data.status !== "pending_approval") assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.update");
       // Verificar permissão
       const directContract = await getDirectContractByIdForOrganization(input.id, ctx.organizationId);
       
@@ -408,7 +410,8 @@ export const directContractsRouter = router({
   // ========================================
   
   documents: router({
-    create: institutionalProcedure("viewer") // SECURITY-02 — pode nascer `final`: membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: rascunho = operator; nascer `final` = manager.
+    create: institutionalProcedure("operator") // SECURITY-02 — pode nascer `final`: membership REAL
       .input(z.object({
         directContractId: z.number(),
         type: z.enum([
@@ -428,6 +431,7 @@ export const directContractsRouter = router({
         status: z.enum(["draft", "final", "archived"]).default("draft"),
       }))
       .mutation(async ({ input, ctx }) => {
+      if (input.status === "final") assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.documents.create");
         // Verificar permissão
         const directContract = await getDirectContractByIdForOrganization(input.directContractId, ctx.organizationId);
         
@@ -489,7 +493,8 @@ export const directContractsRouter = router({
         return await getDirectContractDocuments(input.directContractId);
       }),
     
-    update: institutionalProcedure("viewer") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL (piso legado inalterado)
+    // LR-05 — NEW-006: edição = operator; tornar `final` = manager.
+    update: institutionalProcedure("operator") // SECURITY-02 — muda status (aprovado/publicado/final): membership REAL
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -498,6 +503,7 @@ export const directContractsRouter = router({
         }),
       }))
       .mutation(async ({ input, ctx }) => {
+      if (input.data.status === "final") assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.documents.update");
         return await updateDirectContractDocumentForOrganization(input.id, ctx.organizationId, input.data);
       }),
   }),

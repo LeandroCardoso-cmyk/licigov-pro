@@ -6,7 +6,7 @@
  * services e navegação. Padrão getDb(): degrada graciosamente sem DB. Multi-tenant.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "./connection";
 import { toDbDatetime } from "./institutionalConsultations";
 import {
@@ -85,6 +85,7 @@ export async function upsertLicensedModule(module: LicensedModule): Promise<Lice
   // duplicada e a leitura (`limit 1`) podia devolver a desativada. Reativação atualiza a linha existente.
   const existing = await db.select({ id: licensedModulesTable.id }).from(licensedModulesTable)
     .where(and(eq(licensedModulesTable.organizationId, module.organizationId), eq(licensedModulesTable.businessDomainCode, module.businessDomainCode)))
+    .orderBy(desc(licensedModulesTable.active), desc(licensedModulesTable.createdAt), desc(licensedModulesTable.id))
     .limit(1);
   if (existing[0]) {
     await db.update(licensedModulesTable)
@@ -117,6 +118,8 @@ export async function getLicensedModule(organizationId: number, businessDomainCo
   if (!db) return null;
   const rows = await db.select().from(licensedModulesTable)
     .where(and(eq(licensedModulesTable.organizationId, organizationId), eq(licensedModulesTable.businessDomainCode, businessDomainCode)))
+    // LR-04 — leitura DETERMINÍSTICA mesmo com linhas legadas duplicadas (sem unicidade no schema): a ativa e mais recente vence.
+    .orderBy(desc(licensedModulesTable.active), desc(licensedModulesTable.createdAt), desc(licensedModulesTable.id))
     .limit(1);
   if (rows.length === 0) return null;
   const r = rows[0];

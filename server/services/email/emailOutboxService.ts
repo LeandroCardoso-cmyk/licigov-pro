@@ -29,7 +29,7 @@ const log = serviceLogger("EmailOutboxService");
  */
 const STALE_PROCESSING_MS = 5 * 60 * 1000;
 
-export type EmailMessageType = "invitation" | "invitation_resent" | "password_reset" | "password_changed";
+export type EmailMessageType = "invitation" | "invitation_resent" | "password_reset" | "password_changed" | "commercial_proposal_received";
 
 export interface EnqueueEmailInput {
   organizationId?: number | null;

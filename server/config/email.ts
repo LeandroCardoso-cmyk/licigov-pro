@@ -11,6 +11,8 @@
  *   BREVO_API_KEY / BREVO_SENDER_EMAIL / BREVO_SENDER_NAME
  *   APP_BASE_URL   = origem pública usada nos links dos e-mails (convite, redefinição de senha)
  *   EMAIL_MAX_ATTEMPTS / EMAIL_DISPATCH_INTERVAL_MS
+ *   COMMERCIAL_NOTIFICATION_EMAIL = destinatário INTERNO do aviso de nova solicitação comercial (LR-08). Opcional: vazio ⇒
+ *     nenhum aviso é enfileirado (a solicitação é persistida do mesmo jeito). Nunca há destinatário padrão.
  *
  * Regra fail-closed: em staging/production, "console" e "fake" NUNCA são o provider ativo — o
  * boot lança se EMAIL_PROVIDER resolver para outra coisa que não "brevo", ou se faltar
@@ -31,6 +33,7 @@ export interface EmailConfigEnv {
   APP_BASE_URL?: string;
   EMAIL_MAX_ATTEMPTS?: string;
   EMAIL_DISPATCH_INTERVAL_MS?: string;
+  COMMERCIAL_NOTIFICATION_EMAIL?: string;
 }
 
 export interface EmailRuntimeContext {
@@ -53,6 +56,8 @@ export interface EmailConfig {
   appBaseUrl: string;
   maxAttempts: number;
   dispatchIntervalMs: number;
+  /** LR-08 — destinatário interno do aviso de nova solicitação comercial; "" = não configurado (sem aviso). */
+  commercialNotificationEmail: string;
 }
 
 const DEFAULT_SENDER_NAME = "LiciGov Pro";
@@ -77,6 +82,12 @@ export function resolveEmailProvider(env: EmailConfigEnv, ctx: EmailRuntimeConte
   if (ctx.isTest) return "fake";
   if (ctx.isDevelopment) return "console";
   return "brevo"; // staging/production
+}
+
+/** LR-08 — e-mail interno do comercial: aceito só se tiver forma de endereço; caso contrário, "" (aviso desligado). Puro. */
+export function resolveCommercialNotificationEmail(raw: string | undefined): string {
+  const v = (raw ?? "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : "";
 }
 
 /** Resolve se o dispatcher de e-mail deve estar ativo. Puro/testável. */
@@ -106,6 +117,7 @@ export function resolveEmailConfig(env: EmailConfigEnv, ctx: EmailRuntimeContext
     appBaseUrl: appBaseUrlRaw ? stripTrailingSlash(appBaseUrlRaw) : "",
     maxAttempts: parsePositiveInt(env.EMAIL_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS),
     dispatchIntervalMs: parsePositiveInt(env.EMAIL_DISPATCH_INTERVAL_MS, DEFAULT_DISPATCH_INTERVAL_MS),
+    commercialNotificationEmail: resolveCommercialNotificationEmail(env.COMMERCIAL_NOTIFICATION_EMAIL),
   };
 
   // Fail-closed em staging/production — MAS apenas quando o e-mail está HABILITADO. Se
@@ -151,6 +163,7 @@ export const EMAIL_CONFIG: EmailConfig = resolveEmailConfig(
     APP_BASE_URL: process.env.APP_BASE_URL,
     EMAIL_MAX_ATTEMPTS: process.env.EMAIL_MAX_ATTEMPTS,
     EMAIL_DISPATCH_INTERVAL_MS: process.env.EMAIL_DISPATCH_INTERVAL_MS,
+    COMMERCIAL_NOTIFICATION_EMAIL: process.env.COMMERCIAL_NOTIFICATION_EMAIL,
   },
   runtimeContext
 );

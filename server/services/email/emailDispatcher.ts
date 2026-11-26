@@ -23,6 +23,7 @@ import {
   buildPasswordResetEmail,
   buildPasswordChangedEmail,
   type EmailContent,
+  buildCommercialProposalReceivedEmail,
 } from "./templates";
 import type { OrgRole, EmailOutboxMessage } from "../../../drizzle/schema";
 
@@ -104,6 +105,14 @@ function renderTemplate(row: Pick<EmailOutboxMessage, "templateKey" | "payload">
       return buildPasswordChangedEmail({
         userName: str(p.userName),
         changedAt: new Date(str(p.changedAt)),
+      });
+    case "commercial_proposal_received":
+      return buildCommercialProposalReceivedEmail({
+        proposalId: Number(p.proposalId),
+        orgaoNome: str(p.orgaoNome),
+        orgaoCidade: str(p.orgaoCidade),
+        orgaoEstado: str(p.orgaoEstado),
+        adminUrl: str(p.adminUrl),
       });
     default:
       throw new Error(`templateKey desconhecido: "${row.templateKey}"`);

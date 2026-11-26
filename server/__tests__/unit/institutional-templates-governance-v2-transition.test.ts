@@ -37,8 +37,9 @@ describe("migration 0318 — marco imutável no instante efetivo do primeiro dep
     const e317 = j.entries.find((e) => e.tag.startsWith("0317_"))!;
     const e318 = j.entries.find((e) => e.tag === "0318_template_governance_transition")!;
     expect(e318).toBeTruthy(); expect(e318.idx).toBe(e317.idx + 1); expect(e318.when).toBeGreaterThan(e317.when);
-    // Posteriores admitidas: só a 0319 (M8 — proveniência das cotações; não toca o marco nem os templates).
-    expect(j.entries.filter((e) => e.idx > e318.idx).map((e) => e.tag)).toEqual(["0319_price_quote_provenance"]);
+    // Posteriores admitidas: 0319 (M8 — proveniência das cotações) e 0320 (LR-02 — plano opcional na solicitação comercial);
+    // nenhuma toca o marco nem os templates.
+    expect(j.entries.filter((e) => e.idx > e318.idx).map((e) => e.tag)).toEqual(["0319_price_quote_provenance", "0320_proposal_requests_plan_optional"]);
     expect(read("drizzle/meta/0318_snapshot.json")).toContain("template_governance_transitions");
   });
 });

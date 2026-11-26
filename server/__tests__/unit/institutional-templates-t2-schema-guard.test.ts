@@ -208,7 +208,7 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     // 0318 (marco de transição da Governance V2) é POSTERIOR e independente: só ACRESCENTA a tabela platform-level `template_governance_transitions`
     // (nenhuma tabela existente muda) — provado logo abaixo. Além da 0318, só a 0319 (M8 — coluna anulável de proveniência
     // em `price_research_items`, fora do bounded context dos templates) — também provado abaixo.
-    expect(journal.filter((e) => e.idx > 318).map((e) => e.tag)).toEqual(["0319_price_quote_provenance"]);
+    expect(journal.filter((e) => e.idx > 318).map((e) => e.tag)).toEqual(["0319_price_quote_provenance", "0320_proposal_requests_plan_optional"]);
     expect(journal.find((e) => e.idx === 318)!.tag).toBe("0318_template_governance_transition");
     const e317 = journal.find((e) => e.idx === 317)!;
     expect(e317.tag).toBe("0317_institutional_template_multimodel_scope");
@@ -243,6 +243,17 @@ describe("HD-26 — contrato × drizzle/schema.ts × SQL da 0316 × snapshot", (
     expect(Object.keys(pri319).filter((c) => !(c in pri318))).toEqual(["provenance_kind"]);
     expect(pri319.provenance_kind.notNull).toBe(false);
     for (const c of Object.keys(pri318)) expect(templateCanonicalJson(pri319[c] as never)).toBe(templateCanonicalJson(pri318[c] as never));
+
+    // 0320 (LR-02): só `proposal_requests` muda, e só por relaxar NOT NULL em planSlug/planName/planPrice; templates intactos.
+    const after320 = snap("0320").tables;
+    expect(Object.keys(after320).sort()).toEqual(Object.keys(after319).sort());
+    const changed320 = Object.keys(after319).filter((k) => templateCanonicalJson(after320[k] as never) !== templateCanonicalJson(after319[k] as never));
+    expect(changed320).toEqual(["proposal_requests"]);
+    const pr319 = cols(after319.proposal_requests), pr320 = cols(after320.proposal_requests);
+    expect(Object.keys(pr320).sort()).toEqual(Object.keys(pr319).sort());
+    const flipped = Object.keys(pr319).filter((c) => templateCanonicalJson(pr320[c] as never) !== templateCanonicalJson(pr319[c] as never)).sort();
+    expect(flipped).toEqual(["planName", "planPrice", "planSlug"]);
+    for (const c of flipped) { expect(pr319[c].notNull).toBe(true); expect(pr320[c].notNull).toBe(false); }
   });
 });
 

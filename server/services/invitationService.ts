@@ -122,6 +122,18 @@ async function bootstrapEvidenceHolds(
 }
 
 /**
+ * LICIGOV-LAUNCH-READY LR-01 — leitura (sem escrita) da EVIDÊNCIA de bootstrap usada pelo aceite/reenvio, exposta ao onboarding
+ * para que ele nunca entregue um convite `owner` que o aceite recusaria (evidência ausente ⇒ convite "morto").
+ */
+export async function tenantOnboardingEvidenceHolds(p: { organizationId: number; grantorUserId: number; email: string }): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  return bootstrapEvidenceHolds(db, {
+    organizationId: p.organizationId, grantorUserId: p.grantorUserId, emailNormalized: normalizeInvitationEmail(p.email),
+  });
+}
+
+/**
  * SECURITY-02 — bootstrap `owner` SERIALIZADO: trava a organização (FOR UPDATE) e, sob a trava, exige órgão sem nenhum membro ativo
  * (leitura travada) e a evidência do onboarding. Dois aceites concorrentes de convites `owner` do mesmo órgão se serializam na trava
  * da organização: o segundo vê o titular já criado e é recusado.

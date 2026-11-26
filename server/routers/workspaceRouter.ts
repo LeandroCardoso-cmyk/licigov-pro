@@ -206,7 +206,8 @@ export const workspaceRouter = router({
       return { decision };
     }),
 
-  approveDecision: institutionalProcedure("viewer") // SECURITY-02 — aprovação registrada: membership REAL (piso inalterado)
+  // LR-05 — NEW-006 OFFICIAL_DECISION: aprovar decisão = manager.
+  approveDecision: institutionalProcedure("manager") // SECURITY-02 — aprovação registrada: membership REAL
     .input(z.object({ workspaceId: z.string().min(1), decisionId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
