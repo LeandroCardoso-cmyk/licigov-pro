@@ -124,8 +124,9 @@ export const commercialRouter = router({
         since: new Date(Date.now() - PROPOSAL_DEDUP_WINDOW_MS),
       });
       if (existingId !== null) {
-        // Reenvio corrige/complementa a solicitação pendente — nada informado pelo solicitante é descartado.
-        await db.refreshPendingProposalRequest(existingId, proposalInput);
+        // Reenvio COMPLEMENTA a solicitação pendente: acrescenta observações novas; nunca sobrescreve contato/dados já
+        // registrados (o endpoint é público e CNPJ é dado público — auditoria P2).
+        await db.appendPendingProposalNotes(existingId, proposalInput.observacoes);
         return { proposalId: existingId };
       }
 

@@ -29,6 +29,7 @@ import {
   createDirectContractDocument,
   getDirectContractDocuments,
   updateDirectContractDocumentForOrganization,
+  getDirectContractDocumentStatusForOrganization,
   createQuotation,
   listQuotations,
   updateQuotationForOrganization,
@@ -369,7 +370,6 @@ export const directContractsRouter = router({
       }),
     }))
     .mutation(async ({ input, ctx }) => {
-      if (input.data.status !== undefined && input.data.status !== "draft" && input.data.status !== "pending_approval") assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.update");
       // Verificar permissão
       const directContract = await getDirectContractByIdForOrganization(input.id, ctx.organizationId);
       
@@ -380,6 +380,12 @@ export const directContractsRouter = router({
         });
       }
       
+      // LR-05 — além de rascunho/envio para aprovação (estado ATUAL ou pedido), alterar a contratação é ato de manager+.
+      const EDITABLE = ["draft", "pending_approval"];
+      if (!EDITABLE.includes(directContract.status) || (input.data.status !== undefined && !EDITABLE.includes(input.data.status))) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.update");
+      }
+
       if (directContract.createdBy !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -503,7 +509,11 @@ export const directContractsRouter = router({
         }),
       }))
       .mutation(async ({ input, ctx }) => {
-      if (input.data.status === "final") assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.documents.update");
+      // LR-05 — documento fora de rascunho (atual ou pedido) só muda com manager+.
+      const currentDocStatus = await getDirectContractDocumentStatusForOrganization(input.id, ctx.organizationId);
+      if ((currentDocStatus !== null && currentDocStatus !== "draft") || (input.data.status !== undefined && input.data.status !== "draft")) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "directContracts.documents.update");
+      }
         return await updateDirectContractDocumentForOrganization(input.id, ctx.organizationId, input.data);
       }),
   }),

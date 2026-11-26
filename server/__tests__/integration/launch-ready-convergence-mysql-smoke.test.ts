@@ -228,9 +228,12 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
         expect(payload).toContain("Órgão Sintético LRC");
         expect(payload).not.toContain(email);
         expect(payload).not.toContain("11999998888");
-        const row = (await q(`SELECT planSlug, planPrice, observacoes FROM proposal_requests WHERE id = ?`, [res.proposalId]))[0];
+        // Reenvio público não sobrescreve dados já registrados (só acrescenta observações).
+        await c.commercial.create(input(email, { responsavelTelefone: "11000000000", responsavelNome: "Outro" }));
+        const row = (await q(`SELECT planSlug, planPrice, observacoes, responsavelTelefone, responsavelNome FROM proposal_requests WHERE id = ?`, [res.proposalId]))[0];
         expect(row.planPrice).toBeNull();
         expect(row.observacoes).toBe("reenvio");
+        expect(row).toMatchObject({ responsavelTelefone: "11999998888", responsavelNome: "Responsável Teste" });
       } finally { EMAIL_CONFIG.commercialNotificationEmail = prev; }
     });
   });
@@ -307,6 +310,17 @@ describe.skipIf(!DB)("LAUNCH-READY convergência — MySQL real", { timeout: 600
       await expect((await caller(users.operator)).workspace.approveDecision({ workspaceId: "ws-x", decisionId: "d-x" })).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect((await caller(users.manager)).workspace.approveDecision({ workspaceId: "ws-x", decisionId: "d-x" })).rejects.not.toMatchObject({ code: "FORBIDDEN" });
       await expect((await caller(users.viewer)).operationRecord.registerMilestone({ referenceType: "processo", referenceId: "p-x", milestoneType: "certame" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
+    it("operator não altera contrato fora de rascunho (nem rebaixa status); altera rascunho", async () => {
+      const active = await (await caller(users.manager)).contracts.create(contractInput({ status: "active" })) as { id: number };
+      const op = await caller(users.operator);
+      await expect(op.contracts.update({ id: active.id, value: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(op.contracts.update({ id: active.id, status: "draft" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect((await q(`SELECT status, value FROM contracts WHERE id = ?`, [active.id]))[0]).toMatchObject({ status: "active" });
+      const draft = await op.contracts.create(contractInput()) as { id: number };
+      await expect(op.contracts.update({ id: draft.id, notes: "ajuste" })).resolves.toBeTruthy();
+      await expect((await caller(users.manager)).contracts.update({ id: active.id, notes: "ok" })).resolves.toBeTruthy();
     });
 
     it("tenant cruzado: manager do órgão B não altera contrato do órgão A", async () => {

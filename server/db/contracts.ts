@@ -1,6 +1,6 @@
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, type SQL } from "drizzle-orm";
 import {
-  contracts, InsertContract,
+  contracts, InsertContract, type Contract,
   contractAmendments, InsertContractAmendment,
   contractApostilles, InsertContractApostille,
   contractDocuments, InsertContractDocument,
@@ -44,9 +44,9 @@ export async function getContractByIdForOrganization(id: number, organizationId:
 export async function listContractsByOrganization(organizationId: number, filters?: { type?: string; status?: string; year?: number }) {
   const db = await getDb();
   if (!db) return [];
-  const conditions: any[] = [eq(contracts.organizationId, organizationId)];
-  if (filters?.type) conditions.push(eq(contracts.type, filters.type as any));
-  if (filters?.status) conditions.push(eq(contracts.status, filters.status as any));
+  const conditions: SQL[] = [eq(contracts.organizationId, organizationId)];
+  if (filters?.type) conditions.push(eq(contracts.type, filters.type as Contract["type"]));
+  if (filters?.status) conditions.push(eq(contracts.status, filters.status as Contract["status"]));
   if (filters?.year) conditions.push(eq(contracts.year, filters.year));
   return await db.select().from(contracts).where(and(...conditions)).orderBy(desc(contracts.createdAt));
 }
@@ -117,6 +117,17 @@ export async function listContractDocumentsForOrganization(contractId: number, o
   return await db.select().from(contractDocuments).where(eq(contractDocuments.contractId, contractId)).orderBy(desc(contractDocuments.createdAt));
 }
 
+/** LR-05 — status atual do documento, só se o contrato-pai pertence à organização (null = inexistente/outro órgão). */
+export async function getContractDocumentStatusForOrganization(id: number, organizationId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await db.select({ contractId: contractDocuments.contractId, status: contractDocuments.status })
+    .from(contractDocuments).where(eq(contractDocuments.id, id)).limit(1);
+  if (existing.length === 0) return null;
+  const parent = await getContractByIdForOrganization(existing[0].contractId, organizationId);
+  return parent ? existing[0].status : null;
+}
+
 /** Documento não referencia organizationId diretamente — resolve o contrato-pai a partir do próprio documento antes de autorizar. */
 export async function updateContractDocumentForOrganization(id: number, organizationId: number, data: Partial<InsertContractDocument>) {
   const db = await getDb();
@@ -134,7 +145,7 @@ export async function createContractAuditLog(log: InsertContractAuditLog) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.insert(contractAuditLogs).values(log);
-  return (result as any)[0]?.insertId ?? result;
+  return (result as unknown as Array<{ insertId?: number }>)[0]?.insertId ?? result;
 }
 
 export async function getContractAuditLogsForOrganization(contractId: number, organizationId: number) {
@@ -153,7 +164,7 @@ export async function getContractAuditLogsByActionForOrganization(contractId: nu
   return await db
     .select()
     .from(contractAuditLogs)
-    .where(and(eq(contractAuditLogs.contractId, contractId), eq(contractAuditLogs.action, action as any)))
+    .where(and(eq(contractAuditLogs.contractId, contractId), eq(contractAuditLogs.action, action as InsertContractAuditLog["action"])))
     .orderBy(desc(contractAuditLogs.createdAt));
 }
 

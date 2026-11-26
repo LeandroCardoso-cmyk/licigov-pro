@@ -81,7 +81,8 @@ export const ORGANIZATION_INACTIVE = "ORGANIZATION_INACTIVE";
 
 /**
  * LR-06 (LICIGOV-LAUNCH-READY) — organização desativada (`organizations.ativo = false`) é SOMENTE LEITURA para os membros do
- * órgão: nenhuma mutação de negócio (inclusive atos institucionais, que passam por aqui) prossegue; consultas e históricos
+ * órgão em TODA mutação resolvida por tenant (`tenantProcedure` e derivados, inclusive atos institucionais); rotas fora do
+ * tenant (`protectedProcedure`, uploads REST) estão no backlog do handoff. Consultas e históricos
  * continuam acessíveis (nada é apagado nem ocultado). Antes, o estado era ignorado por toda a resolução de tenant. Acesso
  * TÉCNICO do admin de plataforma (tenant explícito + auditoria fail-closed) é preservado — inclusive para reativação/licença.
  * Semântica mínima e reversível; suspensão por inadimplência ou regra contratual NÃO é inferida aqui (decisão do Owner).

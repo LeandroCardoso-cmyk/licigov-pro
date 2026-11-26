@@ -39,12 +39,21 @@ export async function findRecentPendingProposalRequest(params: {
   return rows[0]?.id ?? null;
 }
 
-/** COM-01 — reenvio de solicitação pendente: atualiza os dados informados (só enquanto `pending`). */
-export async function refreshPendingProposalRequest(id: number, data: Omit<InsertProposalRequest, "id" | "status" | "createdAt" | "updatedAt">) {
+/** COM-01 — reenvio de solicitação pendente: só ACRESCENTA observações novas (nunca sobrescreve dados registrados). */
+export async function appendPendingProposalNotes(id: number, notes: string | null | undefined) {
+  const extra = (notes ?? "").trim();
+  if (!extra) return;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const rows = await db.select({ observacoes: proposalRequests.observacoes, status: proposalRequests.status })
+    .from(proposalRequests).where(eq(proposalRequests.id, id)).limit(1);
+  const current = rows[0];
+  if (!current || current.status !== "pending") return;
+  const prev = (current.observacoes ?? "").trim();
+  if (prev.includes(extra)) return;
+  const merged = (prev ? `${prev}\n\n[Complemento] ${extra}` : extra).slice(0, 8000);
   await db.update(proposalRequests)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ observacoes: merged, updatedAt: new Date() })
     .where(and(eq(proposalRequests.id, id), eq(proposalRequests.status, "pending")));
 }
 

@@ -159,7 +159,12 @@ export const contractsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      if (input.status !== undefined && input.status !== "draft") assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.update");
+      // LR-05 — fora de rascunho (estado ATUAL ou pedido), qualquer alteração do instrumento é ato de manager+ (inclui
+      // rebaixar status ou mudar valor/vigência sem aditivo). Contrato de outro órgão ⇒ null ⇒ segue ao NOT_FOUND abaixo.
+      const currentContract = await db.getContractByIdForOrganization(input.id, ctx.organizationId);
+      if ((currentContract && currentContract.status !== "draft") || (input.status !== undefined && input.status !== "draft")) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.update");
+      }
       return audited("update", ctx, async () => {
         const { id, ...data } = input;
         const contract = await db.updateContractForOrganization(id, ctx.organizationId, data);
@@ -428,7 +433,11 @@ export const contractsRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-      if (input.status === "final") assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.documents.update");
+      // LR-05 — documento fora de rascunho (atual ou pedido) só muda com manager+.
+      const currentDocStatus = await db.getContractDocumentStatusForOrganization(input.id, ctx.organizationId);
+      if ((currentDocStatus !== null && currentDocStatus !== "draft") || (input.status !== undefined && input.status !== "draft")) {
+        assertInstitutionalRoleAtLeast(ctx, "manager", "contracts.documents.update");
+      }
         return audited("documents.update", ctx, async () => {
           const { id, ...data } = input;
           const document = await db.updateContractDocumentForOrganization(id, ctx.organizationId, data);

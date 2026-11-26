@@ -49,7 +49,8 @@ export async function resolveTenantForUser(
     .select({
       ...getTableColumns(organizationMembers),
       // LR-06 — estado do órgão na mesma consulta (subconsulta escalar parametrizada pela coluna; sem consulta adicional).
-      organizationAtivo: sql<number | null>`(select ${organizations.ativo} from ${organizations} where ${organizations.id} = ${organizationMembers.organizationId})`,
+      // Nomes QUALIFICADOS explícitos: em seleção de tabela única o drizzle remove o qualificador das colunas interpoladas (auditoria P2).
+      organizationAtivo: sql<number | null>`(select ${sql.raw("`o_lr06`.`ativo`")} from ${organizations} ${sql.raw("`o_lr06`")} where ${sql.raw("`o_lr06`.`id` = `organization_members`.`organizationId`")})`,
     })
     .from(organizationMembers)
     .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.ativo, true)));

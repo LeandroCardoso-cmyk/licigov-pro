@@ -368,6 +368,19 @@ export async function getRecentDirectContractsForOrganization(organizationId: nu
 }
 
 /** Atualiza documento-filho apenas se o contrato-pai pertence à organização. */
+/** LR-05 — status atual do documento, só se o contrato-pai pertence à organização (null = inexistente/outro órgão). */
+export async function getDirectContractDocumentStatusForOrganization(id: number, organizationId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ status: directContractDocuments.status })
+    .from(directContractDocuments)
+    .innerJoin(directContracts, eq(directContractDocuments.directContractId, directContracts.id))
+    .where(and(eq(directContractDocuments.id, id), eq(directContracts.organizationId, organizationId)))
+    .limit(1);
+  return rows[0]?.status ?? null;
+}
+
 export async function updateDirectContractDocumentForOrganization(
   id: number,
   organizationId: number,

@@ -38,6 +38,17 @@ const platformLicensingProcedure = tenantProcedure.use(async opts => {
   throw new TRPCError({ code: "FORBIDDEN", message: "O licenciamento de módulos é gerido pela administração da plataforma." });
 });
 
+/** LR-04 — data de calendário REAL (rejeita 2027-02-30, que o Date.parse aceitaria) e futura. */
+export function isFutureCalendarDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return false;
+  const ts = Date.parse(v);
+  return !Number.isNaN(ts) && ts > Date.now();
+}
+
 /** LR-04 — registro persistido de cada mutação de licença (quem, órgão, o quê), ANTES de mutar. Falha ⇒ a mutação não ocorre. */
 async function auditLicensingMutation(
   ctx: { user: { id: number }; correlationId?: string; req: { ip?: unknown } },
@@ -73,10 +84,7 @@ export const moduleLicensingRouter = router({
       code: z.enum(DOMAIN_CODES),
       plan: z.enum(PLANS).optional(),
       // LR-04 — validade explícita e coerente: data ISO (AAAA-MM-DD ou data-hora) futura; ausente = sem termo.
-      expirationDate: z.string().refine(
-        (v) => /^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v)) && Date.parse(v) > Date.now(),
-        "Validade deve ser uma data futura (AAAA-MM-DD).",
-      ).optional(),
+      expirationDate: z.string().max(30).refine(isFutureCalendarDate, "Validade deve ser uma data futura válida (AAAA-MM-DD).").optional(),
       licensedFeatures: z.array(z.string()).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
