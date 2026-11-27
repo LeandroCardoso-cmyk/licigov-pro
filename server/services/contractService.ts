@@ -884,6 +884,11 @@ export async function createAddendum(params: {
   idempotencyKey: string;
 }): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean; expiration: null; proposedEndDate: string | null }> {
   // Recusa ANTES de qualquer efeito: data inválida, data em aditivo que não é de prazo, texto longo demais.
+  // Auditoria PROMPT 08 (P2): o sufixo "término da vigência em" é RESERVADO ao campo estruturado — digitado no texto livre
+  // ele seria lido na formalização como término proposto sem ter passado pela validação de data.
+  if (/t[ée]rmino da vig[êe]ncia em/i.test(params.newTerm ?? "")) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o novo término no campo \"Novo término da vigência\" (data), não no texto do prazo. Nada foi gravado." });
+  }
   const term = composeAddendumTerm({ addendumType: params.addendumType, newTerm: params.newTerm, newEndDate: params.newEndDate });
   if (!term.ok) {
     const msg = term.issue === "END_DATE_ONLY_FOR_TERM_ADDENDUM" ? "O término da vigência só se aplica a aditivo de prazo."
@@ -918,6 +923,7 @@ export async function createAddendum(params: {
 
 export const ADDENDUM_NOT_FORMALIZABLE = "ADDENDUM_NOT_FORMALIZABLE";
 export const ADDENDUM_ALREADY_FORMALIZED = "ADDENDUM_ALREADY_FORMALIZED";
+export const ADDENDUM_LEGAL_OPINION_UNFAVORABLE = "ADDENDUM_LEGAL_OPINION_UNFAVORABLE";
 export const ADDENDUM_LEGAL_OPINION_REQUIRED = "ADDENDUM_LEGAL_OPINION_REQUIRED";
 export const ADDENDUM_TERM_REQUIRED = "ADDENDUM_TERM_REQUIRED";
 export const ADDENDUM_FORMALIZATION_CONFLICT = "ADDENDUM_FORMALIZATION_CONFLICT";
@@ -986,6 +992,7 @@ export async function formalizeAddendum(params: {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_NOT_FORMALIZABLE}: o aditivo está em "${current.status}"; só minuta/aguardando parecer podem ser formalizados.` });
       }
       const opinionRequired = addendumRequiresLegalOpinion(current.addendumType);
+      let opinionConclusion: string | null = null;
       if (opinionRequired && !legalOpinionRequestId) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: aditivo de ${current.addendumType} exige parecer jurídico concluído e vinculado ao contrato antes da formalização.` });
       }
@@ -997,6 +1004,16 @@ export async function formalizeAddendum(params: {
         if (!request || request.referenceProcessId !== ws.id || !opinion.response) {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: o parecer informado não é um parecer jurídico governado deste contrato (Parecer Jurídico, procurador designado).` });
         }
+        // Auditoria PROMPT 08 (P1): o parecer precisa ter sido SOLICITADO depois da minuta deste aditivo (um parecer anterior
+        // não examinou este aditivo) e não pode ser desfavorável. A conclusão fica registrada no evento de formalização.
+        const secs = (iso: string): number => Math.floor(Date.parse(iso) / 1000);
+        if (!(secs(request.createdAt) >= secs(current.createdAt))) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: o parecer informado foi solicitado antes da minuta deste aditivo e não o examinou. Solicite parecer sobre este aditivo.` });
+        }
+        if (opinion.response.responseStatus === "desfavoravel") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_UNFAVORABLE}: o parecer jurídico vinculado é desfavorável; a formalização não foi registrada.` });
+        }
+        opinionConclusion = opinion.response.responseStatus;
       }
       const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: "contratos", documentType: "aditivo", origin: ws.id, instrumentId: current.id });
       if (!(await getLatestByLineage(lineageId, params.organizationId))) {
@@ -1019,7 +1036,7 @@ export async function formalizeAddendum(params: {
         if (!statusOk) throw new InstrumentStatusCasMiss();
         await recordProcessEvent({
           organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: timelineActor(params.actorUserId),
-          summary: `Aditivo ${current.sequence} (${current.addendumType}) FORMALIZADO — ${documentReference}${legalOpinionRequestId ? `; parecer vinculado ${legalOpinionRequestId}` : ""}. Efeitos aplicados ao contrato (status ${plan.to}).`,
+          summary: `Aditivo ${current.sequence} (${current.addendumType}) FORMALIZADO — ${documentReference}${legalOpinionRequestId ? `; parecer vinculado ${legalOpinionRequestId} (conclusão: ${opinionConclusion})` : ""}. Efeitos aplicados ao contrato (status ${plan.to}).`,
           refId: current.id, correlationId: params.correlationId,
         }, tx);
         return { ...current, status: "finalizado" as const, documentReference, legalOpinionRequestId, updatedAt: at };

@@ -157,6 +157,8 @@ describe.skipIf(!DB)("Jornada integrada — legado, contratos, aditivos, monitor
     expect((await err(op.contractWorkspace.createAddendum(adInput)))?.code).toBe("FORBIDDEN");
     expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-adv-${RUN}`, addendumType: "valor" })))?.code).toBe("BAD_REQUEST"); // data só em aditivo de prazo
     expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-adi-${RUN}`, newEndDate: "2026-02-30" })))?.code).toBe("BAD_REQUEST");
+    // Sufixo de término RESERVADO ao campo estruturado: digitado no texto livre ⇒ recusa (seria lido como término proposto).
+    expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-ads-${RUN}`, newEndDate: undefined, newTerm: "12 meses — término da vigência em 01/01/2031" })))?.code).toBe("BAD_REQUEST");
     expect(await n("SELECT COUNT(*) n FROM contract_addenda WHERE organization_id = ? AND contract_id = ?", [ORG, cid])).toBe(2);
     expect((await expiryEvents(cid)).map((e) => e.event_date)).toContain(plusDays(45)); // recusas não mexeram na vigência
 

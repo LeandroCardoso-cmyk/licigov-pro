@@ -156,7 +156,7 @@ describe.skipIf(!DB)("SEM-084 — retry de deadlock (SEM084-A) e replay do coman
     expect(await n("SELECT COUNT(*) n FROM official_document_timeline WHERE tenant_id = ? AND lineage_id = ?", [ORG_A, lineage])).toBe(1);
     expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE process_id = ? AND event_type = 'change'", [id])).toBe(1);
     expect(await n("SELECT COUNT(*) n FROM contract_ws_documents WHERE contract_id = ? AND kind = 'aditivo'", [id])).toBe(1);
-    expect((await rows("SELECT status FROM contract_workspaces WHERE id = ?", [id]))[0].status).toBe("aditado");
+    expect((await rows("SELECT status FROM contract_workspaces WHERE id = ?", [id]))[0].status).toBe("vigente"); // PROMPT 08 / D-2: minuta sem efeito
   }, 120_000);
 
   it("B — erro que NÃO é deadlock (1205 lock wait timeout) ⇒ sem retry, erro original propagado, nada gravado", async () => {

@@ -267,6 +267,21 @@ describe.skipIf(!DB)("contractsRouter legado — isolamento multi-tenant complet
     ).rejects.toThrow(/não encontrado/i);
   }, 30_000);
 
+  it("router: amendments.create exige data de assinatura NÃO futura, comparada por DATA em Brasília (hoje vale o dia todo)", async () => {
+    const callerA = await makeCaller(userA);
+    const br = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+    const today = br(new Date());
+    const tomorrow = br(new Date(Date.now() + 24 * 3600 * 1000));
+    const base = {
+      contractId: contractA, type: "escopo" as const, scopeChanges: "Ajuste de escopo sintético.",
+      justification: "Aditivo qualitativo sintético para validar a data de assinatura do termo — justificativa longa o bastante para a validação de negócio (Art. 124 da Lei 14.133/2021).",
+    };
+    await expect(callerA.contracts.amendments.create({ ...base, number: 71 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(callerA.contracts.amendments.create({ ...base, number: 72, signedAt: new Date(`${tomorrow}T00:30:00-03:00`) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    // Assinado HOJE às 23:59 (Brasília): aceito mesmo antes desse horário — a comparação é por data, não por instante.
+    await expect(callerA.contracts.amendments.create({ ...base, number: 73, signedAt: new Date(`${today}T23:59:00-03:00`) })).resolves.toBeTruthy();
+  }, 30_000);
+
   it("router: header malicioso (organização sem membership) é rejeitado antes de qualquer query de contrato", async () => {
     const caller = await makeCaller(userA, "user", { "x-organization-id": String(ORG_B) });
     await expect(caller.contracts.list()).rejects.toThrow(/acesso/i);

@@ -163,7 +163,7 @@ export function NewAmendmentModal({
           {/* PROMPT 08 / D-2 — assinatura do termo (o registro aplica efeitos ao contrato) */}
           <div className="space-y-2">
             <Label htmlFor="signedAt">Data de assinatura do termo aditivo *</Label>
-            <Input id="signedAt" type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
+            <Input id="signedAt" type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} max={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())} required />
             <p className="text-xs text-muted-foreground">Registre aqui somente aditivo já assinado: a vigência e o valor do contrato são atualizados no registro.</p>
           </div>
 

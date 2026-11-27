@@ -110,8 +110,8 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const a = await rows<{ id: string; sequence: number; status: string }>("SELECT id, sequence, status FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
     expect(a.map((r) => r.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(new Set(a.map((r) => r.id)).size).toBe(8);
-    expect(a.every((r) => r.status === "finalizado")).toBe(true);
-    expect((await contractRow(id)).status).toBe("aditado");
+    expect(a.every((r) => r.status === "minuta")).toBe(true); // PROMPT 08 / D-2: criação registra minuta
+    expect((await contractRow(id)).status).toBe("vigente"); // sem efeito no contrato até a formalização
     // Um evento por instrumento, ids distintos, todos com o ator humano.
     const ev = await rows<{ id: string; actor: string; ref_id: string }>("SELECT id, actor, ref_id FROM process_timeline WHERE process_id = ? AND event_type = 'change'", [id]);
     expect(ev).toHaveLength(8);

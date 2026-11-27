@@ -114,10 +114,13 @@ export default function TaskDetailModal({ taskId, open, onClose }: TaskDetailMod
             onDelete={(id) => { if (confirm("Deseja realmente remover este anexo?")) deleteAttachmentMutation.mutate({ id }); }}
             onDownload={async (id) => {
               // PROMPT 08 / D-3 — URL assinada de curta duração, emitida após autorização no servidor.
+              // A janela é aberta no gesto do usuário (antes do await) para não ser barrada pelo bloqueador de pop-ups.
+              const win = window.open("", "_blank");
               try {
                 const { url } = await utils.departmentTasks.getAttachmentDownloadUrl.fetch({ attachmentId: id });
-                window.open(url, "_blank", "noopener,noreferrer");
+                if (win) { win.opener = null; win.location.href = url; } else { window.location.assign(url); }
               } catch (err) {
+                win?.close();
                 toast.error("Não foi possível baixar o anexo", { description: err instanceof Error ? err.message : undefined });
               }
             }}
