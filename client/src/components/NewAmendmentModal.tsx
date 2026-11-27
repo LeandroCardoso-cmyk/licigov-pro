@@ -39,6 +39,8 @@ export function NewAmendmentModal({
   const [type, setType] = useState<"prazo" | "valor" | "escopo" | "misto">("prazo");
   const [justification, setJustification] = useState("");
   const [newEndDate, setNewEndDate] = useState("");
+  // PROMPT 08 / D-2 — o registro aplica os efeitos: só para termo aditivo já assinado.
+  const [signedAt, setSignedAt] = useState("");
   const [valueChange, setValueChange] = useState("");
   const [scopeChange, setScopeChange] = useState("");
 
@@ -61,6 +63,7 @@ export function NewAmendmentModal({
     setType("prazo");
     setJustification("");
     setNewEndDate("");
+    setSignedAt("");
     setValueChange("");
     setScopeChange("");
     onClose();
@@ -94,7 +97,13 @@ export function NewAmendmentModal({
       return;
     }
 
+    if (!signedAt) {
+      toast.error("Informe a data de assinatura do termo aditivo");
+      return;
+    }
+
     createAmendment.mutate({
+      signedAt: new Date(`${signedAt}T12:00:00`),
       contractId,
       number: 1,
       type,
@@ -119,7 +128,7 @@ export function NewAmendmentModal({
           {/* Tipo de Aditivo */}
           <div className="space-y-2">
             <Label htmlFor="type">Tipo de Aditivo *</Label>
-            <Select value={type} onValueChange={(value: any) => setType(value)}>
+            <Select value={type} onValueChange={(value) => setType(value as typeof type)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -149,6 +158,13 @@ export function NewAmendmentModal({
             <p className="text-xs text-muted-foreground">
               Fundamentação legal e técnica para a alteração contratual
             </p>
+          </div>
+
+          {/* PROMPT 08 / D-2 — assinatura do termo (o registro aplica efeitos ao contrato) */}
+          <div className="space-y-2">
+            <Label htmlFor="signedAt">Data de assinatura do termo aditivo *</Label>
+            <Input id="signedAt" type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
+            <p className="text-xs text-muted-foreground">Registre aqui somente aditivo já assinado: a vigência e o valor do contrato são atualizados no registro.</p>
           </div>
 
           {/* Nova Data de Término (Prazo ou Misto) */}

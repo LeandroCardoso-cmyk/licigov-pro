@@ -7,7 +7,8 @@ import { ptBR } from "date-fns/locale";
 interface Attachment {
   id: number;
   fileName: string;
-  fileUrl: string;
+  /** PROMPT 08 / D-3 — o servidor não expõe URL; `false` = anexo antigo sem referência de armazenamento reconhecível. */
+  downloadable: boolean;
   fileSize?: number | null;
   uploadedAt?: Date | string | null;
 }
@@ -17,6 +18,8 @@ interface Props {
   uploadingFile: boolean;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDelete: (id: number) => void;
+  /** PROMPT 08 / D-3 — pede URL ASSINADA de curta duração (bucket privado) e abre o download. */
+  onDownload: (id: number) => void;
 }
 
 function formatFileSize(bytes: number) {
@@ -25,7 +28,7 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-export function TaskAttachments({ attachments, uploadingFile, onFileChange, onDelete }: Props) {
+export function TaskAttachments({ attachments, uploadingFile, onFileChange, onDelete, onDownload }: Props) {
   return (
     <Card>
       <CardHeader>
@@ -48,9 +51,9 @@ export function TaskAttachments({ attachments, uploadingFile, onFileChange, onDe
               </div>
             </div>
             <div className="flex gap-2">
-              <a href={a.fileUrl} download={a.fileName}>
-                <Button size="sm" variant="ghost"><Download className="h-4 w-4" /></Button>
-              </a>
+              <Button size="sm" variant="ghost" disabled={!a.downloadable} title={a.downloadable ? "Baixar" : "Anexo antigo sem referência de armazenamento"} onClick={() => onDownload(a.id)}>
+                <Download className="h-4 w-4" />
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => onDelete(a.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>

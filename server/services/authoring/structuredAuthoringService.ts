@@ -457,6 +457,7 @@ export async function generateStructuredAuthoring(input: StructuredAuthoringInpu
   const estimateInput: EstimateAuthorityInput = ctx
     ? {
         itemCount: ctx.estimate.itemCount, pricedItemCount: ctx.estimate.pricedItemCount, unpricedItemCount: ctx.estimate.unpricedItemCount,
+        contributingItemCount: ctx.estimate.contributingItemCount,
         globalTotalCents: ctx.estimate.globalTotalCents, rows: ctx.estimate.rows,
         missingPlannedQuantity: ctx.canonical?.missingPlannedQuantity.length ?? 0, hasAuthoritativeBlock: !!ctx.authoritativeBlock,
       }

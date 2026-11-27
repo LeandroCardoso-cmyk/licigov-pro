@@ -39,7 +39,7 @@ const ITEMS_BLOCK = renderAuthoritativeItemsBlock({
     estimatedTotalCents: 1234 * (i + 1) * 120 * (i + 1), confirmedCatalogCode: i % 2 ? null : "BR0461234", suggestedCatalogCode: i === 1 ? "x" : null,
     quoteCount: 3, priceBlockedReason: null,
   })),
-  globalTotalCents: 1_000_000, itemCount: DESCS.length, pricedItemCount: DESCS.length, unpricedItemCount: 0, unknownQuantityItemCount: 0, quoteCount: 12,
+  globalTotalCents: 1_000_000, itemCount: DESCS.length, pricedItemCount: DESCS.length, unpricedItemCount: 0, unknownQuantityItemCount: 0, contributingItemCount: DESCS.length, quoteCount: 12,
   fictitiousQuoteCount: 0, suspectedQuoteCount: 0, confirmedClassificationCount: 2, pendingClassificationCount: 2,
 } as unknown as AuthoritativeItemsEstimate, { quantitySource: "canonical_planned" });
 

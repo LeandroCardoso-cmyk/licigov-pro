@@ -24,8 +24,7 @@ import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
   createManualContract, ManualContractConflictError, ContractStatusConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
-  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract,
-} from "../services/contractService";
+  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract, formalizeAddendum } from "../services/contractService";
 import { validLocalDate } from "../domain/operationRecordSchedule";
 import { MAX_PRIOR_AMENDMENTS, PRIOR_AMENDMENT_TYPES } from "../domain/legacyContractContinuity";
 import { getCurrentExpirationDate } from "../db/departmentOperation";
@@ -326,7 +325,7 @@ export const contractWorkspaceRouter = router({
     // SEM084-B — chave de idempotência OBRIGATÓRIA (uma por tentativa lógica): repetir o comando converge para o MESMO aditivo.
     .input(z.object({
       contractId: z.string().min(1), addendumType: z.enum(ADDENDUM_TYPES), justification: z.string().min(1), newValue: z.number().optional(), newTerm: z.string().optional(),
-      /** Novo término da vigência (AAAA-MM-DD) — só aditivo de prazo; reagenda o vencimento e os alertas no Centro de Operações. */
+      /** Novo término PROPOSTO (AAAA-MM-DD) — só aditivo de prazo; entra no termo; vencimento/alertas mudam SÓ na formalização (D-2). */
       newEndDate: z.string().refine(validLocalDate, "Término da vigência inválido.").optional(),
       requestOrigin: z.enum(ADDENDUM_ORIGINS).optional(), idempotencyKey: z.string().trim().min(8).max(128),
     }))
@@ -335,6 +334,29 @@ export const contractWorkspaceRouter = router({
       await requireContract(input.contractId, orgId);
       return createAddendum({ organizationId: orgId, contractId: input.contractId, addendumType: input.addendumType, justification: input.justification, newValue: input.newValue, newTerm: input.newTerm, newEndDate: input.newEndDate, requestOrigin: input.requestOrigin, actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey })
         .catch(mapInstrumentStatusError);
+    }),
+
+  /**
+   * PROMPT 08 / D-2 — registra a FORMALIZAÇÃO do aditivo (termo assinado fora do sistema) e aplica os efeitos UMA vez.
+   * Piso TÉCNICO manager com membership REAL (não é a autoridade legalmente competente — PR-07/PR-18/PR-20); a formalização
+   * exige data de assinatura, referência do instrumento assinado, termo gerado e, quando exigido, parecer governado.
+   */
+  formalizeAddendum: institutionalProcedure("manager")
+    .input(z.object({
+      contractId: z.string().min(1), addendumId: z.string().min(1),
+      signedOn: z.string().refine(validLocalDate, "Data de assinatura inválida."),
+      formalizationReference: z.string().trim().min(3).max(300),
+      legalOpinionRequestId: z.string().trim().max(20).optional(),
+      idempotencyKey: z.string().trim().min(8).max(128),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireContract(input.contractId, orgId);
+      return formalizeAddendum({
+        organizationId: orgId, contractId: input.contractId, addendumId: input.addendumId, signedOn: input.signedOn,
+        formalizationReference: input.formalizationReference, legalOpinionRequestId: input.legalOpinionRequestId,
+        actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey,
+      }).catch(mapInstrumentStatusError);
     }),
 
   createApostille: institutionalProcedure("manager") // piso TÉCNICO de RBAC — não é a autoridade legalmente competente (competência: PR-07/PR-18/PR-20)

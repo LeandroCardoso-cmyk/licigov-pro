@@ -221,6 +221,15 @@ export const contractsRouter = router({
             });
           }
 
+          // PROMPT 08 / D-2 — este registro legado APLICA os efeitos (vigência/valor) no contrato: só é legítimo para termo
+          // aditivo JÁ ASSINADO. Sem data de assinatura (ou futura) ⇒ recusa antes de qualquer escrita (sem efeito antecipado).
+          if (!input.signedAt || Number.isNaN(input.signedAt.getTime()) || input.signedAt.getTime() > Date.now()) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Informe a data de assinatura do termo aditivo (não futura). O registro aplica os efeitos ao contrato e só vale para aditivo já assinado.',
+            });
+          }
+
           // 2. Buscar contrato-pai dentro da organização (NOT_FOUND se cross-tenant)
           const contract = await requireContractForOrg(input.contractId, ctx.organizationId);
 

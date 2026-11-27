@@ -35,7 +35,7 @@ import { fictitiousPriceBlocker } from "../priceGovernanceService";
 import { authorityLabel, authorityMarker, resolveAuthoritativeUpstream, type AuthoritativeUpstream, type UpstreamAuthority } from "./upstreamAuthority";
 import { sourceDigestMarkers, sourceHash, type SourceKey } from "../../domain/sourceDigests";
 import type { ProcurementCanonicalContext } from "../../domain/canonicalProcurementContext";
-import { globalEstimateLabel } from "../../../shared/estimateLabel";
+import { globalEstimateText } from "../../../shared/estimateLabel";
 
 export const AUTHORING_CONTEXT_VERSION = "authoring-context/2.0";
 
@@ -262,7 +262,8 @@ export function buildDocumentAuthoringContext(input: DocumentAuthoringInputs): D
     lines.push(undefinedQty.size > 0
       // Estimativa parcial NUNCA é apresentada como global (e a quantidade da Pesquisa nunca completa a lacuna).
       ? `- Valor estimado global: [REVISAR: ${undefinedQty.size} item(ns) sem quantidade prevista em "Itens da contratação" — estimativa não calculada; NÃO inferir quantidades]`
-      : `- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`, "");
+      // PROMPT 08 / D-5 — sem preço de referência o total é INDISPONÍVEL (texto M8), nunca "R$ 0,00".
+      : `- ${globalEstimateText(estimate).available ? globalEstimateText(estimate).text : `Valor estimado global: [REVISAR: ${globalEstimateText(estimate).text}]`}`, "");
     if (undefinedQty.size > 0) missing.push("quantidade_prevista");
   } else {
     missing.push("itens");
@@ -363,6 +364,8 @@ export function canonicalDocumentItems(
       id: it.key, description, unit: String(it.unit.value ?? ""),
       quantity: planned !== null && planned > 0 ? planned : 0,
       averagePriceCents: it.priceContext.unitReferencePriceCents ?? 0,
+      // PROMPT 08 / D-5 — ausência ≠ zero informado.
+      priceInformed: it.priceContext.unitReferencePriceCents !== null && it.priceContext.unitReferencePriceCents !== undefined,
       priceBlockedReason: it.priceContext.priceBlockedReason,
       quoteCount: evid.reduce((n, e) => n + e.quoteCount, 0),
       fictitiousQuoteCount: evid.reduce((n, e) => n + (e.fictitiousQuoteCount ?? 0), 0),

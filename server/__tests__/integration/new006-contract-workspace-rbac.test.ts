@@ -55,6 +55,7 @@ vi.mock("../../services/contractService", () => {
     registerInForceLegacyContract: vi.fn(async () => ({ workspace: h.contract, created: true, provenance: "DECLARADO" })),
     generateContractDocument: vi.fn(async () => ({ document: null, officialDocumentId: "od", recommendation: {} })),
     createAddendum: vi.fn(async () => ({ addendum: null, requiresLegalOpinion: false })),
+    formalizeAddendum: vi.fn(async () => ({ addendum: null, expiration: null, replayed: false })),
     createApostille: vi.fn(async () => null),
     registerOccurrence: vi.fn(async () => null),
     requestContractLegalOpinion: vi.fn(async () => ({ requestId: "req-1" })),
@@ -123,6 +124,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   updateContract: { contractId: DRAFT, contractor: "Novo Fornecedor", expectedUpdatedAt: REV },
   generateDocuments: { contractId: CID, kind: "contrato" },
   createAddendum: { contractId: CID, addendumType: "prazo", justification: "prorrogação", idempotencyKey: "new006-cmd-add" },
+  formalizeAddendum: { contractId: CID, addendumId: "adt-1", signedOn: "2026-11-20", formalizationReference: "Termo assinado", idempotencyKey: "new006-cmd-form" },
   createApostille: { contractId: CID, kind: "reajuste", idempotencyKey: "new006-cmd-apo" },
   registerOccurrence: { contractId: CID, description: "atraso na entrega" },
   requestLegalOpinion: { contractId: CID },
@@ -133,7 +135,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
 /** Todo efeito (serviço/escrita) que uma procedure pode disparar — tem de ficar em ZERO numa recusa. */
 const EFFECT_MOCKS = () => [
   contractService.createFromProcurement, contractService.createFromDirectProcurement, contractService.importExternalContract,
-  contractService.createManualContract, contractService.registerInForceLegacyContract, contractService.generateContractDocument, contractService.createAddendum,
+  contractService.createManualContract, contractService.registerInForceLegacyContract, contractService.generateContractDocument, contractService.createAddendum, contractService.formalizeAddendum,
   contractService.createApostille, contractService.registerOccurrence, contractService.requestContractLegalOpinion,
   contractDb.insertContractWorkspace, idem.checkIdempotency, idem.saveIdempotencyResult, idem.failIdempotencyKey,
   h.cas, h.recordProcessEvent,
@@ -181,7 +183,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
 
   it("a matriz cobre EXATAMENTE as procedures do router (nova procedure ⇒ atualizar a matriz deliberadamente)", () => {
     expect(Object.keys(CONTRACT_WORKSPACE_RBAC_MATRIX).sort()).toEqual(procedures);
-    expect(procedures).toHaveLength(16);
+    expect(procedures).toHaveLength(17); // PROMPT 08 / D-2 — + formalizeAddendum (manager, membership real)
   });
 
   it("o builder declarado no código-fonte confere com a matriz, procedure a procedure", () => {
@@ -253,16 +255,16 @@ describe("NEW-006 — comportamento por papel (router real, serviços mockados)"
     }
   }
 
-  it("viewer é recusado em TODAS as 11 mutations e aceito nas 5 leituras", () => {
+  it("viewer é recusado em TODAS as 12 mutations e aceito nas 5 leituras", () => {
     const denied = names.filter(n => !allowed("viewer", n));
     expect(denied.sort()).toEqual([
-      "createAddendum", "createApostille", "createFromDirectProcurement", "createFromProcurement", "createManual",
+      "createAddendum", "createApostille", "createFromDirectProcurement", "createFromProcurement", "createManual", "formalizeAddendum",
       "generateDocuments", "importExternalContract", "registerInForceContract", "registerOccurrence", "requestLegalOpinion", "updateContract",
     ]);
   });
 
-  it("operator é recusado exatamente em createAddendum, createApostille e registerInForceContract", () => {
-    expect(names.filter(n => !allowed("operator", n)).sort()).toEqual(["createAddendum", "createApostille", "registerInForceContract"]);
+  it("operator é recusado exatamente em createAddendum, createApostille, formalizeAddendum e registerInForceContract", () => {
+    expect(names.filter(n => !allowed("operator", n)).sort()).toEqual(["createAddendum", "createApostille", "formalizeAddendum", "registerInForceContract"]);
   });
 });
 

@@ -2,20 +2,25 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, LayoutGrid, List, Calendar as CalendarIcon, BarChart3, Download, FileSpreadsheet, Bell } from "lucide-react";
-import { BackToDashboard } from "@/components/BackToDashboard";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TaskKanban from "@/components/TaskKanban";
 import TaskList from "@/components/TaskList";
 import TaskCalendar from "@/components/TaskCalendar";
 import TaskDashboard from "@/components/TaskDashboard";
+import { CreateTaskDialog } from "@/components/task-kanban/CreateTaskDialog";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 
 export default function DepartmentManagement() {
   const [activeTab, setActiveTab] = useState("kanban");
+  // PROMPT 08 / D-1 — o botão "Nova Tarefa" abre o diálogo único de criação; viewer (somente leitura) não vê o gatilho.
+  const [createOpen, setCreateOpen] = useState(false);
+  const { hasRole } = useOrgRole();
+  const canEdit = hasRole("operator");
   
   // Mutation para exportar Excel
-  const exportExcelMutation = (trpc as any).departmentTasks.exportExcel.useMutation({
-    onSuccess: (data: any) => {
+  const exportExcelMutation = trpc.tasks.exportExcel.useMutation({
+    onSuccess: (data) => {
       const byteCharacters = atob(data.data);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
@@ -33,7 +38,7 @@ export default function DepartmentManagement() {
       window.URL.revokeObjectURL(url);
       toast.success("Relatório Excel exportado com sucesso!");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Erro ao exportar relatório", {
         description: error.message,
       });
@@ -41,8 +46,8 @@ export default function DepartmentManagement() {
   });
 
   // Mutation para exportar PDF (Markdown)
-  const exportPDFMutation = (trpc as any).departmentTasks.exportPDF.useMutation({
-    onSuccess: (data: any) => {
+  const exportPDFMutation = trpc.tasks.exportPDF.useMutation({
+    onSuccess: (data) => {
       const blob = new Blob([data.content], { type: "text/markdown" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -52,7 +57,7 @@ export default function DepartmentManagement() {
       window.URL.revokeObjectURL(url);
       toast.success("Relatório resumido exportado com sucesso!");
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast.error("Erro ao exportar relatório", {
         description: error.message,
       });
@@ -60,8 +65,8 @@ export default function DepartmentManagement() {
   });
 
   // Mutation para verificar prazos
-  const checkDeadlinesMutation = (trpc as any).departmentTasks.checkDeadlines.useMutation({
-    onSuccess: (result: any) => {
+  const checkDeadlinesMutation = trpc.tasks.checkDeadlines.useMutation({
+    onSuccess: (result) => {
       if (result.success) {
         toast.success(`Verificação concluída!`, {
           description: `${result.notificationsSent} notificação(s) enviada(s). ${result.upcomingCount} tarefa(s) próximas do prazo, ${result.overdueCount} atrasada(s).`,
@@ -70,7 +75,7 @@ export default function DepartmentManagement() {
         toast.error("Erro ao verificar prazos");
       }
     },
-    onError: (error: any) => {      toast.error("Erro ao verificar prazos", {
+    onError: (error) => {      toast.error("Erro ao verificar prazos", {
         description: error.message,
       });
     },
@@ -111,10 +116,13 @@ export default function DepartmentManagement() {
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             {exportExcelMutation.isPending ? "Exportando..." : "Excel Completo"}
           </Button>
-          <Button size="lg">
-            <Plus className="h-5 w-5 mr-2" />
-            Nova Tarefa
-          </Button>
+          {canEdit && (
+            <Button size="lg" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-5 w-5 mr-2" />
+              Nova Tarefa
+            </Button>
+          )}
+          <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} />
         </div>
       </div>
 

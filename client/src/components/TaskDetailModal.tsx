@@ -102,7 +102,7 @@ export default function TaskDetailModal({ taskId, open, onClose }: TaskDetailMod
           <TaskLinkedProcess
             taskId={task.id}
             linkedProcess={linkedProcess ?? null}
-            processes={processes as any[]}
+            processes={processes as unknown as React.ComponentProps<typeof TaskLinkedProcess>["processes"]}
             onLink={(processId) => linkProcessMutation.mutate({ taskId: task.id, processId })}
             onUnlink={() => linkProcessMutation.mutate({ taskId: task.id, processId: null })}
           />
@@ -112,6 +112,15 @@ export default function TaskDetailModal({ taskId, open, onClose }: TaskDetailMod
             uploadingFile={uploadingFile}
             onFileChange={handleFileChange}
             onDelete={(id) => { if (confirm("Deseja realmente remover este anexo?")) deleteAttachmentMutation.mutate({ id }); }}
+            onDownload={async (id) => {
+              // PROMPT 08 / D-3 — URL assinada de curta duração, emitida após autorização no servidor.
+              try {
+                const { url } = await utils.departmentTasks.getAttachmentDownloadUrl.fetch({ attachmentId: id });
+                window.open(url, "_blank", "noopener,noreferrer");
+              } catch (err) {
+                toast.error("Não foi possível baixar o anexo", { description: err instanceof Error ? err.message : undefined });
+              }
+            }}
           />
           <TaskComments
             comments={comments}

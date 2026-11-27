@@ -133,7 +133,8 @@ describe("SEM-084 — sequência alocada DENTRO da transação, sob o lock da li
     cw.status = "vigente"; cw.lockStatus = "apostilado";
     await createAddendum({ idempotencyKey: cmdKey(),  ...base, addendumType: "prazo", justification: "j" });
     const arg = cw.cas.mock.calls[0][0];
-    expect(arg).toMatchObject({ fromStatus: "apostilado", toStatus: "aditado", expectedUpdatedAt: cw.lockRevision });
+    // PROMPT 08 / D-2 — criação preparatória: o CAS preserva o status lido sob o lock (efeito só na formalização).
+    expect(arg).toMatchObject({ fromStatus: "apostilado", toStatus: "apostilado", expectedUpdatedAt: cw.lockRevision });
     expect(Date.parse(arg.updatedAt)).toBeGreaterThan(Date.parse(cw.lockRevision));
   });
 

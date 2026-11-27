@@ -21,8 +21,10 @@ import { registerExpiration, rescheduleExpiration, releaseRecordExpiration, link
 import { getCurrentExpirationDate, getOperationRecordById, listOperationRecordIdsLinkedTo } from "../db/departmentOperation";
 import {
   buildPriorAmendmentRow, composeAddendumTerm, DECLARED_OUTSIDE_SYSTEM, LEGACY_RECORD_TYPES_FOR_CONTRACT, mergeLegacyRecordFields,
-  validatePriorAmendments, type LegacyRecordTypeForContract, type PriorAmendmentInput,
+  validatePriorAmendments, extractProposedEndDate, type LegacyRecordTypeForContract, type PriorAmendmentInput,
 } from "../domain/legacyContractContinuity";
+import { getRequest as getInstitutionalRequest } from "../db/institutionalRequests";
+import { validLocalDate } from "../domain/operationRecordSchedule";
 import { timelineActor } from "../domain/timelineActor";
 import { getProcess } from "../db/procurement";
 import { getDirectProcurementWorkspace } from "../db/directProcurement";
@@ -57,7 +59,7 @@ import {
   nextAddendumSequenceUnderLock, nextApostilleSequenceUnderLock,
   insertContractWsDocument, insertContractAddendum, listContractAddenda, listContractApostilles,
   insertContractApostille, insertContractOccurrence, insertImportedContract, getContractAddendumById, getContractApostilleById,
-  findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber,
+  findManualContractByNumber, insertNewContractWorkspace, findContractByNormalizedNumber, compareAndSetAddendumFormalized,
 } from "../db/contractWorkspace";
 import {
   CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED_MESSAGE,
@@ -639,6 +641,8 @@ async function persistInstrumentWithGovernedStatus<T>(params: {
   ws: ContractWorkspace;
   instrument: ContractInstrumentKind;
   requiresLegalOpinion?: boolean;
+  /** PROMPT 08 / D-2 — registro PREPARATÓRIO: o status do contrato não muda (efeitos só na formalização). */
+  deferUntilFormalization?: boolean;
   allocateSequence: (tx: ContractWsExecutor) => Promise<number>;
   build: (c: { sequence: number; plan: InstrumentStatusChangePlan; locked: ContractWorkspace; at: string }) => InstrumentToPersist<T>;
   /** Mudança de designação (gestor/fiscal) avaliada contra o contrato LIDO SOB O LOCK. */
@@ -650,7 +654,7 @@ async function persistInstrumentWithGovernedStatus<T>(params: {
   const { ws } = params;
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível — instrumento contratual não persistido (fail-closed).");
-  const opts = { requiresLegalOpinion: params.requiresLegalOpinion };
+  const opts = { requiresLegalOpinion: params.requiresLegalOpinion, deferUntilFormalization: params.deferUntilFormalization };
   try {
     // SEM084-A — esta é a fronteira DONA da transação: deadlock (1213) ⇒ a transação INTEIRA é repetida (trava,
     // máquina de estados, sequência e revisão recalculadas sob o novo lock); qualquer outro erro segue o tratamento abaixo.
@@ -745,8 +749,10 @@ async function createAddendumInstrument(params: {
   planInstrumentStatusChange(ws.status, "aditivo", { requiresLegalOpinion });
   // R9 / SEM-084 — a sequência NÃO é calculada aqui: é alocada dentro da transação, sob o lock do contrato.
   // Os limites legais de valor/prazo do art. 125 seguem NÃO verificados (J-4, BLOCKED_LEGAL_REVIEW): nada é imposto.
+  // PROMPT 08 / D-2 — a CRIAÇÃO é preparatória: registra a minuta (ou aguarda parecer) SEM efeito contratual — status do
+  // contrato, vigência, valores e alertas permanecem os vigentes até a formalização legítima (`formalizeAddendum`).
   const { result: updated } = await persistInstrumentWithGovernedStatus({
-    ws, instrument: "aditivo", requiresLegalOpinion, actorUserId: params.actorUserId, correlationId: params.correlationId,
+    ws, instrument: "aditivo", requiresLegalOpinion, deferUntilFormalization: true, actorUserId: params.actorUserId, correlationId: params.correlationId,
     allocateSequence: (tx) => nextAddendumSequenceUnderLock(ws.id, params.organizationId, tx),
     build: ({ sequence, plan, at }) => {
       let addendum = createContractAddendum({
@@ -755,10 +761,10 @@ async function createAddendumInstrument(params: {
         requestOrigin: params.requestOrigin, correlationId: params.correlationId, createdAt: at,
       });
       addendum = advanceAddendum(addendum, "minuta", at);
-      const final = advanceAddendum(addendum, requiresLegalOpinion ? "aguardando_parecer" : "finalizado", at);
+      const final = requiresLegalOpinion ? advanceAddendum(addendum, "aguardando_parecer", at) : addendum;
       return {
         result: final, refId: final.id,
-        summary: `Aditivo ${sequence} (${params.addendumType}) — ${requiresLegalOpinion ? `requer parecer; status do contrato mantido (${plan.to}) até o parecer` : "finalizado"}.`,
+        summary: `Aditivo ${sequence} (${params.addendumType}) — minuta registrada${requiresLegalOpinion ? "; requer parecer jurídico" : ""}. Sem efeito no contrato (status ${plan.to}, vigência e valores mantidos) até a formalização.`,
         write: (tx) => insertContractAddendum(final, tx, { failOnDuplicate: true }),
       };
     },
@@ -870,13 +876,13 @@ export async function createAddendum(params: {
   organizationId: number; contractId: string; addendumType: AddendumType; justification: string;
   newValue?: number; newTerm?: string;
   /**
-   * Novo término da vigência (AAAA-MM-DD) — SÓ aditivo de prazo. Entra no texto do termo e REAGENDA o vencimento e os alertas
-   * do contrato no Centro de Operações (o calendário nunca fica com o vencimento antigo).
+   * Novo término PROPOSTO da vigência (AAAA-MM-DD) — SÓ aditivo de prazo. Entra no texto do termo; o vencimento e os alertas
+   * do Centro de Operações só são reagendados na FORMALIZAÇÃO (PROMPT 08 / D-2).
    */
   newEndDate?: string;
   requestOrigin?: AddendumRequestOrigin; correlationId: string; actorUserId: number;
   idempotencyKey: string;
-}): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean; expiration: { previousDate: string | null; newDate: string } | null }> {
+}): Promise<{ addendum: ContractAddendum; requiresLegalOpinion: boolean; resumed: boolean; expiration: null; proposedEndDate: string | null }> {
   // Recusa ANTES de qualquer efeito: data inválida, data em aditivo que não é de prazo, texto longo demais.
   const term = composeAddendumTerm({ addendumType: params.addendumType, newTerm: params.newTerm, newEndDate: params.newEndDate });
   if (!term.ok) {
@@ -888,7 +894,6 @@ export async function createAddendum(params: {
     addendumType: params.addendumType, justification: params.justification ?? "", newValue: params.newValue ?? 0,
     newTerm: term.newTerm, newEndDate: params.newEndDate ?? "", requestOrigin: params.requestOrigin ?? "contract_workspace",
   };
-  let expiration: { previousDate: string | null; newDate: string } | null = null;
   return runInstrumentCommand({
     op: "contract.createAddendum", kind: "aditivo", organizationId: params.organizationId, contractId: params.contractId,
     actorUserId: params.actorUserId, idempotencyKey: params.idempotencyKey, correlationId: params.correlationId, payload: normalized,
@@ -901,19 +906,148 @@ export async function createAddendum(params: {
       return ws;
     },
     create: (id, ws) => createAddendumInstrument({ ...params, newTerm: normalized.newTerm, id, ws }),
-    // Efeito derivado e IDEMPOTENTE (roda também na retomada): o aditivo de prazo EFETIVO (sem parecer pendente) move o vencimento.
-    settle: async (addendum) => {
-      if (!normalized.newEndDate || addendum.addendumType !== "prazo" || addendum.status !== "finalizado") return;
-      const ws = await requireContract(params.contractId, params.organizationId);
+    // PROMPT 08 / D-2 — sem `settle`: criar/retomar o comando NUNCA move vencimento, alertas ou valores (efeito só na formalização).
+    result: (addendum, flags) => ({
+      addendum, requiresLegalOpinion: addendumRequiresLegalOpinion(addendum.addendumType), resumed: flags.resumed,
+      expiration: null, proposedEndDate: extractProposedEndDate(addendum.newTerm),
+    }),
+  });
+}
+
+// ─── PROMPT 08 / D-2 — FORMALIZAÇÃO do aditivo (único ponto que aplica efeitos) ─────────────────────────────────
+
+export const ADDENDUM_NOT_FORMALIZABLE = "ADDENDUM_NOT_FORMALIZABLE";
+export const ADDENDUM_ALREADY_FORMALIZED = "ADDENDUM_ALREADY_FORMALIZED";
+export const ADDENDUM_LEGAL_OPINION_REQUIRED = "ADDENDUM_LEGAL_OPINION_REQUIRED";
+export const ADDENDUM_TERM_REQUIRED = "ADDENDUM_TERM_REQUIRED";
+export const ADDENDUM_FORMALIZATION_CONFLICT = "ADDENDUM_FORMALIZATION_CONFLICT";
+
+const todayLocalIso = (): string => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+
+/** Referência gravada no aditivo: o REGISTRO declarado do instrumento assinado (o sistema não assina nem presume assinatura). */
+export function composeFormalizationReference(signedOn: string, reference: string): string {
+  return `Formalizado — assinatura em ${signedOn.slice(8, 10)}/${signedOn.slice(5, 7)}/${signedOn.slice(0, 4)}; ${reference.trim()}`.slice(0, 500);
+}
+
+/**
+ * Registra a FORMALIZAÇÃO de um aditivo (termo assinado fora do sistema) e só então aplica os efeitos previstos: status do
+ * contrato (`aditado`, pela máquina de estados) e, no aditivo de prazo, o novo término proposto (vencimento + alertas).
+ *
+ * Exige, ANTES de qualquer efeito: aditivo do órgão/contrato em `minuta` ou `aguardando_parecer`; data de assinatura válida e
+ * não futura; referência do instrumento assinado; termo gerado na linhagem do aditivo; e — quando a regra do fluxo exige
+ * parecer (valor/quantitativo) — parecer jurídico GOVERNADO, pedido por Contratos para ESTE contrato. Gerar/exportar a minuta,
+ * emissão interna ou ter papel manager NÃO formalizam. Aditivo + status + evento numa transação (lock do contrato, CAS do
+ * aditivo e do status); vencimento reagendado depois, de forma idempotente. Replay (mesma chave) devolve o mesmo resultado;
+ * aditivo já formalizado com outra referência ⇒ CONFLICT. Efeitos aplicados UMA vez.
+ */
+export async function formalizeAddendum(params: {
+  organizationId: number; contractId: string; addendumId: string; signedOn: string; formalizationReference: string;
+  legalOpinionRequestId?: string; actorUserId: number; correlationId: string; idempotencyKey: string;
+}): Promise<{ addendum: ContractAddendum; expiration: { previousDate: string | null; newDate: string } | null; replayed: boolean }> {
+  if (!Number.isInteger(params.actorUserId) || params.actorUserId <= 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `${INSTRUMENT_COMMAND_ACTOR_REQUIRED}: a formalização exige o usuário que a registra; nada foi gravado.` });
+  }
+  const signedOn = params.signedOn.trim();
+  const reference = params.formalizationReference.trim();
+  if (!validLocalDate(signedOn) || signedOn > todayLocalIso()) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Data de assinatura inválida ou futura (use AAAA-MM-DD). Nada foi gravado." });
+  }
+  if (reference.length < 3 || reference.length > 300) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a referência do termo aditivo assinado (3 a 300 caracteres). Nada foi gravado." });
+  }
+  const documentReference = composeFormalizationReference(signedOn, reference);
+  const legalOpinionRequestId = (params.legalOpinionRequestId ?? "").trim();
+  const key = params.idempotencyKey.trim();
+  const op = "contract.formalizeAddendum";
+  const payloadHash = commandPayloadHash(op, params.organizationId, params.contractId, { addendumId: params.addendumId, documentReference, legalOpinionRequestId });
+
+  const ws = await requireContract(params.contractId, params.organizationId);
+  const current = await getContractAddendumById(params.addendumId, ws.id, params.organizationId);
+  if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Aditivo não encontrado." });
+
+  const check = await checkIdempotency(key, params.actorUserId, params.organizationId, op, payloadHash);
+  if (check.status === "completed") {
+    if (check.payloadMismatch) throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_PAYLOAD_MISMATCH}: esta chave já registrou outra formalização; nada foi gravado.` });
+    return { ...(typeof check.response === "string" ? JSON.parse(check.response) : check.response), replayed: true };
+  }
+  if (check.status === "processing") throw new TRPCError({ code: "CONFLICT", message: `${INSTRUMENT_COMMAND_IN_PROGRESS}: esta formalização já está em andamento — aguarde.` });
+
+  try {
+    let addendum = current;
+    let formalizedNow = false;
+    if (current.status === "finalizado") {
+      // Retomada de uma formalização já COMMITADA pela mesma tentativa lógica (ex.: falha depois do commit): só completa
+      // o efeito derivado idempotente. Outra referência ⇒ é outra formalização: recusa.
+      if (current.documentReference !== documentReference) {
+        throw new TRPCError({ code: "CONFLICT", message: `${ADDENDUM_ALREADY_FORMALIZED}: o aditivo ${current.sequence} já foi formalizado (${current.documentReference || "registro anterior"}); nada foi alterado.` });
+      }
+    } else {
+      if (current.status !== "minuta" && current.status !== "aguardando_parecer") {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_NOT_FORMALIZABLE}: o aditivo está em "${current.status}"; só minuta/aguardando parecer podem ser formalizados.` });
+      }
+      const opinionRequired = addendumRequiresLegalOpinion(current.addendumType);
+      if (opinionRequired && !legalOpinionRequestId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: aditivo de ${current.addendumType} exige parecer jurídico concluído e vinculado ao contrato antes da formalização.` });
+      }
+      if (legalOpinionRequestId) {
+        const [request, opinion] = await Promise.all([
+          getInstitutionalRequest(legalOpinionRequestId, params.organizationId),
+          readLegalOpinionForConsumer(legalOpinionRequestId, params.organizationId, "contratos"),
+        ]);
+        if (!request || request.referenceProcessId !== ws.id || !opinion.response) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: o parecer informado não é um parecer jurídico governado deste contrato (Parecer Jurídico, procurador designado).` });
+        }
+      }
+      const lineageId = computeLineageId({ tenantId: params.organizationId, businessDomain: "contratos", documentType: "aditivo", origin: ws.id, instrumentId: current.id });
+      if (!(await getLatestByLineage(lineageId, params.organizationId))) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_TERM_REQUIRED}: gere o termo do aditivo antes de registrar a formalização.` });
+      }
+      const db = await getDb();
+      if (!db) throw new Error("Banco de dados indisponível — formalização não registrada (fail-closed).");
+      addendum = await runTransactionWithDeadlockRetry({ label: "contract.aditivo.formalize", organizationId: params.organizationId, correlationId: params.correlationId }, () => db.transaction(async (tx) => {
+        const locked = await lockContractWorkspaceForInstrument(ws.id, params.organizationId, tx);
+        if (!locked) throw new Error("Contrato não encontrado.");
+        const plan = planInstrumentStatusChange(locked.status, "aditivo");
+        const at = nextContractRevision(locked.updatedAt);
+        const ok = await compareAndSetAddendumFormalized({
+          id: current.id, contractId: ws.id, orgId: params.organizationId, fromStatus: current.status, documentReference, legalOpinionRequestId, updatedAt: at,
+        }, tx);
+        if (!ok) throw new TRPCError({ code: "CONFLICT", message: `${ADDENDUM_FORMALIZATION_CONFLICT}: o aditivo mudou desde a leitura (outra formalização em andamento ou concluída). Recarregue.` });
+        const statusOk = await compareAndSetContractWorkspaceStatus({
+          id: ws.id, orgId: params.organizationId, fromStatus: plan.from, toStatus: plan.to, updatedAt: at, expectedUpdatedAt: locked.updatedAt,
+        }, tx);
+        if (!statusOk) throw new InstrumentStatusCasMiss();
+        await recordProcessEvent({
+          organizationId: params.organizationId, processId: ws.id, eventType: "change", actor: timelineActor(params.actorUserId),
+          summary: `Aditivo ${current.sequence} (${current.addendumType}) FORMALIZADO — ${documentReference}${legalOpinionRequestId ? `; parecer vinculado ${legalOpinionRequestId}` : ""}. Efeitos aplicados ao contrato (status ${plan.to}).`,
+          refId: current.id, correlationId: params.correlationId,
+        }, tx);
+        return { ...current, status: "finalizado" as const, documentReference, legalOpinionRequestId, updatedAt: at };
+      }));
+      formalizedNow = true;
+    }
+    // Efeito derivado IDEMPOTENTE (roda também na retomada): o aditivo de PRAZO formalizado move o vencimento para o término proposto.
+    let expiration: { previousDate: string | null; newDate: string } | null = null;
+    const proposedEndDate = addendum.addendumType === "prazo" ? extractProposedEndDate(addendum.newTerm) : null;
+    if (proposedEndDate) {
       const r = await rescheduleExpiration({
         organizationId: params.organizationId, kind: "contrato", referenceId: ws.id, title: `Contrato ${ws.contractNumber}`,
-        expirationDate: normalized.newEndDate, actor: `user:${params.actorUserId}`, correlationId: params.correlationId,
-        reason: `aditivo nº ${addendum.sequence}`,
+        expirationDate: proposedEndDate, actor: `user:${params.actorUserId}`, correlationId: params.correlationId,
+        reason: `aditivo nº ${addendum.sequence} formalizado`,
       });
       expiration = { previousDate: r.previousDate, newDate: r.newDate };
-    },
-    result: (addendum, flags) => ({ addendum, requiresLegalOpinion: addendumRequiresLegalOpinion(addendum.addendumType), resumed: flags.resumed, expiration }),
-  });
+    }
+    log.info("contract_addendum_formalized", {
+      contractId: ws.id, organizationId: params.organizationId, addendumId: addendum.id, resumed: !formalizedNow,
+      expirationRescheduled: !!expiration, actorUserId: params.actorUserId, correlationId: params.correlationId,
+    });
+    const out = { addendum, expiration, replayed: false };
+    await saveIdempotencyResult(key, params.actorUserId, params.organizationId, out);
+    return out;
+  } catch (err) {
+    await failIdempotencyKey(key, params.actorUserId, params.organizationId).catch(() => {});
+    throw err;
+  }
 }
 
 // ─── Apostilamentos ───────────────────────────────────────────────────────────
