@@ -153,6 +153,13 @@ describe.skipIf(!DB)("PROMPT 09 — integridade do aditivo: parecer vinculado, v
     expect(refs).toEqual([{ document_id: term1.id, version: term1.version }]);
     expect((await mgr.contractWorkspace.listAddendumLegalOpinions({ contractId: cid, addendumId: A.id })).map((o) => [o.requestId, o.eligible])).toEqual([[r1.requestId, false]]);
     await issueOpinion(r1.requestId, "desfavoravel");
+    // Auditoria P1 — reaproveitar o MESMO correlationId nunca reabre nem estende a solicitação já respondida.
+    const sameCorr = await caller(U.operator);
+    const first = await sameCorr.contractWorkspace.requestLegalOpinion({ contractId: cid, addendumId: B.id });
+    expect((await err(sameCorr.contractWorkspace.requestLegalOpinion({ contractId: cid, addendumId: B.id })))?.message).toMatch(/REQUEST_ALREADY_REGISTERED/);
+    expect((await rows("SELECT id FROM document_references WHERE request_id = ?", [first.requestId])).length).toBe(1);
+    const [st1] = await rows<{ status: string }>("SELECT status FROM institutional_requests WHERE id = ?", [r1.requestId]);
+    expect(st1.status).not.toBe("PENDING"); // respondida continua respondida
     expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...form, legalOpinionRequestId: r1.requestId, idempotencyKey: key("f") })))?.message).toMatch(/ADDENDUM_LEGAL_OPINION_UNFAVORABLE/);
 
     // 3) Com ressalvas: sem o registro do atendimento ⇒ recusado (nunca presumido).

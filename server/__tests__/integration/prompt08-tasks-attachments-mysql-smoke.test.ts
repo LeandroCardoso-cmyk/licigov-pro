@@ -25,7 +25,7 @@ vi.mock("../../storage", async (orig) => ({
     DELETED.push(key); STORED.delete(key); return { key, deleted: true };
   },
   // PROMPT 09 — o download confere a existência do objeto antes de assinar.
-  storageExists: async (key: string) => STORED.has(key),
+  storageObjectStatus: async (key: string) => (STORED.has(key) ? "exists" : "missing"),
 }));
 
 const DB = process.env.DATABASE_URL;

@@ -532,6 +532,9 @@ export async function generateContractDocument(params: {
   });
   const document = await insertContractWsDocument(doc);
   // RC-3 — documento oficial gerado/versionado pelo pipeline ÚNICO (Document Engine).
+  // PROMPT 09 (auditoria P2) — reconfere o congelamento IMEDIATAMENTE antes de gravar: a geração com IA leva segundos e uma
+  // formalização pode ter commitado nesse intervalo (a formalização, por sua vez, relê a versão do termo sob o lock).
+  if (instrument?.kind === "aditivo") await loadInstrumentForTerm("aditivo", ws.id, params.organizationId, instrument.data.id);
   const official = await generateOfficialDocument({
     organizationId: params.organizationId, businessDomain: "contratos",
     documentType: params.kind === "rescisao" ? "rescisao" : params.kind === "aditivo" ? "aditivo" : params.kind === "apostilamento" ? "apostilamento" : "contrato",
@@ -1014,8 +1017,8 @@ export async function formalizeAddendum(params: {
       if (current.documentReference !== documentReference) {
         throw new TRPCError({ code: "CONFLICT", message: `${ADDENDUM_ALREADY_FORMALIZED}: o aditivo ${current.sequence} já foi formalizado (${current.documentReference || "registro anterior"}); nada foi alterado.` });
       }
-      const term = await getLatestByLineage(lineageId, params.organizationId);
-      const out = { addendum: current, expiration: null, replayed: false, resumed: true, termDocument: term ? { id: term.id, version: term.version } : null };
+      // A versão formalizada está fixada no evento FORMALIZADO (trilha); a retomada não a "relê" pela última versão.
+      const out = { addendum: current, expiration: null, replayed: false, resumed: true, termDocument: null };
       await saveIdempotencyResult(key, params.actorUserId, params.organizationId, out);
       return out;
     }
@@ -1044,7 +1047,9 @@ export async function formalizeAddendum(params: {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_NOT_BOUND}: o parecer informado não foi solicitado para o aditivo ${current.sequence}. Solicite parecer sobre este aditivo.` });
       }
       // … e para a VERSÃO do termo que será formalizada.
-      if (!opinion.documents.some((d) => d.documentId === term.id && d.version === term.version)) {
+      // Exatamente UMA referência documental (a fixada na solicitação), e ela é a versão vigente — um parecer nunca "cobre"
+      // versões acrescentadas depois (auditoria PROMPT 09, P1).
+      if (opinion.documents.length !== 1 || opinion.documents[0].documentId !== term.id || opinion.documents[0].version !== term.version) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_STALE_TERM}: o parecer examinou outra versão do termo (atual: v${term.version}). Solicite parecer sobre a versão vigente.` });
       }
       const conclusion = opinion.response.responseStatus;
@@ -1285,7 +1290,7 @@ export async function listAddendumLegalOpinions(params: { organizationId: number
   return Promise.all(requests.map(async (r) => {
     const opinion = await readLegalOpinionForConsumer(r.id, params.organizationId, "contratos");
     const ref = opinion.documents.find((d) => term && d.documentId === term.id) ?? opinion.documents[0];
-    const currentTerm = !!term && opinion.documents.some((d) => d.documentId === term.id && d.version === term.version);
+    const currentTerm = !!term && opinion.documents.length === 1 && opinion.documents[0].documentId === term.id && opinion.documents[0].version === term.version;
     const conclusion = opinion.response?.responseStatus ?? null;
     return {
       requestId: r.id, requestedAt: r.createdAt, status: r.status, conclusion, governed: !!opinion.response,

@@ -5,7 +5,7 @@ import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
 import { logActivity } from "../services/activityLogService";
-import { assertStorageUsable, storageDelete, storageExists, storagePut, storageSignedUrl } from "../storage";
+import { assertStorageUsable, storageDelete, storageObjectStatus, storagePut, storageSignedUrl } from "../storage";
 import { attachmentStorageKey, TASK_ATTACHMENT_URL_TTL_SECONDS } from "../domain/taskAttachmentStorage";
 import { compensateUnreferencedObject, deleteTaskWithAttachmentObjects } from "../services/taskAttachmentStorageService";
 import { randomUUID } from "crypto";
@@ -205,7 +205,8 @@ export const departmentTasksRouter = router({
       const key = attachmentStorageKey(att.fileUrl, att.taskId);
       if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Este anexo antigo não tem referência de armazenamento reconhecível — não é possível gerar o download." });
       // PROMPT 09 — registro apontando para objeto indisponível: erro claro (não um link que falha no S3).
-      if (!(await storageExists(key))) {
+      // Só "missing" (404) vira NOT_FOUND; erro indeterminado do S3 segue para a URL assinada (não induz a apagar um registro válido).
+      if ((await storageObjectStatus(key)) === "missing") {
         authzLog.warn("task_attachment_object_missing", { organizationId: ctx.organizationId, attachmentId: att.id, taskId: att.taskId });
         throw new TRPCError({ code: "NOT_FOUND", message: "O arquivo deste anexo não está mais disponível no armazenamento. Remova o anexo e envie-o novamente." });
       }

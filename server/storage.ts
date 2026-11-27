@@ -242,6 +242,23 @@ export async function storageDelete(relKey: string): Promise<{ key: string; dele
 }
 
 /**
+ * PROMPT 09 — estado do objeto (HEAD) distinguindo AUSENTE (404/NoSuchKey/NotFound) de INDETERMINADO (rede, 403, throttling):
+ * só "missing" autoriza dizer ao usuário que o arquivo não existe mais. Nunca lança.
+ */
+export async function storageObjectStatus(relKey: string): Promise<"exists" | "missing" | "unknown"> {
+  const key = normalizeKey(relKey);
+  try {
+    const s3 = getS3();
+    await s3.send(new HeadObjectCommand({ Bucket: ENV.awsS3Bucket, Key: key }));
+    return "exists";
+  } catch (e) {
+    const err = e as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+    if (err?.name === "NotFound" || err?.name === "NoSuchKey" || err?.Code === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) return "missing";
+    return "unknown";
+  }
+}
+
+/**
  * Verifica se um objeto existe no S3 (HEAD). Retorna false em qualquer erro
  * (objeto ausente ou acesso negado), nunca lança.
  */

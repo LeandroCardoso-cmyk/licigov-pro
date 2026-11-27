@@ -81,8 +81,10 @@ describe("Formalização de aditivo — portão do parecer jurídico", () => {
     }
   });
 
-  it("parecer sobre OUTRA versão do termo ⇒ recusa", async () => {
+  it("parecer sobre OUTRA versão do termo ⇒ recusa; referência da versão vigente ACRESCENTADA depois também não vale", async () => {
     m.readLegalOpinionForConsumer.mockResolvedValue(opinion("favoravel", [{ documentId: TERM.id, version: 1 }]));
+    expect((await reason())?.message).toMatch(/ADDENDUM_LEGAL_OPINION_STALE_TERM/);
+    m.readLegalOpinionForConsumer.mockResolvedValue(opinion("favoravel", [{ documentId: TERM.id, version: 1 }, { documentId: TERM.id, version: TERM.version }]));
     expect((await reason())?.message).toMatch(/ADDENDUM_LEGAL_OPINION_STALE_TERM/);
   });
 
