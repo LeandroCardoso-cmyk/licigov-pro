@@ -24,7 +24,7 @@ import {
   createFromProcurement, createFromDirectProcurement, importExternalContract,
   createManualContract, ManualContractConflictError, ContractStatusConflictError,
   generateContractDocument, createAddendum, createApostille, registerOccurrence,
-  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract, formalizeAddendum } from "../services/contractService";
+  requestContractLegalOpinion, getContractLegalOpinion, registerInForceLegacyContract, formalizeAddendum, listAddendumLegalOpinions } from "../services/contractService";
 import { validLocalDate } from "../domain/operationRecordSchedule";
 import { MAX_PRIOR_AMENDMENTS, PRIOR_AMENDMENT_TYPES } from "../domain/legacyContractContinuity";
 import { getCurrentExpirationDate } from "../db/departmentOperation";
@@ -347,6 +347,10 @@ export const contractWorkspaceRouter = router({
       signedOn: z.string().refine(validLocalDate, "Data de assinatura inválida."),
       formalizationReference: z.string().trim().min(3).max(300),
       legalOpinionRequestId: z.string().trim().max(20).optional(),
+      // PROMPT 09 — parecer com ressalvas: registro de como foram atendidas (declaração de quem formaliza).
+      reservationsAddressed: z.string().trim().max(1000).optional(),
+      // PROMPT 09 — confirmação explícita quando o término proposto é ANTERIOR ao vencimento vigente (redução de prazo).
+      termReductionConfirmed: z.boolean().optional(),
       idempotencyKey: z.string().trim().min(8).max(128),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -355,6 +359,7 @@ export const contractWorkspaceRouter = router({
       return formalizeAddendum({
         organizationId: orgId, contractId: input.contractId, addendumId: input.addendumId, signedOn: input.signedOn,
         formalizationReference: input.formalizationReference, legalOpinionRequestId: input.legalOpinionRequestId,
+        reservationsAddressed: input.reservationsAddressed, termReductionConfirmed: input.termReductionConfirmed,
         actorUserId: ctx.user.id, correlationId: ctx.correlationId, idempotencyKey: input.idempotencyKey,
       }).catch(mapInstrumentStatusError);
     }),
@@ -387,12 +392,25 @@ export const contractWorkspaceRouter = router({
     }),
 
   requestLegalOpinion: orgRoleProcedure("operator")
-    .input(z.object({ contractId: z.string().min(1), requestType: z.enum(OPINION_TYPES).optional(), documents: z.array(z.object({ documentId: z.string(), title: z.string().optional(), version: z.number().optional() })).optional() }))
+    .input(z.object({
+      contractId: z.string().min(1), requestType: z.enum(OPINION_TYPES).optional(),
+      documents: z.array(z.object({ documentId: z.string(), title: z.string().optional(), version: z.number().optional() })).optional(),
+      // PROMPT 09 — parecer sobre UM aditivo: o servidor vincula o aditivo e a versão vigente do termo (documents ignorado).
+      addendumId: z.string().min(1).max(20).optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const orgId = ctx.organizationId!;
       await requireContract(input.contractId, orgId);
-      const { requestId } = await requestContractLegalOpinion({ organizationId: orgId, contractId: input.contractId, requestType: input.requestType ?? "LEGAL_OPINION_INITIAL", requestedBy: ctx.user.id, documents: input.documents, correlationId: ctx.correlationId });
+      const { requestId } = await requestContractLegalOpinion({ organizationId: orgId, contractId: input.contractId, requestType: input.requestType ?? "LEGAL_OPINION_INITIAL", requestedBy: ctx.user.id, documents: input.addendumId ? undefined : input.documents, addendumId: input.addendumId, correlationId: ctx.correlationId });
       return { requestId, status: "aguardando_parecer" as const };
+    }),
+
+  listAddendumLegalOpinions: tenantProcedure
+    .input(z.object({ contractId: z.string().min(1), addendumId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const orgId = ctx.organizationId!;
+      await requireContract(input.contractId, orgId);
+      return listAddendumLegalOpinions({ organizationId: orgId, contractId: input.contractId, addendumId: input.addendumId });
     }),
 
   getLegalOpinion: tenantProcedure

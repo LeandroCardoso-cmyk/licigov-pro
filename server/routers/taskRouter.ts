@@ -7,7 +7,6 @@ import {
   getTaskByIdForOrganization,
   listTasksForOrganization,
   updateTaskForOrganization,
-  deleteTaskForOrganization,
   updateTaskStatusForOrganization,
   getTaskStatsForOrganization,
   getOverdueTasksForOrganization,
@@ -15,6 +14,7 @@ import {
 import { generateTasksExcelReport, generateTasksPDFContent } from "../services/taskReports";
 import { checkTaskDeadlines, getTaskDeadlineSummary } from "../services/taskNotifications";
 import { serviceLogger } from "../services/observabilityService";
+import { deleteTaskWithAttachmentObjects } from "../services/taskAttachmentStorageService";
 
 const authzLog = serviceLogger("taskRouter");
 
@@ -178,7 +178,8 @@ export const taskRouter = router({
         });
       }
 
-      const ok = await deleteTaskForOrganization(input.id, ctx.organizationId);
+      // PROMPT 09 — mesmo ponto único de exclusão do departmentTasks (objetos dos anexos tratados; nada órfão silencioso).
+      const { deleted: ok } = await deleteTaskWithAttachmentObjects({ taskId: input.id, organizationId: ctx.organizationId, userId: ctx.user.id });
 
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {

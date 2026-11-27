@@ -20,7 +20,7 @@ import {
   insertOperationRecord, insertOperationalEvent, insertOperationalMilestone,
   countOperationalTimeline, insertOperationalTimelineEntry, upsertPublicationRecord,
   setOperationRecordSchedule, insertManualOperationalEvent, transitionOperationRecordLifecycle,
-  getCurrentExpirationDate, replaceExpirationEvents, linkOperationRecordReference,
+  getCurrentExpirationDate, replaceExpirationEvents, linkOperationRecordReference, type OperationExecutor,
 } from "../db/departmentOperation";
 import { COMPLETION_REASON_MAX, type LifecycleAction } from "../domain/operationRecordLifecycle";
 import { serviceLogger } from "./observabilityService";
@@ -28,12 +28,12 @@ import { serviceLogger } from "./observabilityService";
 const log = serviceLogger("OperationRecordService");
 
 /** Registra um evento na timeline operacional (append-only), calculando a ordem. */
-async function recordTimeline(params: { organizationId: number; actor: string; action: string; referenceType?: string; referenceId?: string; summary: string; correlationId: string }): Promise<void> {
-  const order = await countOperationalTimeline(params.organizationId);
+async function recordTimeline(params: { organizationId: number; actor: string; action: string; referenceType?: string; referenceId?: string; summary: string; correlationId: string }, executor?: OperationExecutor): Promise<void> {
+  const order = await countOperationalTimeline(params.organizationId, executor);
   await insertOperationalTimelineEntry(createOperationalTimelineEntry({
     organizationId: params.organizationId, order, actor: params.actor, action: params.action,
     referenceType: params.referenceType, referenceId: params.referenceId, summary: params.summary, correlationId: params.correlationId,
-  }));
+  }), executor);
 }
 
 /** Cadastro Rápido / registro manual (legado ou externo). Parte ou processo completo. */
@@ -152,21 +152,23 @@ export async function registerExpiration(params: {
 export async function rescheduleExpiration(params: {
   organizationId: number; kind: "contrato" | "aditivo" | "ata"; referenceId: string; title: string;
   expirationDate: string; actor: string; correlationId: string; reason: string;
-}): Promise<{ previousDate: string | null; newDate: string; changed: boolean }> {
+}, executor?: OperationExecutor): Promise<{ previousDate: string | null; newDate: string; changed: boolean }> {
+  // PROMPT 09 — `executor` (transação do chamador): vencimento, alertas e timeline gravados ATOMICAMENTE com o efeito
+  // contratual que os origina (ex.: formalização de aditivo de prazo). Ausente ⇒ comportamento anterior.
   if (!validLocalDate(params.expirationDate)) throw new Error("Término de vigência inválido.");
-  const previousDate = await getCurrentExpirationDate(params.organizationId, params.kind, params.referenceId);
+  const previousDate = await getCurrentExpirationDate(params.organizationId, params.kind, params.referenceId, executor);
   const events = createExpirationEvents({
     organizationId: params.organizationId, kind: params.kind, referenceId: params.referenceId, title: params.title,
     expirationDate: params.expirationDate, correlationId: params.correlationId,
   });
-  await replaceExpirationEvents({ organizationId: params.organizationId, referenceType: params.kind, referenceId: params.referenceId, events });
+  await replaceExpirationEvents({ organizationId: params.organizationId, referenceType: params.kind, referenceId: params.referenceId, events }, executor);
   const changed = previousDate !== params.expirationDate;
   if (changed) {
     await recordTimeline({
       organizationId: params.organizationId, actor: params.actor, action: "vigencia_reagendada", referenceType: params.kind, referenceId: params.referenceId,
       summary: `Vigência de ${params.title} ${previousDate ? `reagendada de ${previousDate} para ${params.expirationDate}` : `agendada para ${params.expirationDate}`} (${params.reason}); vencimento e alertas (90/60/30/15/7d) regenerados.`,
       correlationId: params.correlationId,
-    });
+    }, executor);
   }
   return { previousDate, newDate: params.expirationDate, changed };
 }

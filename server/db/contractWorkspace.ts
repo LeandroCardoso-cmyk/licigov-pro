@@ -389,6 +389,20 @@ export async function listContractAddenda(contractId: string, orgId: number): Pr
 }
 
 /**
+ * PROMPT 09 — outro aditivo do contrato que já consome este parecer (formalizado com ele). Lido com o executor da transação
+ * da formalização, DEPOIS do lock do contrato: duas formalizações concorrentes com o mesmo parecer são serializadas.
+ */
+export async function findAddendumUsingLegalOpinion(p: { contractId: string; orgId: number; legalOpinionRequestId: string; excludeId: string }, executor?: ContractWsExecutor): Promise<{ id: string; sequence: number } | null> {
+  const db = executor ?? await getDb();
+  if (!db || !p.legalOpinionRequestId) return null;
+  const rows = await db.select({ id: contractAddendaTable.id, sequence: contractAddendaTable.sequence }).from(contractAddendaTable).where(and(
+    eq(contractAddendaTable.contractId, p.contractId), eq(contractAddendaTable.organizationId, p.orgId),
+    eq(contractAddendaTable.legalOpinionRequestId, p.legalOpinionRequestId), ne(contractAddendaTable.id, p.excludeId),
+  )).limit(1);
+  return rows[0] ?? null;
+}
+
+/**
  * SEM084-B — um aditivo pelo id, escopado por órgão E contrato (outro órgão/contrato ⇒ null). Usado para
  * reconhecer o instrumento já criado por uma tentativa anterior do MESMO comando (id derivado da chave de idempotência).
  */

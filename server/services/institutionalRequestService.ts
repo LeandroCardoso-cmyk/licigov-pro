@@ -87,6 +87,8 @@ export async function requestInstitutionalReview(params: {
   destinationDomain: BusinessDomainCode;
   requestType: RequestType;
   referenceProcessId: string;
+  /** PROMPT 09 — documento/instrumento específico examinado (ex.: id do aditivo). Opcional; vazio ⇒ processo inteiro. */
+  referenceDocumentId?: string;
   title: string;
   description?: string;
   priority?: RequestPriority;
@@ -101,7 +103,7 @@ export async function requestInstitutionalReview(params: {
   // 1) Cria e encaminha (NEW → PENDING)
   const created = createInstitutionalRequest({
     organizationId: params.organizationId, sourceDomain: params.sourceDomain, destinationDomain: params.destinationDomain,
-    requestType: params.requestType, referenceProcessId: params.referenceProcessId, title: params.title,
+    requestType: params.requestType, referenceProcessId: params.referenceProcessId, referenceDocumentId: params.referenceDocumentId, title: params.title,
     description: params.description, priority: params.priority, requestedBy: params.requestedBy, correlationId: params.correlationId,
   });
   await insertRequest(created);

@@ -84,7 +84,9 @@ export function createInstitutionalRequest(params: {
   createdAt?: string;
 }): InstitutionalRequest {
   const id = createHash("sha256")
-    .update(`ireq:${params.organizationId}:${params.sourceDomain}:${params.destinationDomain}:${params.requestType}:${params.referenceProcessId}:${params.correlationId}`)
+    // PROMPT 09 — o documento/instrumento examinado entra na identidade QUANDO informado (ids antigos, sem ele, inalterados):
+    // duas solicitações para aditivos diferentes nunca colapsam na mesma linha (o upsert as fundiria em silêncio).
+    .update(`ireq:${params.organizationId}:${params.sourceDomain}:${params.destinationDomain}:${params.requestType}:${params.referenceProcessId}:${params.correlationId}${params.referenceDocumentId ? `:doc:${params.referenceDocumentId}` : ""}`)
     .digest("hex").slice(0, 20);
   const ts = params.createdAt ?? new Date().toISOString();
   return {

@@ -69,7 +69,7 @@ describe("SEC-037 · departmentTasks.addAttachment", () => {
     // Gravou no S3 com chave interna segura sob tasks/<taskId>/
     expect(storageModule.storagePut).toHaveBeenCalledTimes(1);
     const s3Key = vi.mocked(storageModule.storagePut).mock.calls[0][0];
-    expect(s3Key).toMatch(/^tasks\/10\/\d+_nota\.pdf$/);
+    expect(s3Key).toMatch(/^tasks\/10\/\d+_[0-9a-f]{8}_nota\.pdf$/); // PROMPT 09 — sufixo aleatório (sem colisão)
     // Persistiu de forma tenant-scoped, com a org do contexto
     expect(db.createTaskAttachmentForOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 10, fileName: "nota.pdf", uploadedBy: mockUser.id }),

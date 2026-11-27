@@ -60,6 +60,7 @@ vi.mock("../../services/contractService", () => {
     registerOccurrence: vi.fn(async () => null),
     requestContractLegalOpinion: vi.fn(async () => ({ requestId: "req-1" })),
     getContractLegalOpinion: vi.fn(async () => ({ response: null, documents: [] })),
+    listAddendumLegalOpinions: vi.fn(async () => []),
   };
 });
 
@@ -129,6 +130,7 @@ const VALID_INPUT: Record<ContractWorkspaceProcedureName, unknown> = {
   registerOccurrence: { contractId: CID, description: "atraso na entrega" },
   requestLegalOpinion: { contractId: CID },
   getLegalOpinion: { requestId: "req-1" },
+  listAddendumLegalOpinions: { contractId: CID, addendumId: "adt-1" },
   proposeInheritance: { sourceType: "processo_licitatorio", sourceId: "p-1" },
 };
 
@@ -183,7 +185,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
 
   it("a matriz cobre EXATAMENTE as procedures do router (nova procedure ⇒ atualizar a matriz deliberadamente)", () => {
     expect(Object.keys(CONTRACT_WORKSPACE_RBAC_MATRIX).sort()).toEqual(procedures);
-    expect(procedures).toHaveLength(17); // PROMPT 08 / D-2 — + formalizeAddendum (manager, membership real)
+    expect(procedures).toHaveLength(18); // PROMPT 08 / D-2 — + formalizeAddendum (manager, membership real); PROMPT 09 — + listAddendumLegalOpinions (leitura)
   });
 
   it("o builder declarado no código-fonte confere com a matriz, procedure a procedure", () => {
@@ -195,7 +197,7 @@ describe("NEW-006 — matriz RBAC congelada do contractWorkspaceRouter", () => {
     }
     // Nenhuma mutation ficou em tenantProcedure.
     const tenantDecls = [...src.matchAll(/\n  (\w+): tenantProcedure\b/g)].map(m => m[1]).sort();
-    expect(tenantDecls).toEqual(["getLegalOpinion", "listContracts", "listImported", "loadContract", "proposeInheritance"]);
+    expect(tenantDecls).toEqual(["getLegalOpinion", "listAddendumLegalOpinions", "listContracts", "listImported", "loadContract", "proposeInheritance"]);
   });
 
   it("todas as mutations exigem pelo menos operator; as leituras seguem tenantProcedure", () => {
