@@ -6,12 +6,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  getContractWorkspace: vi.fn(), getContractAddendumById: vi.fn(), getRequest: vi.fn(), readLegalOpinionForConsumer: vi.fn(),
+  getContractWorkspace: vi.fn(), getContractAddendumById: vi.fn(), listContractAddenda: vi.fn(), getRequest: vi.fn(), readLegalOpinionForConsumer: vi.fn(),
   getLatestByLineage: vi.fn(), checkIdempotency: vi.fn(), failIdempotencyKey: vi.fn(), getDb: vi.fn(),
 }));
 vi.mock("../../db/contractWorkspace", async (orig) => ({
   ...(await orig<typeof import("../../db/contractWorkspace")>()),
-  getContractWorkspace: m.getContractWorkspace, getContractAddendumById: m.getContractAddendumById,
+  getContractWorkspace: m.getContractWorkspace, getContractAddendumById: m.getContractAddendumById, listContractAddenda: m.listContractAddenda,
 }));
 vi.mock("../../db/institutionalRequests", async (orig) => ({ ...(await orig<typeof import("../../db/institutionalRequests")>()), getRequest: m.getRequest }));
 vi.mock("../../services/institutionalRequestService", async (orig) => ({
@@ -39,6 +39,7 @@ beforeEach(() => {
   m.getRequest.mockResolvedValue({ id: "req-1", referenceProcessId: "ctw-synthetic", createdAt: "2026-11-20T11:00:00.000Z" });
   m.readLegalOpinionForConsumer.mockResolvedValue(opinion("favoravel"));
   m.getLatestByLineage.mockResolvedValue(null);
+  m.listContractAddenda.mockResolvedValue([{ id: "add-synthetic", sequence: 1, legalOpinionRequestId: "" }]);
   m.checkIdempotency.mockResolvedValue({ status: "new" });
   m.failIdempotencyKey.mockResolvedValue(undefined);
 });
@@ -79,5 +80,17 @@ describe("Formalização de aditivo — portão do parecer jurídico", () => {
     m.getRequest.mockResolvedValue({ id: "req-1", referenceProcessId: "ctw-synthetic", createdAt: "2026-11-20T11:00:00.000Z" });
     m.readLegalOpinionForConsumer.mockResolvedValue({ response: null, institutionalResponse: { responseStatus: "favoravel" } });
     expect((await reason())?.message).toMatch(/ADDENDUM_LEGAL_OPINION_REQUIRED/);
+  });
+
+  it("conclusão fora da allow-list (ex.: informativo) ⇒ recusa", async () => {
+    m.readLegalOpinionForConsumer.mockResolvedValue(opinion("informativo"));
+    expect((await reason())?.message).toMatch(/ADDENDUM_LEGAL_OPINION_UNFAVORABLE/);
+  });
+
+  it("parecer já vinculado a OUTRO aditivo do contrato ⇒ recusa (um parecer examina um aditivo)", async () => {
+    m.listContractAddenda.mockResolvedValue([{ id: "add-synthetic", sequence: 2, legalOpinionRequestId: "" }, { id: "add-outro", sequence: 1, legalOpinionRequestId: "req-1" }]);
+    const e = await reason();
+    expect(e).toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(e?.message).toMatch(/já está vinculado ao aditivo 1/);
   });
 });

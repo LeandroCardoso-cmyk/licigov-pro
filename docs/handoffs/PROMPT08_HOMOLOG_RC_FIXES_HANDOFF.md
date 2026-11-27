@@ -15,7 +15,8 @@
 - **D-2** — criação registra **minuta** (ou `aguardando_parecer`) sem efeito no contrato; o novo término fica no termo como PROPOSTA.
   Novo comando `contractWorkspace.formalizeAddendum` (manager, membership real, idempotente, CAS, transação única): exige termo
   gerado, data de assinatura não futura (Brasília) e referência; aditivo de valor/quantitativo exige parecer jurídico **governado**,
-  do mesmo contrato, **solicitado após a minuta** e **não desfavorável** (conclusão registrada no evento). Efeitos aplicados uma vez;
+  do mesmo contrato, **solicitado após a minuta**, com conclusão **favorável ou com ressalvas** (allow-list; registrada no evento)
+  e **não vinculado a outro aditivo**. Efeitos aplicados uma vez;
   vencimento reagendado só na formalização. Sufixo "término da vigência em" reservado ao campo estruturado.
   Registro legado (`contracts.amendments.create`) exige data de assinatura não futura, comparada por data em Brasília, depois do
   isolamento por organização.
@@ -35,5 +36,5 @@ Não alterado nem excluído. Recomendação: manter como registro histórico do 
 criação), anotado no dossiê de homologação; nenhuma correção retroativa. Rehomologar D-2 com um aditivo novo.
 
 ## 5. Backlog (P2)
-Término pode recuar em relação à vigência atual (validar na formalização); id do parecer digitado à mão (seletor); exclusão de
+Vínculo do parecer ao aditivo por `referenceDocumentId` (hoje: tempo + não reutilização; corrida entre duas formalizações simultâneas com o mesmo parecer); término pode recuar em relação à vigência atual (validar na formalização); id do parecer digitado à mão (seletor); exclusão de
 tarefa não atômica entre S3 e banco; corrida upload/exclusão; versionamento do bucket (delete marker).

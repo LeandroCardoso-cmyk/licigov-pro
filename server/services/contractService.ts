@@ -1010,8 +1010,14 @@ export async function formalizeAddendum(params: {
         if (!(secs(request.createdAt) >= secs(current.createdAt))) {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: o parecer informado foi solicitado antes da minuta deste aditivo e não o examinou. Solicite parecer sobre este aditivo.` });
         }
-        if (opinion.response.responseStatus === "desfavoravel") {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_UNFAVORABLE}: o parecer jurídico vinculado é desfavorável; a formalização não foi registrada.` });
+        // Allow-list (não deny-list): só conclusão favorável ou com ressalvas destrava a formalização.
+        if (opinion.response.responseStatus !== "favoravel" && opinion.response.responseStatus !== "com_ressalvas") {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_UNFAVORABLE}: o parecer jurídico vinculado não é favorável (conclusão: ${opinion.response.responseStatus}); a formalização não foi registrada.` });
+        }
+        // Um parecer examina UM aditivo: já vinculado a outro aditivo deste contrato ⇒ recusa.
+        const reused = (await listContractAddenda(ws.id, params.organizationId)).find((x) => x.id !== current.id && x.legalOpinionRequestId === legalOpinionRequestId);
+        if (reused) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${ADDENDUM_LEGAL_OPINION_REQUIRED}: o parecer informado já está vinculado ao aditivo ${reused.sequence}; solicite parecer sobre este aditivo.` });
         }
         opinionConclusion = opinion.response.responseStatus;
       }
