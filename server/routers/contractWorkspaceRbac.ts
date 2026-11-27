@@ -136,6 +136,10 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     classes: ["READ"], oldBuilder: "tenantProcedure", minRole: null,
     rationale: "Leitura escopada por organização.", sideEffects: [],
   },
+  listAddendumLegalOpinions: {
+    classes: ["READ"], oldBuilder: "tenantProcedure", minRole: null,
+    rationale: "PROMPT 09 — leitura dos pareceres solicitados para um aditivo (seleção na formalização); escopo do tenant e do contrato.", sideEffects: [],
+  },
 } as const satisfies Record<string, ContractWorkspaceRbacEntry>;
 
 export type ContractWorkspaceProcedureName = keyof typeof CONTRACT_WORKSPACE_RBAC_MATRIX;

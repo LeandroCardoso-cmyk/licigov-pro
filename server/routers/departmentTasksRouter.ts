@@ -5,8 +5,10 @@ import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
 import { logActivity } from "../services/activityLogService";
-import { assertStorageUsable, storageDelete, storagePut, storageSignedUrl } from "../storage";
+import { assertStorageUsable, storageDelete, storageObjectStatus, storagePut, storageSignedUrl } from "../storage";
 import { attachmentStorageKey, TASK_ATTACHMENT_URL_TTL_SECONDS } from "../domain/taskAttachmentStorage";
+import { compensateUnreferencedObject, deleteTaskWithAttachmentObjects } from "../services/taskAttachmentStorageService";
+import { randomUUID } from "crypto";
 import {
   MAX_TASK_ATTACHMENT_BASE64_CHARS,
   isAllowedTaskAttachmentMime,
@@ -103,20 +105,8 @@ export const departmentTasksRouter = router({
   delete: orgRoleProcedure("operator")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      // PROMPT 08 / D-3 — a exclusão da tarefa remove antes os objetos dos anexos (só chaves da própria tarefa); falha ⇒ nada é
-      // excluído (a tarefa e os registros ficam; repetir é seguro — `DeleteObject` é idempotente).
-      const attachments = await db.listTaskAttachmentsForOrganization(input.id, ctx.organizationId);
-      for (const a of attachments) {
-        const key = attachmentStorageKey(a.fileUrl, a.taskId);
-        if (!key) continue;
-        try {
-          await storageDelete(key);
-        } catch {
-          authzLog.error("task_delete_attachment_storage_failed", { organizationId: ctx.organizationId, taskId: input.id, attachmentId: a.id });
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível remover os arquivos anexados. A tarefa foi mantida; tente novamente." });
-        }
-      }
-      const ok = await db.deleteTaskForOrganization(input.id, ctx.organizationId);
+      // PROMPT 08 / D-3 + PROMPT 09 — exclusão consistente com o S3 (ponto único; ver taskAttachmentStorageService).
+      const { deleted: ok } = await deleteTaskWithAttachmentObjects({ taskId: input.id, organizationId: ctx.organizationId, userId: ctx.user.id });
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.delete",
@@ -214,6 +204,12 @@ export const departmentTasksRouter = router({
       }
       const key = attachmentStorageKey(att.fileUrl, att.taskId);
       if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Este anexo antigo não tem referência de armazenamento reconhecível — não é possível gerar o download." });
+      // PROMPT 09 — registro apontando para objeto indisponível: erro claro (não um link que falha no S3).
+      // Só "missing" (404) vira NOT_FOUND; erro indeterminado do S3 segue para a URL assinada (não induz a apagar um registro válido).
+      if ((await storageObjectStatus(key)) === "missing") {
+        authzLog.warn("task_attachment_object_missing", { organizationId: ctx.organizationId, attachmentId: att.id, taskId: att.taskId });
+        throw new TRPCError({ code: "NOT_FOUND", message: "O arquivo deste anexo não está mais disponível no armazenamento. Remova o anexo e envie-o novamente." });
+      }
       const { url } = await storageSignedUrl(key, TASK_ATTACHMENT_URL_TTL_SECONDS, att.fileName);
       return { url, expiresInSeconds: TASK_ATTACHMENT_URL_TTL_SECONDS };
     }),
@@ -270,7 +266,8 @@ export const departmentTasksRouter = router({
       // sem path traversal). Em produção/staging o storage é obrigatório.
       assertStorageUsable();
       const safeName = sanitizeAttachmentFileName(input.fileName);
-      const s3Key = `tasks/${input.taskId}/${Date.now()}_${safeName}`;
+      // PROMPT 09 — sufixo aleatório: dois uploads simultâneos com o mesmo nome nunca compartilham o objeto.
+      const s3Key = `tasks/${input.taskId}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
       const { key } = await storagePut(s3Key, buffer, input.mimeType);
 
       // (4) Persistência tenant-scoped + (5) compensação se a gravação falhar.
@@ -288,13 +285,13 @@ export const departmentTasksRouter = router({
           ctx.organizationId,
         );
       } catch (err) {
-        await storageDelete(key).catch(() => {});
+        await compensateUnreferencedObject({ organizationId: ctx.organizationId, userId: ctx.user.id, taskId: input.taskId, s3Key: key, reason: "attachment_insert_failed" });
         throw err;
       }
       if (attachmentId === null) {
         // A tarefa deixou de pertencer à organização entre as checagens: remove o
         // objeto recém-gravado para não deixar arquivo órfão.
-        await storageDelete(key).catch(() => {});
+        await compensateUnreferencedObject({ organizationId: ctx.organizationId, userId: ctx.user.id, taskId: input.taskId, s3Key: key, reason: "task_gone_before_insert" });
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.addAttachment",
           organizationId: ctx.organizationId,

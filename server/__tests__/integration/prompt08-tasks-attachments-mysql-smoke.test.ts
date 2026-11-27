@@ -24,6 +24,8 @@ vi.mock("../../storage", async (orig) => ({
     if (failNextDelete) { failNextDelete = false; throw Object.assign(new Error("S3 indisponível (simulado)"), { name: "ServiceUnavailable" }); }
     DELETED.push(key); STORED.delete(key); return { key, deleted: true };
   },
+  // PROMPT 09 — o download confere a existência do objeto antes de assinar.
+  storageObjectStatus: async (key: string) => (STORED.has(key) ? "exists" : "missing"),
 }));
 
 const DB = process.env.DATABASE_URL;
@@ -128,7 +130,7 @@ describe.skipIf(!DB)("PROMPT 08 — tarefas e anexos (MySQL real)", { timeout: 6
       const up = await op.departmentTasks.addAttachment({ taskId, fileName: "evidencia.png", fileBase64: PNG.toString("base64"), mimeType: "image/png" });
       attId = up.id as number;
       const row = (await q("SELECT fileUrl FROM task_attachments WHERE id = ?", [attId]))[0];
-      expect(row.fileUrl).toMatch(new RegExp(`^tasks/${taskId}/\\d+_evidencia\\.png$`));
+      expect(row.fileUrl).toMatch(new RegExp(`^tasks/${taskId}/\\d+_[0-9a-f]{8}_evidencia\\.png$`)); // PROMPT 09: sufixo aleatório
       key = row.fileUrl;
       const list = await (await caller(U.viewer)).departmentTasks.listAttachments({ taskId });
       expect(list[0]).toMatchObject({ id: attId, downloadable: true });
@@ -141,6 +143,7 @@ describe.skipIf(!DB)("PROMPT 08 — tarefas e anexos (MySQL real)", { timeout: 6
 
     it("anexo LEGADO com URL pública resolve a chave da própria tarefa; chave de OUTRO recurso nunca é assinada", async () => {
       const legacyKey = `tasks/${taskId}/123_antigo.pdf`;
+      STORED.set(legacyKey, Buffer.from("%PDF-1.4"));
       const [l] = await conn.execute<mysql.ResultSetHeader>("INSERT INTO task_attachments (taskId, fileName, fileUrl, fileSize, uploadedBy) VALUES (?, 'antigo.pdf', ?, 10, ?)",
         [taskId, `https://bucket.s3.sa-east-1.amazonaws.com/${legacyKey}`, U.operator]);
       await (await caller(U.operator)).departmentTasks.getAttachmentDownloadUrl({ attachmentId: l.insertId });
@@ -182,6 +185,62 @@ describe.skipIf(!DB)("PROMPT 08 — tarefas e anexos (MySQL real)", { timeout: 6
       await op.departmentTasks.delete({ id: t });
       expect(STORED.has(k)).toBe(false);
       expect((await q("SELECT COUNT(*) n FROM tasks WHERE id = ?", [t]))[0].n).toBe(0);
+    });
+
+    // ─── PROMPT 09 / Frente D ─────────────────────────────────────────────────────────────────────────────────────────
+    it("registro apontando para objeto INDISPONÍVEL ⇒ NOT_FOUND claro no download (nenhuma URL assinada para objeto ausente)", async () => {
+      const op = await caller(U.operator);
+      const t = (await op.departmentTasks.create({ title: "Objeto ausente" })).taskId;
+      const up = await op.departmentTasks.addAttachment({ taskId: t, fileName: "x.png", fileBase64: PNG.toString("base64"), mimeType: "image/png" });
+      const k = (await q("SELECT fileUrl FROM task_attachments WHERE id = ?", [up.id]))[0].fileUrl;
+      STORED.delete(k); // objeto removido fora do fluxo (ex.: retenção/limpeza do bucket)
+      const signedBefore = SIGNED.length;
+      const e = await err(op.departmentTasks.getAttachmentDownloadUrl({ attachmentId: up.id as number }));
+      expect(e).toMatchObject({ code: "NOT_FOUND", message: expect.stringContaining("não está mais disponível") });
+      expect(SIGNED.length).toBe(signedBefore);
+    });
+
+    it("upload CONCORRENTE com a exclusão da tarefa: nunca sobra registro pendurado nem objeto sem tratamento", async () => {
+      const op = await caller(U.operator);
+      for (let i = 0; i < 6; i++) {
+        const t = (await op.departmentTasks.create({ title: `Corrida ${i}` })).taskId;
+        await op.departmentTasks.addAttachment({ taskId: t, fileName: "base.png", fileBase64: PNG.toString("base64"), mimeType: "image/png" });
+        const [up, del] = await Promise.allSettled([
+          (await caller(U.colleague)).departmentTasks.addAttachment({ taskId: t, fileName: "novo.png", fileBase64: PNG.toString("base64"), mimeType: "image/png" }),
+          op.departmentTasks.delete({ id: t }),
+        ]);
+        expect(del.status).toBe("fulfilled");
+        if (up.status === "rejected") expect((up.reason as { code?: string }).code).toBe("NOT_FOUND"); // tarefa já excluída
+        expect((await q("SELECT COUNT(*) n FROM tasks WHERE id = ?", [t]))[0].n).toBe(0);
+        expect((await q("SELECT COUNT(*) n FROM task_attachments WHERE taskId = ?", [t]))[0].n).toBe(0);
+        const leftovers = [...STORED.keys()].filter((k) => k.startsWith(`tasks/${t}/`));
+        const inventoried = await q<{ details: string }>("SELECT details FROM activity_logs WHERE organizationId = ? AND action = 'task.attachment_storage_orphan' AND entityId = ?", [ORG, t]);
+        expect(leftovers.every((k) => inventoried.some((r) => String(r.details).includes(k)))).toBe(true);
+        expect(leftovers).toEqual([]); // com o S3 disponível, nada sobra
+      }
+    }, 120_000);
+
+    it("objeto que não pôde ser removido nem ficou referenciado ⇒ inventário DURÁVEL (activity_log), nunca silencioso", async () => {
+      const { compensateUnreferencedObject } = await import("../../services/taskAttachmentStorageService");
+      const k = `tasks/424242/${Date.now()}_deadbeef_orfao.png`;
+      STORED.set(k, PNG);
+      failNextDelete = true;
+      await compensateUnreferencedObject({ organizationId: ORG, userId: U.operator, taskId: 424242, s3Key: k, reason: "attachment_insert_failed" });
+      expect(STORED.has(k)).toBe(true);
+      const rows = await q<{ details: string }>("SELECT details FROM activity_logs WHERE organizationId = ? AND action = 'task.attachment_storage_orphan' AND entityId = 424242", [ORG]);
+      expect(rows.map((r) => String(r.details))).toEqual([expect.stringContaining(k)]);
+      STORED.delete(k);
+    });
+
+    it("exclusão da tarefa com registro legado de OUTRO recurso: objeto alheio intocado, registro inventariado", async () => {
+      const op = await caller(U.operator);
+      const t = (await op.departmentTasks.create({ title: "Legado alheio" })).taskId;
+      await conn.execute("INSERT INTO task_attachments (taskId, fileName, fileUrl, fileSize, uploadedBy) VALUES (?, 'alheio.pdf', ?, 10, ?)",
+        [t, "https://bucket.s3.sa-east-1.amazonaws.com/tasks/999998/1_alheio.pdf", U.operator]);
+      const deletedBefore = DELETED.length;
+      await op.departmentTasks.delete({ id: t });
+      expect(DELETED.length).toBe(deletedBefore);
+      expect((await q("SELECT COUNT(*) n FROM activity_logs WHERE organizationId = ? AND action = 'task.attachment_storage_orphan' AND entityId = ? AND details LIKE '%storage_key_unresolved_on_task_delete%'", [ORG, t]))[0].n).toBe(1);
     });
   });
 });

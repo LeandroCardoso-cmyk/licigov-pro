@@ -165,9 +165,17 @@ export async function createDocument(params: CreateDocumentParams, executor?: Of
   if (executor) return persist(executor);        // transação externa: o retry de deadlock é da FRONTEIRA do chamador
   // SEM084-A — transação PRÓPRIA: se o InnoDB a desfizer por deadlock (alocação de versão concorrente entre
   // linhagens do mesmo órgão), repete a transação INTEIRA (GET_LOCK + versão recalculada + INSERT + timeline).
+  //
+  // PROMPT 09 / Frente C — READ COMMITTED nesta transação PRÓPRIA. Causa comprovada (SHOW ENGINE INNODB STATUS) da falha
+  // intermitente com N aditivos concorrentes: em REPEATABLE READ o `MAX(version) … FOR UPDATE` de uma linhagem SEM linhas
+  // (1ª versão) toma GAP LOCK no índice do tenant; duas linhagens novas do mesmo órgão seguram o mesmo gap e cada INSERT
+  // espera a "insert intention" bloqueada pelo gap do outro ⇒ deadlock em cascata (3 tentativas esgotadas). O gap lock não
+  // protege nada aqui: a serialização da numeração vem do GET_LOCK por linhagem + leitura com lock que ESPERA a linha não
+  // commitada da mesma linhagem (vale em READ COMMITTED) + PK determinística (tenant, linhagem, versão) que transforma
+  // qualquer colisão residual em erro, nunca em sobrescrita. Transação externa (executor) mantém o nível do chamador.
   return runTransactionWithDeadlockRetry(
     { label: "official_document.create", organizationId: params.organizationId, correlationId: params.correlationId },
-    () => db!.transaction(async (tx) => persist(tx)),
+    () => db!.transaction(async (tx) => persist(tx), { isolationLevel: "read committed" }),
   );
 }
 

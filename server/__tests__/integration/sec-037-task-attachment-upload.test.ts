@@ -57,8 +57,8 @@ function validInput(overrides: Record<string, unknown> = {}) {
 describe("SEC-037 · departmentTasks.addAttachment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.getTaskByIdForOrganization).mockResolvedValue(mockTask as any);
-    vi.mocked(db.createTaskAttachmentForOrganization).mockResolvedValue(101 as any);
+    vi.mocked(db.getTaskByIdForOrganization).mockResolvedValue(mockTask as unknown as Awaited<ReturnType<typeof db.getTaskByIdForOrganization>>);
+    vi.mocked(db.createTaskAttachmentForOrganization).mockResolvedValue(101);
   });
 
   it("faz upload autorizado: grava no S3 (chave tasks/) e persiste tenant-scoped", async () => {
@@ -69,7 +69,7 @@ describe("SEC-037 · departmentTasks.addAttachment", () => {
     // Gravou no S3 com chave interna segura sob tasks/<taskId>/
     expect(storageModule.storagePut).toHaveBeenCalledTimes(1);
     const s3Key = vi.mocked(storageModule.storagePut).mock.calls[0][0];
-    expect(s3Key).toMatch(/^tasks\/10\/\d+_nota\.pdf$/);
+    expect(s3Key).toMatch(/^tasks\/10\/\d+_[0-9a-f]{8}_nota\.pdf$/); // PROMPT 09 — sufixo aleatório (sem colisão)
     // Persistiu de forma tenant-scoped, com a org do contexto
     expect(db.createTaskAttachmentForOrganization).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 10, fileName: "nota.pdf", uploadedBy: mockUser.id }),
@@ -110,7 +110,7 @@ describe("SEC-037 · departmentTasks.addAttachment", () => {
   });
 
   it("bloqueia tarefa de outro tenant (NOT_FOUND) SEM gravar no S3", async () => {
-    vi.mocked(db.getTaskByIdForOrganization).mockResolvedValue(undefined as any);
+    vi.mocked(db.getTaskByIdForOrganization).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof db.getTaskByIdForOrganization>>);
     const caller = departmentTasksRouter.createCaller(makeContext(mockUser));
 
     await expect(caller.addAttachment(validInput())).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -120,7 +120,7 @@ describe("SEC-037 · departmentTasks.addAttachment", () => {
   });
 
   it("compensa (remove o objeto do S3) se a persistência retornar null — sem órfão", async () => {
-    vi.mocked(db.createTaskAttachmentForOrganization).mockResolvedValue(null as any);
+    vi.mocked(db.createTaskAttachmentForOrganization).mockResolvedValue(null);
     const caller = departmentTasksRouter.createCaller(makeContext(mockUser));
 
     await expect(caller.addAttachment(validInput())).rejects.toMatchObject({ code: "NOT_FOUND" });

@@ -106,7 +106,9 @@ describe.skipIf(!DB)("SW-C1 — instrumentos contratuais: sequência atômica, g
     const api = await caller(U.manager, ORG_A);
     const results = await Promise.allSettled(Array.from({ length: 8 }, (_, i) =>
       api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: i % 2 ? "prazo" : "qualitativo", justification: `Aditivo concorrente ${i}`, newTerm: `${18 + i} meses` })));
-    expect(results.map((r) => (r.status === "rejected" ? String((r.reason as Error).message) : "ok"))).toEqual(Array(8).fill("ok"));
+    // PROMPT 09 / Frente C — a mensagem COMPLETA de cada rejeição vai no relatório (antes era truncada no diff).
+    const rejected = results.flatMap((r, i) => (r.status === "rejected" ? [`#${i}: ${String((r.reason as Error)?.message ?? r.reason)}`] : []));
+    expect(rejected, rejected.join(" | ")).toEqual([]);
     const a = await rows<{ id: string; sequence: number; status: string }>("SELECT id, sequence, status FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
     expect(a.map((r) => r.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(new Set(a.map((r) => r.id)).size).toBe(8);

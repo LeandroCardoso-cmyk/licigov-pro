@@ -37,17 +37,28 @@ const ADDENDUM_STATUS_LABELS: Record<string, string> = {
  * PROMPT 08 / D-2 — registro da formalização: data de assinatura + referência do termo assinado (+ parecer, quando exigido).
  * O texto do botão corresponde exatamente à ação; o sistema não assina nem presume assinatura.
  */
+const CONCLUSION_LABELS: Record<string, string> = { favoravel: "favorável", com_ressalvas: "com ressalvas", desfavoravel: "desfavorável" };
+
 function FormalizeAddendumForm({ contractId, addendum }: { contractId: string; addendum: { id: string; addendumType: string; sequence: number } }) {
   const utils = trpc.useUtils();
   const [open, setOpen] = React.useState(false);
   const [signedOn, setSignedOn] = React.useState("");
   const [reference, setReference] = React.useState("");
   const [opinionId, setOpinionId] = React.useState("");
+  const [reservations, setReservations] = React.useState("");
+  const [confirmReduction, setConfirmReduction] = React.useState(false);
   const { key, rotate } = useIdempotencyKey();
   const needsOpinion = addendum.addendumType === "valor" || addendum.addendumType === "quantitativo";
+  // PROMPT 09 — pareceres SOLICITADOS PARA ESTE aditivo (o servidor vincula aditivo + versão do termo); sem digitar id.
+  const opinions = trpc.contractWorkspace.listAddendumLegalOpinions.useQuery({ contractId, addendumId: addendum.id }, { enabled: open && needsOpinion });
+  const requestOpinion = trpc.contractWorkspace.requestLegalOpinion.useMutation({
+    onSuccess: () => { void opinions.refetch(); },
+  });
+  const selected = opinions.data?.find((o) => o.requestId === opinionId) ?? null;
   const formalize = trpc.contractWorkspace.formalizeAddendum.useMutation({
     onSuccess: () => { rotate(); setOpen(false); void utils.contractWorkspace.loadContract.invalidate({ contractId }); },
   });
+  const reductionAsked = /ADDENDUM_TERM_REDUCTION_UNCONFIRMED/.test(formalize.error?.message ?? "");
   if (!open) {
     return <button type="button" onClick={() => setOpen(true)} className="text-[11px] font-medium text-indigo-700 underline dark:text-indigo-300">Registrar formalização</button>;
   }
@@ -57,16 +68,47 @@ function FormalizeAddendumForm({ contractId, addendum }: { contractId: string; a
       data-testid="addendum-formalize-form"
       onSubmit={(e) => {
         e.preventDefault();
-        formalize.mutate({ contractId, addendumId: addendum.id, signedOn, formalizationReference: reference, legalOpinionRequestId: opinionId.trim() || undefined, idempotencyKey: key });
+        formalize.mutate({
+          contractId, addendumId: addendum.id, signedOn, formalizationReference: reference,
+          legalOpinionRequestId: opinionId || undefined,
+          reservationsAddressed: selected?.conclusion === "com_ressalvas" ? reservations : undefined,
+          termReductionConfirmed: confirmReduction || undefined, idempotencyKey: key,
+        });
       }}
     >
       <label className="block text-[11px] text-foreground">Data de assinatura do termo
         <input type="date" required value={signedOn} onChange={(e) => setSignedOn(e.target.value)} className="mt-0.5 w-full rounded border border-border px-1 py-0.5 text-xs" />
       </label>
       <input required value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Referência do termo assinado (nº/processo)" className="w-full rounded border border-border px-1 py-0.5 text-xs" />
-      {needsOpinion && <input required value={opinionId} onChange={(e) => setOpinionId(e.target.value)} placeholder="Solicitação de parecer vinculada" className="w-full rounded border border-border px-1 py-0.5 text-xs" />}
-      <p className="text-[10px] text-muted-foreground">Ao registrar, o aditivo {addendum.sequence} passa a produzir efeitos no contrato (status e, se de prazo, vigência e alertas).</p>
-      <button type="submit" disabled={formalize.isPending || !signedOn || reference.trim().length < 3} className="w-full rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
+      {needsOpinion && (
+        <div className="space-y-1" data-testid="addendum-opinion-select">
+          <label className="block text-[11px] text-foreground">Parecer jurídico deste aditivo
+            <select required value={opinionId} onChange={(e) => setOpinionId(e.target.value)} className="mt-0.5 w-full rounded border border-border px-1 py-0.5 text-xs">
+              <option value="">{opinions.isLoading ? "Carregando…" : "Selecione o parecer"}</option>
+              {(opinions.data ?? []).map((o) => (
+                <option key={o.requestId} value={o.requestId} disabled={!o.eligible}>
+                  {`${o.requestId} — ${o.conclusion ? CONCLUSION_LABELS[o.conclusion] ?? o.conclusion : "aguardando parecer"}${o.termVersion ? ` (termo v${o.termVersion}${o.currentTerm ? "" : ", versão anterior"})` : ""}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={() => requestOpinion.mutate({ contractId, addendumId: addendum.id })} disabled={requestOpinion.isPending} className="text-[11px] font-medium text-indigo-700 underline disabled:text-muted-foreground dark:text-indigo-300">
+            {requestOpinion.isPending ? "Solicitando…" : "Solicitar parecer sobre este aditivo"}
+          </button>
+          {requestOpinion.error && <p role="alert" className="text-[11px] text-red-700 dark:text-red-300">{requestOpinion.error.message}</p>}
+        </div>
+      )}
+      {selected?.conclusion === "com_ressalvas" && (
+        <textarea required minLength={10} value={reservations} onChange={(e) => setReservations(e.target.value)} rows={2} placeholder="Como as ressalvas do parecer foram atendidas" className="w-full rounded border border-border px-1 py-0.5 text-xs" />
+      )}
+      {reductionAsked && (
+        <label className="flex items-start gap-1 text-[11px] text-foreground">
+          <input type="checkbox" checked={confirmReduction} onChange={(e) => setConfirmReduction(e.target.checked)} />
+          Confirmar redução de prazo (o novo término é anterior ao vencimento atual)
+        </label>
+      )}
+      <p className="text-[10px] text-muted-foreground">Ao registrar, o aditivo {addendum.sequence} passa a produzir efeitos no contrato (status e, se de prazo, vigência e alertas). O termo formalizado não é regerado.</p>
+      <button type="submit" disabled={formalize.isPending || !signedOn || reference.trim().length < 3 || (needsOpinion && !opinionId)} className="w-full rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
         {formalize.isPending ? "Registrando…" : "Registrar formalização"}
       </button>
       {formalize.error && <p role="alert" className="text-[11px] text-red-700 dark:text-red-300">{formalize.error.message}</p>}

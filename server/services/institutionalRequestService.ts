@@ -28,7 +28,11 @@ import {
   type ResponseStatus,
   type SignatureMethod,
 } from "../domain/institutionalResponse";
+import { TRPCError } from "@trpc/server";
 import { createRequestAssignment } from "../domain/requestAssignment";
+
+/** PROMPT 09 — solicitação vinculada a documento já registrada com a mesma identidade (nunca reaberta/estendida). */
+export const REQUEST_ALREADY_REGISTERED = "REQUEST_ALREADY_REGISTERED";
 import { createRequestNotification } from "../domain/requestNotification";
 import { createDocumentReference } from "../domain/documentReference";
 import { createRequestTimelineEntry, type RequestEventType } from "../domain/requestTimeline";
@@ -87,6 +91,8 @@ export async function requestInstitutionalReview(params: {
   destinationDomain: BusinessDomainCode;
   requestType: RequestType;
   referenceProcessId: string;
+  /** PROMPT 09 — documento/instrumento específico examinado (ex.: id do aditivo). Opcional; vazio ⇒ processo inteiro. */
+  referenceDocumentId?: string;
   title: string;
   description?: string;
   priority?: RequestPriority;
@@ -101,9 +107,15 @@ export async function requestInstitutionalReview(params: {
   // 1) Cria e encaminha (NEW → PENDING)
   const created = createInstitutionalRequest({
     organizationId: params.organizationId, sourceDomain: params.sourceDomain, destinationDomain: params.destinationDomain,
-    requestType: params.requestType, referenceProcessId: params.referenceProcessId, title: params.title,
+    requestType: params.requestType, referenceProcessId: params.referenceProcessId, referenceDocumentId: params.referenceDocumentId, title: params.title,
     description: params.description, priority: params.priority, requestedBy: params.requestedBy, correlationId: params.correlationId,
   });
+  // PROMPT 09 (auditoria P1) — solicitação vinculada a um documento/instrumento é IMUTÁVEL quanto ao vínculo: a mesma identidade
+  // (mesmo correlationId reaproveitado) nunca reabre nem acrescenta referências a uma solicitação já registrada — o upsert
+  // faria voltar a PENDING uma solicitação respondida e anexaria outra versão do documento a um parecer que não a examinou.
+  if (params.referenceDocumentId && await getRequest(created.id, params.organizationId)) {
+    throw new TRPCError({ code: "CONFLICT", message: `${REQUEST_ALREADY_REGISTERED}: esta solicitação já foi registrada (identificador de correlação reaproveitado). Nada foi alterado; envie uma nova solicitação.` });
+  }
   await insertRequest(created);
   await recordEvent({ request: created, eventType: "created", actor: String(params.requestedBy), summary: `Solicitação "${created.title}" criada (${created.requestType}).`, refId: created.id });
 

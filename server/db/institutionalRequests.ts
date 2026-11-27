@@ -49,6 +49,20 @@ export async function insertRequest(r: InstitutionalRequest): Promise<Institutio
   return r;
 }
 
+/**
+ * PROMPT 09 — solicitações de um domínio de origem vinculadas a um DOCUMENTO/INSTRUMENTO específico (`referenceDocumentId`)
+ * dentro de um processo/contrato. Escopo do tenant; ordem cronológica.
+ */
+export async function listRequestsByReferenceDocument(orgId: number, sourceDomain: string, referenceProcessId: string, referenceDocumentId: string): Promise<InstitutionalRequest[]> {
+  const db = await getDb();
+  if (!db || !referenceDocumentId) return [];
+  const rows = await db.select().from(institutionalRequestsTable).where(and(
+    eq(institutionalRequestsTable.organizationId, orgId), eq(institutionalRequestsTable.sourceDomain, sourceDomain),
+    eq(institutionalRequestsTable.referenceProcessId, referenceProcessId), eq(institutionalRequestsTable.referenceDocumentId, referenceDocumentId),
+  )).orderBy(asc(institutionalRequestsTable.createdAt), asc(institutionalRequestsTable.id));
+  return rows.map(rowToRequest);
+}
+
 function rowToRequest(r: typeof institutionalRequestsTable.$inferSelect): InstitutionalRequest {
   return {
     id: r.id, organizationId: r.organizationId, sourceDomain: r.sourceDomain as BusinessDomainCode,
