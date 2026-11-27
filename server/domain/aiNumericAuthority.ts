@@ -9,6 +9,7 @@
  *    `[REVISAR: valor não conferido com o quadro do sistema]` — a IA não cria autoridade numérica.
  */
 import { formatBRL } from "./money";
+import { ESTIMATE_UNAVAILABLE_TEXT, ESTIMATE_NO_QUANTITY_TEXT } from "../../shared/estimateLabel";
 
 export const ESTIMATE_SECTION_KEY = "estimativa_valor";
 export const UNVERIFIED_AMOUNT_MARK = "[REVISAR: valor não conferido com o quadro do sistema]";
@@ -46,6 +47,8 @@ export interface EstimateAuthorityInput {
   readonly rows: ReadonlyArray<{ readonly averagePriceCents: number; readonly estimatedTotalCents: number }>;
   /** Há itens sem quantidade prevista (estimativa não calculável). */
   readonly missingPlannedQuantity: number;
+  /** PROMPT 08 / D-5 — itens que compõem o total (preço válido E quantidade). Ausente ⇒ não verificado aqui. */
+  readonly contributingItemCount?: number;
   /** O documento traz o quadro autoritativo? (TR sempre; ETP no modo canônico). */
   readonly hasAuthoritativeBlock: boolean;
 }
@@ -68,6 +71,13 @@ export function serverEstimateProse(e: EstimateAuthorityInput): string {
   }
   if (e.missingPlannedQuantity > 0) {
     return `[REVISAR: ${e.missingPlannedQuantity} item(ns) sem quantidade prevista — a estimativa global não foi calculada; nenhum valor foi inferido.]`;
+  }
+  // PROMPT 08 / D-5 — nenhum item com preço de referência válido ⇒ estimativa INDISPONÍVEL (texto M8); nunca "R$ 0,00".
+  if (e.pricedItemCount <= 0) {
+    return `[REVISAR: ${ESTIMATE_UNAVAILABLE_TEXT} — nenhum valor foi inferido.]`;
+  }
+  if (e.contributingItemCount !== undefined && e.contributingItemCount <= 0) {
+    return `[REVISAR: ${ESTIMATE_NO_QUANTITY_TEXT} — nenhum valor foi inferido.]`;
   }
   const where = e.hasAuthoritativeBlock ? " Os valores unitários e totais por item constam do quadro autoritativo deste documento." : "";
   const unpriced = e.unpricedItemCount > 0 ? ` [REVISAR: ${e.unpricedItemCount} item(ns) sem preço de referência não entram no total.]` : "";

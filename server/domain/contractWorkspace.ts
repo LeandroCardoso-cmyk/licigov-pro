@@ -161,7 +161,9 @@ export type ContractInstrumentKind = keyof typeof INSTRUMENT_CONTRACT_STATUS;
  *               transição institucional explícita, proposta em docs/design/CONTRACT_ACTIVATION_TRANSITION.md);
  *  - encerrado, rescindido, arquivado — nenhum admite aditado/apostilado na máquina; nunca reabrem.
  */
-export type InstrumentStatusChangeMode = "machine" | "unchanged" | "deferred_pending_legal_opinion";
+/** `deferred_pending_formalization` (PROMPT 08 / D-2): o instrumento foi REGISTRADO em preparação (minuta) — nenhum efeito
+ *  contratual até a formalização legítima (`formalizeAddendum`). */
+export type InstrumentStatusChangeMode = "machine" | "unchanged" | "deferred_pending_legal_opinion" | "deferred_pending_formalization";
 
 export interface InstrumentStatusChangePlan {
   readonly from: ContractStatus;
@@ -175,11 +177,12 @@ export interface InstrumentStatusChangePlan {
 export function planInstrumentStatusChange(
   from: ContractStatus,
   instrument: ContractInstrumentKind,
-  opts: { readonly requiresLegalOpinion?: boolean } = {},
+  opts: { readonly requiresLegalOpinion?: boolean; readonly deferUntilFormalization?: boolean } = {},
 ): InstrumentStatusChangePlan {
   const instrumentStatus: ContractStatus = INSTRUMENT_CONTRACT_STATUS[instrument];
   const admissible = from === instrumentStatus || canContractTransition(from, instrumentStatus);
   if (!admissible) throw new ContractStatusTransitionError(from, instrumentStatus);
+  if (opts.deferUntilFormalization === true) return { from, to: from, instrumentStatus, mode: "deferred_pending_formalization" };
   if (opts.requiresLegalOpinion === true) return { from, to: from, instrumentStatus, mode: "deferred_pending_legal_opinion" };
   if (from === instrumentStatus) return { from, to: from, instrumentStatus, mode: "unchanged" };
   return { from, to: instrumentStatus, instrumentStatus, mode: "machine" };

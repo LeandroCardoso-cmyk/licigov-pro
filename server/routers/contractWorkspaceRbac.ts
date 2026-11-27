@@ -108,9 +108,14 @@ export const CONTRACT_WORKSPACE_RBAC_MATRIX = {
     sideEffects: ["AI (orchestrateMultiCopilot → AIExecutionEngine)", "contract_ws_documents", "official_documents (status gerado)", "official_document_timeline", "process_timeline"],
   },
   createAddendum: {
-    classes: ["INSTRUMENT_CREATION", "STATE_CHANGE", "OFFICIAL_DECISION"], oldBuilder: "tenantProcedure", minRole: "manager", requiresRealMembership: true,
-    rationale: "Além da minuta, MUDA o status institucional do contrato para 'aditado' (main: updateContractWorkspaceStatus direto; PR-08: via máquina de estados, ainda mudando o status) e finaliza automaticamente aditivo de prazo/qualitativo ('finalizado'). Piso manager até draft e decisão serem separados.",
-    sideEffects: ["contract_addenda", "AI (minuta do aditivo)", "contract_ws_documents", "official_documents", "contract_workspaces.status → aditado", "process_timeline"],
+    classes: ["INSTRUMENT_CREATION"], oldBuilder: "tenantProcedure", minRole: "manager", requiresRealMembership: true,
+    rationale: "PROMPT 08 / D-2 — PREPARATÓRIO: registra o aditivo em minuta (ou aguardando parecer) e gera o termo; NÃO muda status, vigência, valores nem alertas do contrato (efeitos só em formalizeAddendum). Piso manager mantido (sem afrouxar o piso vigente).",
+    sideEffects: ["contract_addenda (minuta/aguardando_parecer)", "AI (minuta do aditivo)", "contract_ws_documents", "official_documents", "process_timeline", "idempotency_keys"],
+  },
+  formalizeAddendum: {
+    classes: ["STATE_CHANGE", "OFFICIAL_DECISION"], oldBuilder: null, minRole: "manager", requiresRealMembership: true,
+    rationale: "PROMPT 08 / D-2 — REGISTRO da formalização (termo assinado fora do sistema: data + referência; parecer governado quando exigido; termo gerado). Único ponto que aplica efeitos: contrato → 'aditado' (máquina de estados) e, no prazo, vencimento/alertas. CAS do aditivo e do status, idempotente, auditado.",
+    sideEffects: ["contract_addenda (→ finalizado, documentReference, legalOpinionRequestId)", "contract_workspaces.status → aditado", "process_timeline", "operational_events/operational_timeline (aditivo de prazo)", "idempotency_keys"],
   },
   createApostille: {
     classes: ["INSTRUMENT_CREATION", "STATE_CHANGE"], oldBuilder: "tenantProcedure", minRole: "manager", requiresRealMembership: true,

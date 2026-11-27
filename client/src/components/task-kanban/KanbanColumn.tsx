@@ -15,9 +15,11 @@ interface Props {
   column: Column;
   tasks: Task[];
   onTaskClick: (taskId: number) => void;
+  /** PROMPT 08 / D-1 — cria tarefa já no status da coluna; ausente (viewer) ⇒ sem botão. */
+  onCreateTask?: (status: TaskStatus) => void;
 }
 
-export function KanbanColumn({ column, tasks, onTaskClick }: Props) {
+export function KanbanColumn({ column, tasks, onTaskClick, onCreateTask }: Props) {
   const taskIds = tasks.map((t) => t.id);
 
   return (
@@ -41,10 +43,12 @@ export function KanbanColumn({ column, tasks, onTaskClick }: Props) {
         </div>
       </SortableContext>
 
-      <Button variant="ghost" size="sm" className="mt-3 w-full justify-start text-xs">
-        <Plus className="h-4 w-4 mr-1" />
-        Nova tarefa
-      </Button>
+      {onCreateTask && (
+        <Button variant="ghost" size="sm" className="mt-3 w-full justify-start text-xs" onClick={() => onCreateTask(column.id)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Nova tarefa
+        </Button>
+      )}
     </div>
   );
 }

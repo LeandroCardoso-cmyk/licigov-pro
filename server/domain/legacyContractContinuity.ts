@@ -51,6 +51,18 @@ export function composeAddendumTerm(params: { addendumType: string; newTerm?: st
   return composed.length > ADDENDUM_TERM_MAX ? { ok: false, issue: "TERM_TOO_LONG" } : { ok: true, newTerm: composed };
 }
 
+/**
+ * PROMPT 08 / D-2 — inverso de `composeAddendumTerm`: o novo término PROPOSTO gravado no texto do prazo do aditivo
+ * ("… término da vigência em DD/MM/AAAA"). Só o sufixo composto pelo servidor é reconhecido; data inválida ⇒ null.
+ * Sem migration: o término proposto vive no próprio termo e só produz efeito na formalização.
+ */
+export function extractProposedEndDate(newTerm: string): string | null {
+  const m = /(?:^|— )[Tt]érmino da vigência em (\d{2})\/(\d{2})\/(\d{4})$/.exec((newTerm ?? "").trim());
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2]}-${m[1]}`;
+  return validLocalDate(iso) ? iso : null;
+}
+
 export function validatePriorAmendments(list: readonly PriorAmendmentInput[] | undefined): string[] {
   const issues: string[] = [];
   const items = list ?? [];

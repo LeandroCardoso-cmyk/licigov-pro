@@ -14,7 +14,7 @@
  */
 import { formatBRL, multiplyQuantityCents, sumCents, type Cents } from "./money";
 import { normalizeDescription } from "./priceQuoteConsolidation";
-import { globalEstimateLabel } from "../../shared/estimateLabel";
+import { globalEstimateLabel, globalEstimateText } from "../../shared/estimateLabel";
 
 export const AUTHORITATIVE_ITEMS_CONTRACT_VERSION = "authoritative-items/1.0";
 /** Marcadores HTML (invisíveis no render) que delimitam o bloco — permitem verificar integridade. */
@@ -43,6 +43,12 @@ export interface AuthoritativeItemInput {
   readonly fictitiousQuoteCount?: number;
   /** M8 — cotações LEGADAS possivelmente demonstrativas (marcador antigo, sem declaração): só [REVISAR]; ausente/0 ⇒ nenhuma. */
   readonly suspectedQuoteCount?: number;
+  /**
+   * PROMPT 08 / D-5 — o produtor DISTINGUE preço informado de ausente: `true` quando a fonte trouxe um valor (inclusive zero).
+   * Ausente ⇒ comportamento histórico (só `averagePriceCents > 0` conta como preço). Zero informado e sem bloqueio conta como
+   * preço válido (não é confundido com ausência).
+   */
+  readonly priceInformed?: boolean;
 }
 
 export interface AuthoritativeItemRow extends AuthoritativeItemInput {
@@ -73,6 +79,8 @@ export interface AuthoritativeItemsEstimate {
   readonly unpricedItemCount: number;
   /** R10 / SEM-090 — itens sem quantidade informada (excluídos do total estimado; sinalizados [REVISAR]). */
   readonly unknownQuantityItemCount: number;
+  /** PROMPT 08 / D-5 — itens que compõem o total (preço válido E quantidade informada). 0 ⇒ total INDISPONÍVEL, nunca R$ 0,00. */
+  readonly contributingItemCount: number;
   readonly quoteCount: number;
   /** M8 hardening — cotações de fonte fictícia entre as `quoteCount` (0 ⇒ bloco byte-idêntico ao anterior). */
   readonly fictitiousQuoteCount: number;
@@ -122,13 +130,19 @@ export function quoteCountText(quoteCount: number, fictitiousQuoteCount = 0, sus
   return `${quoteCount} cotação(ões) registrada(s), das quais ${kinds}`;
 }
 
+/** PROMPT 08 / D-5 — preço de referência válido: positivo, ou ZERO efetivamente informado sem bloqueio (nunca ausência). */
+export function hasValidReferencePrice(it: Pick<AuthoritativeItemInput, "averagePriceCents" | "priceInformed" | "priceBlockedReason">): boolean {
+  if (it.averagePriceCents > 0) return true;
+  return it.priceInformed === true && it.averagePriceCents === 0 && !it.priceBlockedReason;
+}
+
 export function computeItemEstimates(items: readonly AuthoritativeItemInput[], opts: { preserveOrder?: boolean } = {}): AuthoritativeItemsEstimate {
   const rows: AuthoritativeItemRow[] = (opts.preserveOrder ? [...items] : sortItems(items)).map((it, i) => ({
     ...it,
     index: i + 1,
     estimatedTotalCents: it.averagePriceCents > 0 && isQuantityInformed(it.quantity) ? multiplyQuantityCents(it.quantity, it.averagePriceCents) : 0,
   }));
-  const priced = rows.filter((r) => r.averagePriceCents > 0);
+  const priced = rows.filter((r) => hasValidReferencePrice(r));
   return {
     rows,
     globalTotalCents: sumCents(rows.map((r) => r.estimatedTotalCents)),
@@ -136,6 +150,7 @@ export function computeItemEstimates(items: readonly AuthoritativeItemInput[], o
     pricedItemCount: priced.length,
     unpricedItemCount: rows.length - priced.length,
     unknownQuantityItemCount: rows.filter((r) => !isQuantityInformed(r.quantity)).length,
+    contributingItemCount: priced.filter((r) => isQuantityInformed(r.quantity)).length,
     quoteCount: rows.reduce((a, r) => a + r.quoteCount, 0),
     fictitiousQuoteCount: rows.reduce((a, r) => a + (r.fictitiousQuoteCount ?? 0), 0),
     suspectedQuoteCount: rows.reduce((a, r) => a + (r.suspectedQuoteCount ?? 0), 0),
@@ -196,21 +211,25 @@ export function renderAuthoritativeItemsBlock(
     const catalog = r.confirmedCatalogCode
       ? cell(r.confirmedCatalogCode)
       : r.suggestedCatalogCode ? "a revisar (sugestão não confirmada)" : "a revisar";
-    const avg = r.averagePriceCents > 0 ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "")
+    const avg = hasValidReferencePrice(r) ? formatBRL(r.averagePriceCents).replace(/^R\$ /, "")
       : r.priceBlockedReason === "FICTITIOUS_SOURCE" ? FICTITIOUS_PRICE_CELL_TEXT
       : r.priceBlockedReason === "SOURCE_NOT_CURRENT" ? "[REVISAR: preço suspenso — fonte da pesquisa alterada]"
         : r.priceBlockedReason === "UNIT_MISMATCH" ? "[REVISAR: unidade da cotação incompatível com o item]"
           : "[REVISAR: sem preço]";
-    const total = r.averagePriceCents > 0 && isQuantityInformed(r.quantity) ? formatBRL(r.estimatedTotalCents).replace(/^R\$ /, "") : "—";
+    const total = hasValidReferencePrice(r) && isQuantityInformed(r.quantity) ? formatBRL(r.estimatedTotalCents).replace(/^R\$ /, "") : "—";
     lines.push(`| ${r.index} | ${cell(r.description) || "[item sem descrição]"} | ${formatQuantityOrReview(r.quantity)} | ${cell(r.unit)} | ${avg} | ${total} | ${catalog} | ${r.quoteCount} |`);
   }
   lines.push("");
-  lines.push(canonical
-    // SEM-081: total PARCIAL (itens sem preço ficam fora da soma) nunca aparece como "global".
-    ? (estimate.unpricedItemCount > 0
-      ? `**${globalEstimateLabel(estimate)}:** ${formatBRL(estimate.globalTotalCents)}`
-      : `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`)
-    : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
+  // PROMPT 08 / D-5 — sem nenhum item precificado (ou sem quantidade nos precificados) o total é INDISPONÍVEL (texto M8), nunca R$ 0,00.
+  const globalLine = globalEstimateText(estimate);
+  lines.push(!globalLine.available
+    ? `**Valor estimado:** [REVISAR: ${globalLine.text}]`
+    : canonical
+      // SEM-081: total PARCIAL (itens sem preço ficam fora da soma) nunca aparece como "global".
+      ? (estimate.unpricedItemCount > 0
+        ? `**${globalEstimateLabel(estimate)}:** ${formatBRL(estimate.globalTotalCents)}`
+        : `**Valor estimado global:** ${formatBRL(estimate.globalTotalCents)}`)
+      : `**Valor indicativo (quantidade cotada, não confirmada):** ${formatBRL(estimate.globalTotalCents)}`);
   lines.push("");
   // Risco A (hardening P0): cotações com preço (as que entram na média). Pós-M8: com fonte fictícia/suspeita, "registradas" e a
   // natureza explícita — uma cotação fictícia nunca é chamada de válida (texto inalterado sem elas).

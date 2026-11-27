@@ -1,8 +1,11 @@
-import { eq, and, or, like, inArray, gte, lte, lt, ne } from "drizzle-orm";
+import { eq, and, or, like, inArray, gte, lte, lt, ne, type SQL } from "drizzle-orm";
 import {
   tasks, taskComments, taskAttachments, taskHistory, taskEditLocks, InsertTask,
 } from "../../drizzle/schema";
 import { getDb } from "./connection";
+
+type TaskStatusValue = (typeof tasks.$inferSelect)["status"];
+type TaskPriorityValue = (typeof tasks.$inferSelect)["priority"];
 
 export async function createTask(task: InsertTask): Promise<number> {
   const db = await getDb();
@@ -42,14 +45,13 @@ export async function listTasks(filters: {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db.select().from(tasks);
-  const conditions = [];
+  const conditions: SQL[] = [];
 
   if (filters.search) {
-    conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`)));
+    conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`))!);
   }
-  if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as any));
-  if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as any));
+  if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as TaskStatusValue[]));
+  if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as TaskPriorityValue[]));
   if (filters.type) conditions.push(eq(tasks.type, filters.type));
   if (filters.assignedTo) conditions.push(eq(tasks.assignedTo, filters.assignedTo));
   if (filters.processId) conditions.push(eq(tasks.processId, filters.processId));
@@ -58,11 +60,9 @@ export async function listTasks(filters: {
   if (filters.deadlineFrom) conditions.push(gte(tasks.deadline, filters.deadlineFrom));
   if (filters.deadlineTo) conditions.push(lte(tasks.deadline, filters.deadlineTo));
 
-  if (conditions.length > 0) query = query.where(and(...conditions)) as any;
-
   const page = filters.page || 1;
   const pageSize = filters.pageSize || 20;
-  return await query.limit(pageSize).offset((page - 1) * pageSize);
+  return await db.select().from(tasks).where(conditions.length > 0 ? and(...conditions) : undefined).limit(pageSize).offset((page - 1) * pageSize);
 }
 
 export async function updateTask(id: number, updates: Partial<InsertTask>) {
@@ -84,15 +84,13 @@ export async function deleteTask(id: number) {
 export async function updateTaskStatus(id: number, status: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(tasks).set({ status: status as any }).where(eq(tasks.id, id));
+  await db.update(tasks).set({ status: status as TaskStatusValue }).where(eq(tasks.id, id));
 }
 
 export async function getTaskStats(assignedTo?: number) {
   const db = await getDb();
   if (!db) return { total: 0, inProgress: 0, completed: 0, overdue: 0 };
-  let query = db.select().from(tasks);
-  if (assignedTo) query = query.where(eq(tasks.assignedTo, assignedTo)) as any;
-  const allTasks = await query;
+  const allTasks = await db.select().from(tasks).where(assignedTo ? eq(tasks.assignedTo, assignedTo) : undefined);
   const now = new Date();
   return {
     total: allTasks.length,
@@ -106,7 +104,7 @@ export async function getOverdueTasks(assignedTo?: number) {
   const db = await getDb();
   if (!db) return [];
   const now = new Date();
-  const conditions: any[] = [lt(tasks.deadline, now), ne(tasks.status, "concluida")];
+  const conditions: SQL[] = [lt(tasks.deadline, now), ne(tasks.status, "concluida")];
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
   return await db.select().from(tasks).where(and(...conditions));
 }
@@ -204,14 +202,14 @@ export async function listTasksForOrganization(
   const db = await getDb();
   if (!db) return [];
 
-  const conditions: any[] = [eq(tasks.organizationId, organizationId)];
+  const conditions: SQL[] = [eq(tasks.organizationId, organizationId)];
 
   if (filters) {
     if (filters.search) {
-      conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`)));
+      conditions.push(or(like(tasks.title, `%${filters.search}%`), like(tasks.description, `%${filters.search}%`))!);
     }
-    if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as any));
-    if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as any));
+    if (filters.status && filters.status.length > 0) conditions.push(inArray(tasks.status, filters.status as TaskStatusValue[]));
+    if (filters.priority && filters.priority.length > 0) conditions.push(inArray(tasks.priority, filters.priority as TaskPriorityValue[]));
     if (filters.type) conditions.push(eq(tasks.type, filters.type));
     if (filters.assignedTo) conditions.push(eq(tasks.assignedTo, filters.assignedTo));
     if (filters.processId) conditions.push(eq(tasks.processId, filters.processId));
@@ -256,7 +254,7 @@ export async function updateTaskStatusForOrganization(
   if (!(await assertTaskInOrganization(id, organizationId))) return false;
   const result = await db
     .update(tasks)
-    .set({ status: status as any })
+    .set({ status: status as TaskStatusValue })
     .where(and(eq(tasks.id, id), eq(tasks.organizationId, organizationId)));
   return (result[0]?.affectedRows ?? 0) > 0;
 }
@@ -276,7 +274,7 @@ export async function deleteTaskForOrganization(
 export async function getTaskStatsForOrganization(organizationId: number, assignedTo?: number) {
   const db = await getDb();
   if (!db) return { total: 0, inProgress: 0, completed: 0, overdue: 0 };
-  const conditions: any[] = [eq(tasks.organizationId, organizationId)];
+  const conditions: SQL[] = [eq(tasks.organizationId, organizationId)];
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
   const allTasks = await db.select().from(tasks).where(and(...conditions));
   const now = new Date();
@@ -292,7 +290,7 @@ export async function getOverdueTasksForOrganization(organizationId: number, ass
   const db = await getDb();
   if (!db) return [];
   const now = new Date();
-  const conditions: any[] = [
+  const conditions: SQL[] = [
     eq(tasks.organizationId, organizationId),
     lt(tasks.deadline, now),
     ne(tasks.status, "concluida"),
@@ -337,6 +335,19 @@ export async function createTaskAttachmentForOrganization(
 ): Promise<number | null> {
   if (!(await assertTaskInOrganization(attachment.taskId, organizationId))) return null;
   return createTaskAttachment(attachment);
+}
+
+/** PROMPT 08 / D-3 — anexo pelo id, SÓ se a tarefa-mãe pertence ao órgão (outro órgão/inexistente ⇒ null). */
+export async function getTaskAttachmentForOrganization(attachmentId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ id: taskAttachments.id, taskId: taskAttachments.taskId, fileName: taskAttachments.fileName, fileUrl: taskAttachments.fileUrl })
+    .from(taskAttachments)
+    .innerJoin(tasks, eq(taskAttachments.taskId, tasks.id))
+    .where(and(eq(taskAttachments.id, attachmentId), eq(tasks.organizationId, organizationId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function deleteTaskAttachmentForOrganization(

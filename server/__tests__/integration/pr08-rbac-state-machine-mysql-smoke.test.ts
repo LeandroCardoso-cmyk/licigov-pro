@@ -228,14 +228,15 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     const api = await caller(users.owner, ORG_A, corr);
     const status = async () => (await getContractWorkspace(id, ORG_A))?.status;
     const r1 = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "Prorrogação.", newTerm: "18 meses" });
-    expect(r1.addendum?.status).toBe("finalizado");
-    expect(await status()).toBe("aditado");
+    // PROMPT 08 / D-2 — criar aditivo registra MINUTA sem efeito no contrato; o status só muda na formalização.
+    expect(r1.addendum?.status).toBe("minuta");
+    expect(await status()).toBe("vigente");
     await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "qualitativo", justification: "Ajuste." });
-    expect(await status()).toBe("aditado"); // `aditado` não bloqueia novo aditivo
+    expect(await status()).toBe("vigente"); // minuta pendente não bloqueia novo aditivo
     await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "gestor", newManager: "Maria" });
     expect(await status()).toBe("apostilado");
     await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "prazo", justification: "2ª prorrogação.", newTerm: "24 meses" });
-    expect(await status()).toBe("aditado");
+    expect(await status()).toBe("apostilado"); // minuta de aditivo não altera o status
     await api.contractWorkspace.createApostille({ idempotencyKey: cmdKey(),  contractId: id, kind: "reajuste", newValue: 110000 });
     expect(await status()).toBe("apostilado");
     const r6 = await api.contractWorkspace.createAddendum({ idempotencyKey: cmdKey(),  contractId: id, addendumType: "valor", justification: "Acréscimo.", newValue: 1000 });
@@ -247,13 +248,15 @@ describe.skipIf(!DB)("PR-08 — RBAC de Itens Inteligentes e máquina de estados
     expect(snap.apostilles).toBe(2);
     expect(snap.minutas).toBe(6); // minuta gerada para cada instrumento persistido
     const [rows] = await conn.execute<mysql.RowDataPacket[]>("SELECT sequence, status FROM contract_addenda WHERE contract_id = ? ORDER BY sequence", [id]);
-    expect(rows.map((r) => `${r.sequence}:${r.status}`)).toEqual(["1:finalizado", "2:finalizado", "3:finalizado", "4:aguardando_parecer"]);
+    expect(rows.map((r) => `${r.sequence}:${r.status}`)).toEqual(["1:minuta", "2:minuta", "3:minuta", "4:aguardando_parecer"]);
     // Rastreabilidade: cada instrumento gera evento de timeline com o correlationId da requisição.
     const [ev] = await conn.execute<mysql.RowDataPacket[]>(
       "SELECT summary, correlation_id FROM process_timeline WHERE organization_id = ? AND process_id = ? AND event_type = 'change'", [ORG_A, id]);
     expect(ev.length).toBe(6);
     expect(ev.every((r) => r.correlation_id === corr)).toBe(true);
-    expect(ev.filter((r) => String(r.summary).includes("status do contrato mantido (apostilado)")).length).toBe(1);
+    // PROMPT 08 / D-2: os 4 aditivos são minutas sem efeito; o de valor também registra a exigência de parecer.
+    expect(ev.filter((r) => String(r.summary).includes("Sem efeito no contrato")).length).toBe(4);
+    expect(ev.filter((r) => String(r.summary).includes("requer parecer jurídico. Sem efeito no contrato (status apostilado")).length).toBe(1);
   }, 240_000);
 
   it("C3) minuta: aditivo/apostilamento recusados (sem exceção); nenhuma linha, IA, minuta, documento oficial ou timeline", async () => {

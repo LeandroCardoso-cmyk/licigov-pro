@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { parseTaskDeadline } from "../domain/taskDeadline";
 import { router, tenantProcedure, orgRoleProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { serviceLogger } from "../services/observabilityService";
 import { logActivity } from "../services/activityLogService";
-import { assertStorageUsable, storageDelete, storagePut } from "../storage";
+import { assertStorageUsable, storageDelete, storagePut, storageSignedUrl } from "../storage";
+import { attachmentStorageKey, TASK_ATTACHMENT_URL_TTL_SECONDS } from "../domain/taskAttachmentStorage";
 import {
   MAX_TASK_ATTACHMENT_BASE64_CHARS,
   isAllowedTaskAttachmentMime,
@@ -24,21 +26,30 @@ export const departmentTasksRouter = router({
   create: orgRoleProcedure("operator")
     .input(
       z.object({
-        title: z.string(),
-        description: z.string().optional(),
-        type: z.string(),
+        title: z.string().trim().min(1, "Informe o título da tarefa.").max(200),
+        description: z.string().max(5000).optional(),
+        type: z.string().trim().min(1).max(50).default("geral"),
         status: z.enum(["pendente", "em_andamento", "pausada", "atrasada", "aguardando_informacao", "concluida", "cancelada"]).default("pendente"),
         priority: z.enum(["baixa", "media", "alta", "urgente"]).default("media"),
-        deadline: z.string(),
-        assignedTo: z.number(),
+        // PROMPT 08 / D-1 — prazo OPCIONAL, parseado numa fronteira única (antes: string crua numa coluna TIMESTAMP ⇒ 500).
+        deadline: z.union([z.date(), z.string(), z.null()]).optional(),
+        // Responsável: padrão = quem cria; outro usuário só se for membro ATIVO do órgão.
+        assignedTo: z.number().int().positive().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      return await db.createTask({
-        ...input,
-        organizationId: ctx.organizationId,
-        createdBy: ctx.user.id,
-      } as unknown as Parameters<typeof db.createTask>[0]);
+      const deadline = parseTaskDeadline(input.deadline);
+      if (!deadline.ok) throw new TRPCError({ code: "BAD_REQUEST", message: deadline.message });
+      const assignedTo = input.assignedTo ?? ctx.user.id;
+      if (assignedTo !== ctx.user.id && !(await db.getActiveOrganizationUserById(assignedTo, ctx.organizationId))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "O responsável precisa ser membro ativo da organização." });
+      }
+      const taskId = await db.createTask({
+        title: input.title, description: input.description ?? null, type: input.type, status: input.status,
+        priority: input.priority, deadline: deadline.value, assignedTo,
+        organizationId: ctx.organizationId, createdBy: ctx.user.id,
+      });
+      return { taskId };
     }),
 
   // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
@@ -52,14 +63,28 @@ export const departmentTasksRouter = router({
         type: z.string().optional(),
         status: z.enum(["pendente", "em_andamento", "pausada", "atrasada", "aguardando_informacao", "concluida", "cancelada"]).optional(),
         priority: z.enum(["baixa", "media", "alta", "urgente"]).optional(),
-        deadline: z.string().optional(),
-        assignedTo: z.number().optional(),
+        deadline: z.union([z.date(), z.string(), z.null()]).optional(),
+        assignedTo: z.number().int().positive().optional(),
         processId: z.number().nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { id, ...updateData } = input;
-      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData as unknown as Parameters<typeof db.updateTaskForOrganization>[2]);
+      const { id, deadline: rawDeadline, ...rest } = input;
+      const updateData: Parameters<typeof db.updateTaskForOrganization>[2] = { ...rest };
+      // PROMPT 08 / D-1 — mesma fronteira de prazo do create (undefined = não altera; null/"" = remove o prazo).
+      if (rawDeadline !== undefined) {
+        const deadline = parseTaskDeadline(rawDeadline);
+        if (!deadline.ok) throw new TRPCError({ code: "BAD_REQUEST", message: deadline.message });
+        updateData.deadline = deadline.value;
+      }
+      if (rest.assignedTo !== undefined && !(await db.getActiveOrganizationUserById(rest.assignedTo, ctx.organizationId))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "O responsável precisa ser membro ativo da organização." });
+      }
+      if (rest.processId !== undefined && rest.processId !== null) {
+        const process = await db.getProcessByIdForOrganization(rest.processId, ctx.organizationId);
+        if (!process) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      }
+      const ok = await db.updateTaskForOrganization(id, ctx.organizationId, updateData);
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.update",
@@ -78,6 +103,19 @@ export const departmentTasksRouter = router({
   delete: orgRoleProcedure("operator")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
+      // PROMPT 08 / D-3 — a exclusão da tarefa remove antes os objetos dos anexos (só chaves da própria tarefa); falha ⇒ nada é
+      // excluído (a tarefa e os registros ficam; repetir é seguro — `DeleteObject` é idempotente).
+      const attachments = await db.listTaskAttachmentsForOrganization(input.id, ctx.organizationId);
+      for (const a of attachments) {
+        const key = attachmentStorageKey(a.fileUrl, a.taskId);
+        if (!key) continue;
+        try {
+          await storageDelete(key);
+        } catch {
+          authzLog.error("task_delete_attachment_storage_failed", { organizationId: ctx.organizationId, taskId: input.id, attachmentId: a.id });
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível remover os arquivos anexados. A tarefa foi mantida; tente novamente." });
+        }
+      }
       const ok = await db.deleteTaskForOrganization(input.id, ctx.organizationId);
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
@@ -148,10 +186,36 @@ export const departmentTasksRouter = router({
     }),
 
   // Anexos
+  // PROMPT 08 / D-3 — a listagem NÃO expõe URL/chave de armazenamento; o download é por `getAttachmentDownloadUrl`.
   listAttachments: tenantProcedure
     .input(z.object({ taskId: z.number() }))
     .query(async ({ input, ctx }) => {
-      return await db.listTaskAttachmentsForOrganization(input.taskId, ctx.organizationId);
+      const rows = await db.listTaskAttachmentsForOrganization(input.taskId, ctx.organizationId);
+      return rows.map((r) => ({
+        id: r.id, taskId: r.taskId, fileName: r.fileName, fileSize: r.fileSize, uploadedBy: r.uploadedBy, uploadedAt: r.uploadedAt,
+        downloadable: attachmentStorageKey(r.fileUrl, r.taskId) !== null,
+      }));
+    }),
+
+  /**
+   * PROMPT 08 / D-3 — URL ASSINADA de curta duração (bucket privado). Autoriza sessão + tenant (`tenantProcedure`, leitura —
+   * viewer pode baixar) + vínculo anexo↔tarefa do órgão; a chave só é assinada se pertencer ao prefixo da própria tarefa.
+   */
+  getAttachmentDownloadUrl: tenantProcedure
+    .input(z.object({ attachmentId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      const att = await db.getTaskAttachmentForOrganization(input.attachmentId, ctx.organizationId);
+      if (!att) {
+        authzLog.warn("cross_tenant_denied", {
+          procedure: "departmentTasks.getAttachmentDownloadUrl", organizationId: ctx.organizationId, userId: ctx.user.id,
+          resourceId: input.attachmentId, reason: "attachment_not_found_or_cross_tenant",
+        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Anexo não encontrado" });
+      }
+      const key = attachmentStorageKey(att.fileUrl, att.taskId);
+      if (!key) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Este anexo antigo não tem referência de armazenamento reconhecível — não é possível gerar o download." });
+      const { url } = await storageSignedUrl(key, TASK_ATTACHMENT_URL_TTL_SECONDS, att.fileName);
+      return { url, expiresInSeconds: TASK_ATTACHMENT_URL_TTL_SECONDS };
     }),
 
   // SEC-037 (PR B) — Upload SEGURO de anexo de tarefa.
@@ -207,7 +271,7 @@ export const departmentTasksRouter = router({
       assertStorageUsable();
       const safeName = sanitizeAttachmentFileName(input.fileName);
       const s3Key = `tasks/${input.taskId}/${Date.now()}_${safeName}`;
-      const { key, url } = await storagePut(s3Key, buffer, input.mimeType);
+      const { key } = await storagePut(s3Key, buffer, input.mimeType);
 
       // (4) Persistência tenant-scoped + (5) compensação se a gravação falhar.
       let attachmentId: number | null;
@@ -216,7 +280,8 @@ export const departmentTasksRouter = router({
           {
             taskId: input.taskId,
             fileName: safeName,
-            fileUrl: url,
+            // PROMPT 08 / D-3 — guarda a CHAVE interna (bucket privado), nunca a URL pública.
+            fileUrl: key,
             fileSize: buffer.length,
             uploadedBy: ctx.user.id,
           },
@@ -255,10 +320,36 @@ export const departmentTasksRouter = router({
 
   // LAUNCH-READY DELTA-01 — matriz NEW-006: operator.
 
+  /**
+   * PROMPT 08 / D-3 — remoção CONSISTENTE: (1) autoriza anexo↔tarefa do órgão; (2) remove o objeto (só a chave da própria
+   * tarefa; `DeleteObject` é idempotente — em bucket versionado cria marcador de exclusão, NÃO elimina versões anteriores);
+   * falha do S3 ⇒ o registro é MANTIDO, a falha é auditada e a operação pode ser repetida (sem órfão silencioso);
+   * (3) remove o registro; (4) audita o resultado. Replay de anexo já removido ⇒ NOT_FOUND, sem efeito.
+   */
   deleteAttachment: orgRoleProcedure("operator")
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      const ok = await db.deleteTaskAttachmentForOrganization(input.id, ctx.organizationId);
+      const att = await db.getTaskAttachmentForOrganization(input.id, ctx.organizationId);
+      const key = att ? attachmentStorageKey(att.fileUrl, att.taskId) : null;
+      if (att && key) {
+        try {
+          await storageDelete(key);
+        } catch (err) {
+          await logActivity({
+            organizationId: ctx.organizationId, userId: ctx.user.id, action: "task.attachment_delete_failed", entityType: "task",
+            entityId: att.taskId, details: { attachmentId: att.id, s3Key: key, error: err instanceof Error ? err.name : "unknown" },
+          });
+          authzLog.error("task_attachment_storage_delete_failed", { organizationId: ctx.organizationId, attachmentId: att.id });
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível remover o arquivo do armazenamento. O anexo foi mantido; tente novamente." });
+        }
+      }
+      const ok = att ? await db.deleteTaskAttachmentForOrganization(input.id, ctx.organizationId) : false;
+      if (ok && att) {
+        await logActivity({
+          organizationId: ctx.organizationId, userId: ctx.user.id, action: "task.attachment_deleted", entityType: "task", entityId: att.taskId,
+          details: key ? { attachmentId: att.id, s3Key: key, storageDeleted: true } : { attachmentId: att.id, storageDeleted: false, reason: "storage_key_unresolved" },
+        });
+      }
       if (!ok) {
         authzLog.warn("cross_tenant_denied", {
           procedure: "departmentTasks.deleteAttachment",

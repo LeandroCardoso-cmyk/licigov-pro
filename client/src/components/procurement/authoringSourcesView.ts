@@ -28,8 +28,9 @@ export interface SourcesPriceSummary {
 
 export interface SummaryRowView { readonly ok: boolean; readonly label: string; readonly detail?: string }
 
-export const ESTIMATE_UNAVAILABLE_TEXT = "Valor estimado indisponível — nenhum item possui preço de referência válido";
-export const ESTIMATE_NO_QUANTITY_TEXT = "Valor estimado indisponível — nenhum item com preço de referência tem quantidade informada";
+// PROMPT 08 / D-5 — texto M8 movido para a fonte única compartilhada (servidor + UI).
+import { ESTIMATE_UNAVAILABLE_TEXT, ESTIMATE_NO_QUANTITY_TEXT } from "@shared/estimateLabel";
+export { ESTIMATE_UNAVAILABLE_TEXT, ESTIMATE_NO_QUANTITY_TEXT };
 
 /**
  * Cotações: sem fictícia, o texto de sempre; com fictícia, separa-as das demais importadas. O "ok" exige que alguma cotação

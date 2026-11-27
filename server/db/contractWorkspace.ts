@@ -364,13 +364,28 @@ export async function insertContractAddendum(a: ContractAddendum, executor?: Con
   return a;
 }
 
-export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin: string; documentReference: string }>> {
+/**
+ * PROMPT 08 / D-2 — FORMALIZAÇÃO do aditivo por compare-and-set: só passa de `fromStatus` (minuta/aguardando_parecer) para
+ * `finalizado`, gravando a referência da formalização e o parecer vinculado. Escopado por órgão e contrato. `false` ⇒ o
+ * aditivo não estava mais no estado lido (concorrência/replay) — nada gravado.
+ */
+export async function compareAndSetAddendumFormalized(p: {
+  id: string; contractId: string; orgId: number; fromStatus: string; documentReference: string; legalOpinionRequestId: string; updatedAt: string;
+}, executor: ContractWsExecutor): Promise<boolean> {
+  const res = await executor.update(contractAddendaTable)
+    .set({ status: "finalizado", documentReference: p.documentReference, legalOpinionRequestId: p.legalOpinionRequestId, updatedAt: toDbDatetime(p.updatedAt) })
+    .where(and(eq(contractAddendaTable.id, p.id), eq(contractAddendaTable.contractId, p.contractId), eq(contractAddendaTable.organizationId, p.orgId), eq(contractAddendaTable.status, p.fromStatus)));
+  const header = Array.isArray(res) ? res[0] : res;
+  return Number((header as { affectedRows?: number })?.affectedRows ?? 0) === 1;
+}
+
+export async function listContractAddenda(contractId: string, orgId: number): Promise<Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin: string; documentReference: string; legalOpinionRequestId: string }>> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(contractAddendaTable)
     .where(and(eq(contractAddendaTable.contractId, contractId), eq(contractAddendaTable.organizationId, orgId)))
     .orderBy(asc(contractAddendaTable.sequence));
-  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin, documentReference: r.documentReference ?? "" }));
+  return rows.map(r => ({ id: r.id, addendumType: r.addendumType, sequence: r.sequence, justification: r.justification ?? "", newValue: Number(r.newValue), newTerm: r.newTerm, status: r.status, requestOrigin: r.requestOrigin, documentReference: r.documentReference ?? "", legalOpinionRequestId: r.legalOpinionRequestId ?? "" }));
 }
 
 /**

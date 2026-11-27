@@ -6,14 +6,14 @@ import { ADDENDUM_TYPE_LABELS } from "./labels";
 /**
  * AddendumWorkspace — REAL (tRPC).
  *
- * Termos aditivos (prazo/valor/quantitativo/qualitativo). Fluxo: solicitar →
- * justificar → gerar minuta → parecer jurídico (quando o Adaptive Engine exigir)
- * → documento final. Aditivos de valor/quantitativo requerem parecer.
+ * Termos aditivos (prazo/valor/quantitativo/qualitativo). Fluxo: solicitar → justificar → minuta (termo gerado) →
+ * parecer jurídico (quando exigido: valor/quantitativo) → FORMALIZAÇÃO (registro do termo assinado). PROMPT 08 / D-2:
+ * criar/editar/exportar a minuta NÃO altera o contrato; vigência, valores e alertas só mudam na formalização.
  */
 
 export interface AddendumWorkspaceProps {
   contractId: string;
-  addenda?: Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin?: string }>;
+  addenda?: Array<{ id: string; addendumType: string; sequence: number; justification: string; newValue: number; newTerm: string; status: string; requestOrigin?: string; documentReference?: string }>;
   /** Vigência acompanhada hoje (derivada do Centro de Operações); mostrada para a pessoa saber o que o aditivo de prazo vai mover. */
   currentEndDate?: string | null;
 }
@@ -27,6 +27,52 @@ const ORIGINS: Array<{ value: Origin; label: string }> = [
   { value: "solicitacao_manual", label: "Solicitação Manual" },
 ];
 const ORIGIN_LABELS: Record<string, string> = Object.fromEntries(ORIGINS.map((o) => [o.value, o.label]));
+
+const ADDENDUM_STATUS_LABELS: Record<string, string> = {
+  solicitado: "Solicitado", justificado: "Justificado", minuta: "Minuta (sem efeito)",
+  aguardando_parecer: "Aguardando parecer (sem efeito)", finalizado: "Formalizado",
+};
+
+/**
+ * PROMPT 08 / D-2 — registro da formalização: data de assinatura + referência do termo assinado (+ parecer, quando exigido).
+ * O texto do botão corresponde exatamente à ação; o sistema não assina nem presume assinatura.
+ */
+function FormalizeAddendumForm({ contractId, addendum }: { contractId: string; addendum: { id: string; addendumType: string; sequence: number } }) {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = React.useState(false);
+  const [signedOn, setSignedOn] = React.useState("");
+  const [reference, setReference] = React.useState("");
+  const [opinionId, setOpinionId] = React.useState("");
+  const { key, rotate } = useIdempotencyKey();
+  const needsOpinion = addendum.addendumType === "valor" || addendum.addendumType === "quantitativo";
+  const formalize = trpc.contractWorkspace.formalizeAddendum.useMutation({
+    onSuccess: () => { rotate(); setOpen(false); void utils.contractWorkspace.loadContract.invalidate({ contractId }); },
+  });
+  if (!open) {
+    return <button type="button" onClick={() => setOpen(true)} className="text-[11px] font-medium text-indigo-700 underline dark:text-indigo-300">Registrar formalização</button>;
+  }
+  return (
+    <form
+      className="w-72 space-y-1 rounded-md border border-border p-2 text-left"
+      data-testid="addendum-formalize-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        formalize.mutate({ contractId, addendumId: addendum.id, signedOn, formalizationReference: reference, legalOpinionRequestId: opinionId.trim() || undefined, idempotencyKey: key });
+      }}
+    >
+      <label className="block text-[11px] text-foreground">Data de assinatura do termo
+        <input type="date" required value={signedOn} onChange={(e) => setSignedOn(e.target.value)} className="mt-0.5 w-full rounded border border-border px-1 py-0.5 text-xs" />
+      </label>
+      <input required value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Referência do termo assinado (nº/processo)" className="w-full rounded border border-border px-1 py-0.5 text-xs" />
+      {needsOpinion && <input required value={opinionId} onChange={(e) => setOpinionId(e.target.value)} placeholder="Solicitação de parecer vinculada" className="w-full rounded border border-border px-1 py-0.5 text-xs" />}
+      <p className="text-[10px] text-muted-foreground">Ao registrar, o aditivo {addendum.sequence} passa a produzir efeitos no contrato (status e, se de prazo, vigência e alertas).</p>
+      <button type="submit" disabled={formalize.isPending || !signedOn || reference.trim().length < 3} className="w-full rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
+        {formalize.isPending ? "Registrando…" : "Registrar formalização"}
+      </button>
+      {formalize.error && <p role="alert" className="text-[11px] text-red-700 dark:text-red-300">{formalize.error.message}</p>}
+    </form>
+  );
+}
 
 export default function AddendumWorkspace({ contractId, addenda = [], currentEndDate = null }: AddendumWorkspaceProps) {
   const utils = trpc.useUtils();
@@ -71,15 +117,15 @@ export default function AddendumWorkspace({ contractId, addenda = [], currentEnd
         </div>
         {addendumType === "prazo" && (
           <p className="text-[11px] text-muted-foreground" data-testid="addendum-expiration-hint">
-            {currentEndDate ? `Vigência acompanhada hoje: término em ${currentEndDate}. ` : "Este contrato ainda não tem término acompanhado. "}
-            Informando o novo término, o vencimento e os alertas (90/60/30/15/7 dias) do Centro de Operações são reagendados e a data entra no termo.
+            {currentEndDate ? `Vigência vigente: término em ${currentEndDate}. ` : "Este contrato ainda não tem término acompanhado. "}
+            O novo término informado entra na minuta como PROPOSTA; o vencimento e os alertas (90/60/30/15/7 dias) só são reagendados quando o aditivo for formalizado.
           </p>
         )}
         <button type="submit" disabled={create.isPending || !justification.trim()} className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground">
           {create.isPending ? "Gerando…" : "Criar aditivo + minuta"}
         </button>
-        {create.data?.expiration && <p className="text-xs text-emerald-700 dark:text-emerald-300" role="status">Vigência reagendada: {create.data.expiration.previousDate ? `de ${create.data.expiration.previousDate} ` : ""}para {create.data.expiration.newDate}.</p>}
-        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico (Adaptive Process Engine). O status do contrato só muda após o parecer.</p>}
+        {create.data && <p className="text-xs text-muted-foreground" role="status" data-testid="addendum-created-preparatory">Minuta registrada. Nenhum efeito no contrato até a formalização{create.data.proposedEndDate ? ` (término proposto: ${create.data.proposedEndDate})` : ""}.</p>}
+        {create.data?.requiresLegalOpinion && <p className="text-xs text-amber-700 dark:text-amber-300">Este aditivo requer parecer jurídico concluído e vinculado ao contrato antes da formalização.</p>}
         {/* SEM-025 — recusa governada da máquina de estados do contrato (ex.: contrato rescindido) nunca é silenciosa. */}
         {create.error && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{create.error.message}</p>}
       </form>
@@ -93,7 +139,11 @@ export default function AddendumWorkspace({ contractId, addenda = [], currentEnd
                 <p className="line-clamp-1 text-xs text-muted-foreground">{a.justification}</p>
                 {a.requestOrigin && <p className="text-[11px] text-muted-foreground">Origem: {ORIGIN_LABELS[a.requestOrigin] ?? a.requestOrigin}{a.requestOrigin === "documento_externo" ? " · declarado, não verificado" : ""}</p>}
               </div>
-              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{a.status}</span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{ADDENDUM_STATUS_LABELS[a.status] ?? a.status}</span>
+                {(a.status === "minuta" || a.status === "aguardando_parecer") && <FormalizeAddendumForm contractId={contractId} addendum={a} />}
+                {a.status === "finalizado" && a.documentReference && <p className="max-w-xs text-right text-[11px] text-muted-foreground">{a.documentReference}</p>}
+              </div>
             </li>
           ))}
         </ul>

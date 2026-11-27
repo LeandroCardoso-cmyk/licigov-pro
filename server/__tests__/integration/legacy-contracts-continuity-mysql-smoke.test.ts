@@ -157,30 +157,26 @@ describe.skipIf(!DB)("Jornada integrada — legado, contratos, aditivos, monitor
     expect((await err(op.contractWorkspace.createAddendum(adInput)))?.code).toBe("FORBIDDEN");
     expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-adv-${RUN}`, addendumType: "valor" })))?.code).toBe("BAD_REQUEST"); // data só em aditivo de prazo
     expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-adi-${RUN}`, newEndDate: "2026-02-30" })))?.code).toBe("BAD_REQUEST");
+    // Sufixo de término RESERVADO ao campo estruturado: digitado no texto livre ⇒ recusa (seria lido como término proposto).
+    expect((await err(mgr.contractWorkspace.createAddendum({ ...adInput, idempotencyKey: `lc-j5-ads-${RUN}`, newEndDate: undefined, newTerm: "12 meses — término da vigência em 01/01/2031" })))?.code).toBe("BAD_REQUEST");
     expect(await n("SELECT COUNT(*) n FROM contract_addenda WHERE organization_id = ? AND contract_id = ?", [ORG, cid])).toBe(2);
     expect((await expiryEvents(cid)).map((e) => e.event_date)).toContain(plusDays(45)); // recusas não mexeram na vigência
 
+    // PROMPT 08 / D-2 — CRIAR o aditivo é PREPARATÓRIO: minuta registrada, status do contrato, vigência e alertas INTACTOS.
+    const statusBefore = (await mgr.contractWorkspace.loadContract({ contractId: cid })).workspace?.status;
     const ad = await mgr.contractWorkspace.createAddendum(adInput);
-    expect(ad.addendum).toMatchObject({ sequence: 3, addendumType: "prazo", status: "finalizado" });
+    expect(ad.addendum).toMatchObject({ sequence: 3, addendumType: "prazo", status: "minuta" });
     expect(ad.addendum.newTerm).toMatch(/^24 meses — término da vigência em \d{2}\/\d{2}\/\d{4}$/);
-    expect(ad.expiration).toEqual({ previousDate: plusDays(45), newDate: newEnd });
-    // Calendário: o vencimento ANTIGO sumiu, o novo existe UMA vez, com os 5 alertas; nada duplicado.
-    const ev = await expiryEvents(cid);
-    expect(ev.map((e) => e.event_date)).not.toContain(plusDays(45));
-    expect(ev.filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([newEnd]);
-    expect(ev).toHaveLength(6);
-    const cal = await mgr.departmentOperation.calendar({ from: TODAY, to: plusDays(100) });
-    expect(cal.events.filter((e: any) => e.referenceId === cid && e.alertOffsetDays === 0)).toHaveLength(1);
-    expect((await mgr.contractWorkspace.loadContract({ contractId: cid })).expiration?.endDate).toBe(newEnd);
-    // KPI: o contrato conta UMA vez (janela de 90 dias).
-    expect(((await mgr.departmentOperation.dashboard({ today: TODAY })) as any).indicators.contractsExpiring).toBe(1);
-    // Replay do comando: mesmo aditivo, sem segunda linha, sem novo evento.
+    expect(ad.expiration).toBeNull();
+    expect(ad.proposedEndDate).toBe(newEnd);
+    expect((await expiryEvents(cid)).filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([plusDays(45)]);
+    expect(await expiryEvents(cid)).toHaveLength(6);
+    expect((await mgr.contractWorkspace.loadContract({ contractId: cid })).workspace?.status).toBe(statusBefore);
+    // Replay do comando de criação: mesmo aditivo, sem segunda linha, sem efeito.
     const again = await mgr.contractWorkspace.createAddendum(adInput);
     expect(again.addendum.id).toBe(ad.addendum.id);
     expect(await n("SELECT COUNT(*) n FROM contract_addenda WHERE organization_id = ? AND contract_id = ?", [ORG, cid])).toBe(3);
-    expect(await expiryEvents(cid)).toHaveLength(6);
-    // Timeline: reagendamento auditado com origem → destino.
-    expect(await n("SELECT COUNT(*) n FROM operational_timeline WHERE organization_id = ? AND action = 'vigencia_reagendada' AND reference_id = ?", [ORG, cid])).toBe(1);
+    expect(await n("SELECT COUNT(*) n FROM operational_timeline WHERE organization_id = ? AND action = 'vigencia_reagendada' AND reference_id = ?", [ORG, cid])).toBe(0);
 
     // 4) Termo exportado (DOCX e PDF) com a numeração, a data e o histórico DECLARADO.
     const termo = (await rows<{ id: string }>("SELECT id FROM official_documents WHERE tenant_id = ? AND origin = ? AND document_type = 'aditivo'", [ORG, cid]))[0];
@@ -198,11 +194,65 @@ describe.skipIf(!DB)("Jornada integrada — legado, contratos, aditivos, monitor
     expect(text).toMatch(/Termo Aditivo nº 1.*DECLARADO pelo usuário/);
     expect(text).toMatch(/Termo Aditivo nº 2/);
 
+    // PROMPT 08 / D-2 — EXPORTAR a minuta não formaliza: o aditivo segue sem efeito.
+    expect((await rows<{ status: string }>("SELECT status FROM contract_addenda WHERE id = ?", [ad.addendum.id]))[0].status).toBe("minuta");
+    expect((await expiryEvents(cid)).filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([plusDays(45)]);
+
+    // 4b) FORMALIZAÇÃO — único ponto que aplica efeitos. Recusas antes de qualquer efeito.
+    // Assinatura "ontem" (UTC) — nunca futura no fuso do órgão (o servidor compara com a data de Brasília).
+    const form = { contractId: cid, addendumId: ad.addendum.id, signedOn: plusDays(-1), formalizationReference: "Termo Aditivo nº 3 assinado (sintético)" };
+    expect((await err(op.contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f-op-${RUN}` })))?.code).toBe("FORBIDDEN");
+    expect((await err((await caller(U.viewer)).contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f-vw-${RUN}` })))?.code).toBe("FORBIDDEN");
+    expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...form, signedOn: plusDays(3), idempotencyKey: `lc-j5-f-fut-${RUN}` })))?.code).toBe("BAD_REQUEST");
+    expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...form, formalizationReference: "x", idempotencyKey: `lc-j5-f-ref-${RUN}` })))?.code).toBe("BAD_REQUEST");
+    expect((await err((await caller(U.managerB, ORG_B)).contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f-b-${RUN}` })))?.code).toBe("NOT_FOUND");
+    expect((await expiryEvents(cid)).filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([plusDays(45)]);
+
+    const f1 = await mgr.contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f-${RUN}` });
+    expect(f1.addendum.status).toBe("finalizado");
+    expect(f1.addendum.documentReference).toMatch(/^Formalizado — assinatura em \d{2}\/\d{2}\/\d{4}; Termo Aditivo nº 3 assinado/);
+    expect(f1.expiration).toEqual({ previousDate: plusDays(45), newDate: newEnd });
+    expect((await mgr.contractWorkspace.loadContract({ contractId: cid })).workspace?.status).toBe("aditado");
+    // Calendário: o vencimento ANTIGO sumiu, o novo existe UMA vez, com os 5 alertas; nada duplicado.
+    const ev = await expiryEvents(cid);
+    expect(ev.map((e) => e.event_date)).not.toContain(plusDays(45));
+    expect(ev.filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([newEnd]);
+    expect(ev).toHaveLength(6);
+    const cal = await mgr.departmentOperation.calendar({ from: TODAY, to: plusDays(100) });
+    expect(cal.events.filter((e: any) => e.referenceId === cid && e.alertOffsetDays === 0)).toHaveLength(1);
+    expect((await mgr.contractWorkspace.loadContract({ contractId: cid })).expiration?.endDate).toBe(newEnd);
+    expect(((await mgr.departmentOperation.dashboard({ today: TODAY })) as any).indicators.contractsExpiring).toBe(1);
+    // Replay (mesma chave) ⇒ mesmo resultado; outra chave com a MESMA formalização ⇒ retomada idempotente; outra referência ⇒ CONFLICT.
+    expect((await mgr.contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f-${RUN}` })).addendum.status).toBe("finalizado");
+    expect((await mgr.contractWorkspace.formalizeAddendum({ ...form, idempotencyKey: `lc-j5-f2-${RUN}` })).addendum.status).toBe("finalizado");
+    expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...form, formalizationReference: "Outro termo", idempotencyKey: `lc-j5-f3-${RUN}` })))?.code).toBe("CONFLICT");
+    expect(await expiryEvents(cid)).toHaveLength(6);
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND ref_id = ? AND summary LIKE '%FORMALIZADO%'", [ORG, ad.addendum.id])).toBe(1);
+
     // 5) Aditivo de VALOR exige parecer: a vigência NÃO é mexida; nenhum parecer é produzido pelo sistema.
     const valor = await mgr.contractWorkspace.createAddendum({ idempotencyKey: `lc-j5-val-${RUN}`, contractId: cid, addendumType: "valor", justification: "Acréscimo de valor (sintético).", newValue: 52000 });
     expect(valor.requiresLegalOpinion).toBe(true);
     expect(valor.addendum).toMatchObject({ sequence: 4, status: "aguardando_parecer" });
+    // Formalização SEM parecer governado vinculado ⇒ recusada (nenhuma dispensa fictícia); parecer inexistente idem.
+    const vf = { contractId: cid, addendumId: valor.addendum.id, signedOn: plusDays(-1), formalizationReference: "Termo Aditivo nº 4 (sintético)" };
+    expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...vf, idempotencyKey: `lc-j5-vf1-${RUN}` })))?.message).toMatch(/ADDENDUM_LEGAL_OPINION_REQUIRED/);
+    expect((await err(mgr.contractWorkspace.formalizeAddendum({ ...vf, legalOpinionRequestId: "inexistente", idempotencyKey: `lc-j5-vf2-${RUN}` })))?.message).toMatch(/ADDENDUM_LEGAL_OPINION_REQUIRED/);
+    expect((await rows<{ status: string }>("SELECT status FROM contract_addenda WHERE id = ?", [valor.addendum.id]))[0].status).toBe("aguardando_parecer");
     expect((await expiryEvents(cid)).filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([newEnd]);
+
+    // 5b) PROMPT 08 / D-2 — formalizações CONCORRENTES (chaves distintas) do mesmo aditivo: efeito aplicado UMA vez.
+    const end2 = plusDays(150);
+    const ad2 = await mgr.contractWorkspace.createAddendum({ idempotencyKey: `lc-j5-ad2-${RUN}`, contractId: cid, addendumType: "prazo", justification: "Nova prorrogação (sintético).", newTerm: "36 meses", newEndDate: end2 });
+    const f2 = { contractId: cid, addendumId: ad2.addendum.id, signedOn: plusDays(-1), formalizationReference: "Termo Aditivo nº 5 assinado (sintético)" };
+    const results = await Promise.allSettled([
+      mgr.contractWorkspace.formalizeAddendum({ ...f2, idempotencyKey: `lc-j5-c1-${RUN}` }),
+      mgr.contractWorkspace.formalizeAddendum({ ...f2, idempotencyKey: `lc-j5-c2-${RUN}` }),
+    ]);
+    expect(results.some((r) => r.status === "fulfilled")).toBe(true);
+    for (const r of results) if (r.status === "rejected") expect((r.reason as { code?: string }).code).toBe("CONFLICT");
+    expect(await n("SELECT COUNT(*) n FROM process_timeline WHERE organization_id = ? AND ref_id = ? AND summary LIKE '%FORMALIZADO%'", [ORG, ad2.addendum.id])).toBe(1);
+    expect((await expiryEvents(cid)).filter((e) => e.alert_offset_days === 0).map((e) => e.event_date)).toEqual([end2]);
+    expect(await expiryEvents(cid)).toHaveLength(6);
 
     // 6) Tenant: outro órgão não vê a vigência nem adita.
     expect((await (await caller(U.managerB, ORG_B)).contractWorkspace.loadContract({ contractId: cid })).workspace).toBeNull();
@@ -253,7 +303,7 @@ describe.skipIf(!DB)("Jornada integrada — legado, contratos, aditivos, monitor
     });
     // A jornada do contrato segue: aditivo de PRAZO (sem parecer) continua possível mesmo com um pedido de parecer em aberto.
     const ad = await mgr.contractWorkspace.createAddendum({ idempotencyKey: `lc-j7-ad-${RUN}`, contractId: contract.id, addendumType: "prazo", justification: "Nova prorrogação (sintético).", newTerm: "36 meses", newEndDate: plusDays(120) });
-    expect(ad.addendum.status).toBe("finalizado");
+    expect(ad.addendum.status).toBe("minuta"); // PROMPT 08 / D-2 — criação preparatória (efeitos só na formalização)
   }, 120_000);
 
   it("J4 — contratação direta (módulo existente): sem DFD → fundamento → proposta → justificativas → ratificação → contrato por herança confirmada → exportação DOCX/PDF", async () => {

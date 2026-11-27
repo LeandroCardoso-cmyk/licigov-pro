@@ -183,9 +183,9 @@ describe.skipIf(!DB)("NEW-006 — RBAC do contractWorkspaceRouter (MySQL real, r
     expect(logs[0]).toMatchObject({ procedure, requiredRole, userId: users[userTag], organizationId: ORG_A, correlationId: corr });
   }
 
-  it("matriz: 11 mutations protegidas (8 operator, 3 manager)", () => {
-    expect(MUTATIONS).toHaveLength(11);
-    expect(MUTATIONS.filter(n => CONTRACT_WORKSPACE_RBAC_MATRIX[n].minRole === "manager").sort()).toEqual(["createAddendum", "createApostille", "registerInForceContract"]);
+  it("matriz: 12 mutations protegidas (8 operator, 4 manager — inclui formalizeAddendum, PROMPT 08 / D-2)", () => {
+    expect(MUTATIONS).toHaveLength(12);
+    expect(MUTATIONS.filter(n => CONTRACT_WORKSPACE_RBAC_MATRIX[n].minRole === "manager").sort()).toEqual(["createAddendum", "createApostille", "formalizeAddendum", "registerInForceContract"]);
   });
 
   it("viewer: FORBIDDEN em TODAS as mutations, zero escrita em qualquer tabela, zero IA, log com correlationId", async () => {

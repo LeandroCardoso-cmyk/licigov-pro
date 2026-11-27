@@ -133,7 +133,9 @@ describe("P0 — bloco AUTORITATIVO de itens (servidor, nunca IA)", () => {
     expect(renderAuthoritativeItemsBlock(computeItemEstimates([]))).toContain("[REVISAR: nenhum Item Inteligente aprovado");
     const md = renderAuthoritativeItemsBlock(computeItemEstimates([{ ...items[0], averagePriceCents: 0 }]));
     expect(md).toContain("[REVISAR: sem preço]");
-    expect(md).toContain("**Valor indicativo (quantidade cotada, não confirmada):** R$ 0,00");
+    // PROMPT 08 / D-5 — sem nenhum preço de referência, o total é INDISPONÍVEL (texto M8), nunca "R$ 0,00".
+    expect(md).toContain("**Valor estimado:** [REVISAR: Valor estimado indisponível — nenhum item possui preço de referência válido]");
+    expect(md).not.toMatch(/R\$ 0,00/);
   });
 });
 

@@ -33,7 +33,7 @@ import {
   confirmedCatalogFromDecision, resolveCanonicalDocumentItems, type CanonicalItemsState, type ContextItem,
 } from "./authoringContext";
 import { selectDocumentExcerpt, sha256Hex } from "../../domain/canonicalJson";
-import { globalEstimateLabel } from "../../../shared/estimateLabel";
+import { globalEstimateText } from "../../../shared/estimateLabel";
 
 /**
  * Versão do contrato de montagem de contexto do Edital (compõe o digest/lineage).
@@ -249,7 +249,9 @@ export function buildEditalSourceContext(input: EditalSourceInputs): EditalSourc
         + (it.suspectedQuoteCount ? ` · ${suspectedQuotesReviewText(it.suspectedQuoteCount)}` : "");
       lines.push(`- ${it.description || "[item sem descrição]"} — ${formatQuantityOrReview(it.quantity)} ${it.unit}${canonical ? " (quantidade prevista)" : ""}${lot ? ` · lote ${lot}` : ""}${price}${catmat}${flag}${fict}`);
     }
-    lines.push(`- ${globalEstimateLabel(estimate)}: ${formatBRL(estimate.globalTotalCents)}`);
+    // PROMPT 08 / D-5 — sem preço de referência o total é INDISPONÍVEL (texto M8), nunca "R$ 0,00".
+    const globalLine = globalEstimateText(estimate);
+    lines.push(`- ${globalLine.available ? globalLine.text : `Valor estimado global: [REVISAR: ${globalLine.text}]`}`);
     lines.push("");
   } else {
     missing.push("itens");

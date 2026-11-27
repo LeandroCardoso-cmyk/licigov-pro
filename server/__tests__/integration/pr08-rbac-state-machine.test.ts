@@ -339,12 +339,13 @@ describe("SEM-025 — createAddendum/createApostille recusam minuta e estados en
 });
 
 describe("SEM-025 — transições válidas: instrumento + status + evento na MESMA transação, CAS a partir do status avaliado", () => {
-  it("vigente → aditado: aditivo final e CAS vigente→aditado no tx; minuta gerada DEPOIS", async () => {
+  // PROMPT 08 / D-2 — a CRIAÇÃO é preparatória: minuta registrada e status do contrato INALTERADO (CAS vigente→vigente).
+  it("vigente: aditivo registrado em MINUTA, status inalterado (sem efeito antecipado); minuta gerada DEPOIS", async () => {
     cw.status = "vigente";
     const res = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "Prorrogação", newTerm: "18 meses", correlationId: "c" });
-    expect(res.addendum?.status).toBe("finalizado");
-    expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "finalizado" }), { __tx: true }, { failOnDuplicate: true });
-    expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado", orgId: 1 }), { __tx: true });
+    expect(res.addendum?.status).toBe("minuta");
+    expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "minuta" }), { __tx: true }, { failOnDuplicate: true });
+    expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "vigente", orgId: 1 }), { __tx: true });
     expect(item.recordProcessEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "change" }), { __tx: true });
     expect(cw.orchestrateMultiCopilot).toHaveBeenCalledTimes(1);
     expect(cw.insertContractAddendum.mock.invocationCallOrder[0]).toBeLessThan(cw.orchestrateMultiCopilot.mock.invocationCallOrder[0]);
@@ -358,17 +359,17 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
       expect(res.addendum?.status).toBe("aguardando_parecer");
       expect(cw.insertContractAddendum).toHaveBeenCalledWith(expect.objectContaining({ status: "aguardando_parecer" }), { __tx: true }, { failOnDuplicate: true });
       expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "vigente" }), { __tx: true });
-      expect(item.recordProcessEvent).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.stringContaining("status do contrato mantido (vigente)") }), { __tx: true });
+      expect(item.recordProcessEvent).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.stringContaining("Sem efeito no contrato (status vigente") }), { __tx: true });
     }
   });
 
-  it("aditivo que NÃO exige parecer (prazo/qualitativo) segue efetivando pela máquina", async () => {
+  it("aditivo que NÃO exige parecer (prazo/qualitativo) também nasce em minuta — efeitos só na formalização", async () => {
     for (const addendumType of ["prazo", "qualitativo"] as const) {
       vi.clearAllMocks();
       const res = await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType, justification: "j", correlationId: "c" });
       expect(res.requiresLegalOpinion).toBe(false);
-      expect(res.addendum?.status).toBe("finalizado");
-      expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "aditado" }), { __tx: true });
+      expect(res.addendum?.status).toBe("minuta");
+      expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenCalledWith(expect.objectContaining({ fromStatus: "vigente", toStatus: "vigente" }), { __tx: true });
     }
   });
 
@@ -382,13 +383,13 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
     expect(cw.transaction).not.toHaveBeenCalled();
   });
 
-  it("aditado + 2º aditivo ⇒ status inalterado (CAS aditado→aditado); apostilado → aditado pela máquina", async () => {
+  it("aditado/apostilado + novo aditivo ⇒ status inalterado na criação (a máquina só é aplicada na formalização)", async () => {
     cw.status = "aditado";
     await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
     expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "aditado", toStatus: "aditado" }), { __tx: true });
     cw.status = "apostilado";
     await createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "j", correlationId: "c" });
-    expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "apostilado", toStatus: "aditado" }), { __tx: true });
+    expect(cw.compareAndSetContractWorkspaceStatus).toHaveBeenLastCalledWith(expect.objectContaining({ fromStatus: "apostilado", toStatus: "apostilado" }), { __tx: true });
   });
 
   it("cadeia de instrumentos sucessivos: vigente → aditivo → aditivo → apostilamento → aditivo → apostilamento", async () => {
@@ -398,11 +399,12 @@ describe("SEM-025 — transições válidas: instrumento + status + evento na ME
       cw.status = p.toStatus; return true;
     });
     cw.status = "vigente";
+    // PROMPT 08 / D-2 — criar aditivo não muda o status (minuta); apostilamento continua efetivando pela máquina.
     const steps: Array<[string, () => Promise<unknown>]> = [
-      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "1", correlationId: "c" })],
-      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "qualitativo", justification: "2", correlationId: "c" })],
+      ["vigente",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "1", correlationId: "c" })],
+      ["vigente",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "qualitativo", justification: "2", correlationId: "c" })],
       ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "reajuste", newValue: 5, correlationId: "c" })],
-      ["aditado",    () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "3", correlationId: "c" })],
+      ["apostilado", () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "prazo", justification: "3", correlationId: "c" })],
       ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "fiscal", newInspector: "João", correlationId: "c" })],
       ["apostilado", () => createApostille({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", kind: "gestor", newManager: "Ana", correlationId: "c" })],
       ["apostilado", () => createAddendum({ idempotencyKey: cmdKey(), actorUserId: 7, organizationId: 1, contractId: "c1", addendumType: "valor", justification: "4", newValue: 9, correlationId: "c" })], // parecer ⇒ inalterado

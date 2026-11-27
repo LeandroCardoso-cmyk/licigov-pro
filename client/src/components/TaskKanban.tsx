@@ -7,6 +7,8 @@ import {
 import { trpc } from "@/lib/trpc";
 import { TaskCard, type Task, type TaskStatus } from "@/components/task-kanban/TaskCard";
 import { KanbanColumn } from "@/components/task-kanban/KanbanColumn";
+import { CreateTaskDialog } from "@/components/task-kanban/CreateTaskDialog";
+import { useOrgRole } from "@/_core/hooks/useOrgRole";
 
 const COLUMNS: { id: TaskStatus; title: string; color: string }[] = [
   { id: "pendente", title: "Pendente", color: "bg-gray-100 dark:bg-gray-800" },
@@ -22,6 +24,10 @@ export default function TaskKanban() {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const utils = trpc.useUtils();
+  // PROMPT 08 / D-1 — "Nova tarefa" por coluna (status inicial = coluna); viewer não cria.
+  const [createStatus, setCreateStatus] = useState<TaskStatus | null>(null);
+  const { hasRole } = useOrgRole();
+  const canEdit = hasRole("operator");
 
   const { data: tasks = [], isLoading } = trpc.departmentTasks.list.useQuery();
   const updateTaskMutation = trpc.departmentTasks.update.useMutation({
@@ -75,6 +81,7 @@ export default function TaskKanban() {
               column={column}
               tasks={tasksByStatus[column.id]}
               onTaskClick={setSelectedTaskId}
+              onCreateTask={canEdit ? setCreateStatus : undefined}
             />
           ))}
         </div>
@@ -82,6 +89,8 @@ export default function TaskKanban() {
           {activeTask ? <TaskCard task={activeTask} isDragging /> : null}
         </DragOverlay>
       </DndContext>
+
+      <CreateTaskDialog open={createStatus !== null} onOpenChange={(o) => { if (!o) setCreateStatus(null); }} initialStatus={createStatus ?? "pendente"} />
 
       <TaskDetailModal
         taskId={selectedTaskId}
