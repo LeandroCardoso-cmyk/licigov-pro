@@ -73708,7 +73708,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "new022-generic-contract-activation-mysql-smoke.test.ts"
     },
     {
@@ -73719,7 +73719,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_user",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "user()"
     },
     {
@@ -73741,7 +73741,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_caller",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "caller()"
     },
     {
@@ -73752,7 +73752,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_row",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "row()"
     },
     {
@@ -73763,7 +73763,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_rev",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "rev()"
     },
     {
@@ -73774,7 +73774,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_timelinecount",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "timelinecount()"
     },
     {
@@ -73785,7 +73785,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_mysql_smoke_test_capturewarn",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "capturewarn()"
     },
     {
@@ -73796,7 +73796,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_test",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "new022-generic-contract-activation.test.ts"
     },
     {
@@ -73807,7 +73807,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_test_statuses",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "statuses"
     },
     {
@@ -73818,7 +73818,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_test_getws",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "getws()"
     },
     {
@@ -73829,7 +73829,7 @@
       "_origin": "ast",
       "id": "server_tests_integration_new022_generic_contract_activation_test_ws",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "ws()"
     },
     {
@@ -76138,8 +76138,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "pr08-rbac-state-machine-mysql-smoke.test.ts"
     },
     {
@@ -76149,8 +76149,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_cmdkey",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cmdkey()"
     },
     {
@@ -76160,8 +76160,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_roles",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "roles"
     },
     {
@@ -76171,8 +76171,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_role",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "role"
     },
     {
@@ -76182,8 +76182,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_caller",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "caller()"
     },
     {
@@ -76193,8 +76193,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_err",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "err()"
     },
     {
@@ -76204,8 +76204,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_cleanup",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -76215,8 +76215,8 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_insertuser",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "insertuser()"
     },
     {
@@ -76237,8 +76237,8 @@
       "source_location": "L189",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_seedcontract",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "seedcontract()"
     },
     {
@@ -76248,8 +76248,8 @@
       "source_location": "L197",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_mysql_smoke_test_contractsnapshot",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractsnapshot()"
     },
     {
@@ -76259,8 +76259,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "pr08-rbac-state-machine.test.ts"
     },
     {
@@ -76270,8 +76270,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_role",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "role"
     },
     {
@@ -76281,8 +76281,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_item",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "item"
     },
     {
@@ -76292,8 +76292,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_cw",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cw"
     },
     {
@@ -76303,8 +76303,8 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_cmdkey",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cmdkey()"
     },
     {
@@ -76314,8 +76314,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_ii",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "ii()"
     },
     {
@@ -76325,8 +76325,8 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_cwr",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cwr()"
     },
     {
@@ -76336,8 +76336,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_err",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "err()"
     },
     {
@@ -76347,8 +76347,8 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_all_roles",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "all_roles"
     },
     {
@@ -76358,8 +76358,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_statuses",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "statuses"
     },
     {
@@ -76369,8 +76369,8 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_closed",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "closed"
     },
     {
@@ -76380,8 +76380,8 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_refusing",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "refusing"
     },
     {
@@ -76391,8 +76391,8 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "server_tests_integration_pr08_rbac_state_machine_test_contractwith",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractwith()"
     },
     {
@@ -76710,8 +76710,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "pr12-contract-governed-change-mysql-smoke.test.ts"
     },
     {
@@ -76721,8 +76721,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_caller",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "caller()"
     },
     {
@@ -76732,8 +76732,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_insertuser",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "insertuser()"
     },
     {
@@ -76743,8 +76743,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_row",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "row()"
     },
     {
@@ -76754,8 +76754,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_changeevents",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "changeevents()"
     },
     {
@@ -76765,8 +76765,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_seedcontract",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "seedcontract()"
     },
     {
@@ -76776,8 +76776,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_mysql_smoke_test_cleanup",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "cleanup()"
     },
     {
@@ -76820,8 +76820,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "server_tests_integration_pr12_contract_governed_change_test_contract",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contract()"
     },
     {
@@ -77117,8 +77117,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "server_tests_integration_pr17_instrument_terms_mysql_smoke_test_vigente",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "vigente()"
     },
     {
@@ -82199,8 +82199,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "sem084-sem062-sem040-contract-instruments.test.ts"
     },
     {
@@ -82210,8 +82210,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_cw",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "cw"
     },
     {
@@ -82221,8 +82221,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_cmdkey",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "cmdkey()"
     },
     {
@@ -82232,8 +82232,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_tx",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "tx"
     },
     {
@@ -82243,8 +82243,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_row",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "row()"
     },
     {
@@ -82254,8 +82254,8 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_base",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "base"
     },
     {
@@ -82265,8 +82265,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "server_tests_integration_sem084_sem062_sem040_contract_instruments_test_orderof",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "orderof()"
     },
     {
@@ -95638,7 +95638,7 @@
       "label": "reason()",
       "file_type": "code",
       "source_file": "server/__tests__/unit/prompt08-addendum-formalization-opinion-gate.test.ts",
-      "source_location": "L46",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "server_tests_unit_prompt08_addendum_formalization_opinion_gate_test_reason",
       "community": 149,
@@ -102989,8 +102989,8 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "server_db_contractworkspace_findcontractbynormalizednumber",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "findcontractbynormalizednumber()"
     },
     {
@@ -103012,7 +103012,7 @@
       "_origin": "ast",
       "id": "server_db_contractworkspace_getcontractworkspace",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "getcontractworkspace()"
     },
     {
@@ -119280,8 +119280,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "server_domain_contractcreation",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractcreation.ts"
     },
     {
@@ -119291,8 +119291,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contract_already_exists",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contract_already_exists"
     },
     {
@@ -119302,8 +119302,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contract_number_required",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contract_number_required"
     },
     {
@@ -119313,8 +119313,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "server_domain_contractcreation_normalizecontractnumber",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "normalizecontractnumber()"
     },
     {
@@ -119324,8 +119324,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contract_number_required_message",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contract_number_required_message"
     },
     {
@@ -119335,8 +119335,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "server_domain_contractcreation_origin_label",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "origin_label"
     },
     {
@@ -119346,8 +119346,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contractalreadyexistsmessage",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractalreadyexistsmessage()"
     },
     {
@@ -119357,8 +119357,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contractnumbertakentext",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractnumbertakentext()"
     },
     {
@@ -119368,8 +119368,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "server_domain_contractcreation_cents",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "cents()"
     },
     {
@@ -119379,8 +119379,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "server_domain_contractcreation_issamecontractcreate",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "issamecontractcreate()"
     },
     {
@@ -119390,8 +119390,8 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "server_domain_contractcreation_contractcreatedecision",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractcreatedecision"
     },
     {
@@ -119401,8 +119401,8 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "server_domain_contractcreation_decidecontractcreateonexisting",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "decidecontractcreateonexisting()"
     },
     {
@@ -119907,8 +119907,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "server_domain_contractworkspace_contractorigintype",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractorigintype"
     },
     {
@@ -119919,7 +119919,7 @@
       "_origin": "ast",
       "id": "server_domain_contractworkspace_contractstatus",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractstatus"
     },
     {
@@ -119940,8 +119940,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "server_domain_contractworkspace_contractworkspace",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractworkspace"
     },
     {
@@ -119962,8 +119962,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "server_domain_contractworkspace_createcontractworkspace",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "createcontractworkspace()"
     },
     {
@@ -119984,8 +119984,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "server_domain_contractworkspace_contract_status_transition_invalid",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contract_status_transition_invalid"
     },
     {
@@ -120083,8 +120083,8 @@
       "source_location": "L194",
       "_origin": "ast",
       "id": "server_domain_contractworkspace_contract_apostille_assignment_invalid",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 149,
+      "community_name": "contractService.ts",
       "norm_label": "contract_apostille_assignment_invalid"
     },
     {
@@ -168484,7 +168484,7 @@
       "_origin": "ast",
       "id": "server_routers_contractworkspacerouter_requirecontract",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "requirecontract()"
     },
     {
@@ -168505,8 +168505,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "server_routers_contractworkspacerouter_contractworkspacerouter",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractworkspacerouter"
     },
     {
@@ -170551,8 +170551,8 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "server_routers_itemintelligencerouter_itemintelligencerouter",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "itemintelligencerouter"
     },
     {
@@ -179481,7 +179481,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractactivationguard.ts"
     },
     {
@@ -179492,7 +179492,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_contract_activation_requires_governed_action",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contract_activation_requires_governed_action"
     },
     {
@@ -179503,7 +179503,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_contract_activation_requires_governed_action_message",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contract_activation_requires_governed_action_message"
     },
     {
@@ -179514,7 +179514,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_log",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "log"
     },
     {
@@ -179525,7 +179525,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_isgenericcontractactivation",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "isgenericcontractactivation()"
     },
     {
@@ -179536,7 +179536,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_genericactivationcallcontext",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "genericactivationcallcontext"
     },
     {
@@ -179547,7 +179547,7 @@
       "_origin": "ast",
       "id": "server_services_contractactivationguard_assertnogenericcontractactivation",
       "community": 148,
-      "community_name": "getContractWorkspace",
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "assertnogenericcontractactivation()"
     },
     {
@@ -180019,8 +180019,8 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "server_services_contractservice_manualcontractconflicterror",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "manualcontractconflicterror"
     },
     {
@@ -180030,8 +180030,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "server_services_contractservice_manualcontractconflicterror_constructor",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": ".constructor()"
     },
     {
@@ -180041,8 +180041,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "server_services_contractservice_contractalreadyexistserror",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": "contractalreadyexistserror"
     },
     {
@@ -180052,8 +180052,8 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "server_services_contractservice_contractalreadyexistserror_constructor",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 102,
+      "community_name": "contractWorkspaceRouter.ts",
       "norm_label": ".constructor()"
     },
     {
@@ -180063,8 +180063,8 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "server_services_contractservice_requirecontractnumber",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "requirecontractnumber()"
     },
     {
@@ -180074,8 +180074,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "server_services_contractservice_persistnewcontract",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "persistnewcontract()"
     },
     {
@@ -180107,8 +180107,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "server_services_contractservice_createfromprocurement",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "createfromprocurement()"
     },
     {
@@ -180129,8 +180129,8 @@
       "source_location": "L233",
       "_origin": "ast",
       "id": "server_services_contractservice_createmanualcontract",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "createmanualcontract()"
     },
     {
@@ -180162,8 +180162,8 @@
       "source_location": "L410",
       "_origin": "ast",
       "id": "server_services_contractservice_importexternalcontract",
-      "community": 149,
-      "community_name": "contractService.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "importexternalcontract()"
     },
     {
@@ -180206,8 +180206,8 @@
       "source_location": "L579",
       "_origin": "ast",
       "id": "server_services_contractservice_contractstatusconflicterror",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": "contractstatusconflicterror"
     },
     {
@@ -180217,8 +180217,8 @@
       "source_location": "L580",
       "_origin": "ast",
       "id": "server_services_contractservice_contractstatusconflicterror_constructor",
-      "community": 102,
-      "community_name": "contractWorkspaceRouter.ts",
+      "community": 148,
+      "community_name": "pr08-rbac-state-machine.test.ts",
       "norm_label": ".constructor()"
     },
     {
@@ -180500,7 +180500,7 @@
       "label": "createApostilleInstrument()",
       "file_type": "code",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1081",
+      "source_location": "L1087",
       "_origin": "ast",
       "id": "server_services_contractservice_createapostilleinstrument",
       "community": 149,
@@ -180511,7 +180511,7 @@
       "label": "createApostille()",
       "file_type": "code",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1121",
+      "source_location": "L1127",
       "_origin": "ast",
       "id": "server_services_contractservice_createapostille",
       "community": 149,
@@ -180522,7 +180522,7 @@
       "label": "registerOccurrence()",
       "file_type": "code",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1152",
+      "source_location": "L1158",
       "_origin": "ast",
       "id": "server_services_contractservice_registeroccurrence",
       "community": 149,
@@ -180533,7 +180533,7 @@
       "label": "requestContractLegalOpinion()",
       "file_type": "code",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1168",
+      "source_location": "L1174",
       "_origin": "ast",
       "id": "server_services_contractservice_requestcontractlegalopinion",
       "community": 149,
@@ -180544,7 +180544,7 @@
       "label": "getContractLegalOpinion()",
       "file_type": "code",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1184",
+      "source_location": "L1190",
       "_origin": "ast",
       "id": "server_services_contractservice_getcontractlegalopinion",
       "community": 285,
@@ -254058,7 +254058,7 @@
       "label": "3. Evid\u00eancias locais",
       "file_type": "document",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L29",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_3_evid\u00eancias_locais",
       "community": 955,
@@ -254069,7 +254069,7 @@
       "label": "4. Aditivo sint\u00e9tico `14093ee293c37665e925` (homologa\u00e7\u00e3o, org 2)",
       "file_type": "document",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L33",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_4_aditivo_sint\u00e9tico_14093ee293c37665e925_homologa\u00e7\u00e3o_org_2",
       "community": 955,
@@ -254080,7 +254080,7 @@
       "label": "5. Backlog (P2)",
       "file_type": "document",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L37",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_5_backlog_p2",
       "community": 955,
@@ -582408,7 +582408,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/__tests__/unit/prompt08-addendum-formalization-opinion-gate.test.ts",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_tests_unit_prompt08_addendum_formalization_opinion_gate_test",
@@ -582420,7 +582420,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/__tests__/unit/prompt08-addendum-formalization-opinion-gate.test.ts",
-      "source_location": "L47",
+      "source_location": "L48",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_tests_unit_prompt08_addendum_formalization_opinion_gate_test_reason",
@@ -613232,7 +613232,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1022",
+      "source_location": "L1028",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -616279,7 +616279,7 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1188",
+      "source_location": "L1194",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -616820,7 +616820,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1025",
+      "source_location": "L1031",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -616964,7 +616964,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1033",
+      "source_location": "L1039",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -617120,7 +617120,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1029",
+      "source_location": "L1035",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -617149,6 +617149,18 @@
       "source": "server_services_contractservice",
       "target": "server_db_contractworkspace_listcontractaddenda",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "server/services/contractService.ts",
+      "source_location": "L1018",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "server_services_contractservice_formalizeaddendum",
+      "target": "server_db_contractworkspace_listcontractaddenda"
     },
     {
       "relation": "calls",
@@ -617239,7 +617251,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1099",
+      "source_location": "L1105",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -617263,7 +617275,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1108",
+      "source_location": "L1114",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -617324,7 +617336,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1136",
+      "source_location": "L1142",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -617348,7 +617360,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1160",
+      "source_location": "L1166",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_registeroccurrence",
@@ -638760,7 +638772,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1019",
+      "source_location": "L1025",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -645741,7 +645753,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1037",
+      "source_location": "L1043",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -645801,7 +645813,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1161",
+      "source_location": "L1167",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_registeroccurrence",
@@ -645813,7 +645825,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1179",
+      "source_location": "L1185",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_requestcontractlegalopinion",
@@ -674018,7 +674030,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1102",
+      "source_location": "L1108",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -674067,7 +674079,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1156",
+      "source_location": "L1162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_registeroccurrence",
@@ -675166,7 +675178,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1141",
+      "source_location": "L1147",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -675177,7 +675189,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1092",
+      "source_location": "L1098",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -675190,7 +675202,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1027",
+      "source_location": "L1033",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -675261,7 +675273,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1142",
+      "source_location": "L1148",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -675272,7 +675284,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1093",
+      "source_location": "L1099",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -675558,7 +675570,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1028",
+      "source_location": "L1034",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -762036,7 +762048,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1048",
+      "source_location": "L1054",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -777095,7 +777107,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1018",
+      "source_location": "L1024",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -796678,7 +796690,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1038",
+      "source_location": "L1044",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -838816,7 +838828,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1121",
+      "source_location": "L1127",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -838827,7 +838839,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1081",
+      "source_location": "L1087",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -838915,7 +838927,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1184",
+      "source_location": "L1190",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -839102,7 +839114,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1152",
+      "source_location": "L1158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -839113,7 +839125,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1168",
+      "source_location": "L1174",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice",
@@ -839610,7 +839622,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1140",
+      "source_location": "L1146",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -839658,7 +839670,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1155",
+      "source_location": "L1161",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_registeroccurrence",
@@ -839670,7 +839682,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1172",
+      "source_location": "L1178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_requestcontractlegalopinion",
@@ -839848,7 +839860,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1096",
+      "source_location": "L1102",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostilleinstrument",
@@ -839956,7 +839968,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1132",
+      "source_location": "L1138",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -840041,7 +840053,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1065",
+      "source_location": "L1071",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -840053,7 +840065,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1062",
+      "source_location": "L1068",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -840077,7 +840089,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1050",
+      "source_location": "L1056",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -840089,7 +840101,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1024",
+      "source_location": "L1030",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_formalizeaddendum",
@@ -840100,7 +840112,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1145",
+      "source_location": "L1151",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_createapostille",
@@ -840113,7 +840125,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1173",
+      "source_location": "L1179",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_requestcontractlegalopinion",
@@ -840125,7 +840137,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "server/services/contractService.ts",
-      "source_location": "L1185",
+      "source_location": "L1191",
       "weight": 1.0,
       "_origin": "ast",
       "source": "server_services_contractservice_getcontractlegalopinion",
@@ -948101,7 +948113,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L29",
+      "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_prompt08_homolog_rc_fixes_handoff_corre\u00e7\u00e3o_integrada_dos_achados_da_homologa\u00e7\u00e3o_rc",
@@ -948112,7 +948124,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_prompt08_homolog_rc_fixes_handoff_corre\u00e7\u00e3o_integrada_dos_achados_da_homologa\u00e7\u00e3o_rc",
@@ -948123,7 +948135,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_handoffs_prompt08_homolog_rc_fixes_handoff_prompt08_homolog_rc_fixes_handoff_corre\u00e7\u00e3o_integrada_dos_achados_da_homologa\u00e7\u00e3o_rc",
@@ -967272,5 +967284,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "03462a7f9afe2a6815a2b0750c99004893449d1d"
+  "built_at_commit": "3c909ed093d5a3b8d88903cd4195faa23b2f4aee"
 }

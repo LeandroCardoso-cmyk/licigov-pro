@@ -6945,8 +6945,8 @@
     "semantic_hash": ""
   },
   "server/db/contractWorkspace.ts": {
-    "mtime": 1795745049.5232613,
-    "ast_hash": "a872eef7c9001caab42fd826b370f074",
+    "mtime": 1795747505.7070472,
+    "ast_hash": "8c755e5353d6887927e00b8dcee78d70",
     "semantic_hash": ""
   },
   "server/db/contracts.ts": {
@@ -9405,8 +9405,8 @@
     "semantic_hash": ""
   },
   "server/services/contractService.ts": {
-    "mtime": 1795746764.6721766,
-    "ast_hash": "236b30cf3e2aa15c3b7056229126b25b",
+    "mtime": 1795747514.0457964,
+    "ast_hash": "fb195291ea44d61a4c15200eb7680ce2",
     "semantic_hash": ""
   },
   "server/services/contractValidation.ts": {
@@ -15960,8 +15960,8 @@
     "semantic_hash": ""
   },
   "server/__tests__/unit/prompt08-addendum-formalization-opinion-gate.test.ts": {
-    "mtime": 1795746799.2857933,
-    "ast_hash": "002c8257f12eec09d119e7646aeae014",
+    "mtime": 1795747514.0617497,
+    "ast_hash": "6733eac6b2e989ead82b85ac4727a302",
     "semantic_hash": ""
   },
   "server/__tests__/unit/prompt08-d5-estimate-unavailable.test.ts": {
@@ -15980,8 +15980,8 @@
     "semantic_hash": ""
   },
   "docs/handoffs/PROMPT08_HOMOLOG_RC_FIXES_HANDOFF.md": {
-    "mtime": 1795747330.691926,
-    "ast_hash": "44df38eac9f99eef4c6e933b1743b185",
+    "mtime": 1795747578.7704017,
+    "ast_hash": "0092f8e45273d923867d359fe777cd01",
     "semantic_hash": ""
   }
 }

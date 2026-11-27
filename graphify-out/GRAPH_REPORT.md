@@ -1,16 +1,16 @@
 # Graph Report - licigov-pro  (2026-11-27)
 
 ## Corpus Check
-- 3148 files · ~5,337,254 words
+- 3148 files · ~5,337,444 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 24937 nodes · 59587 edges · 1022 communities (924 shown, 98 thin omitted)
+- 24937 nodes · 59588 edges · 1022 communities (924 shown, 98 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 398 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `03462a7f`
+- Built from commit: `3c909ed0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -163,7 +163,7 @@
 - editalPreparationService.ts
 - App.tsx
 - adaptiveRecommendationEngine.ts
-- getContractWorkspace
+- pr08-rbac-state-machine.test.ts
 - contractService.ts
 - importAnalyticsService.ts
 - LiciGov Pro — Política Documental
@@ -1462,8 +1462,8 @@ Cohesion: 0.07
 Nodes (51): Citation, CONTEXT_PACKAGE_CONTRACT, ContextDocument, ContextExplainabilityEntry, CreateContextPackageParams, RetrievedPassage, classifyApplicability(), ConsultationIntent (+43 more)
 
 ### Community 102 - "contractWorkspaceRouter.ts"
-Cohesion: 0.03
-Nodes (84): compareAndSetContractWorkspace(), listContractWsDocuments(), ApostilleAssignmentChange, assertContractFieldsEditable(), assignmentFieldChanges(), canContractTransition(), changedFields(), CONTRACT_APOSTILLE_ASSIGNMENT_INVALID (+76 more)
+Cohesion: 0.04
+Nodes (69): compareAndSetContractWorkspace(), listContractWsDocuments(), cents(), CONTRACT_ALREADY_EXISTS, CONTRACT_NUMBER_REQUIRED, CONTRACT_NUMBER_REQUIRED_MESSAGE, contractAlreadyExistsMessage(), ContractCreateDecision (+61 more)
 
 ### Community 103 - "legacyBoundaries.ts"
 Cohesion: 0.07
@@ -1645,13 +1645,13 @@ Nodes (120): AdminOrganizacoesShellRoute, AdminPlatformsRoute, App(), Authentica
 Cohesion: 0.17
 Nodes (17): acceptRecommendation(), declineRecommendation(), RecommendableStep, RecommendationContext, recommendationHash(), RecommendationOption, recommendStep(), Rule (+9 more)
 
-### Community 148 - "getContractWorkspace"
-Cohesion: 0.15
-Nodes (13): getContractWorkspace(), ContractStatus, requireContract(), assertNoGenericContractActivation(), CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION, CONTRACT_ACTIVATION_REQUIRES_GOVERNED_ACTION_MESSAGE, GenericActivationCallContext, isGenericContractActivation() (+5 more)
+### Community 148 - "pr08-rbac-state-machine.test.ts"
+Cohesion: 0.04
+Nodes (44): findContractByNormalizedNumber(), getContractWorkspace(), normalizeContractNumber(), CONTRACT_STATUS_TRANSITION_INVALID, ContractStatus, createContractWorkspace(), contractWorkspaceRouter, requireContract() (+36 more)
 
 ### Community 149 - "contractService.ts"
 Cohesion: 0.03
-Nodes (134): contractAddendaTable, contractOccurrencesTable, contractWorkspacesTable, contractWsApostillesTable, contractWsDocumentsTable, importedContractsTable, compareAndSetAddendumFormalized(), compareAndSetContractWorkspaceStatus() (+126 more)
+Nodes (118): contractAddendaTable, contractOccurrencesTable, contractWorkspacesTable, contractWsApostillesTable, contractWsDocumentsTable, importedContractsTable, compareAndSetAddendumFormalized(), compareAndSetContractWorkspaceStatus() (+110 more)
 
 ### Community 150 - "importAnalyticsService.ts"
 Cohesion: 0.09
@@ -4701,7 +4701,7 @@ Nodes (73): directContractAuditLogs, DirectContractChecklistProgress, directCont
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `getDb()` connect `getDb` to `schema.ts`, `procurementProcessService.ts`, `priceResearchReviewGroups.ts`, `sprint25-hardening.test.ts`, `authoringContext.ts`, `organizations.ts`, `importPromotionService.ts`, `sprint50-workspace.test.ts`, `observabilityService.ts`, `directProcurementService.ts`, `institutionalRequestService.ts`, `processLifecycleService.ts`, `new003-lgpd-export-disabled.test.ts`, `directContractsRouter.ts`, `priceResearch.ts`, `procurementItemsService.ts`, `departmentOperation.ts`, `importStagingService.ts`, `documentService.ts`, `templates-edital-deferred-publication-mysql-smoke.test.ts`, `directProcurementRouter.ts`, `templates-persistence-mysql-smoke.test.ts`, `dfdPrefill.ts`, `legalOpinionAuthorityService.ts`, `fileIngestionService.ts`, `governedLawCorpusMaterializer.ts`, `cognitiveProvenanceService.ts`, `departmentOperationService.ts`, `embeddingReindex.ts`, `procurement.ts`, `featureFlagAdminService.ts`, `itemMaterializationService.ts`, `legalOpinionWorkspaceService.ts`, `contractWorkspaceRouter.ts`, `_core/index.ts`, `sprint49-copilots.test.ts`, `embeddings.ts`, `contracts.ts`, `operationRecordScheduleBackfill.ts`, `itemIntelligenceRouter.ts`, `invitationService.ts`, `itemCatalogClassificationService.ts`, `businessDomainRegistryService.ts`, `templateCompositionService.ts`, `catalogEvidence.ts`, `connection.ts`, `documentEngineService.ts`, `sprint501-business-domains.test.ts`, `editalPreparationService.ts`, `getContractWorkspace`, `contractService.ts`, `businessDomain.ts`, `featureFlagService.ts`, `admin.ts`, `ingestionRouter.ts`, `officialDocumentExportAdapter.ts`, `services/gemini.ts`, `db/businessDomains.ts`, `emailDispatcher.ts`, `institutionalIdentityService.ts`, `processItems.ts`, `documentPromotionService.ts`, `documentIntakeService.ts`, `tasks.ts`, `contractsRouter.ts`, `stageAssignmentService.ts`, `productionMonitoringService.ts`, `knowledgeGraph.ts`, `idempotencyService.ts`, `contractInheritanceService.ts`, `sem043-official-artifact-ledger.test.ts`, `r2-leg005-legacy-items-catmat-disabled.test.ts`, `new016-official-document-immutability-mysql-smoke.test.ts`, `institutionalRetrievalService.ts`, `procurementProcessRouter.ts`, `getDirectProcurementWorkspace`, `institutionalConsultationService.ts`?**
+- **Why does `getDb()` connect `getDb` to `schema.ts`, `procurementProcessService.ts`, `priceResearchReviewGroups.ts`, `sprint25-hardening.test.ts`, `authoringContext.ts`, `organizations.ts`, `importPromotionService.ts`, `sprint50-workspace.test.ts`, `observabilityService.ts`, `directProcurementService.ts`, `institutionalRequestService.ts`, `processLifecycleService.ts`, `new003-lgpd-export-disabled.test.ts`, `directContractsRouter.ts`, `priceResearch.ts`, `procurementItemsService.ts`, `departmentOperation.ts`, `importStagingService.ts`, `documentService.ts`, `templates-edital-deferred-publication-mysql-smoke.test.ts`, `directProcurementRouter.ts`, `templates-persistence-mysql-smoke.test.ts`, `dfdPrefill.ts`, `legalOpinionAuthorityService.ts`, `fileIngestionService.ts`, `governedLawCorpusMaterializer.ts`, `cognitiveProvenanceService.ts`, `departmentOperationService.ts`, `embeddingReindex.ts`, `procurement.ts`, `featureFlagAdminService.ts`, `itemMaterializationService.ts`, `legalOpinionWorkspaceService.ts`, `contractWorkspaceRouter.ts`, `_core/index.ts`, `sprint49-copilots.test.ts`, `embeddings.ts`, `contracts.ts`, `operationRecordScheduleBackfill.ts`, `itemIntelligenceRouter.ts`, `invitationService.ts`, `itemCatalogClassificationService.ts`, `businessDomainRegistryService.ts`, `templateCompositionService.ts`, `catalogEvidence.ts`, `connection.ts`, `documentEngineService.ts`, `sprint501-business-domains.test.ts`, `editalPreparationService.ts`, `pr08-rbac-state-machine.test.ts`, `contractService.ts`, `businessDomain.ts`, `featureFlagService.ts`, `admin.ts`, `ingestionRouter.ts`, `officialDocumentExportAdapter.ts`, `services/gemini.ts`, `db/businessDomains.ts`, `emailDispatcher.ts`, `institutionalIdentityService.ts`, `processItems.ts`, `documentPromotionService.ts`, `documentIntakeService.ts`, `tasks.ts`, `contractsRouter.ts`, `stageAssignmentService.ts`, `productionMonitoringService.ts`, `knowledgeGraph.ts`, `idempotencyService.ts`, `contractInheritanceService.ts`, `sem043-official-artifact-ledger.test.ts`, `r2-leg005-legacy-items-catmat-disabled.test.ts`, `new016-official-document-immutability-mysql-smoke.test.ts`, `institutionalRetrievalService.ts`, `procurementProcessRouter.ts`, `getDirectProcurementWorkspace`, `institutionalConsultationService.ts`?**
   _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `cn`, `@radix-ui/react-avatar`, `class-variance-authority`, `framer-motion`, `_core/index.ts`, `@radix-ui/react-dialog`, `clsx`, `helmet`, `@dnd-kit/utilities`, `embla-carousel-react`, `services/gemini.ts`, `pdf-ocr-fallback.test.ts`, `@radix-ui/react-separator`, `@tanstack/react-query`, `package.json`, `directContractPackage.ts`?**
   _High betweenness centrality (0.016) - this node is a cross-community bridge._
